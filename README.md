@@ -1,15 +1,15 @@
-<div align="center">
-<picture>
-<source media="(prefers-color-scheme: dark)" srcset="public/caracal_nobg_dark_mode.png">
-<source media="(prefers-color-scheme: light)" srcset="public/caracal_nobg.png">
-<img alt="Caracal Logo" src="public/caracal_nobg.png" width="300">
-</picture>
-</div>
-
-<div align="center">
-
-**Pre-execution authority enforcement for AI agents**
-
+<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;">
+  <div style="flex:0 0 auto;">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="public/caracal_nobg_dark_mode.png">
+      <source media="(prefers-color-scheme: light)" srcset="public/caracal_nobg.png">
+      <img alt="Caracal Logo" src="public/caracal_nobg.png" width="300" style="display:block">
+    </picture>
+  </div>
+  <div style="flex:1 1 320px;min-width:200px;max-width:680px;text-align:left;">
+    <h1 style="margin:0;font-size:28px;">Caracal</h1>
+    <p style="margin:8px 0 0 0;font-weight:600;">Pre-execution authority enforcement for AI agents</p>
+  </div>
 </div>
 
 <div align="center">
@@ -134,27 +134,75 @@ workspace delete <workspace-name> --force
 
 -----
 
+## Maintainers
+
+<table width="100%">
+  <tr align="center">
+    <td valign="top" width="33%">
+      <a href="https://github.com/RAWx18" target="_blank">
+        <img src="https://avatars.githubusercontent.com/RAWx18?s=150" width="120" alt="RAWx18"/><br/>
+        <strong>RAWx18</strong>
+      </a>
+      <p>
+        <a href="https://github.com/RAWx18" target="_blank">
+          <img src="https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white" alt="GitHub"/>
+        </a>
+        <a href="https://linkedin.com/in/ryanmadhuwala" target="_blank">
+          <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white" alt="LinkedIn"/>
+        </a>
+      </p>
+    </td>
+    <td valign="top" width="33%">
+      <a href="https://github.com/yashgo0018" target="_blank">
+        <img src="https://avatars.githubusercontent.com/yashgo0018?s=150" width="120" alt="yashgo0018"/><br/>
+        <strong>yashgo0018</strong>
+      </a>
+      <p>
+        <a href="https://github.com/yashgo0018" target="_blank">
+          <img src="https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white" alt="GitHub"/>
+        </a>
+        <a href="https://www.linkedin.com/in/yash-goyal-0018" target="_blank">
+          <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white" alt="LinkedIn"/>
+        </a>
+      </p>
+    </td>
+    <td valign="top" width="33%">
+      <a href="https://github.com/Slo-Pix" target="_blank">
+        <img src="https://avatars.githubusercontent.com/Slo-Pix?s=150" width="120" alt="Slo-Pix"/><br/>
+        <strong>Slo-Pix</strong>
+      </a>
+      <p>
+        <a href="https://github.com/Slo-Pix" target="_blank">
+          <img src="https://img.shields.io/badge/GitHub-100000?style=flat&logo=github&logoColor=white" alt="GitHub"/>
+        </a>
+        <a href="https://www.linkedin.com/in/shubh465" target="_blank">
+          <img src="https://img.shields.io/badge/LinkedIn-0077B5?style=flat&logo=linkedin&logoColor=white" alt="LinkedIn"/>
+        </a>
+      </p>
+    </td>
+  </tr>
+</table>
+
+-----
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
 
 -----
 
-## Citation
+## Programs
 
-**Caracal** is an open-source framework for *pre-execution authority enforcement for AI agents controlling delegated actions, with real-time revocation and immutable proof*.
-
-If this project contributes to your research, product, or derivative systems, please consider citing it to help us advance trustworthy AI security research.
-
-```bibtex
-@software{GarudexLabs2026caracal,
-  author    = {Garudex Labs},
-  title     = {Caracal: Authority Enforcement Framework for AI Agents},
-  year      = {2026},
-  publisher = {GitHub},
-  url       = {https://github.com/garudex-labs/caracal}
-}
-```
+<div align="center">
+  <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;max-width:960px;">
+    <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">
+      <img src="public/lfx-mentorship.png" alt="LFX Mentorship 2026" width="90" />
+    </a>
+    <div style="max-width:520px;text-align:left;">
+      <p style="margin:0;">This project is part of the <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">LFX Mentorship 2026</a> program under the <a href="https://www.lfdecentralizedtrust.org" target="_blank" rel="noopener">LF Decentralized Trust</a> organization, improving security and open source awareness.</p>
+    </div>
+  </div>
+</div>
 
 -----
 
