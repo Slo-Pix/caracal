@@ -1,15 +1,14 @@
-<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;justify-content:center;">
-  <div style="flex:0 0 auto;">
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="public/caracal_nobg_dark_mode.png">
-      <source media="(prefers-color-scheme: light)" srcset="public/caracal_nobg.png">
-      <img alt="Caracal Logo" src="public/caracal_nobg.png" width="300" style="display:block">
-    </picture>
-  </div>
-  <div style="flex:1 1 320px;min-width:200px;max-width:680px;text-align:left;">
-    <h1 style="margin:0;font-size:28px;">Caracal</h1>
-    <p style="margin:8px 0 0 0;font-weight:600;">Pre-execution authority enforcement for AI agents</p>
-  </div>
+<div align="center">
+<picture>
+<source media="(prefers-color-scheme: dark)" srcset="public/caracal_nobg_dark_mode.png">
+<source media="(prefers-color-scheme: light)" srcset="public/caracal_nobg.png">
+<img alt="Caracal Logo" src="public/caracal_nobg.png" width="300">
+</picture>
+</div>
+
+<div align="center">
+
+**Pre-execution authority enforcement for AI agents**
 </div>
 
 <div align="center">
