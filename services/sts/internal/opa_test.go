@@ -1,0 +1,1 @@
+../../../tests/go/unit/sts/internal/opa_test.go
