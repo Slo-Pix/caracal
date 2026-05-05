@@ -27,6 +27,7 @@ export async function buildApp() {
   })
   app.decorate('db', db)
   app.decorate('redis', redis)
+  app.get('/health', async () => ({ ok: true }))
   app.addHook('preHandler', verifyBearer)
   app.get('/metrics', async () => {
     const { rows: invocations } = await app.db.query(

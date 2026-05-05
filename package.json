@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "caracal": "node apps/cli/bin/caracal.mjs",
+    "caracal": "node apps/cli/bin/caracal-workspace.mjs",
     "test": "pnpm run test:typescript && pnpm run test:go && pnpm run test:python",
     "test:go": "go test ./packages/shared/... ./services/sts/... ./services/audit/... ./services/gateway/... ./apps/agent-coordinator/relay/... ./packages/caracalai-mcp-go/...",
     "test:python": "PYTHONPATH=packages/caracalai-mcp-python python -m unittest discover -s tests/python -p 'test_*.py'",

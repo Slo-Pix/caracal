@@ -19,6 +19,8 @@ declare module 'fastify' {
 }
 
 export async function verifyBearer(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (req.url === '/health') return
+
   const auth = req.headers.authorization
   if (!auth?.startsWith('Bearer ')) {
     reply.code(401).send({ error: 'missing_token' })

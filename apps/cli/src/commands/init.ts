@@ -29,6 +29,11 @@ const DEFAULT_API_URL = 'http://localhost:3000'
 const DEFAULT_ZONE_URL = 'http://localhost:8080'
 
 function defaultConfigPath(): string {
+  for (const dir of [process.cwd(), process.env.PWD, process.env.INIT_CWD]) {
+    if (!dir) continue
+    const path = join(dir, 'caracal.toml')
+    if (existsSync(path)) return path
+  }
   const xdg = process.env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.config')
   return join(base, 'caracal', 'caracal.toml')
