@@ -63,20 +63,61 @@ More coming soon
 
 ## Installation & Setup
 
-### Install (end users)
+### Quickstart
 
-Only Docker (Compose v2) is required. The CLI is a single self-contained binary; no repo clone, no Node, no Go, no pnpm.
+> Only Docker is required. The CLI is a single self-contained binary. Pin a version with `CARACAL_VERSION=vX.Y.Z` before the install command.
+
+<details open>
+<summary><strong>Linux</strong> (x64 / arm64) curl or wget</summary>
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+# or, without curl:
+wget -qO- https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
+
+Installs to `~/.local/bin/caracal`. Override with `CARACAL_INSTALL_DIR=/usr/local/bin` (may need `sudo`).
+
+</details>
+
+<details>
+<summary><strong>macOS</strong> (Intel / Apple Silicon)</summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
+
+If Gatekeeper blocks the binary on first run: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
+
+</details>
+
+<details>
+<summary><strong>Windows</strong> (x64) PowerShell</summary>
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\Programs\caracal\caracal.exe` and adds it to the user `PATH`. Requires Docker Desktop with WSL2.
+
+</details>
+
+<details>
+<summary><strong>Manual</strong> direct download</summary>
+
+Grab the matching asset from the [latest release](https://github.com/Garudex-Labs/caracal/releases/latest) (`caracal-linux-x64`, `caracal-linux-arm64`, `caracal-darwin-x64`, `caracal-darwin-arm64`, or `caracal-windows-x64.exe`), verify against `SHA256SUMS`, then place it on your `PATH` and `chmod +x` (Unix).
+
+</details>
+
+<p></p>
+
+Then, on any platform:
+
+```bash
 caracal up
 caracal init
 caracal run -- printenv RESOURCE_TOKEN
 ```
-
-The first `caracal up` provisions `compose.yml`, `.env`, and `provision-streams.sh` under `$CARACAL_HOME` (default: `~/.local/share/caracal` on Linux, `~/Library/Application Support/caracal` on macOS), seeded with random Postgres, Redis, and admin secrets. Container images are pulled from `ghcr.io/garudex-labs/caracal-{api,sts,gateway,audit,coordinator}` pinned to the CLI version.
-
-Pin a version: `CARACAL_VERSION=v0.1.0 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh`.
 
 ### Basic commands
 

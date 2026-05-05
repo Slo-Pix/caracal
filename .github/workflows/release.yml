@@ -141,3 +141,4 @@ jobs:
             dist/caracal-*
             dist/SHA256SUMS
             install.sh
+            install.ps1
