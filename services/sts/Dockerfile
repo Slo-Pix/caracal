@@ -12,12 +12,13 @@ COPY services/audit/ services/audit/
 COPY services/gateway/ services/gateway/
 COPY apps/agent-coordinator/relay/ apps/agent-coordinator/relay/
 COPY services/sts/ services/sts/
-COPY tests/go/unit/sts/internal/ tests/go/unit/sts/internal/
+COPY tests/go/ tests/go/
 WORKDIR /build/services/sts
 RUN go mod download && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -o /sts ./cmd/sts
 
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates wget
 COPY --from=builder /sts /sts
-USER nonroot:nonroot
+USER 65532:65532
 ENTRYPOINT ["/sts"]

@@ -72,6 +72,17 @@ describe('runCommand', () => {
     expect(childEnv.RESOURCE_TOKEN).toBe('resource-token')
   })
 
+  it('strips the pnpm separator before spawning the child command', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: 'resource-token', expires_in: 3600 }),
+    }))
+
+    await expect(runCommand(['--', 'node', 'tool.js'], cfg)).rejects.toThrow('exit:0')
+
+    expect(spawnMock).toHaveBeenCalledWith('node', ['tool.js'], expect.objectContaining({ stdio: 'inherit' }))
+  })
+
   it('warns for optional credential failures and still runs child command', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,

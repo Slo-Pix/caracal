@@ -7,12 +7,18 @@ FROM golang:1.26-alpine AS builder
 WORKDIR /build
 COPY go.work go.work
 COPY packages/shared/ packages/shared/
+COPY packages/caracalai-mcp-go/ packages/caracalai-mcp-go/
+COPY services/sts/ services/sts/
+COPY services/gateway/ services/gateway/
+COPY apps/agent-coordinator/relay/ apps/agent-coordinator/relay/
 COPY services/audit/ services/audit/
+COPY tests/go/ tests/go/
 WORKDIR /build/services/audit
 RUN go mod download && \
     CGO_ENABLED=0 GOOS=linux go build -trimpath -o /audit ./cmd/audit
 
-FROM gcr.io/distroless/static:nonroot
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates wget
 COPY --from=builder /audit /audit
-USER nonroot:nonroot
+USER 65532:65532
 ENTRYPOINT ["/audit"]

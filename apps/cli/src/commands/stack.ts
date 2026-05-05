@@ -6,10 +6,11 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { CARACAL_VERSION } from '../runtime/version.ts'
 import { installRuntimeAssets, runtimePaths } from '../runtime/install.ts'
 
-interface StackPaths {
+export interface StackPaths {
   composeFile: string
   envFile: string
   cwd: string
@@ -30,13 +31,30 @@ const SERVICE_PROBES: ServiceProbe[] = [
   { name: 'coordinator', url: 'http://localhost:4000/health', port: 4000 },
 ]
 
-function findRepoRoot(): string | undefined {
-  let dir = process.cwd()
-  for (let depth = 0; depth < 8; depth++) {
+function searchRepoRoot(start: string | undefined): string | undefined {
+  if (!start) return undefined
+  let dir = start
+  for (let depth = 0; depth < 10; depth++) {
     if (existsSync(join(dir, 'infra', 'docker', 'docker-compose.yml'))) return dir
     const parent = dirname(dir)
     if (parent === dir) break
     dir = parent
+  }
+  return undefined
+}
+
+function findRepoRoot(): string | undefined {
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    process.env.CARACAL_REPO_ROOT,
+    process.env.INIT_CWD,
+    process.env.PWD,
+    process.cwd(),
+    moduleDir,
+  ]
+  for (const candidate of candidates) {
+    const repoRoot = searchRepoRoot(candidate)
+    if (repoRoot) return repoRoot
   }
   return undefined
 }
@@ -63,8 +81,8 @@ function runtimeStackPaths(): StackPaths {
   return { composeFile: paths.composeFile, envFile, cwd: paths.home, mode: 'runtime' }
 }
 
-function resolvePaths(): StackPaths {
-  if (process.env.CARACAL_HOME) return runtimeStackPaths()
+export function resolvePaths(): StackPaths {
+  if (process.env.CARACAL_STACK_MODE === 'runtime') return runtimeStackPaths()
   const repoRoot = findRepoRoot()
   if (repoRoot) return devPaths(repoRoot)
   return runtimeStackPaths()
