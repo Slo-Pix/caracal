@@ -9,6 +9,7 @@
     "test": "vitest run --root ../.. tests/typescript/unit/orchestration/agent-coordinator"
   },
   "dependencies": {
+    "@caracalai/shared": "workspace:*",
     "fastify": "^5.2.1",
     "jose": "^5.0.0",
     "pg": "^8.14.1",

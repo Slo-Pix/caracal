@@ -83,7 +83,7 @@ export class AdminClient {
     }
     const res = await this.doFetch(url, { method: opts.method ?? 'GET', headers, body })
     if (!res.ok) {
-      const text = await res.text().catch(() => '')
+      const text = await res.text()
       let parsed: unknown = text
       let code = res.statusText || 'request_failed'
       try {

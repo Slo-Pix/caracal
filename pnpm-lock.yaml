@@ -14,6 +14,9 @@ importers:
 
   apps/agent-coordinator:
     dependencies:
+      '@caracalai/shared':
+        specifier: workspace:*
+        version: link:../../packages/ts-shared
       fastify:
         specifier: ^5.2.1
         version: 5.8.5
@@ -48,6 +51,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@caracalai/shared':
+        specifier: workspace:*
+        version: link:../../packages/ts-shared
       '@fastify/swagger':
         specifier: ^9.4.0
         version: 9.7.0
