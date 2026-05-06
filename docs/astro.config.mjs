@@ -9,27 +9,12 @@ import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 
 export default defineConfig({
-  site: 'https://docs.caracal.ai',
+  output: 'static',
+  site: 'https://docs.caracal.run',
   integrations: [
     starlight({
       title: 'Caracal',
       customCss: ['./src/styles/custom.css'],
-      sidebar: [
-        {
-          label: 'Start Here',
-          items: [
-            { label: 'Getting Started', slug: 'getting-started' },
-            { label: 'Architecture', slug: 'architecture' },
-          ],
-        },
-        {
-          label: 'Build',
-          items: [
-            { label: 'SDKs', slug: 'sdks' },
-            { label: 'Operations', slug: 'operations' },
-          ],
-        },
-      ],
     }),
   ],
 })
