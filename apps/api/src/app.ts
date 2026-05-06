@@ -37,9 +37,10 @@ export interface AppDeps {
   cfg: Config
   db: DB
   redis: RedisClient
+  isDraining?: () => boolean
 }
 
-export async function buildApp({ cfg, db, redis }: AppDeps) {
+export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   const app = Fastify({
     logger: { level: cfg.logLevel },
     genReqId: (req) => {
@@ -89,6 +90,10 @@ export async function buildApp({ cfg, db, redis }: AppDeps) {
 
   app.get('/health', async () => ({ ok: true }))
   app.get('/ready', async (_req, reply) => {
+    if (isDraining?.()) {
+      reply.code(503)
+      return { ok: false, draining: true }
+    }
     try {
       await db.query('SELECT 1')
       const pong = await redis.ping()
