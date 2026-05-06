@@ -11,6 +11,7 @@ import { STREAM_POLICY_INVALIDATE } from '../redis.js'
 import { enqueueOutbox } from '../outbox.js'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { zoneExists } from '../zone-guard.js'
+import { validateAuthzPolicy } from '../rego.js'
 
 const MANIFEST_MAX_ENTRIES = 256
 
@@ -278,12 +279,15 @@ async function policySetContractError(
     if (row.zone_id !== zoneId) {
       return `policy version ${row.id} belongs to a different zone`
     }
-    const content = String(row.content)
-    if (!/package\s+caracal\.authz\b/.test(content)) {
+    const err = validateAuthzPolicy(String(row.content))
+    if (err === 'must_use_package_caracal_authz') {
       return `policy version ${row.id} must use package caracal.authz`
     }
-    if (!/\bresult\b/.test(content)) {
+    if (err === 'must_define_result_rule') {
       return `policy version ${row.id} must emit data.caracal.authz.result`
+    }
+    if (err) {
+      return `policy version ${row.id} failed validation: ${err}`
     }
   }
   return null

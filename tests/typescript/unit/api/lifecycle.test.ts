@@ -45,4 +45,12 @@ describe('ShutdownRegistry', () => {
     expect(fn).toHaveBeenCalledTimes(1)
     expect(exit).toHaveBeenCalledTimes(1)
   })
+
+  it('flips draining true once fire begins', async () => {
+    const { r } = makeRegistry()
+    expect(r.draining).toBe(false)
+    r.register('a', () => { expect(r.draining).toBe(true) })
+    await r.fire('test')
+    expect(r.draining).toBe(true)
+  })
 })

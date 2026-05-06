@@ -9,6 +9,7 @@ import { createHash } from 'crypto'
 import { v7 as uuidv7 } from 'uuid'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { zoneExists } from '../zone-guard.js'
+import { validatePolicySource } from '../rego.js'
 
 const PolicyBody = z.object({
   name: z.string().min(1),
@@ -28,10 +29,7 @@ function sha256(s: string) {
 }
 
 function validateRego(content: string): string | null {
-  if (!/^\s*package\s+[a-zA-Z0-9_.]+/m.test(content)) {
-    return 'missing_package_declaration'
-  }
-  return null
+  return validatePolicySource(content)
 }
 
 export const policiesRoutes: FastifyPluginAsync = async (fastify) => {
