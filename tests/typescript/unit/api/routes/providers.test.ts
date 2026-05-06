@@ -27,9 +27,11 @@ describe('GET /v1/zones/:zoneId/providers/:id', () => {
 describe('POST /v1/zones/:zoneId/providers', () => {
   it('stores provider kind inside config_json', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
-    db.query.mockResolvedValueOnce({
-      rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'oidc-main', kind: 'oidc' }],
-    })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'oidc-main', kind: 'oidc' }],
+      })
 
     await app.ready()
     const res = await app.inject({
@@ -38,7 +40,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       payload: { identifier: 'oidc-main', kind: 'oidc', config_json: { issuer: 'https://issuer.example' } },
     })
 
-    const values = db.query.mock.calls[0][1] as unknown[]
+    const values = db.query.mock.calls[1][1] as unknown[]
     expect(res.statusCode).toBe(201)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-1', kind: 'oidc' })
     expect(JSON.parse(values[6] as string)).toEqual({ issuer: 'https://issuer.example', kind: 'oidc' })

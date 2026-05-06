@@ -101,11 +101,19 @@ describe('PATCH /v1/zones/:id', () => {
 })
 
 describe('DELETE /v1/zones/:id', () => {
-  it('returns 204', async () => {
+  it('returns 204 when row was archived', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValue({ rows: [] })
+    db.query.mockResolvedValue({ rowCount: 1, rows: [] })
     await app.ready()
     const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1' })
     expect(res.statusCode).toBe(204)
+  })
+
+  it('returns 404 when zone is missing', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValue({ rowCount: 0, rows: [] })
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/missing' })
+    expect(res.statusCode).toBe(404)
   })
 })

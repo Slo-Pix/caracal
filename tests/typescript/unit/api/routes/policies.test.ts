@@ -9,25 +9,30 @@ import { policiesRoutes } from '../../../../../apps/api/src/routes/policies.js'
 
 function buildApp() {
   const app = Fastify({ logger: false })
+  const clientQuery = vi.fn().mockResolvedValue({ rows: [{ id: 'pv-1', policy_id: 'p-1', version: 1, content_sha256: 'abc', schema_version: '2026-03-16', created_at: new Date() }] })
   const db = {
     query: vi.fn(),
     connect: vi.fn().mockResolvedValue({
-      query: vi.fn().mockResolvedValue({ rows: [{ id: 'pv-1', policy_id: 'p-1', version: 1, content_sha256: 'abc', schema_version: '2026-03-16', created_at: new Date() }] }),
+      query: clientQuery,
       release: vi.fn(),
     }),
   }
   const redis = { xadd: vi.fn() }
   app.decorate('db', db as any)
   app.decorate('redis', redis as any)
+  app.addHook('preHandler', async (req) => {
+    req.actor = { id: 'test-actor', name: 'test', scope: 'global', zoneId: null }
+  })
   app.register(policiesRoutes, { prefix: '/v1' })
-  return { app, db, redis }
+  return { app, db, clientQuery, redis }
 }
 
 const validRego = `package caracal.authz\ndefault allow = false`
 
 describe('POST /v1/zones/:zoneId/policies', () => {
   it('rejects missing package declaration', async () => {
-    const { app } = buildApp()
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
     await app.ready()
     const res = await app.inject({
       method: 'POST',
@@ -40,7 +45,7 @@ describe('POST /v1/zones/:zoneId/policies', () => {
 
   it('accepts valid Rego with package declaration', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValue({ rows: [] })
+    db.query.mockResolvedValue({ rows: [{ '?column?': 1 }] })
     await app.ready()
     const res = await app.inject({
       method: 'POST',
@@ -64,8 +69,12 @@ describe('POST /v1/zones/:zoneId/policies/:id/versions', () => {
   })
 
   it('returns 404 when policy not found', async () => {
-    const { app, db } = buildApp()
-    db.query.mockResolvedValueOnce({ rows: [] }) // policy not found
+    const { app, clientQuery } = buildApp()
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [] }) // advisory lock
+      .mockResolvedValueOnce({ rows: [] }) // policy lookup → not found
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
     await app.ready()
     const res = await app.inject({
       method: 'POST',

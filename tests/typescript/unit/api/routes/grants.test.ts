@@ -30,7 +30,9 @@ const grantBody = {
 describe('POST /v1/zones/:zoneId/grants', () => {
   it('rejects application references outside the zone', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValueOnce({ rows: [{ application_exists: false, resource_scopes: ['read'] }] })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ application_exists: false, resource_scopes: ['read'] }] })
 
     await app.ready()
     const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/grants', payload: grantBody })
@@ -41,7 +43,9 @@ describe('POST /v1/zones/:zoneId/grants', () => {
 
   it('rejects resource references outside the zone', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValueOnce({ rows: [{ application_exists: true, resource_scopes: null }] })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ application_exists: true, resource_scopes: null }] })
 
     await app.ready()
     const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/grants', payload: grantBody })
@@ -52,7 +56,9 @@ describe('POST /v1/zones/:zoneId/grants', () => {
 
   it('rejects grant scopes outside the resource scope set', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValueOnce({ rows: [{ application_exists: true, resource_scopes: ['read'] }] })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ application_exists: true, resource_scopes: ['read'] }] })
 
     await app.ready()
     const res = await app.inject({
@@ -68,6 +74,7 @@ describe('POST /v1/zones/:zoneId/grants', () => {
   it('creates a grant with same-zone references and bounded scopes', async () => {
     const { app, db } = buildApp()
     db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
       .mockResolvedValueOnce({ rows: [{ application_exists: true, resource_scopes: ['read', 'write'] }] })
       .mockResolvedValueOnce({ rows: [{ id: 'grant-1', zone_id: 'z1', scopes: ['read'] }] })
 
