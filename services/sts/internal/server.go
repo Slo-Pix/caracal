@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -19,6 +20,11 @@ import (
 	"github.com/garudex-labs/caracal/shared/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
+)
+
+const (
+	maxRequestBodyBytes = 64 * 1024
+	jwksCacheMaxAge     = 300
 )
 
 // Server holds all runtime state for the STS.
@@ -48,7 +54,7 @@ func New(ctx context.Context) (*Server, error) {
 		return nil, fmt.Errorf("redis: %w", err)
 	}
 
-	kek, err := resolveKEK(cfg.ZoneKEKProvider)
+	kek, err := resolveKEK(cfg.ZoneKEKProvider, cfg.IsProduction())
 	if err != nil {
 		return nil, fmt.Errorf("kek: %w", err)
 	}
@@ -74,6 +80,7 @@ func (s *Server) Run(ctx context.Context) error {
 	s.auditBuffer.start(ctx)
 	go s.startConsumers(ctx)
 	go s.opa.StartPGPolling(ctx)
+	go s.opa.SeedZones(ctx)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /oauth/2/token", s.handleTokenExchange)
@@ -109,15 +116,15 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 }
 
+// handleJWKS returns the JWKS for one zone. zone_id is mandatory: STS must never
+// expose every zone's signing keys in a single document.
 func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 	zoneID := r.URL.Query().Get("zone_id")
-	var secrets []SecretRow
-	var err error
 	if zoneID == "" {
-		secrets, err = s.db.GetAllZoneSigningKeySecrets(r.Context())
-	} else {
-		secrets, err = s.db.GetZoneSigningKeySecrets(r.Context(), zoneID)
+		writeError(w, http.StatusBadRequest, sharederr.New(sharederr.InvalidToken, "zone_id required"))
+		return
 	}
+	secrets, err := s.db.GetZoneSigningKeySecrets(r.Context(), zoneID)
 	if err != nil || len(secrets) == 0 {
 		writeError(w, http.StatusNotFound, sharederr.New(sharederr.ResourceNotFound, "zone signing key not found"))
 		return
@@ -144,7 +151,7 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, must-revalidate", jwksCacheMaxAge))
 	_, _ = w.Write(data)
 }
 
@@ -164,6 +171,7 @@ func (s *Server) handleStepUpStatus(w http.ResponseWriter, r *http.Request) {
 		"id":             c.ID,
 		"challenge_type": c.ChallengeType,
 		"satisfied":      c.SatisfiedAt != nil,
+		"consumed":       c.ConsumedAt != nil,
 		"expires_at":     c.ExpiresAt.Format(time.RFC3339),
 	})
 }
@@ -185,13 +193,17 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// resolveKEK loads the 32-byte zone encryption key.
-// "local" reads ZONE_KEK (hex-encoded); returns a zero key when unset (dev only).
-func resolveKEK(provider string) ([]byte, error) {
+// resolveKEK loads the 32-byte zone encryption key. In production-like environments
+// (CARACAL_ENV=production|prod|staging) ZONE_KEK is mandatory; the dev-only zero key
+// is rejected to prevent silent issuance with predictable signing-key encryption.
+func resolveKEK(provider string, production bool) ([]byte, error) {
 	switch provider {
 	case "local", "":
 		raw := os.Getenv("ZONE_KEK")
 		if raw == "" {
+			if production {
+				return nil, errors.New("ZONE_KEK is required in production")
+			}
 			return make([]byte, 32), nil
 		}
 		b, err := hex.DecodeString(raw)

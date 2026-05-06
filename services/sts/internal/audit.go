@@ -7,7 +7,11 @@ package internal
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -27,13 +31,26 @@ type AuditBuffer struct {
 	redis   *RedisClient
 	log     zerolog.Logger
 	dropped atomic.Uint64
+	hmacKey []byte
 }
 
 func newAuditBuffer(redis *RedisClient, log zerolog.Logger) *AuditBuffer {
+	var key []byte
+	if hexKey := os.Getenv("AUDIT_HMAC_KEY"); hexKey != "" {
+		k, err := hex.DecodeString(hexKey)
+		if err == nil && len(k) >= 32 {
+			key = k
+		} else {
+			log.Warn().Msg("AUDIT_HMAC_KEY invalid; audit events will be unsigned")
+		}
+	} else {
+		log.Warn().Msg("AUDIT_HMAC_KEY not set; audit events will be unsigned")
+	}
 	return &AuditBuffer{
-		ch:    make(chan AuditEvent, auditBufCap),
-		redis: redis,
-		log:   log,
+		ch:      make(chan AuditEvent, auditBufCap),
+		redis:   redis,
+		log:     log,
+		hmacKey: key,
 	}
 }
 
@@ -53,6 +70,15 @@ func (a *AuditBuffer) Dropped() uint64 {
 	return a.dropped.Load()
 }
 
+func (a *AuditBuffer) sign(data []byte) string {
+	if len(a.hmacKey) == 0 {
+		return ""
+	}
+	mac := hmac.New(sha256.New, a.hmacKey)
+	mac.Write(data)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 // start launches the background flusher goroutine.
 func (a *AuditBuffer) start(ctx context.Context) {
 	go func() {
@@ -67,10 +93,14 @@ func (a *AuditBuffer) start(ctx context.Context) {
 					a.log.Error().Err(err).Str("id", ev.ID).Msg("marshal audit event")
 					continue
 				}
-				if err := a.redis.XAdd(ctx, auditStream, map[string]interface{}{
+				values := map[string]interface{}{
 					"id":   ev.ID,
 					"data": string(data),
-				}); err != nil {
+				}
+				if sig := a.sign(data); sig != "" {
+					values["sig"] = sig
+				}
+				if err := a.redis.XAdd(ctx, auditStream, values); err != nil {
 					a.log.Error().Err(err).Str("id", ev.ID).Msg("xadd audit event")
 				}
 			}

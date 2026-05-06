@@ -46,16 +46,18 @@ type DBQuerier interface {
 	GetDelegationPath(ctx context.Context, zoneID, sourceID, targetID string, maxHops int) ([]string, error)
 	GetDelegationGraphEpoch(ctx context.Context, zoneID string) (int64, error)
 	InsertSession(ctx context.Context, s *Session) error
-	RevokeSession(ctx context.Context, sid string) error
+	RevokeSession(ctx context.Context, zoneID, sid string) error
 	GetStepUpChallenge(ctx context.Context, id string) (*StepUpChallengePG, error)
 	InsertStepUpChallenge(ctx context.Context, c *StepUpChallengePG) error
 	SatisfyStepUpChallenge(ctx context.Context, id string) error
+	ConsumeStepUpChallenge(ctx context.Context, p ConsumeStepUpParams) error
 	GetZoneSigningKeySecret(ctx context.Context, zoneID string) (*SecretRow, error)
 	GetZoneSigningKeySecrets(ctx context.Context, zoneID string) ([]SecretRow, error)
-	GetAllZoneSigningKeySecrets(ctx context.Context) ([]SecretRow, error)
 	GetActivePolicySetBinding(ctx context.Context, zoneID string) (*PolicySetBinding, error)
 	GetPolicySetVersion(ctx context.Context, id string) (*PolicySetVersion, error)
 	GetPolicyVersionsByIDs(ctx context.Context, ids []string) ([]PolicyVersion, error)
+	ListBoundZoneIDs(ctx context.Context) ([]string, error)
+	UpdateApplicationSecretHash(ctx context.Context, id, zoneID, hash string) error
 }
 
 // Zone holds the fields STS needs from the zones table.
@@ -345,28 +347,46 @@ func (d *DB) InsertSession(ctx context.Context, s *Session) error {
 	return err
 }
 
-func (d *DB) RevokeSession(ctx context.Context, sid string) error {
+func (d *DB) RevokeSession(ctx context.Context, zoneID, sid string) error {
 	_, err := d.pool.Exec(ctx,
-		`UPDATE sessions SET status = 'revoked' WHERE id = $1`, sid,
+		`UPDATE sessions SET status = 'revoked' WHERE id = $1 AND zone_id = $2`, sid, zoneID,
 	)
 	return err
 }
 
-// StepUpChallengePG is stored in the database for audit purposes.
+// StepUpChallengePG is stored in the database as the proof-bound, single-use record
+// behind every step-up challenge.
 type StepUpChallengePG struct {
-	ID            string
-	ZoneID        string
-	SessionID     string
-	ChallengeType string
-	ExpiresAt     time.Time
-	SatisfiedAt   *time.Time
+	ID                  string
+	ZoneID              string
+	SessionID           string
+	ChallengeType       string
+	ChallengeSecretHash []byte
+	PrincipalID         string
+	ResourceSetHash     []byte
+	ExpiresAt           time.Time
+	SatisfiedAt         *time.Time
+	ConsumedAt          *time.Time
+}
+
+// ConsumeStepUpParams holds the bindings the caller must present to consume a challenge.
+type ConsumeStepUpParams struct {
+	ID                  string
+	ZoneID              string
+	PrincipalID         string
+	ChallengeSecretHash []byte
+	ResourceSetHash     []byte
+	Now                 time.Time
 }
 
 func (d *DB) InsertStepUpChallenge(ctx context.Context, c *StepUpChallengePG) error {
 	_, err := d.pool.Exec(ctx,
-		`INSERT INTO step_up_challenges (id, zone_id, session_id, challenge_type, expires_at)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		c.ID, c.ZoneID, c.SessionID, c.ChallengeType, c.ExpiresAt,
+		`INSERT INTO step_up_challenges
+		   (id, zone_id, session_id, challenge_type, challenge_secret_hash,
+		    principal_id, resource_set_hash, expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		c.ID, c.ZoneID, c.SessionID, c.ChallengeType,
+		c.ChallengeSecretHash, c.PrincipalID, c.ResourceSetHash, c.ExpiresAt,
 	)
 	return err
 }
@@ -378,12 +398,40 @@ func (d *DB) SatisfyStepUpChallenge(ctx context.Context, id string) error {
 	return err
 }
 
+// ConsumeStepUpChallenge atomically transitions a challenge to consumed state, but only
+// when every binding matches: zone, principal, secret hash, resource set, satisfied,
+// not yet expired, not yet consumed. Returns ErrChallengeInvalid otherwise.
+func (d *DB) ConsumeStepUpChallenge(ctx context.Context, p ConsumeStepUpParams) error {
+	tag, err := d.pool.Exec(ctx,
+		`UPDATE step_up_challenges
+		 SET consumed_at = $6
+		 WHERE id = $1
+		   AND zone_id = $2
+		   AND principal_id = $3
+		   AND challenge_secret_hash = $4
+		   AND resource_set_hash = $5
+		   AND satisfied_at IS NOT NULL
+		   AND consumed_at IS NULL
+		   AND expires_at > $6`,
+		p.ID, p.ZoneID, p.PrincipalID, p.ChallengeSecretHash, p.ResourceSetHash, p.Now,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrChallengeInvalid
+	}
+	return nil
+}
+
 func (d *DB) GetStepUpChallenge(ctx context.Context, id string) (*StepUpChallengePG, error) {
 	var c StepUpChallengePG
 	err := d.pool.QueryRow(ctx,
-		`SELECT id, zone_id, session_id, challenge_type, expires_at, satisfied_at
+		`SELECT id, zone_id, session_id, challenge_type, challenge_secret_hash,
+		        principal_id, resource_set_hash, expires_at, satisfied_at, consumed_at
 		 FROM step_up_challenges WHERE id = $1`, id,
-	).Scan(&c.ID, &c.ZoneID, &c.SessionID, &c.ChallengeType, &c.ExpiresAt, &c.SatisfiedAt)
+	).Scan(&c.ID, &c.ZoneID, &c.SessionID, &c.ChallengeType, &c.ChallengeSecretHash,
+		&c.PrincipalID, &c.ResourceSetHash, &c.ExpiresAt, &c.SatisfiedAt, &c.ConsumedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -434,25 +482,37 @@ func (d *DB) GetZoneSigningKeySecrets(ctx context.Context, zoneID string) ([]Sec
 	return secrets, rows.Err()
 }
 
-func (d *DB) GetAllZoneSigningKeySecrets(ctx context.Context) ([]SecretRow, error) {
+// ListBoundZoneIDs returns every zone with an active policy_set_binding. Used by the
+// OPA engine to seed compiled bundles at startup so that fresh zones do not depend on
+// hot-path Evaluate to bootstrap.
+func (d *DB) ListBoundZoneIDs(ctx context.Context) ([]string, error) {
 	rows, err := d.pool.Query(ctx,
-		`SELECT id, ciphertext, nonce, dek_id FROM secrets
-		 WHERE name = 'zone_signing_key'
-		 ORDER BY zone_id, version DESC`,
+		`SELECT DISTINCT zone_id FROM policy_set_bindings WHERE active_version_id IS NOT NULL`,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var secrets []SecretRow
+	var zones []string
 	for rows.Next() {
-		var s SecretRow
-		if err := rows.Scan(&s.ID, &s.Ciphertext, &s.Nonce, &s.DEKID); err != nil {
+		var z string
+		if err := rows.Scan(&z); err != nil {
 			return nil, err
 		}
-		secrets = append(secrets, s)
+		zones = append(zones, z)
 	}
-	return secrets, rows.Err()
+	return zones, rows.Err()
+}
+
+// UpdateApplicationSecretHash rewrites the stored client_secret_hash for an application
+// once a legacy SHA-256 verification succeeds, so subsequent verifications use Argon2id.
+func (d *DB) UpdateApplicationSecretHash(ctx context.Context, id, zoneID, hash string) error {
+	_, err := d.pool.Exec(ctx,
+		`UPDATE applications SET client_secret_hash = $3, updated_at = now()
+		 WHERE id = $1 AND zone_id = $2`,
+		id, zoneID, hash,
+	)
+	return err
 }
 
 // DelegatedGrant holds the provider OAuth tokens for a user+resource pair.
