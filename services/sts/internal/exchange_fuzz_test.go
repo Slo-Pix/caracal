@@ -1,0 +1,1 @@
+../../../tests/go/fuzz/sts/internal/exchange_fuzz_test.go

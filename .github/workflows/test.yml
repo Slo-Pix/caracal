@@ -1,145 +1,410 @@
-name: Test
+# Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+# Caracal, a product of Garudex Labs
+#
+# Validates the Caracal monorepo across TypeScript, Go, Python, and documentation builds.
+
+name: test
 
 on:
   push:
     branches:
       - main
+    paths:
+      - '.github/workflows/*.yml'
+      - 'apps/**'
+      - 'docs/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'tests/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
   pull_request:
+    paths:
+      - '.github/workflows/*.yml'
+      - 'apps/**'
+      - 'docs/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'tests/**'
+      - 'go.work'
+      - 'go.work.sum'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.28.0'
+  GO_VERSION: '1.26'
+  PYTHON_VERSION: '3.11'
+  GOTOOLCHAIN: auto
+  ASTRO_TELEMETRY_DISABLED: '1'
+  CI: true
+
 jobs:
-  test:
-    name: Test
+  changes:
+    name: Detect changes
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
+    outputs:
+      typescript: ${{ steps.paths.outputs.typescript }}
+      go: ${{ steps.paths.outputs.go }}
+      python: ${{ steps.paths.outputs.python }}
+      docs: ${{ steps.paths.outputs.docs }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          enable-cache: true
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Setup Python 3.12
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Classify changed paths
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ '${{ github.event_name }}' == 'workflow_dispatch' ]]; then
+            git ls-files > changed-files.txt
+          elif [[ '${{ github.event_name }}' == 'pull_request' ]]; then
+            git fetch --no-tags --prune --depth=1 origin '${{ github.base_ref }}'
+            git diff --name-only 'origin/${{ github.base_ref }}'...HEAD > changed-files.txt
+          elif [[ '${{ github.event.before }}' =~ ^0+$ ]]; then
+            git ls-files > changed-files.txt
+          else
+            git diff --name-only '${{ github.event.before }}' '${{ github.sha }}' > changed-files.txt
+          fi
+
+          echo 'Changed files:'
+          sed 's/^/  /' changed-files.txt
+
+          run_all=false
+          if grep -Eq '^\.github/workflows/test\.yml$|^package\.json$|^pnpm-lock\.yaml$|^pnpm-workspace\.yaml$' changed-files.txt; then
+            run_all=true
+          fi
+
+          typescript=false
+          go=false
+          python=false
+          docs=false
+
+          if [[ "$run_all" == 'true' ]] || grep -Eq '^(apps/|tests/typescript/|packages/(caracalai-admin|caracalai-agent|caracalai-cloudflare|caracalai-mcp|caracalai-mcp-fastmcp|caracalai-oauth|ts-shared)/)' changed-files.txt; then
+            typescript=true
+          fi
+
+          if [[ "$run_all" == 'true' ]] || grep -Eq '^(go\.work|go\.work\.sum|tests/go/|services/(audit|gateway|sts)/|packages/(shared|caracalai-mcp-go)/|apps/agent-coordinator/relay/)' changed-files.txt || grep -Eq '\.go$|go\.mod$' changed-files.txt; then
+            go=true
+          fi
+
+          if [[ "$run_all" == 'true' ]] || grep -Eq '^(tests/python/|packages/caracalai-mcp-python/)' changed-files.txt || grep -Eq '\.py$|pyproject\.toml$' changed-files.txt; then
+            python=true
+          fi
+
+          if [[ "$run_all" == 'true' ]] || grep -Eq '^(docs/|\.github/workflows/deploy\.yml$)' changed-files.txt; then
+            docs=true
+          fi
+
+          {
+            echo "typescript=$typescript"
+            echo "go=$go"
+            echo "python=$python"
+            echo "docs=$docs"
+          } >> "$GITHUB_OUTPUT"
+
+  typescript:
+    name: TypeScript lint, types, tests, build
+    needs: changes
+    if: needs.changes.outputs.typescript == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: postgresql://caracal:caracal@localhost:5432/caracal
+      REDIS_URL: redis://localhost:6379
+      STS_URL: http://localhost:3001
+      ISSUER_URL: http://localhost:4000
+      AGENT_COORDINATOR_AUDIENCE: caracal-agent-coordinator
+      AGENT_COORDINATOR_SCOPE: agent:coordinate
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: uv sync --group dev
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: ${{ env.PNPM_VERSION }}
 
-      - name: Setup Node.js 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
-          cache-dependency-path: sdk/node-sdk/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install Node SDK dependencies
-        working-directory: sdk/node-sdk
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
 
-      - name: Run OSS separation scan
-        run: uv run python scripts/oss_separation_scan.py --mode gate
+      - name: Generate CLI embedded assets
+        run: pnpm --dir apps/cli sync-embedded
 
-      - name: Run tests
-        run: >-
-          uv run pytest
-          tests/
-          -m "not integration"
-          -n auto
-          --timeout=30
-          --cov=packages/caracal/caracal
-          --cov=packages/caracal-server/caracal
-          --cov-report=term-missing
-          --cov-report=xml
-          --cov-report=html
-          --junitxml=junit.xml
+      - name: Build TypeScript packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir packages/ts-shared build
+          pnpm --dir packages/caracalai-oauth build
+          pnpm --dir packages/caracalai-admin build
+          pnpm --dir packages/caracalai-agent build
+          pnpm --dir packages/caracalai-mcp build
+          pnpm --dir packages/caracalai-mcp-fastmcp build
+          pnpm --dir packages/caracalai-cloudflare build
+          pnpm --dir apps/api build
+          pnpm --dir apps/agent-coordinator build
+
+      - name: Run lint scripts
+        run: pnpm -r --if-present lint
+
+      - name: Run type checks
+        run: pnpm -r --if-present typecheck
+
+      - name: Run TypeScript tests with coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_pkg() {
+            local pkg_dir="$1"
+            local out_name="$2"
+            shift 2
+            echo "::group::vitest ${out_name}"
+            pnpm --dir "${pkg_dir}" exec vitest run --root "${GITHUB_WORKSPACE}" \
+              --coverage.enabled true \
+              --coverage.provider=v8 \
+              --coverage.reporter=lcov \
+              --coverage.reportsDirectory="${GITHUB_WORKSPACE}/coverage/typescript/${out_name}" \
+              "$@"
+            echo "::endgroup::"
+          }
+          run_pkg apps/api api \
+            tests/typescript/unit/api \
+            tests/typescript/security/api \
+            tests/typescript/property/api \
+            tests/typescript/contract/api \
+            tests/typescript/fuzz/api \
+            tests/typescript/integration/api
+          run_pkg apps/agent-coordinator agent-coordinator tests/typescript/unit/orchestration/agent-coordinator
+          run_pkg apps/cli cli tests/typescript/unit/cli
+          run_pkg apps/tui tui tests/typescript/unit/tui
+          run_pkg packages/ts-shared ts-shared tests/typescript/unit/shared
+          run_pkg packages/caracalai-admin caracalai-admin tests/typescript/unit/sdk/caracalai-admin
+          run_pkg packages/caracalai-agent caracalai-agent tests/typescript/unit/sdk/caracalai-agent
+          run_pkg packages/caracalai-oauth caracalai-oauth tests/typescript/unit/sdk/caracalai-oauth
+          run_pkg packages/caracalai-mcp caracalai-mcp tests/typescript/unit/sdk/caracalai-mcp
+          run_pkg packages/caracalai-cloudflare caracalai-cloudflare tests/typescript/unit/sdk/caracalai-cloudflare
+
+      - name: List TypeScript coverage outputs
+        if: always()
+        shell: bash
+        run: |
+          echo 'Coverage tree:'
+          ls -laR coverage/typescript 2>&1 || echo 'coverage/typescript missing'
+
+      - name: Build TypeScript packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --dir packages/caracalai-mcp-fastmcp build
+
+      - name: Upload TypeScript coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-typescript
+          path: coverage/typescript/**/lcov.info
+          if-no-files-found: error
+          retention-days: 7
+
+  go:
+    name: Go tests
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            go.work
+            go.work.sum
+            **/go.mod
+
+      - name: Run Go tests with coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p coverage/go
+          go test -race -covermode=atomic -coverprofile=coverage/go/coverage.out ./packages/shared/... ./services/sts/... ./services/audit/... ./services/gateway/... ./apps/agent-coordinator/relay/... ./packages/caracalai-mcp-go/...
+          go tool cover -func=coverage/go/coverage.out
+
+      - name: Upload Go coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-go
+          path: coverage/go/coverage.out
+          if-no-files-found: error
+          retention-days: 7
+
+  python:
+    name: Python tests
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: packages/caracalai-mcp-python/pyproject.toml
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e packages/caracalai-mcp-python coverage cryptography
+
+      - name: Run Python tests with coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}/packages/caracalai-mcp-python:${{ github.workspace }}/tests/shared/test-utils/python
+        run: |
+          set -euxo pipefail
+          mkdir -p coverage/python
+          coverage run --source=packages/caracalai-mcp-python/caracalai_mcp \
+            -m unittest discover -s tests/python -p 'test_*.py' -v
+          coverage xml -o coverage/python/coverage.xml
+          coverage report --show-missing
+
+      - name: List Python coverage outputs
+        if: always()
+        shell: bash
+        run: ls -la coverage/python 2>&1 || echo 'coverage/python missing'
+
+      - name: Upload Python coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python
+          path: coverage/python/coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
+  docs:
+    name: Docs build
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build static docs
+        run: pnpm --dir docs build
+
+      - name: Verify docs artifact
+        run: |
+          set -euo pipefail
+          test -f docs/dist/index.html
+          test -f docs/dist/CNAME
+          grep -Fx 'docs.caracal.run' docs/dist/CNAME
+
+  coverage:
+    name: Upload coverage
+    needs:
+      - typescript
+      - go
+      - python
+    if: always() && !cancelled() && (needs.typescript.result == 'success' || needs.go.result == 'success' || needs.python.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-*
+          path: coverage
+
+      - name: List coverage files
+        run: find coverage -maxdepth 4 -type f -print | sort
 
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: false
+          files: coverage/coverage-typescript/**/lcov.info,coverage/coverage-go/coverage.out,coverage/coverage-python/coverage.xml
+          disable_search: true
+          fail_ci_if_error: true
 
-      - name: Upload coverage HTML
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: coverage-html
-          path: htmlcov/
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: junit-results
-          path: junit.xml
-
-  package-build:
-    name: Package builds
+  status:
+    name: Test status
+    needs:
+      - changes
+      - typescript
+      - go
+      - python
+      - docs
+      - coverage
+    if: always()
     runs-on: ubuntu-latest
-
+    timeout-minutes: 5
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
-        with:
-          enable-cache: true
-
-      - name: Setup Python 3.12
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-
-      - name: Build Python packages
-        run: uv build --all-packages
-
-  node-sdk:
-    name: Node SDK
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: sdk/node-sdk
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 10
-
-      - name: Setup Node.js 22
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: sdk/node-sdk/pnpm-lock.yaml
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm run lint
-
-      - name: Run tests
-        run: pnpm test
-
-      - name: Build package
-        run: pnpm run build
-
-      - name: Validate package contents
-        run: pnpm pack --pack-destination "$RUNNER_TEMP"
+      - name: Check required jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for result in '${{ needs.changes.result }}' '${{ needs.typescript.result }}' '${{ needs.go.result }}' '${{ needs.python.result }}' '${{ needs.docs.result }}' '${{ needs.coverage.result }}'; do
+            if [[ "$result" == 'failure' || "$result" == 'cancelled' ]]; then
+              echo "A required test workflow job ended with $result."
+              exit 1
+            fi
+          done
+          echo 'All required test workflow jobs passed or were skipped by path filters.'

@@ -1,0 +1,1 @@
+../../../tests/go/unit/sts/internal/consumer_test.go

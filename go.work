@@ -1,0 +1,10 @@
+go 1.26
+
+use (
+	./services/sts
+	./services/audit
+	./services/gateway
+	./apps/agent-coordinator/relay
+	./packages/shared
+	./packages/caracalai-mcp-go
+)

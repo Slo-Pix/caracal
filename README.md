@@ -28,7 +28,7 @@
 
 # Overview
 
-**Caracal** is a pre-execution authority enforcement system for AI agents and automated software operating in production environments. It exists at the boundary where autonomous decisions turn into irreversible actions—such as API calls, database writes, or system triggers.
+**Caracal** is a pre-execution authority enforcement system for AI agents and automated software operating in production environments. It exists at the boundary where autonomous decisions turn into irreversible actions such as API calls, database writes, or system triggers.
 
 By enforcing the **principle of explicit authority**, Caracal ensures no action executes without a cryptographically verified, time-bound mandate issued under a governing policy.
 
@@ -63,73 +63,89 @@ More coming soon
 
 ## Installation & Setup
 
-[![caracal-core](https://img.shields.io/pypi/v/caracal-core?style=for-the-badge&label=caracal-core&logo=pypi&logoColor=white)](https://pypi.org/project/caracal-core)
-[![caracal-sdk](https://img.shields.io/pypi/v/caracal-sdk?style=for-the-badge&label=caracal-sdk&logo=pypi&logoColor=white)](https://pypi.org/project/caracal-sdk)
-
 ### Quickstart
 
-```bash
-export CCL_HOME="${CCL_HOME:-$HOME/.caracal}"
-mkdir -p "$CCL_HOME/runtime"
-umask 077
-cat > "$CCL_HOME/runtime/.env" <<EOF
-CCL_DB_PASSWORD=$(openssl rand -hex 24)
-CCL_REDIS_PASSWORD=$(openssl rand -hex 24)
-CCL_VAULT_TOKEN=dev-local-token
-VAULT_AUTH_SECRET=$(openssl rand -hex 32)
-VAULT_ENC_KEY=$(openssl rand -hex 16)
-CCL_ENV_MODE=dev
-CCL_ALLOW_INTERNAL_PROVIDER_URLS=true
-EOF
-chmod 600 "$CCL_HOME/runtime/.env"
+> Only Docker is required. The CLI is a single self-contained binary. Pin a version with `CARACAL_VERSION=vX.Y.Z` before the install command.
 
-caracal bootstrap
+<details open>
+<summary><strong>Linux</strong> (x64 / arm64) curl or wget</summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+# or, without curl:
+wget -qO- https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
+
+Installs to `~/.local/bin/caracal`. Override with `CARACAL_INSTALL_DIR=/usr/local/bin` (may need `sudo`).
+
+</details>
+
+<details>
+<summary><strong>macOS</strong> (Intel / Apple Silicon)</summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
+
+If Gatekeeper blocks the binary on first run: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
+
+</details>
+
+<details>
+<summary><strong>Windows</strong> (x64) PowerShell</summary>
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\Programs\caracal\caracal.exe` and adds it to the user `PATH`. Requires Docker Desktop with WSL2.
+
+</details>
+
+<details>
+<summary><strong>Manual</strong> direct download</summary>
+
+Grab the matching asset from the [latest release](https://github.com/Garudex-Labs/caracal/releases/latest) (`caracal-linux-x64`, `caracal-linux-arm64`, `caracal-darwin-x64`, `caracal-darwin-arm64`, or `caracal-windows-x64.exe`), verify against `SHA256SUMS`, then place it on your `PATH` and `chmod +x` (Unix).
+
+</details>
+
+<p></p>
+
+Then, on any platform:
+
+```bash
 caracal up
-eval "$(caracal auth token --format env)"
-caracal      # Launch Flow (TUI) inside the runtime container
+caracal init
+caracal run -- printenv RESOURCE_TOKEN
 ```
 
-The default runtime is secure-by-default: Redis requires `CCL_REDIS_PASSWORD`,
-secret-bearing `.env` files must be owner-only, and privileged AIS/MCP calls
-require AIS-issued session tokens. The `caracal auth token --format env` helper
-mints through the local AIS Unix socket and prints `CCL_SESS_TOKEN=...` for SDK
-and example app usage.
-
-### Command Reference
+### Basic commands
 
 ```bash
-caracal            # Launch Flow (TUI) inside the runtime container
-caracal flow       # Same as the default command
-caracal up         # Pull images and start postgres+redis+vault+mcp
-caracal up --no-pull
-caracal down       # Stop stack and remove services
-caracal cli        # Open a restricted interactive Caracal CLI session in the container
-caracal logs -f    # Tail runtime logs
-caracal bootstrap  # Create the system principal and first-boot AIS nonce
-caracal auth token --format env
-caracal reset      # Down + remove volumes (full local reset)
-caracal purge      # Completely remove Caracal containers, data, networks, images, and local state
-caracal purge --force
+caracal up
+caracal status
+caracal down
+caracal init
+caracal run -- <cmd...>
+caracal credential read <resource>
 ```
 
-### Database Migration and Cleanup
+### Inspect with the Terminal UI
+
+A read-only TUI ships next to `caracal` for interactively browsing zones, applications, resources, providers, policies, policy-sets, grants, sessions, agents, and a live audit tail.
 
 ```bash
-caracal migrate        # Run database migrations up inside the runtime container
-caracal migrate down
-caracal migrate up --revision <revision>
-caracal reset
-caracal purge --force
+export CARACAL_ADMIN_TOKEN=<your admin token>   # the installer prints this; or read it from infra/docker/.env
+caracal-tui
 ```
 
-`caracal migrate` is a host database-migration wrapper and accepts only `up` or `down`.
-Do not run `caracal migrate repo-to-package` as a host command.
+Useful environment variables: `CARACAL_API_URL` (default `http://localhost:3000`), `CARACAL_COORDINATOR_URL` (default `http://localhost:4000`), `CARACAL_COORDINATOR_TOKEN` (only required for the agents view), `CARACAL_ZONE_ID` (or set `zone_id` in `caracal.toml`). Inside the TUI: `j`/`k` or arrows to move, `Enter` to drill in, `h`/`Esc` to go back, `r` to reload, `p` to pause the audit tail, `d` to cycle the decision filter, `q` to quit.
 
-To remove a workspace, open `caracal cli` and run:
+Skip installing the TUI by piping the installer with `CARACAL_SKIP_TUI=1`.
 
-```bash
-workspace delete <workspace-name> --force
-```
+### Develop from source
+
+For contributing, building from source, and running the stack against local code, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 -----
 

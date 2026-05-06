@@ -1,0 +1,151 @@
+// Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+// Caracal, a product of Garudex Labs
+//
+// RFC 8693 token exchange client with in-process cache and 401-retry.
+
+import { InProcessTokenCache } from './cache.js'
+import { InteractionRequiredError } from './types.js'
+import type { ExchangeOptions, TokenCache, TokenExchangeResponse } from './types.js'
+
+interface STSErrorResponse {
+  error?: string
+  error_description?: string
+  challenge_id?: string
+}
+
+function parseSTSErrorResponse(body: string): STSErrorResponse {
+  if (body === '') return {}
+  return JSON.parse(body) as STSErrorResponse
+}
+
+async function readSTSErrorResponse(res: Response): Promise<STSErrorResponse> {
+  if (typeof res.text === 'function') {
+    return parseSTSErrorResponse(await res.text())
+  }
+  if (typeof res.json === 'function') {
+    return await res.json() as STSErrorResponse
+  }
+  return {}
+}
+
+export class OAuthClient {
+  private readonly cache: TokenCache
+
+  constructor(
+    private readonly stsUrl: string,
+    private readonly clientId: string,
+    cache?: TokenCache,
+  ) {
+    this.cache = cache ?? new InProcessTokenCache()
+  }
+
+  async exchange(
+    subjectToken: string,
+    resource: string,
+    opts: ExchangeOptions = {},
+  ): Promise<TokenExchangeResponse> {
+    const timeoutMs = opts.timeoutMs ?? 30_000
+    const preflightWindow = timeoutMs / 1000 + 30
+
+    const cacheSubject = this.cacheSubject(subjectToken, opts)
+    const cacheResource = this.cacheResource(resource, opts)
+    const cached = this.cache.get(cacheSubject, cacheResource)
+    if (cached) {
+      const remaining = cached.issuedAt + cached.expiresIn - Date.now() / 1000
+      if (remaining > preflightWindow) return cached
+    }
+
+    const token = await this.doExchange(subjectToken, resource, opts, false)
+    this.cache.set(cacheSubject, cacheResource, token)
+    return token
+  }
+
+  private cacheSubject(subjectToken: string, opts: ExchangeOptions): string {
+    return [
+      this.clientId,
+      subjectToken,
+      opts.actorToken ?? '',
+      opts.sessionId ?? '',
+      opts.agentSessionId ?? '',
+      opts.delegationEdgeId ?? '',
+      opts.clientAssertion ?? '',
+    ].join('::')
+  }
+
+  private cacheResource(resource: string, opts: ExchangeOptions): string {
+    return [resource, this.normalizedScopes(opts.scopes), opts.ttlSeconds?.toString() ?? ''].join('::')
+  }
+
+  private normalizedScopes(scopes?: string[]): string {
+    return [...new Set(scopes ?? [])].sort().join(' ')
+  }
+
+  private async doExchange(
+    subjectToken: string,
+    resource: string,
+    opts: ExchangeOptions,
+    isRetry: boolean,
+  ): Promise<TokenExchangeResponse> {
+    const body = new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      subject_token: subjectToken,
+      subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+      resource,
+      client_id: this.clientId,
+    })
+    if (opts.clientSecret) body.set('client_secret', opts.clientSecret)
+    if (opts.clientAssertion) body.set('client_assertion', opts.clientAssertion)
+    if (opts.clientAssertionType) body.set('client_assertion_type', opts.clientAssertionType)
+    if (opts.actorToken) body.set('actor_token', opts.actorToken)
+    if (opts.sessionId) body.set('session_id', opts.sessionId)
+    if (opts.agentSessionId) body.set('agent_session_id', opts.agentSessionId)
+    if (opts.delegationEdgeId) body.set('delegation_edge_id', opts.delegationEdgeId)
+    const scope = this.normalizedScopes(opts.scopes)
+    if (scope) body.set('scope', scope)
+    if (opts.ttlSeconds) body.set('ttl_seconds', String(opts.ttlSeconds))
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 30_000)
+    let res: Awaited<ReturnType<typeof fetch>>
+    try {
+      res = await fetch(`${this.stsUrl}/oauth/2/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (!res.ok) {
+      let err: STSErrorResponse
+      try {
+        err = await readSTSErrorResponse(res)
+      } catch {
+        throw new Error(`STS error ${res.status}: invalid error response`)
+      }
+      if (err['error'] === 'interaction_required') {
+        throw new InteractionRequiredError(
+          err['error_description'] ?? 'Step-up required',
+          err['challenge_id'] ?? '',
+        )
+      }
+      if (res.status === 401 && !isRetry) {
+        return this.doExchange(subjectToken, resource, opts, true)
+      }
+      throw new Error(err['error_description'] ?? `STS error ${res.status}`)
+    }
+
+    const data = (await res.json()) as {
+      access_token: string
+      expires_in: number
+    }
+    return {
+      accessToken: data['access_token'],
+      tokenType: 'Bearer',
+      expiresIn: data['expires_in'],
+      issuedAt: Math.floor(Date.now() / 1000),
+    }
+  }
+}

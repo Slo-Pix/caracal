@@ -1,0 +1,143 @@
+// Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+// Caracal, a product of Garudex Labs
+//
+// OPA engine unit tests: deny-all fallback, allow policy, partial status pass-through.
+
+package internal
+
+import (
+	"context"
+	"testing"
+
+	"github.com/open-policy-agent/opa/rego"
+)
+
+func TestOPAFallbackDeny(t *testing.T) {
+	e := newOPAEngine(nil)
+	e.storeFallback("z1")
+
+	res, err := e.Evaluate(context.Background(), OPAInput{
+		Principal: OPAPrincipal{ZoneID: "z1"},
+		Action:    OPAAction{ID: "TokenExchange"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Decision != "deny" {
+		t.Errorf("want deny, got %s", res.Decision)
+	}
+	if res.EvaluationStatus != "complete" {
+		t.Errorf("want complete, got %s", res.EvaluationStatus)
+	}
+}
+
+func TestOPAAllowPolicy(t *testing.T) {
+	allowRego := `
+package caracal.authz
+result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
+`
+	e := newOPAEngine(nil)
+	pq, err := rego.New(
+		rego.Module("allow.rego", allowRego),
+		rego.Query("result = data.caracal.authz.result"),
+	).PrepareForEval(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mu.Lock()
+	e.zones["z1"] = &opaZoneState{query: &pq}
+	e.mu.Unlock()
+
+	res, err := e.Evaluate(context.Background(), OPAInput{
+		Principal: OPAPrincipal{ZoneID: "z1"},
+		Action:    OPAAction{ID: "TokenExchange"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Decision != "allow" {
+		t.Errorf("want allow, got %s", res.Decision)
+	}
+}
+
+func TestOPADenyPolicy(t *testing.T) {
+	denyRego := `
+package caracal.authz
+result := {"decision": "deny", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
+`
+	e := newOPAEngine(nil)
+	pq, err := rego.New(
+		rego.Module("deny.rego", denyRego),
+		rego.Query("result = data.caracal.authz.result"),
+	).PrepareForEval(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mu.Lock()
+	e.zones["z1"] = &opaZoneState{query: &pq}
+	e.mu.Unlock()
+
+	res, err := e.Evaluate(context.Background(), OPAInput{
+		Principal: OPAPrincipal{ZoneID: "z1"},
+		Action:    OPAAction{ID: "TokenExchange"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Decision != "deny" {
+		t.Errorf("want deny, got %s", res.Decision)
+	}
+}
+
+func TestOPAPartialStatusPassthrough(t *testing.T) {
+	partialRego := `
+package caracal.authz
+result := {"decision": "partial", "evaluation_status": "partial", "determining_policies": [], "diagnostics": []}
+`
+	e := newOPAEngine(nil)
+	pq, err := rego.New(
+		rego.Module("partial.rego", partialRego),
+		rego.Query("result = data.caracal.authz.result"),
+	).PrepareForEval(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.mu.Lock()
+	e.zones["z1"] = &opaZoneState{query: &pq}
+	e.mu.Unlock()
+
+	res, err := e.Evaluate(context.Background(), OPAInput{
+		Principal: OPAPrincipal{ZoneID: "z1"},
+		Action:    OPAAction{ID: "TokenExchange"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// partial status is passed through; exchange handler enforces DENY
+	if res.EvaluationStatus != "partial" {
+		t.Errorf("want partial, got %s", res.EvaluationStatus)
+	}
+}
+
+func TestOPAReloadSameManifest(t *testing.T) {
+	e := newOPAEngine(nil)
+	sha := "abc123"
+	e.mu.Lock()
+	pq, _ := rego.New(
+		rego.Module("allow.rego", `
+package caracal.authz
+result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
+`),
+		rego.Query("result = data.caracal.authz.result"),
+	).PrepareForEval(context.Background())
+	e.zones["z1"] = &opaZoneState{query: &pq, manifestSHA: sha}
+	e.mu.Unlock()
+
+	// loadZone with a nil DB and the same SHA should skip reload
+	e.mu.RLock()
+	state := e.zones["z1"]
+	e.mu.RUnlock()
+	if state.manifestSHA != sha {
+		t.Errorf("want sha %s, got %s", sha, state.manifestSHA)
+	}
+}

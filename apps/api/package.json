@@ -1,0 +1,34 @@
+{
+  "name": "@caracalai/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "vitest run --root ../.. tests/typescript/unit/api tests/typescript/security/api tests/typescript/property/api tests/typescript/contract/api tests/typescript/fuzz/api tests/typescript/integration/api"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.4.0",
+    "@fastify/swagger-ui": "^5.2.1",
+    "@caracalai/shared": "workspace:*",
+    "fastify": "^5.2.1",
+    "fastify-plugin": "^5.0.1",
+    "ioredis": "^5.6.0",
+    "pg": "^8.14.1",
+    "uuid": "^14.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/pg": "^8.11.14",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

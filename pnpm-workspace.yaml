@@ -1,0 +1,6 @@
+packages:
+  - 'apps/*'
+  - 'docs'
+  - 'services/*'
+  - 'packages/ts-*'
+  - 'packages/caracalai-*'
