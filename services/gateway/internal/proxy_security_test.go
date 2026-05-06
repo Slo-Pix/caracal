@@ -1,1 +1,0 @@
-../../../tests/go/security/gateway/internal/proxy_security_test.go
