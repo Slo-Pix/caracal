@@ -166,16 +166,42 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm --dir apps/api exec vitest run --root ../.. tests/typescript/unit/api tests/typescript/security/api tests/typescript/property/api tests/typescript/contract/api tests/typescript/fuzz/api tests/typescript/integration/api --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/api
-          pnpm --dir apps/agent-coordinator exec vitest run --root ../.. tests/typescript/unit/orchestration/agent-coordinator --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/agent-coordinator
-          pnpm --dir apps/cli exec vitest run --root ../.. tests/typescript/unit/cli --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/cli
-          pnpm --dir apps/tui exec vitest run --root ../.. tests/typescript/unit/tui --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/tui
-          pnpm --dir packages/ts-shared exec vitest run --root ../.. tests/typescript/unit/shared --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/ts-shared
-          pnpm --dir packages/caracalai-admin exec vitest run --root ../.. tests/typescript/unit/sdk/caracalai-admin --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/caracalai-admin
-          pnpm --dir packages/caracalai-agent exec vitest run --root ../.. tests/typescript/unit/sdk/caracalai-agent --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/caracalai-agent
-          pnpm --dir packages/caracalai-oauth exec vitest run --root ../.. tests/typescript/unit/sdk/caracalai-oauth --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/caracalai-oauth
-          pnpm --dir packages/caracalai-mcp exec vitest run --root ../.. tests/typescript/unit/sdk/caracalai-mcp --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/caracalai-mcp
-          pnpm --dir packages/caracalai-cloudflare exec vitest run --root ../.. tests/typescript/unit/sdk/caracalai-cloudflare --coverage.enabled true --coverage.provider=v8 --coverage.reporter=lcov --coverage.reportsDirectory=coverage/typescript/caracalai-cloudflare
+          run_pkg() {
+            local pkg_dir="$1"
+            local out_name="$2"
+            shift 2
+            echo "::group::vitest ${out_name}"
+            pnpm --dir "${pkg_dir}" exec vitest run --root "${GITHUB_WORKSPACE}" \
+              --coverage.enabled true \
+              --coverage.provider=v8 \
+              --coverage.reporter=lcov \
+              --coverage.reportsDirectory="${GITHUB_WORKSPACE}/coverage/typescript/${out_name}" \
+              "$@"
+            echo "::endgroup::"
+          }
+          run_pkg apps/api api \
+            tests/typescript/unit/api \
+            tests/typescript/security/api \
+            tests/typescript/property/api \
+            tests/typescript/contract/api \
+            tests/typescript/fuzz/api \
+            tests/typescript/integration/api
+          run_pkg apps/agent-coordinator agent-coordinator tests/typescript/unit/orchestration/agent-coordinator
+          run_pkg apps/cli cli tests/typescript/unit/cli
+          run_pkg apps/tui tui tests/typescript/unit/tui
+          run_pkg packages/ts-shared ts-shared tests/typescript/unit/shared
+          run_pkg packages/caracalai-admin caracalai-admin tests/typescript/unit/sdk/caracalai-admin
+          run_pkg packages/caracalai-agent caracalai-agent tests/typescript/unit/sdk/caracalai-agent
+          run_pkg packages/caracalai-oauth caracalai-oauth tests/typescript/unit/sdk/caracalai-oauth
+          run_pkg packages/caracalai-mcp caracalai-mcp tests/typescript/unit/sdk/caracalai-mcp
+          run_pkg packages/caracalai-cloudflare caracalai-cloudflare tests/typescript/unit/sdk/caracalai-cloudflare
+
+      - name: List TypeScript coverage outputs
+        if: always()
+        shell: bash
+        run: |
+          echo 'Coverage tree:'
+          ls -laR coverage/typescript 2>&1 || echo 'coverage/typescript missing'
 
       - name: Build TypeScript packages
         shell: bash
@@ -192,7 +218,6 @@ jobs:
           pnpm --dir packages/caracalai-cloudflare build
 
       - name: Upload TypeScript coverage artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-typescript
@@ -230,7 +255,6 @@ jobs:
           go tool cover -func=coverage/go/coverage.out
 
       - name: Upload Go coverage artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-go
@@ -263,14 +287,22 @@ jobs:
           python -m pip install -e packages/caracalai-mcp-python coverage
 
       - name: Run Python tests with coverage
+        env:
+          PYTHONPATH: ${{ github.workspace }}/packages/caracalai-mcp-python
         run: |
+          set -euxo pipefail
           mkdir -p coverage/python
-          coverage run --source=packages/caracalai-mcp-python/caracalai_mcp -m unittest discover -s tests/python -p 'test_*.py'
+          coverage run --source=packages/caracalai-mcp-python/caracalai_mcp \
+            -m unittest discover -s tests/python -p 'test_*.py' -v
           coverage xml -o coverage/python/coverage.xml
           coverage report --show-missing
 
-      - name: Upload Python coverage artifact
+      - name: List Python coverage outputs
         if: always()
+        shell: bash
+        run: ls -la coverage/python 2>&1 || echo 'coverage/python missing'
+
+      - name: Upload Python coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-python
