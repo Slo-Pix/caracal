@@ -1,22 +1,21 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// TTL sweeper: terminates expired agents transactionally with outbox events.
+// Deadline enforcer: marks running invocations past their deadline as timed_out.
 
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
 import { enqueue, Topics } from '../outbox.js'
 
-const SWEEP_LOCK = 'coordinator:ttl_sweep'
+const SWEEP_LOCK = 'coordinator:invocation_deadline'
 
-interface ExpiredAgent {
+interface TimedOutInvocation {
   id: string
   zone_id: string
-  session_sid: string
-  parent_id: string | null
+  service_id: string
 }
 
-export async function runTTLSweep(db: Pool): Promise<number> {
+export async function runDeadlineSweep(db: Pool): Promise<number> {
   const client = await db.connect()
   try {
     await client.query('BEGIN')
@@ -28,21 +27,23 @@ export async function runTTLSweep(db: Pool): Promise<number> {
       await client.query('ROLLBACK')
       return 0
     }
-    const { rows } = await client.query<ExpiredAgent>(
-      `UPDATE agent_sessions
-       SET status = 'terminated', terminated_at = now()
-       WHERE status = 'active'
-         AND spawned_at + (ttl_seconds * interval '1 second') < now()
-       RETURNING id, zone_id, session_sid, parent_id`,
+    const { rows } = await client.query<TimedOutInvocation>(
+      `UPDATE agent_invocations
+       SET status = 'timed_out',
+           completed_at = now(),
+           error_json = COALESCE(error_json, '{}'::jsonb)
+                        || jsonb_build_object('reason', 'deadline_exceeded'),
+           updated_at = now()
+       WHERE status = 'running'
+         AND deadline_at IS NOT NULL
+         AND deadline_at < now()
+       RETURNING id, zone_id, service_id`,
     )
     for (const row of rows) {
-      await enqueue(client, Topics.SessionsRevoke,
-        `agent_ttl:${row.id}`,
-        { zone_id: row.zone_id, session_id: row.session_sid, reason: 'ttl' })
-      await enqueue(client, Topics.AgentsLifecycle,
-        `terminate:${row.id}`,
-        { event: 'terminate', zone_id: row.zone_id, session_id: row.id,
-          parent_id: row.parent_id, reason: 'ttl' })
+      await enqueue(client, Topics.InvocationsLifecycle,
+        `invocation.timed_out:${row.id}`,
+        { event: 'invocation.timed_out', zone_id: row.zone_id,
+          service_id: row.service_id, invocation_id: row.id })
     }
     await client.query('COMMIT')
     return rows.length
@@ -54,11 +55,14 @@ export async function runTTLSweep(db: Pool): Promise<number> {
   }
 }
 
-export interface TTLSweeperHandle {
+export interface DeadlineEnforcerHandle {
   stop: () => Promise<void>
 }
 
-export function startTTLSweeper(db: Pool, intervalMs = cfg.ttlSweepIntervalMs): TTLSweeperHandle {
+export function startDeadlineEnforcer(
+  db: Pool,
+  intervalMs = cfg.deadlineSweepIntervalMs,
+): DeadlineEnforcerHandle {
   let running = false
   let stopped = false
   let pending: Promise<unknown> = Promise.resolve()
@@ -66,9 +70,9 @@ export function startTTLSweeper(db: Pool, intervalMs = cfg.ttlSweepIntervalMs): 
   const tick = (): void => {
     if (stopped || running) return
     running = true
-    pending = runTTLSweep(db)
+    pending = runDeadlineSweep(db)
       .catch((err) => {
-        console.error('TTL sweep failed:', err)
+        console.error('Deadline sweep failed:', err)
       })
       .finally(() => {
         running = false
