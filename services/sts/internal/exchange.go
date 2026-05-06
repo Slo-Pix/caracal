@@ -1,16 +1,14 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Token exchange handler: authenticates, evaluates policy, issues JWT.
+// Token exchange handler: authenticates, evaluates policy per resource, issues JWT.
 
 package internal
 
 import (
 	"context"
-	"crypto/sha256"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -41,6 +39,7 @@ type delegationConstraints struct {
 }
 
 func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	if err := r.ParseForm(); err != nil {
 		writeError(w, http.StatusBadRequest, sharederr.New(sharederr.InvalidToken, "malformed request body"))
 		return
@@ -66,6 +65,7 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		ClientSecret:        r.FormValue("client_secret"),
 		ClientAssertion:     r.FormValue("client_assertion"),
 		ClientAssertionType: r.FormValue("client_assertion_type"),
+		ChallengeID:         r.FormValue("challenge_id"),
 		ChallengeResponse:   r.FormValue("challenge_response"),
 		SessionID:           r.FormValue("session_id"),
 		AgentSessionID:      r.FormValue("agent_session_id"),
@@ -94,7 +94,6 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, requestID string) (*TokenResponse, *challengeState, int, *sharederr.CaracalError) {
-	// 1. Authenticate application
 	app, zoneID, err := s.authenticateApp(ctx, req)
 	if err != nil {
 		return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "invalid client credentials")
@@ -104,7 +103,6 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		return nil, nil, http.StatusBadRequest, sharederr.New(sharederr.InvalidToken, "at least one resource is required")
 	}
 
-	// 2. Validate subject token
 	var subjectClaims map[string]interface{}
 	if req.SubjectToken != "" {
 		subjectClaims, err = s.validateSubjectToken(ctx, req.SubjectToken, zoneID)
@@ -120,7 +118,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		}
 	}
 
-	actorClaims := map[string]interface{}{"client_id": app.ID}
+	actorClaims := map[string]interface{}{}
 	if req.ActorToken != "" {
 		actorClaims, err = s.validateSubjectToken(ctx, req.ActorToken, zoneID)
 		if err != nil {
@@ -129,14 +127,20 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		if _, serr := s.validateTokenSession(ctx, zoneID, "", actorClaims); serr != nil {
 			return nil, nil, http.StatusForbidden, serr
 		}
-		actorClaims["client_id"] = app.ID
+	}
+	// client_id is the authenticated calling application; it is published on a separate
+	// key so it never shadows actor token claims (which carry a distinct application id).
+	actorClaims["caracal_client_id"] = app.ID
+
+	principalID := app.ID
+	if sub := claimString(subjectClaims, "sub"); sub != "" {
+		principalID = sub
 	}
 
-	// 3. Validate challenge response once (global — applies to the whole request)
 	challengeResolved := false
-	if req.ChallengeResponse != "" {
-		c, cerr := s.db.GetStepUpChallenge(ctx, req.ChallengeResponse)
-		if cerr != nil || c.ExpiresAt.Before(time.Now()) || c.SatisfiedAt == nil {
+	if req.ChallengeID != "" || req.ChallengeResponse != "" {
+		if cerr := s.verifyAndConsumeChallenge(ctx, zoneID, principalID, req.ChallengeID, req.ChallengeResponse, req.Resources); cerr != nil {
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "challenge_invalid", &OPAResult{}, nil))
 			return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "challenge not satisfied or expired")
 		}
 		challengeResolved = true
@@ -146,36 +150,43 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		return nil, nil, http.StatusForbidden, refErr
 	}
 
-	// 4. Evaluate policy per resource; collect granted identifiers
+	scopes := strings.Fields(req.Scope)
 	var grantedResources []string
 	grantedUpstreams := map[string]string{}
 	var pendingChallenge *challengeState
-	scopes := strings.Fields(req.Scope)
+	stepUpType := ""
 
 	for _, identifier := range req.Resources {
 		resource, dbErr := s.db.GetResourceByIdentifier(ctx, zoneID, identifier)
 		if dbErr != nil {
-			// unknown resource → soft-deny this slot
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "resource_not_found", &OPAResult{},
+				map[string]interface{}{"resource": identifier}))
 			continue
 		}
 		if !scopesAllowed(scopes, resource.Scopes) {
-			return nil, nil, http.StatusForbidden, sharederr.New(sharederr.AccessDenied, "requested scopes exceed resource scopes")
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "scope_mismatch", &OPAResult{},
+				map[string]interface{}{"resource": resource.Identifier}))
+			continue
 		}
 		if delegation != nil && delegation.edge.ResourceID != nil && *delegation.edge.ResourceID != resource.ID {
-			return nil, nil, http.StatusForbidden, sharederr.New(sharederr.AccessDenied, "requested resource exceeds delegation edge")
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "resource_outside_delegation", &OPAResult{},
+				map[string]interface{}{"resource": resource.Identifier}))
+			continue
 		}
 
-		// Refresh brokered credential if expired
+		if rateErr := s.checkRateLimit(ctx, zoneID, resource.ID, app.ID); rateErr != nil {
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "rate_limited", &OPAResult{},
+				map[string]interface{}{"resource": resource.Identifier}))
+			continue
+		}
+
 		if resource.CredentialProviderID != nil {
 			userID, _ := subjectClaims["sub"].(string)
 			if rerr := s.tryRefreshBrokeredGrant(ctx, zoneID, userID, resource.ID); rerr != nil {
+				s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "credential_refresh_failed", &OPAResult{},
+					map[string]interface{}{"resource": resource.Identifier, "reason": string(rerr.Code)}))
 				continue
 			}
-		}
-
-		// Rate limit per (zone, resource, actor)
-		if rateErr := s.checkRateLimit(ctx, zoneID, resource.ID, app.ID); rateErr != nil {
-			return nil, nil, http.StatusTooManyRequests, rateErr
 		}
 
 		opaInput := OPAInput{
@@ -208,25 +219,23 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 
 		result, evalErr := s.opa.Evaluate(ctx, opaInput)
 		if evalErr != nil {
-			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "policy_eval_failed", &OPAResult{}, nil))
+			s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "policy_eval_failed", &OPAResult{},
+				map[string]interface{}{"resource": resource.Identifier}))
 			return nil, nil, http.StatusServiceUnavailable, sharederr.New(sharederr.PolicyEvalFailed, "policy evaluation unavailable")
 		}
 
-		s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, result.Decision, result.EvaluationStatus, result, nil))
+		s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, result.Decision, result.EvaluationStatus, result,
+			map[string]interface{}{"resource": resource.Identifier}))
 
-		// Partial evaluation is a hard invariant — deny the entire request
+		// Partial evaluation is a hard-deny invariant: any partial answer fails the
+		// entire request rather than silently dropping a resource slot.
 		if result.EvaluationStatus == "partial" {
 			return nil, nil, http.StatusForbidden, sharederr.New(sharederr.PolicyEvalFailed, "partial policy evaluation")
 		}
 
-		// Step-up: first resource requiring it creates the challenge (if not already resolved)
-		if !challengeResolved {
-			if stepUpType := stepUpRequired(result); stepUpType != "" && pendingChallenge == nil {
-				c, cErr := s.createChallenge(ctx, zoneID, req.SessionID, stepUpType)
-				if cErr != nil {
-					return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "challenge creation failed")
-				}
-				pendingChallenge = c
+		if !challengeResolved && pendingChallenge == nil {
+			if t := stepUpRequiredFromResult(result); t != "" {
+				stepUpType = t
 			}
 		}
 
@@ -238,17 +247,24 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		}
 	}
 
-	// Return step-up challenge if any resource required it
+	if !challengeResolved && stepUpType != "" {
+		c, cErr := s.createChallenge(ctx, zoneID, req.SessionID, principalID, stepUpType, req.Resources)
+		if cErr != nil {
+			return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "challenge creation failed")
+		}
+		pendingChallenge = c
+	}
+
 	if pendingChallenge != nil {
 		return nil, pendingChallenge, http.StatusUnauthorized, nil
 	}
 
-	// Hard deny when no resource was granted
 	if len(grantedResources) == 0 {
+		s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "exchange_denied", &OPAResult{},
+			map[string]interface{}{"requested": req.Resources}))
 		return nil, nil, http.StatusForbidden, sharederr.New(sharederr.AccessDenied, "policy denied")
 	}
 
-	// 5. Issue JWT for the granted resources
 	sid, _ := uuid.NewV7()
 	sessID := sid.String()
 	now := time.Now()
@@ -291,6 +307,9 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		issueParams.TargetSessionID = delegation.edge.TargetSessionID
 		issueParams.DelegationPath = delegation.path
 		issueParams.GraphEpoch = delegation.graphEpoch
+		// On-behalf is the immediate issuer in the delegation chain; surface it in the
+		// JWT so downstream resources can render audit subjects without re-walking the graph.
+		issueParams.OnBehalfOf = delegation.edge.IssuerAppID
 	}
 	token, err := issueToken(ctx, issueParams, s.keys, s.cfg.IssuerURL)
 	if err != nil {
@@ -309,9 +328,8 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 }
 
 func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) (*Application, string, error) {
-	// client_id format: "{zone_id}:{app_id}"
 	parts := strings.SplitN(req.ClientID, ":", 2)
-	if len(parts) != 2 {
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return nil, "", fmt.Errorf("invalid client_id format")
 	}
 	zoneID, appID := parts[0], parts[1]
@@ -324,10 +342,14 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 		if credential == "" {
 			credential = req.ClientAssertion
 		}
-		secretHash := sha256.Sum256([]byte(credential))
-		actual := hex.EncodeToString(secretHash[:])
-		if subtle.ConstantTimeCompare([]byte(actual), []byte(*app.ClientSecretHash)) != 1 {
-			return nil, "", fmt.Errorf("invalid client secret")
+		ok, needsRehash := verifyClientSecret(*app.ClientSecretHash, credential)
+		if !ok {
+			return nil, "", errSecretMismatch
+		}
+		if needsRehash {
+			if newHash, herr := hashClientSecret(credential); herr == nil {
+				_ = s.db.UpdateApplicationSecretHash(ctx, app.ID, app.ZoneID, newHash)
+			}
 		}
 	} else if derefStr(app.CredentialType) != "public" {
 		return nil, "", fmt.Errorf("client secret not configured")
@@ -335,6 +357,8 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 	return app, zoneID, nil
 }
 
+// validateSubjectToken verifies an inbound STS-issued token: ES256 signature, this STS
+// as issuer, the token-exchange audience, and a matching zone_id claim.
 func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID string) (map[string]interface{}, error) {
 	pub, _, err := s.keys.getPublicKeyAndKid(ctx, zoneID)
 	if err != nil {
@@ -344,6 +368,8 @@ func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID stri
 	_, err = jwt.NewParser(
 		jwt.WithValidMethods([]string{"ES256"}),
 		jwt.WithIssuer(s.cfg.IssuerURL),
+		jwt.WithAudience(s.cfg.IssuerURL),
+		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
 	).ParseWithClaims(tokenStr, mc, func(*jwt.Token) (interface{}, error) {
 		return pub, nil
@@ -352,7 +378,7 @@ func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID stri
 		return nil, err
 	}
 	if claimString(mc, "zone_id") != zoneID {
-		return nil, fmt.Errorf("token zone mismatch")
+		return nil, errors.New("token zone mismatch")
 	}
 	return mc, nil
 }
@@ -376,6 +402,12 @@ func buildAuditEvent(requestID, zoneID, decision, status string, result *OPAResu
 	id, _ := uuid.NewV7()
 	dpJSON, _ := json.Marshal(result.DeterminingPolicies)
 	diagJSON, _ := json.Marshal(result.Diagnostics)
+	var metaJSON json.RawMessage
+	if meta != nil {
+		if b, err := json.Marshal(meta); err == nil {
+			metaJSON = b
+		}
+	}
 	return AuditEvent{
 		ID:                      id.String(),
 		ZoneID:                  zoneID,
@@ -385,11 +417,12 @@ func buildAuditEvent(requestID, zoneID, decision, status string, result *OPAResu
 		EvaluationStatus:        status,
 		DeterminingPoliciesJSON: dpJSON,
 		DiagnosticsJSON:         diagJSON,
+		MetadataJSON:            metaJSON,
 		OccurredAt:              time.Now(),
 	}
 }
 
-func stepUpRequired(result *OPAResult) string {
+func stepUpRequiredFromResult(result *OPAResult) string {
 	for _, d := range result.Diagnostics {
 		if ct, ok := d["step_up_required"].(string); ok {
 			return ct
@@ -397,6 +430,9 @@ func stepUpRequired(result *OPAResult) string {
 	}
 	return ""
 }
+
+// stepUpRequired is retained for tests and callers that read diagnostics directly.
+func stepUpRequired(result *OPAResult) string { return stepUpRequiredFromResult(result) }
 
 func sessionInput(sessionID string) *OPASession {
 	if sessionID == "" {
@@ -591,6 +627,7 @@ func writeStepUp(w http.ResponseWriter, requestID string, challenge *challengeSt
 		ErrorDescription:   "Step-up authorization required for this resource",
 		ChallengeID:        challenge.ID,
 		ChallengeType:      challenge.ChallengeType,
+		ChallengeSecret:    challenge.Secret,
 		ChallengeExpiresAt: challenge.ExpiresAt.Format(time.RFC3339),
 		RequestID:          requestID,
 	})

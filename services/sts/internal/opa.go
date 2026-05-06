@@ -8,11 +8,13 @@ package internal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/open-policy-agent/opa/rego"
 )
 
@@ -116,6 +118,23 @@ func (e *OPAEngine) Reload(ctx context.Context, zoneID string) error {
 	return e.loadZone(ctx, zoneID)
 }
 
+// SeedZones compiles a bundle for every zone with an active policy_set_binding so the
+// engine is hot before the first token-exchange request and so PG polling has zones to
+// refresh. Errors here are logged-only via the caller; STS must come up even when a
+// single zone fails to compile because deny-all is installed in its place.
+func (e *OPAEngine) SeedZones(ctx context.Context) {
+	if e.db == nil {
+		return
+	}
+	zones, err := e.db.ListBoundZoneIDs(ctx)
+	if err != nil {
+		return
+	}
+	for _, z := range zones {
+		_ = e.loadZone(ctx, z)
+	}
+}
+
 // StartPGPolling polls PostgreSQL every 60 seconds for policy changes on all known zones.
 // This ensures the OPA engine stays current when Redis invalidation events are missed.
 func (e *OPAEngine) StartPGPolling(ctx context.Context) {
@@ -141,14 +160,37 @@ func (e *OPAEngine) StartPGPolling(ctx context.Context) {
 
 func (e *OPAEngine) loadZone(ctx context.Context, zoneID string) error {
 	binding, err := e.db.GetActivePolicySetBinding(ctx, zoneID)
-	if err != nil || binding.ActiveVersionID == nil {
-		// No active policy set: install a deny-all fallback.
+	if err != nil {
+		// pgx.ErrNoRows == no policy bound for this zone → install fail-closed deny-all.
+		// Any other error is transient: keep the previously cached bundle so a flaky
+		// database does not cause STS to self-DoS legitimate traffic.
+		if errors.Is(err, pgx.ErrNoRows) {
+			e.storeFallback(zoneID)
+			return nil
+		}
+		e.mu.RLock()
+		_, cached := e.zones[zoneID]
+		e.mu.RUnlock()
+		if cached {
+			return nil
+		}
+		e.storeFallback(zoneID)
+		return err
+	}
+	if binding == nil || binding.ActiveVersionID == nil {
 		e.storeFallback(zoneID)
 		return nil
 	}
 
 	psv, err := e.db.GetPolicySetVersion(ctx, *binding.ActiveVersionID)
 	if err != nil {
+		e.mu.RLock()
+		_, cached := e.zones[zoneID]
+		e.mu.RUnlock()
+		if cached {
+			return nil
+		}
+		e.storeFallback(zoneID)
 		return err
 	}
 
