@@ -10,7 +10,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"sort"
 	"strings"
@@ -113,9 +112,4 @@ func hashResourceSet(resources []string) []byte {
 	sort.Strings(canon)
 	sum := sha256.Sum256([]byte(strings.Join(canon, "\n")))
 	return sum[:]
-}
-
-// hexHash is a small helper for log fields.
-func hexHash(b []byte) string {
-	return hex.EncodeToString(b)
 }

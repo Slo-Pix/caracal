@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Brokered credential refresh: retries OAuth token exchange on expiry.
+// Brokered credential refresh: SSRF-hardened OAuth refresh with circuit breaker.
 
 package internal
 
@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,6 +28,7 @@ const (
 	providerCircuitTTL      = 30 * time.Second
 	providerFailureTTL      = 5 * time.Minute
 	providerFailureLimit    = int64(5)
+	providerMaxBodyBytes    = 64 * 1024
 )
 
 func sealZEK(zek, plaintext []byte) ([]byte, error) {
@@ -56,8 +58,6 @@ func openZEK(zek, packed []byte) ([]byte, error) {
 
 // tryRefreshBrokeredGrant fetches the delegated grant for userID+resourceID,
 // refreshes the provider access token if expired, and updates the grant.
-// Returns nil if no grant exists or the token is still valid.
-// Returns CredentialExpired if refresh fails.
 func (s *Server) tryRefreshBrokeredGrant(ctx context.Context, zoneID, userID, resourceID string) *sharederr.CaracalError {
 	if userID == "" {
 		return nil
@@ -126,27 +126,104 @@ func (s *Server) tryRefreshBrokeredGrant(ctx context.Context, zoneID, userID, re
 	return nil
 }
 
+// validateTokenEndpoint enforces SSRF defenses: HTTPS only, mandatory non-empty host
+// allowlist (no implicit "any host" mode), case-insensitive exact host match. The host
+// is also pre-resolved to reject private/loopback/link-local addresses; the dialer
+// re-checks at connect time so DNS rebinding cannot bypass the gate.
 func validateTokenEndpoint(raw string, allowedHosts []string) (*url.URL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
 	if u.Scheme != "https" || u.Hostname() == "" {
-		return nil, fmt.Errorf("provider token endpoint must be https")
+		return nil, errors.New("provider token endpoint must be https")
 	}
 	if len(allowedHosts) == 0 {
-		return u, nil
+		return nil, errors.New("provider has no allowed_token_hosts configured")
 	}
+	matched := false
 	for _, host := range allowedHosts {
 		if strings.EqualFold(strings.TrimSpace(host), u.Hostname()) {
-			return u, nil
+			matched = true
+			break
 		}
 	}
-	return nil, fmt.Errorf("provider token endpoint host is not allowlisted")
+	if !matched {
+		return nil, errors.New("provider token endpoint host is not allowlisted")
+	}
+	addrs, err := net.LookupIP(u.Hostname())
+	if err == nil {
+		for _, ip := range addrs {
+			if isUnsafeIP(ip) {
+				return nil, errors.New("provider token endpoint resolves to a non-routable address")
+			}
+		}
+	}
+	return u, nil
+}
+
+// isUnsafeIP returns true for any address class that must not be reachable from STS:
+// loopback, link-local, multicast, unspecified, and RFC 1918 / RFC 4193 private space.
+func isUnsafeIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return true
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+			return true
+		case ip4[0] == 192 && ip4[1] == 168:
+			return true
+		case ip4[0] == 169 && ip4[1] == 254:
+			return true
+		case ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127:
+			return true
+		}
+		return false
+	}
+	if len(ip) == net.IPv6len && ip[0]&0xfe == 0xfc {
+		return true
+	}
+	return false
+}
+
+// safeHTTPClient builds a one-shot HTTP client with redirects disabled and a dialer
+// that re-validates the resolved address right before the TCP connect.
+func safeHTTPClient(timeout time.Duration) *http.Client {
+	dialer := &net.Dialer{Timeout: timeout, KeepAlive: timeout}
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, err
+			}
+			ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+			if err != nil {
+				return nil, err
+			}
+			for _, ip := range ips {
+				if isUnsafeIP(ip) {
+					return nil, fmt.Errorf("blocked address %s", ip.String())
+				}
+			}
+			return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
+		},
+		TLSHandshakeTimeout: timeout,
+	}
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func (s *Server) refreshProviderToken(ctx context.Context, providerID string, endpoint *url.URL, form url.Values) ([]byte, error) {
-	client := &http.Client{Timeout: providerRefreshTimeout}
+	client := safeHTTPClient(providerRefreshTimeout)
 	var lastErr error
 	for attempt := 0; attempt < providerRefreshAttempts; attempt++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), strings.NewReader(form.Encode()))
@@ -159,7 +236,7 @@ func (s *Server) refreshProviderToken(ctx context.Context, providerID string, en
 			lastErr = err
 			continue
 		}
-		body, readErr := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, providerMaxBodyBytes))
 		_ = resp.Body.Close()
 		if readErr != nil {
 			lastErr = readErr
