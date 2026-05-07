@@ -10,7 +10,7 @@ import starlight from '@astrojs/starlight'
 
 export default defineConfig({
   output: 'static',
-  site: 'https://docs.caracal.run',
+  site: 'https://docs.garudexlabs.com',
   integrations: [
     starlight({
       title: 'Caracal',
