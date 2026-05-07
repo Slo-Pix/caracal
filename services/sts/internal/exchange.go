@@ -90,7 +90,9 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.log.Warn().Err(err).Str("request_id", requestID).Msg("failed to encode token response")
+	}
 }
 
 func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, requestID string) (*TokenResponse, *challengeState, int, *sharederr.CaracalError) {
