@@ -228,10 +228,11 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		s.auditBuffer.Emit(buildAuditEventWithBundle(requestID, zoneID, result.Decision, result.EvaluationStatus, result,
 			map[string]interface{}{"resource": resource.Identifier}, bundle))
 
-		// Partial evaluation is a hard-deny invariant: any partial answer fails the
-		// entire request rather than silently dropping a resource slot.
-		if result.EvaluationStatus == "partial" {
-			return nil, nil, http.StatusForbidden, sharederr.New(sharederr.PolicyEvalFailed, "partial policy evaluation")
+		// Only an explicit "complete" status is treated as a usable decision; any
+		// other value (partial, error, future enum) is a hard deny so an unknown
+		// state cannot silently grant access.
+		if result.EvaluationStatus != "complete" {
+			return nil, nil, http.StatusForbidden, sharederr.New(sharederr.PolicyEvalFailed, "policy evaluation incomplete")
 		}
 
 		if !challengeResolved {
@@ -312,10 +313,11 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		// JWT so downstream resources can render audit subjects without re-walking the graph.
 		issueParams.OnBehalfOf = delegation.edge.IssuerAppID
 	}
-	token, err := issueToken(ctx, issueParams, s.keys, s.cfg.IssuerURL)
+	token, jti, err := issueToken(ctx, issueParams, s.keys, s.cfg.IssuerURL)
 	if err != nil {
 		return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "token issuance failed")
 	}
+	s.recordIssuedJTI(ctx, jti, app.ID, zoneID, requestID, ttl)
 
 	return &TokenResponse{
 		AccessToken:     token,
