@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "caracalai-revocation"
+version = "0.1.0"
+description = "Revocation lookup interface and in-memory default for Caracal resource servers"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["caracalai_revocation"]
