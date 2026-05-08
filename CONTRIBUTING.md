@@ -29,9 +29,17 @@ services/
   gateway/             Policy enforcement gateway (Go)
   audit/               Audit log service (Go)
 packages/
-  shared/              Shared Go libraries
-  ts-shared/           Shared TypeScript helpers (internal)
-  caracalai-*/         Public SDKs (TypeScript, Go, Python)
+  core/                Caracal foundation (TypeScript, Go)
+  identity/            JWT verification, JWKS, scope, claims (TypeScript, Go, Python)
+  revocation/          Revocation lookup interface and in-memory default (TypeScript, Go, Python)
+  oauth/               RFC 8693 token exchange client (TypeScript)
+  transport-mcp/       MCP authentication core (TypeScript, Go, Python)
+  transport-a2a/       Agent-to-agent transport primitives (TypeScript)
+  agent-core/          Provider-neutral agent runtime (TypeScript)
+  admin/               Typed admin API client (TypeScript)
+  framework-adaptor/   Per-framework adaptors over transport-mcp / agent-core
+  runtime-adaptor/     Per-runtime adaptors (e.g. Cloudflare)
+  state-backend/       Storage backends (token state, token cache)
 infra/
   docker/              Compose orchestration and .env template
   postgres/migrations/ SQL migrations applied by the API at boot
