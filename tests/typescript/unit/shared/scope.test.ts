@@ -4,7 +4,7 @@
 // Tests for the canonical OAuth scope parser shared across all TS callers.
 
 import { describe, expect, it } from 'vitest'
-import { hasScope, parseScope, scopesAllowed } from '../../../../packages/ts-shared/src/scope.js'
+import { hasScope, parseScope, scopesAllowed } from '../../../../packages/core/ts/src/scope.js'
 
 describe('parseScope', () => {
   it('returns empty array for null, undefined, or empty string', () => {

@@ -4,7 +4,7 @@
 // TypeScript shared error tests for canonical JSON response shape.
 
 import { describe, expect, it } from 'vitest'
-import { CaracalError } from '../../../../packages/ts-shared/src/errors.js'
+import { CaracalError } from '../../../../packages/core/ts/src/errors.js'
 
 describe('CaracalError', () => {
   it('serializes code, description, and request id', () => {

@@ -4,7 +4,7 @@
 // TypeScript shared config tests for environment defaults and required values.
 
 import { afterEach, describe, expect, it } from 'vitest'
-import { getenv, loadBaseConfig, mustGetenv } from '../../../../packages/ts-shared/src/config.js'
+import { getenv, loadBaseConfig, mustGetenv } from '../../../../packages/core/ts/src/config.js'
 
 describe('shared config', () => {
   afterEach(() => {
