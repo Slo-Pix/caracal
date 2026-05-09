@@ -7,7 +7,6 @@ SDK primitives: with_agent and with_delegation as async context managers.
 
 from __future__ import annotations
 
-import contextvars
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from typing import Any, AsyncGenerator

@@ -69,11 +69,6 @@ func (k *KeyCache) getKeyAndKid(ctx context.Context, zoneID string) (*ecdsa.Priv
 	return priv, secret.ID, nil
 }
 
-func (k *KeyCache) getKey(ctx context.Context, zoneID string) (*ecdsa.PrivateKey, error) {
-	priv, _, err := k.getKeyAndKid(ctx, zoneID)
-	return priv, err
-}
-
 func (k *KeyCache) getPublicKeyAndKid(ctx context.Context, zoneID string) (*ecdsa.PublicKey, string, error) {
 	priv, kid, err := k.getKeyAndKid(ctx, zoneID)
 	if err != nil {
