@@ -163,22 +163,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(tsx@4.21.0)(yaml@2.8.4)
 
-  packages/agent-core/ts:
-    dependencies:
-      '@caracalai/oauth':
-        specifier: workspace:*
-        version: link:../../oauth/ts
-      '@caracalai/transport-a2a':
-        specifier: workspace:*
-        version: link:../../transport-a2a/ts
-    devDependencies:
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.12.2)(tsx@4.21.0)(yaml@2.8.4)
-
   packages/caracalai-mcp/ts:
     dependencies:
       '@caracalai/core':

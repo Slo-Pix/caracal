@@ -115,14 +115,13 @@ async def verify(token: str, config: JwtConfig) -> Claims:
     agent_session_id = decoded.get("agent_session_id")
     delegation_edge_id = decoded.get("delegation_edge_id")
     delegation_chain = _read_chain(decoded.get("delegation_chain"))
-    on_behalf = decoded.get("on_behalf")
 
     if config.require_agent and not agent_session_id:
         raise AgentIdentityRequiredError("Agent identity required")
     if config.require_delegation and not delegation_edge_id:
         raise DelegationRequiredError("Delegation required")
     for expected in config.require_chain_contains:
-        present = any(hop.application_id == expected for hop in delegation_chain) or on_behalf == expected
+        present = any(hop.application_id == expected for hop in delegation_chain)
         if not present:
             raise ChainMismatchError(expected)
 
@@ -148,14 +147,11 @@ async def verify(token: str, config: JwtConfig) -> Claims:
         delegation_chain=delegation_chain,
         graph_epoch=graph_epoch if isinstance(graph_epoch, int) else None,
         hop_count=decoded.get("hop_count") if isinstance(decoded.get("hop_count"), int) else None,
-        on_behalf=on_behalf if isinstance(on_behalf, str) else None,
     )
 
 
 def verify_chain_contains(claims: Claims, application_id: str) -> bool:
     if any(hop.application_id == application_id for hop in claims.delegation_chain):
-        return True
-    if claims.on_behalf == application_id:
         return True
     if claims.client_id == application_id:
         return True
