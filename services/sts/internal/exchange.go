@@ -155,7 +155,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		}
 		challengeResolved = true
 	}
-	delegation, refErr := s.validateSessionReferences(ctx, zoneID, app.ID, req)
+	delegation, refErr := s.validateSessionReferences(ctx, zoneID, app.ID, req, subjectClaims != nil)
 	if refErr != nil {
 		return nil, nil, http.StatusForbidden, refErr
 	}
@@ -195,9 +195,27 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 
 		if resource.CredentialProviderID != nil {
 			userID, _ := subjectClaims["sub"].(string)
+			if userID == "" {
+				// Provider-credentialed resources require a user-bound grant;
+				// application-principal exchanges (no subject_token) cannot
+				// produce a usable upstream credential.
+				s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "credential_not_provisioned", &OPAResult{},
+					map[string]any{"resource": resource.Identifier, "reason": "no_user_principal"}))
+				continue
+			}
 			if rerr := s.tryRefreshBrokeredGrant(ctx, zoneID, userID, resource.ID); rerr != nil {
 				s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "credential_refresh_failed", &OPAResult{},
 					map[string]any{"resource": resource.Identifier, "reason": string(rerr.Code)}))
+				continue
+			}
+			// Confirm we actually have a usable provider AT before letting
+			// OPA approve. Without this, the directive build downstream
+			// would silently fall back to caracal_jwt mode and the provider
+			// would reject the request with no clear deny signal.
+			grant, gerr := s.db.GetDelegatedGrant(ctx, zoneID, userID, resource.ID)
+			if gerr != nil || grant == nil || len(grant.AccessTokenCt) == 0 {
+				s.auditBuffer.Emit(buildAuditEvent(requestID, zoneID, "deny", "credential_not_provisioned", &OPAResult{},
+					map[string]any{"resource": resource.Identifier, "reason": "no_grant"}))
 				continue
 			}
 		}
@@ -466,6 +484,14 @@ func (s *Server) validateTokenSession(ctx context.Context, zoneID, sessionID str
 	if err != nil || session.ZoneID != zoneID || session.Status != "active" || !session.ExpiresAt.After(time.Now()) {
 		return "", sharederr.New(sharederr.AccessDenied, "session inactive or expired")
 	}
+	// Defense in depth: even with a valid signature, the session row's
+	// subject must match the JWT sub claim. A leaked signing key or any
+	// other path that could mint a structurally-valid token still fails
+	// this bind unless the session row was also tampered with.
+	sub := claimString(claims, "sub")
+	if sub == "" || session.SubjectID == nil || *session.SubjectID != sub {
+		return "", sharederr.New(sharederr.AccessDenied, "session subject mismatch")
+	}
 	return sid, nil
 }
 
@@ -590,12 +616,21 @@ func (s *Server) validateAgentSessionOwnership(ctx context.Context, zoneID, appI
 // delegation block (source.ApplicationID == appID); otherwise the calling
 // application's ownership of the asserted agent_session_id is verified directly
 // (Issue I — consolidation prevents peer-app forgery via either path).
-func (s *Server) validateSessionReferences(ctx context.Context, zoneID, appID string, req TokenExchangeRequest) (*delegationProof, *sharederr.CaracalError) {
+func (s *Server) validateSessionReferences(ctx context.Context, zoneID, appID string, req TokenExchangeRequest, hasSubjectToken bool) (*delegationProof, *sharederr.CaracalError) {
 	now := time.Now()
 	if req.SessionID != "" {
 		session, err := s.db.GetSession(ctx, req.SessionID)
 		if err != nil || session.ZoneID != zoneID || session.Status != "active" || !session.ExpiresAt.After(now) {
 			return nil, sharederr.New(sharederr.AccessDenied, "session inactive or expired")
+		}
+		// Application-principal flows (no subject_token) must assert a
+		// session owned by the calling app. Without this, peer apps in a
+		// zone could pass another app's session_id and have OPA evaluate
+		// against a session reputation/state that is not their own.
+		if !hasSubjectToken {
+			if session.SessionType != "application" || session.SubjectID == nil || *session.SubjectID != appID {
+				return nil, sharederr.New(sharederr.AccessDenied, "session not owned by caller")
+			}
 		}
 	}
 	if req.AgentSessionID != "" && req.DelegationEdgeID == "" {
@@ -677,6 +712,7 @@ func (s *Server) buildDelegationChain(ctx context.Context, path []string, edge *
 	if len(path) == 0 {
 		return nil, nil
 	}
+	now := time.Now()
 	hops := make([]ChainHop, 0, len(path)+1)
 	var prevReceiverApp string
 	for _, edgeID := range path {
@@ -689,6 +725,12 @@ func (s *Server) buildDelegationChain(ctx context.Context, path []string, edge *
 				return nil, sharederr.New(sharederr.AccessDenied, "delegation path edge unavailable")
 			}
 			hopEdge = fetched
+		}
+		// Re-validate each path edge against current state. GetDelegationPath
+		// filters in SQL, but a revoke racing the path computation could
+		// otherwise let a stale-but-attested chain hop ship in the JWT.
+		if hopEdge.ZoneID != edge.ZoneID || hopEdge.Status != "active" || hopEdge.RevokedAt != nil || !hopEdge.ExpiresAt.After(now) {
+			return nil, sharederr.New(sharederr.AccessDenied, "delegation path edge inactive or revoked")
 		}
 		if prevReceiverApp != "" && hopEdge.IssuerAppID != prevReceiverApp {
 			return nil, sharederr.New(sharederr.AccessDenied, "delegation chain discontinuous")
