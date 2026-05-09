@@ -28,8 +28,6 @@ export function discoverAdminToken(explicit?: string): string | undefined {
     process.env.CARACAL_ENV_FILE,
     join(process.cwd(), 'infra', 'docker', '.env'),
     join(process.cwd(), '.env'),
-    process.env.INIT_CWD && join(process.env.INIT_CWD, 'infra', 'docker', '.env'),
-    process.env.INIT_CWD && join(process.env.INIT_CWD, '.env'),
   ].filter((p): p is string => Boolean(p));
   for (const path of candidates) {
     const env = readEnvFile(path);
