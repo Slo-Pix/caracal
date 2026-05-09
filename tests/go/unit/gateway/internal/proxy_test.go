@@ -164,8 +164,8 @@ func TestProxyMissingRoutingHeaders(t *testing.T) {
 
 	tok := makeJWT(t, time.Hour)
 	cases := []http.Header{
-		{"Authorization": {"Bearer " + tok}, "X-Caracal-Resource": {"r"}},
-		{"Authorization": {"Bearer " + tok}, "X-Caracal-Client-ID": {"a"}},
+		{"Authorization": {"Bearer " + tok}},
+		{"Authorization": {"Bearer " + tok}, "X-Caracal-Resource": {"r"}, "X-Caracal-Client-ID": {"a"}},
 	}
 	for i, hdr := range cases {
 		resp := doProxiedRequest(t, p, "GET", "/x", nil, hdr)
@@ -182,9 +182,8 @@ func TestProxyPathTraversalBlocked(t *testing.T) {
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
-		"Authorization":       {"Bearer " + tok},
-		"X-Caracal-Client-ID": {"app1"},
-		"X-Caracal-Resource":  {"r1"},
+		"Authorization":      {"Bearer " + tok},
+		"X-Caracal-Resource": {"r1"},
 	}
 	resp := doProxiedRequest(t, p, "GET", "/v1/../admin", nil, hdr)
 	if resp.StatusCode != http.StatusBadRequest {
@@ -205,9 +204,8 @@ func TestProxySSRFBlocksLoopback(t *testing.T) {
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
-		"Authorization":       {"Bearer " + tok},
-		"X-Caracal-Client-ID": {"app1"},
-		"X-Caracal-Resource":  {"r1"},
+		"Authorization":      {"Bearer " + tok},
+		"X-Caracal-Resource": {"r1"},
 	}
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, hdr)
 	if resp.StatusCode != http.StatusBadGateway {
