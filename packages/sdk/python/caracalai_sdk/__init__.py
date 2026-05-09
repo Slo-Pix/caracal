@@ -43,6 +43,8 @@ from .coordinator import (
     terminate_agent,
 )
 from .primitives import with_agent, with_delegation
+from .client import Caracal, CaracalConfig
+from .http import CaracalASGIMiddleware
 
 __all__ = [
     "HEADER_SUBJECT_TOKEN",
@@ -78,4 +80,7 @@ __all__ = [
     "create_delegation",
     "with_agent",
     "with_delegation",
+    "Caracal",
+    "CaracalConfig",
+    "CaracalASGIMiddleware",
 ]
