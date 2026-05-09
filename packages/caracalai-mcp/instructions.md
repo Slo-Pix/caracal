@@ -5,7 +5,7 @@
 
 ## Required
 - Must wire the Express bearer-token middleware to `@caracalai/identity` for JWT verify, JWKS, scope, and claim shapes.
-- Must consult the `RevocationStore` iface from `@caracalai/revocation` when a store is supplied.
+- Must consult the `RevocationStore` iface from `@caracalai/revocation` on every authenticated request; the store is a required option on the middleware.
 - Must use PostgresBackend for per-user MCP token state; no SQLite.
 
 ## Forbidden
