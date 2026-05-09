@@ -4,7 +4,7 @@
 // Delegation graph routes for agent-to-agent authority edges.
 
 import type { FastifyPluginAsync } from 'fastify'
-import type { Pool, PoolClient } from 'pg'
+import type { Pool } from 'pg'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { enqueue, Topics, type Queryable } from '../outbox.js'
@@ -315,5 +315,3 @@ async function wouldCreateCycle(
   )
   return rows.length > 0
 }
-
-export type { PoolClient }
