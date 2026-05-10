@@ -15,7 +15,7 @@ COPY packages/framework-adaptor/mcp-nethttp/go/ packages/framework-adaptor/mcp-n
 COPY packages/sdk/go/ packages/sdk/go/
 COPY services/sts/ services/sts/
 COPY services/gateway/ services/gateway/
-COPY apps/agent-coordinator/relay/ apps/agent-coordinator/relay/
+COPY apps/coordinator/relay/ apps/coordinator/relay/
 COPY services/audit/ services/audit/
 COPY tests/go/ tests/go/
 WORKDIR /build/services/audit

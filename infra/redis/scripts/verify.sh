@@ -25,7 +25,7 @@ EXPECTED_GROUPS=(
   "caracal.audit.events:siem-export"
   "caracal.policy.invalidate:opa-engine"
   "caracal.sessions.revoke:sts-revocation"
-  "caracal.agents.lifecycle:agent-coordinator"
+  "caracal.agents.lifecycle:coordinator-relay"
 )
 
 echo "=== Streams exist ==="
