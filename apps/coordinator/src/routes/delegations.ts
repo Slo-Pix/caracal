@@ -44,6 +44,10 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
     if (new Date(body.expires_at).getTime() <= Date.now()) {
       return reply.code(400).send({ error: 'delegation_expired' })
     }
+    const maxHops = body.constraints_json?.max_hops
+    if (maxHops !== undefined && (typeof maxHops !== 'number' || maxHops <= 0)) {
+      return reply.code(400).send({ error: 'invalid_max_hops' })
+    }
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
