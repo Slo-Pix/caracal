@@ -7,6 +7,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { generateKeyPairSync, randomBytes } from 'node:crypto'
 import { isProduction, loadZoneKek, open, seal, sha256Hex } from '@caracalai/core'
+import { hashClientSecret } from '../hash-secret.js'
 
 const ZONE_ID = 'zone1'
 const APP_ID = 'app1'
@@ -100,7 +101,7 @@ export const localBootstrapRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const clientSecret = randomBytes(24).toString('hex')
-    const clientSecretHash = sha256Hex(clientSecret)
+    const clientSecretHash = await hashClientSecret(clientSecret)
     const policyHash = sha256Hex(ALLOW_POLICY)
     const manifest = JSON.stringify([{ policy_version_id: POLICY_VERSION_ID }])
     const manifestHash = sha256Hex(manifest)
