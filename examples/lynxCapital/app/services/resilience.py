@@ -82,6 +82,7 @@ def breaker(provider: str, *, threshold: int = 5, cooldown_s: float = 10.0) -> C
 
 
 def reset_breakers() -> None:
+    """Drop all circuit breakers; primarily used by tests."""
     with _BREAKER_LOCK:
         _BREAKERS.clear()
 
@@ -108,9 +109,10 @@ def with_retry(
             result = fn(attempt)
         except BaseException as exc:
             last = exc
-            if breaker_obj is not None:
+            retryable = is_retryable(exc)
+            if breaker_obj is not None and retryable:
                 breaker_obj.on_failure()
-            if not is_retryable(exc) or attempt == policy.max_attempts:
+            if not retryable or attempt == policy.max_attempts:
                 raise
             delay = 0.0 if fast else policy.delay(attempt)
             retry_after = getattr(exc, "retry_after_s", None)
