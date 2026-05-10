@@ -1,18 +1,20 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Deadline enforcer: marks running invocations past their deadline as timed_out.
+// Deadline enforcer: transitions invocations past deadline to failed (retryable)
+// or timed_out (terminal) based on remaining attempts.
 
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
-import { enqueue, Topics } from '../outbox.js'
+import { enqueueMany, Topics, type OutboxItem } from '../outbox.js'
 
 const SWEEP_LOCK = 'coordinator:invocation_deadline'
 
-interface TimedOutInvocation {
+interface OverdueRow {
   id: string
   zone_id: string
   service_id: string
+  status: 'failed' | 'timed_out'
 }
 
 export async function runDeadlineSweep(db: Pool): Promise<number> {
@@ -27,23 +29,38 @@ export async function runDeadlineSweep(db: Pool): Promise<number> {
       await client.query('ROLLBACK')
       return 0
     }
-    const { rows } = await client.query<TimedOutInvocation>(
-      `UPDATE agent_invocations
-       SET status = 'timed_out',
-           completed_at = now(),
-           error_json = COALESCE(error_json, '{}'::jsonb)
+    const { rows } = await client.query<OverdueRow>(
+      `UPDATE agent_invocations AS i
+       SET status = CASE WHEN i.attempts < i.max_attempts THEN 'failed' ELSE 'timed_out' END,
+           started_at = CASE WHEN i.attempts < i.max_attempts THEN NULL ELSE i.started_at END,
+           completed_at = CASE WHEN i.attempts < i.max_attempts THEN NULL ELSE now() END,
+           error_json = COALESCE(i.error_json, '{}'::jsonb)
                         || jsonb_build_object('reason', 'deadline_exceeded'),
            updated_at = now()
-       WHERE status = 'running'
-         AND deadline_at IS NOT NULL
-         AND deadline_at < now()
-       RETURNING id, zone_id, service_id`,
+       WHERE i.id IN (
+         SELECT id FROM agent_invocations
+         WHERE status = 'running'
+           AND deadline_at IS NOT NULL
+           AND deadline_at < now()
+         ORDER BY deadline_at
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING i.id, i.zone_id, i.service_id, i.status`,
+      [cfg.sweeperBatchSize],
     )
-    for (const row of rows) {
-      await enqueue(client, Topics.InvocationsLifecycle,
-        `invocation.timed_out:${row.id}`,
-        { event: 'invocation.timed_out', zone_id: row.zone_id,
-          service_id: row.service_id, invocation_id: row.id })
+    if (rows.length > 0) {
+      const items: OutboxItem[] = rows.map((row): OutboxItem => ({
+        topic: Topics.InvocationsLifecycle,
+        dedupeKey: `invocation.${row.status}:${row.id}`,
+        payload: {
+          event: `invocation.${row.status}`,
+          zone_id: row.zone_id,
+          service_id: row.service_id,
+          invocation_id: row.id,
+        },
+      }))
+      await enqueueMany(client, items)
     }
     await client.query('COMMIT')
     return rows.length

@@ -54,12 +54,12 @@ type zoneKeys struct {
 // (rate-limited by jwksMissCooldown) so a freshly rotated kid is picked up
 // without waiting for the next periodic refresh.
 type jwksCache struct {
-	stsURL     string
-	client     *http.Client
-	log        zerolog.Logger
-	mu         sync.Mutex
-	zones      map[string]*zoneKeys
-	lastMiss   map[string]time.Time
+	stsURL   string
+	client   *http.Client
+	log      zerolog.Logger
+	mu       sync.Mutex
+	zones    map[string]*zoneKeys
+	lastMiss map[string]time.Time
 }
 
 func newJWKSCache(stsURL string, timeout time.Duration, log zerolog.Logger) *jwksCache {

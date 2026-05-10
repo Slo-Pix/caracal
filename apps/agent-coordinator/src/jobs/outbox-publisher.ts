@@ -92,7 +92,7 @@ export async function publishBatch(
     const dead: string[] = []
     for (const row of rows) {
       try {
-        await redis.xadd(row.topic, '*', ...streamFields(row))
+        await redis.xadd(row.topic, 'MAXLEN', '~', String(cfg.streamsMaxLen), '*', ...streamFields(row))
         published.push(row.id)
       } catch (err) {
         const nextAttempts = row.attempts + 1
@@ -113,7 +113,8 @@ export async function publishBatch(
       await client.query(
         `UPDATE caracal_outbox
          SET attempts = attempts + 1,
-             available_at = now() + (LEAST(attempts + 1, 60) * interval '1 second'),
+             available_at = now() + (LEAST(attempts + 1, 60) * interval '1 second')
+                            + (random() * interval '1 second'),
              updated_at = now()
          WHERE id = ANY($1::text[])`,
         [retried],

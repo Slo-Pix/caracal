@@ -1,20 +1,13 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// TTL sweeper: terminates expired agents transactionally with outbox events.
+// TTL sweeper: terminates expired agents and their descendants transactionally.
 
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
-import { enqueue, Topics } from '../outbox.js'
+import { spawnLockKey, terminateSubtree } from '../routes/agents.js'
 
 const SWEEP_LOCK = 'coordinator:ttl_sweep'
-
-interface ExpiredAgent {
-  id: string
-  zone_id: string
-  session_sid: string
-  parent_id: string | null
-}
 
 export async function runTTLSweep(db: Pool): Promise<number> {
   const client = await db.connect()
@@ -28,24 +21,33 @@ export async function runTTLSweep(db: Pool): Promise<number> {
       await client.query('ROLLBACK')
       return 0
     }
-    const { rows } = await client.query<ExpiredAgent>(
-      `UPDATE agent_sessions
-       SET status = 'terminated', terminated_at = now()
-       WHERE status = 'active'
+    const { rows: expired } = await client.query<{ id: string; zone_id: string }>(
+      `SELECT id, zone_id FROM agent_sessions
+       WHERE status IN ('active','suspended')
+         AND ttl_seconds IS NOT NULL
          AND spawned_at + (ttl_seconds * interval '1 second') < now()
-       RETURNING id, zone_id, session_sid, parent_id`,
+       ORDER BY id
+       LIMIT $1
+       FOR UPDATE SKIP LOCKED`,
+      [cfg.sweeperBatchSize],
     )
-    for (const row of rows) {
-      await enqueue(client, Topics.SessionsRevoke,
-        `agent_ttl:${row.id}`,
-        { zone_id: row.zone_id, session_id: row.session_sid, reason: 'ttl' })
-      await enqueue(client, Topics.AgentsLifecycle,
-        `terminate:${row.id}`,
-        { event: 'terminate', zone_id: row.zone_id, session_id: row.id,
-          parent_id: row.parent_id, reason: 'ttl' })
+    if (expired.length === 0) {
+      await client.query('COMMIT')
+      return 0
+    }
+    const byZone = new Map<string, string[]>()
+    for (const row of expired) {
+      const list = byZone.get(row.zone_id) ?? []
+      list.push(row.id)
+      byZone.set(row.zone_id, list)
+    }
+    let terminated = 0
+    for (const [zoneId, ids] of byZone) {
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [spawnLockKey(zoneId)])
+      terminated += await terminateSubtree(client, zoneId, ids, 'ttl')
     }
     await client.query('COMMIT')
-    return rows.length
+    return terminated
   } catch (err) {
     await client.query('ROLLBACK')
     throw err
