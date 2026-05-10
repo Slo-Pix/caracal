@@ -15,6 +15,7 @@ import {
   printJSON,
   printTable,
   requireZone,
+  usage,
 } from './shared.ts'
 
 export async function appCommand(argv: string[], cfg?: CliConfig): Promise<void> {
@@ -127,8 +128,4 @@ function help(): void {
     ].join('\n'),
   )
   process.exit(0)
-}
-function usage(line: string): void {
-  process.stderr.write(`Usage: caracal ${line}\n`)
-  process.exit(1)
 }
