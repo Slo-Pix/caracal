@@ -22,6 +22,7 @@ type Options struct {
 	RequireAgent         bool
 	RequireDelegation    bool
 	RequireChainContains []string
+	MaxHopCount          int
 	Revocations          revocation.Store
 }
 
@@ -37,6 +38,7 @@ const (
 	ErrAgentRequired      ErrorCode = "agent_required"
 	ErrDelegationRequired ErrorCode = "delegation_required"
 	ErrChainMismatch      ErrorCode = "chain_mismatch"
+	ErrHopCountExceeded   ErrorCode = "hop_count_exceeded"
 )
 
 // AuthError is the typed failure returned by Authenticate.
@@ -72,6 +74,7 @@ func Authenticate(token string, opts Options) (identity.Claims, *AuthError) {
 		RequireAgent:         opts.RequireAgent,
 		RequireDelegation:    opts.RequireDelegation,
 		RequireChainContains: opts.RequireChainContains,
+		MaxHopCount:          opts.MaxHopCount,
 	}
 	claims, err := identity.Verify(token, cfg)
 	if err != nil {
@@ -88,6 +91,8 @@ func Authenticate(token string, opts Options) (identity.Claims, *AuthError) {
 			return identity.Claims{}, &AuthError{Code: ErrDelegationRequired, Description: "Delegation required"}
 		case errors.As(err, &chainErr):
 			return identity.Claims{}, &AuthError{Code: ErrChainMismatch, Description: "Delegation chain missing application: " + chainErr.ApplicationID}
+		case errors.Is(err, identity.ErrHopCountExceeded):
+			return identity.Claims{}, &AuthError{Code: ErrHopCountExceeded, Description: "Hop count exceeded"}
 		default:
 			return identity.Claims{}, &AuthError{Code: ErrInvalidToken, Description: "Token validation failed"}
 		}

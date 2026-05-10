@@ -5,7 +5,9 @@
 
 import {
   AgentIdentityRequiredError,
+  ChainMismatchError,
   DelegationRequiredError,
+  HopCountExceededError,
   ScopeInsufficientError,
   TokenInvalidError,
   ZoneInvalidError,
@@ -21,6 +23,8 @@ export interface AuthDeps {
   requiredScopes?: string[]
   requireAgent?: boolean
   requireDelegation?: boolean
+  requireChainContains?: string[]
+  maxHopCount?: number
   revocations: RevocationStore
 }
 
@@ -43,6 +47,8 @@ export async function authenticate(token: string, deps: AuthDeps): Promise<AuthR
       requiredScopes: deps.requiredScopes,
       requireAgent: deps.requireAgent,
       requireDelegation: deps.requireDelegation,
+      requireChainContains: deps.requireChainContains,
+      maxHopCount: deps.maxHopCount,
     })
     if (claims.sid && (await deps.revocations.isRevoked(claims.sid))) {
       return { ok: false, error: { code: 'session_revoked', description: 'Session revoked' } }
@@ -57,6 +63,12 @@ export async function authenticate(token: string, deps: AuthDeps): Promise<AuthR
     }
     if (err instanceof DelegationRequiredError) {
       return { ok: false, error: { code: 'delegation_required', description: err.message } }
+    }
+    if (err instanceof ChainMismatchError) {
+      return { ok: false, error: { code: 'chain_mismatch', description: err.message } }
+    }
+    if (err instanceof HopCountExceededError) {
+      return { ok: false, error: { code: 'hop_count_exceeded', description: err.message } }
     }
     if (err instanceof ZoneInvalidError) {
       return { ok: false, error: { code: 'invalid_zone', description: 'Token zone validation failed' } }

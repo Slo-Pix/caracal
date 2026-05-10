@@ -64,6 +64,8 @@ func mapError(code transportmcp.ErrorCode) (int, string) {
 		return http.StatusUnauthorized, "delegation_required"
 	case transportmcp.ErrChainMismatch:
 		return http.StatusUnauthorized, "chain_mismatch"
+	case transportmcp.ErrHopCountExceeded:
+		return http.StatusUnauthorized, "hop_count_exceeded"
 	case transportmcp.ErrSessionRevoked:
 		return http.StatusUnauthorized, "session_revoked"
 	case transportmcp.ErrInvalidZone:

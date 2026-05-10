@@ -24,11 +24,14 @@ type Caracal struct {
 	Resources         []ResourceBinding
 	DefaultKind       AgentKind
 	DefaultTTLSeconds int
+
+	agentStartHooks []LifecycleHook
+	agentEndHooks   []LifecycleHook
 }
 
 // ResourceBinding maps a registered Caracal resource id to the upstream URL
 // prefix it serves. The prefix is matched against outbound request URLs so the
-// HTTPClient can rewrite the call through the gateway transparently.
+// transport can rewrite the call through the gateway transparently.
 type ResourceBinding struct {
 	ResourceID     string
 	UpstreamPrefix string
@@ -93,8 +96,27 @@ func parseResourceBindings(raw string) []ResourceBinding {
 	return out
 }
 
-// RunOptions overrides defaults for a single Run call.
-type RunOptions struct {
+// OnAgentStart registers a hook fired when Spawn binds a new agent session.
+func (c *Caracal) OnAgentStart(h LifecycleHook) {
+	c.agentStartHooks = append(c.agentStartHooks, h)
+}
+
+// OnAgentEnd registers a hook fired when Spawn unwinds an agent session.
+func (c *Caracal) OnAgentEnd(h LifecycleHook) {
+	c.agentEndHooks = append(c.agentEndHooks, h)
+}
+
+func (c *Caracal) fire(hooks []LifecycleHook, ctx context.Context, cc CaracalContext) error {
+	for _, h := range hooks {
+		if err := h(ctx, cc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SpawnOptions overrides defaults for a single Spawn call.
+type SpawnOptions struct {
 	Kind       AgentKind
 	TTLSeconds int
 	SessionSID string
@@ -103,9 +125,9 @@ type RunOptions struct {
 	TraceID    string
 }
 
-// Run spawns an agent session and invokes fn with the bound context.
-func (c *Caracal) Run(ctx context.Context, fn func(context.Context) error, opts ...RunOptions) error {
-	o := RunOptions{}
+// Spawn spawns an agent session and invokes fn with the bound context.
+func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opts ...SpawnOptions) error {
+	o := SpawnOptions{}
 	if len(opts) > 0 {
 		o = opts[0]
 	}
@@ -120,7 +142,14 @@ func (c *Caracal) Run(ctx context.Context, fn func(context.Context) error, opts 
 	if ttl == 0 {
 		ttl = c.DefaultTTLSeconds
 	}
-	return WithAgent(ctx, WithAgentOptions{
+	var onStart, onEnd LifecycleHook
+	if len(c.agentStartHooks) > 0 {
+		onStart = func(cx context.Context, cc CaracalContext) error { return c.fire(c.agentStartHooks, cx, cc) }
+	}
+	if len(c.agentEndHooks) > 0 {
+		onEnd = func(cx context.Context, cc CaracalContext) error { return c.fire(c.agentEndHooks, cx, cc) }
+	}
+	return Spawn(ctx, SpawnInput{
 		Coordinator:   c.Coordinator,
 		ZoneID:        c.ZoneID,
 		ApplicationID: c.ApplicationID,
@@ -131,6 +160,8 @@ func (c *Caracal) Run(ctx context.Context, fn func(context.Context) error, opts 
 		TTLSeconds:    ttl,
 		Metadata:      o.Metadata,
 		TraceID:       o.TraceID,
+		OnAgentStart:  onStart,
+		OnAgentEnd:    onEnd,
 	}, fn)
 }
 
@@ -139,13 +170,13 @@ type DelegateOptions struct {
 	To              string
 	ToApplicationID string
 	Scopes          []string
-	Constraints     map[string]any
+	Constraints     *DelegationConstraints
 	TTLSeconds      int
 }
 
 // Delegate creates a delegation edge from the current session and runs fn under it.
 func (c *Caracal) Delegate(ctx context.Context, opts DelegateOptions, fn func(context.Context) error) error {
-	return WithDelegation(ctx, WithDelegationOptions{
+	return Delegate(ctx, DelegateInput{
 		Coordinator:      c.Coordinator,
 		ToAgentSessionID: opts.To,
 		ToApplicationID:  opts.ToApplicationID,
@@ -159,8 +190,8 @@ func (c *Caracal) Delegate(ctx context.Context, opts DelegateOptions, fn func(co
 // using the configured subject token if no context is bound).
 func (c *Caracal) Headers(ctx context.Context) http.Header {
 	h := http.Header{}
-	cur, err := Current(ctx)
-	if err != nil {
+	cur, ok := Current(ctx)
+	if !ok {
 		InjectHTTP(Envelope{SubjectToken: c.SubjectToken, Hop: 0}, h)
 		return h
 	}
@@ -183,25 +214,15 @@ func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request) context.
 	return Bind(ctx, cc)
 }
 
-// Context returns the current Caracal context bound on ctx. Returns an error
-// if no Caracal context has been bound on this execution path.
-func (c *Caracal) Context(ctx context.Context) (CaracalContext, error) {
+// Current returns the Caracal context bound on ctx, or a zero value and false.
+func (c *Caracal) Current(ctx context.Context) (CaracalContext, bool) {
 	return Current(ctx)
 }
 
-// TryContext returns the current Caracal context if one is bound on ctx, or
-// the zero value and false otherwise.
-func (c *Caracal) TryContext(ctx context.Context) (CaracalContext, bool) {
-	cur, err := Current(ctx)
-	if err != nil {
-		return CaracalContext{}, false
-	}
-	return cur, true
-}
-
-// HTTPClient returns an *http.Client whose RoundTripper auto-injects the
-// Caracal envelope headers from the request's context.
-func (c *Caracal) HTTPClient(base *http.Client) *http.Client {
+// Transport returns an *http.Client whose RoundTripper auto-injects the
+// Caracal envelope headers from the request's context. Pass to any HTTP or
+// provider SDK that accepts a custom *http.Client.
+func (c *Caracal) Transport(base *http.Client) *http.Client {
 	if base == nil {
 		base = &http.Client{}
 	}
@@ -220,9 +241,9 @@ type caracalTransport struct {
 }
 
 func (t *caracalTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	cur, err := Current(req.Context())
+	cur, ok := Current(req.Context())
 	var env Envelope
-	if err != nil {
+	if !ok {
 		env = Envelope{SubjectToken: t.client.SubjectToken, Hop: 0}
 	} else {
 		env = ToEnvelope(cur)

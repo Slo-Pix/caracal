@@ -211,9 +211,14 @@ jobs:
           run_pkg apps/tui tui tests/typescript/unit/tui
           run_pkg packages/core/ts core tests/typescript/unit/shared
           run_pkg packages/admin/ts admin tests/typescript/unit/admin
+          run_pkg packages/sdk/ts sdk tests/typescript/unit/sdk/client.test.ts
           run_pkg packages/transport/a2a/ts transport-a2a tests/typescript/unit/transport-a2a
           run_pkg packages/oauth/ts oauth tests/typescript/unit/sdk/oauth
+          run_pkg packages/revocation/ts revocation tests/typescript/unit/revocation
+          run_pkg packages/transport/mcp/ts transport-mcp tests/typescript/unit/transport-mcp
           run_pkg packages/connectors/express/ts mcp-express tests/typescript/unit/sdk/mcp-express
+          run_pkg packages/connectors/fastmcp/ts mcp-fastmcp tests/typescript/unit/sdk/mcp-fastmcp
+          run_pkg packages/connectors/postgres/ts tokenstate-postgres tests/typescript/unit/connectors/postgres
           run_pkg packages/identity/ts identity tests/typescript/unit/identity
 
       - name: List TypeScript coverage outputs
@@ -264,7 +269,16 @@ jobs:
             ./services/gateway/... \
             ./apps/coordinator/relay/... \
             ./packages/transport/mcp/go/... \
-            ./packages/connectors/nethttp/go/...
+            ./packages/connectors/nethttp/go/... \
+            ./packages/identity/go/... \
+            ./packages/revocation/go/... \
+            ./packages/sdk/go/...
+          go test -race -covermode=atomic \
+            -coverpkg=github.com/garudex-labs/caracal/transport-mcp,github.com/garudex-labs/caracal/revocation \
+            -coverprofile=coverage/go/tests.out \
+            ./tests/go/unit/revocation \
+            ./tests/go/unit/transport/mcp
+          tail -n +2 coverage/go/tests.out >> coverage/go/coverage.out
           go tool cover -func=coverage/go/coverage.out
 
       - name: Upload Go coverage artifact
@@ -296,6 +310,7 @@ jobs:
             packages/core/python/pyproject.toml
             packages/identity/python/pyproject.toml
             packages/revocation/python/pyproject.toml
+            packages/sdk/python/pyproject.toml
             packages/transport/mcp/python/pyproject.toml
             packages/connectors/fastmcp/python/pyproject.toml
 
@@ -306,17 +321,18 @@ jobs:
             -e packages/core/python \
             -e packages/identity/python \
             -e packages/revocation/python \
+            -e packages/sdk/python \
             -e packages/transport/mcp/python \
             -e packages/connectors/fastmcp/python \
             coverage==7.13.5 cryptography==48.0.0
 
       - name: Run Python tests with coverage
         env:
-          PYTHONPATH: ${{ github.workspace }}/packages/core/python:${{ github.workspace }}/packages/identity/python:${{ github.workspace }}/packages/revocation/python:${{ github.workspace }}/packages/transport/mcp/python:${{ github.workspace }}/packages/connectors/fastmcp/python:${{ github.workspace }}/tests/shared/test-utils/python
+          PYTHONPATH: ${{ github.workspace }}/packages/core/python:${{ github.workspace }}/packages/identity/python:${{ github.workspace }}/packages/revocation/python:${{ github.workspace }}/packages/sdk/python:${{ github.workspace }}/packages/transport/mcp/python:${{ github.workspace }}/packages/connectors/fastmcp/python:${{ github.workspace }}/tests/shared/test-utils/python
         run: |
           set -euxo pipefail
           mkdir -p coverage/python
-          coverage run --source=packages/core/python/caracalai_core,packages/identity/python/caracalai_identity,packages/revocation/python/caracalai_revocation,packages/transport/mcp/python/caracalai_transport_mcp,packages/connectors/fastmcp/python/caracalai_mcp_fastmcp \
+          coverage run --source=packages/core/python/caracalai_core,packages/identity/python/caracalai_identity,packages/revocation/python/caracalai_revocation,packages/sdk/python/caracalai_sdk,packages/transport/mcp/python/caracalai_transport_mcp,packages/connectors/fastmcp/python/caracalai_mcp_fastmcp \
             -m unittest discover -s tests/python -p 'test_*.py' -v
           coverage xml -o coverage/python/coverage.xml
           coverage report --show-missing

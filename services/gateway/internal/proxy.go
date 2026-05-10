@@ -27,6 +27,8 @@ import (
 // signature validity is established at STS exchange and at the upstream resource.
 const preflightWindow = 35 * time.Second
 
+const maxBearerBytes = 4096
+
 // proxy implements the gateway's reverse-proxy handler.
 type proxy struct {
 	sts         *stsClient
@@ -73,6 +75,11 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if bearer == "" {
 		writeErr(w, requestID, http.StatusUnauthorized, sharederr.InvalidToken, "missing bearer token")
 		logger.Info().Int("status", http.StatusUnauthorized).Msg("denied: missing bearer")
+		return
+	}
+	if len(bearer) > maxBearerBytes {
+		writeErr(w, requestID, http.StatusUnauthorized, sharederr.InvalidToken, "bearer token too large")
+		logger.Info().Int("status", http.StatusUnauthorized).Msg("denied: bearer too large")
 		return
 	}
 
@@ -246,6 +253,9 @@ func buildUpstreamRequest(r *http.Request, upstreamURL *url.URL, caracalToken st
 		req.Header.Set(authHeader, scheme+" "+caracalToken)
 	}
 	req.Header.Set("X-Request-Id", requestID)
+	if req.Header.Get("Traceparent") == "" {
+		req.Header.Set("Traceparent", traceparentFromRequestID(requestID))
+	}
 
 	// Replace, never append: the gateway is a trust boundary and any caller-supplied
 	// X-Forwarded-* values are spoofable. Upstreams that key on the first XFF entry
@@ -378,4 +388,16 @@ func writeErr(w http.ResponseWriter, requestID string, status int, code shareder
 	w.Header().Set("X-Request-Id", requestID)
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(e)
+}
+
+// traceparentFromRequestID builds a W3C traceparent value seeded from the request id
+// so a single trace identifier flows from the gateway through to upstream provider hops.
+func traceparentFromRequestID(requestID string) string {
+	hex := strings.ReplaceAll(requestID, "-", "")
+	for len(hex) < 32 {
+		hex += "0"
+	}
+	traceID := hex[:32]
+	spanID := hex[:16]
+	return "00-" + traceID + "-" + spanID + "-01"
 }

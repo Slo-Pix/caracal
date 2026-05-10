@@ -1,14 +1,15 @@
 go 1.26
 
 use (
-./services/sts
-./services/audit
-./services/gateway
-./apps/coordinator/relay
-./packages/core/go
-./packages/identity/go
-./packages/revocation/go
-./packages/transport/mcp/go
-./packages/connectors/nethttp/go
-./packages/sdk/go
+	./apps/coordinator/relay
+	./packages/connectors/nethttp/go
+	./packages/core/go
+	./packages/identity/go
+	./packages/revocation/go
+	./packages/sdk/go
+	./packages/transport/mcp/go
+	./services/audit
+	./services/gateway
+	./services/sts
+	./tests/go
 )

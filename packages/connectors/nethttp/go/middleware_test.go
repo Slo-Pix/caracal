@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/garudex-labs/caracal/identity"
+	transportmcp "github.com/garudex-labs/caracal/transport-mcp"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -95,6 +96,32 @@ func TestMiddlewareRejectsMissingRequiredScope(t *testing.T) {
 
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %d: %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestMapErrorCoversTransportCodes(t *testing.T) {
+	tests := []struct {
+		code      transportmcp.ErrorCode
+		status    int
+		bodyError string
+	}{
+		{transportmcp.ErrInsufficientScope, http.StatusForbidden, "insufficient_scope"},
+		{transportmcp.ErrAgentRequired, http.StatusUnauthorized, "agent_required"},
+		{transportmcp.ErrDelegationRequired, http.StatusUnauthorized, "delegation_required"},
+		{transportmcp.ErrChainMismatch, http.StatusUnauthorized, "chain_mismatch"},
+		{transportmcp.ErrHopCountExceeded, http.StatusUnauthorized, "hop_count_exceeded"},
+		{transportmcp.ErrSessionRevoked, http.StatusUnauthorized, "session_revoked"},
+		{transportmcp.ErrInvalidZone, http.StatusUnauthorized, "invalid_zone"},
+		{transportmcp.ErrMissingToken, http.StatusUnauthorized, "missing_token"},
+		{transportmcp.ErrInvalidToken, http.StatusUnauthorized, "invalid_token"},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.code), func(t *testing.T) {
+			status, bodyError := mapError(tt.code)
+			if status != tt.status || bodyError != tt.bodyError {
+				t.Fatalf("want %d %q, got %d %q", tt.status, tt.bodyError, status, bodyError)
+			}
+		})
 	}
 }
 

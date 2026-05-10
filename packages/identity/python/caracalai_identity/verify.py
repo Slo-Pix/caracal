@@ -45,6 +45,10 @@ class ChainMismatchError(PermissionError):
         self.missing_application_id = missing_application_id
 
 
+class HopCountExceededError(PermissionError):
+    pass
+
+
 def _read_chain(raw: Any) -> list[ChainHop]:
     if not isinstance(raw, list):
         return []
@@ -138,6 +142,14 @@ async def verify_config(token: str, config: JwtConfig) -> Claims:
         present = any(hop.application_id == expected for hop in delegation_chain)
         if not present:
             raise ChainMismatchError(expected)
+
+    hop_count = decoded.get("hop_count")
+    if (
+        config.max_hop_count is not None
+        and isinstance(hop_count, int)
+        and hop_count > config.max_hop_count
+    ):
+        raise HopCountExceededError("Hop count exceeded")
 
     delegation_path = decoded.get("delegation_path") or []
     if not isinstance(delegation_path, list):

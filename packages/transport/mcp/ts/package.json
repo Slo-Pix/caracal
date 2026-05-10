@@ -24,7 +24,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../../.. tests/typescript/unit/transport-mcp",
+    "test": "vitest run --root ../../../.. tests/typescript/unit/transport-mcp",
     "prepublishOnly": "tsc"
   },
   "dependencies": {

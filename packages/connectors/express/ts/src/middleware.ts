@@ -8,9 +8,10 @@ import type { Claims } from '@caracalai/identity'
 import type { RevocationStore } from '@caracalai/revocation'
 import { authenticate, extractBearer, type AuthError } from '@caracalai/transport-mcp'
 import {
+  AgentKind,
   bind,
   fromHeaders,
-  withAgent,
+  spawn,
   type CaracalContext,
   type CoordinatorClient,
 } from '@caracalai/sdk/advanced'
@@ -74,14 +75,14 @@ export function caracalAuth(opts: MiddlewareOptions): RequestHandler {
 
     if (opts.ephemeralAgent) {
       const { coordinator, applicationId } = opts.ephemeralAgent
-      await withAgent(
+      await spawn(
         {
           coordinator,
           zoneId: baseCtx.zoneId,
           applicationId,
           subjectToken: token,
           parentId: baseCtx.agentSessionId,
-          kind: 'ephemeral',
+          kind: AgentKind.Ephemeral,
           traceId: baseCtx.traceId,
         },
         async () => {
