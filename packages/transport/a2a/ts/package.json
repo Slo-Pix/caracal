@@ -24,7 +24,7 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../../.. tests/typescript/unit/transport-a2a",
+    "test": "vitest run --root ../../../.. tests/typescript/unit/transport-a2a",
     "prepublishOnly": "tsc"
   },
   "dependencies": {
