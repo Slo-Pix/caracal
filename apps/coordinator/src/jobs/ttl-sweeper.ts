@@ -10,6 +10,12 @@ import type { JobLogger } from './outbox-publisher.js'
 
 const SWEEP_LOCK = 'coordinator:ttl_sweep'
 
+export const ttlSweeperStats = {
+  runs: 0,
+  failures: 0,
+  terminated: 0,
+}
+
 export async function runTTLSweep(db: Pool): Promise<number> {
   const client = await db.connect()
   try {
@@ -74,8 +80,13 @@ export function startTTLSweeper(
   const tick = (): void => {
     if (stopped || running) return
     running = true
+    ttlSweeperStats.runs += 1
     pending = runTTLSweep(db)
+      .then((terminated) => {
+        ttlSweeperStats.terminated += terminated
+      })
       .catch((err) => {
+        ttlSweeperStats.failures += 1
         log?.error({ err }, 'ttl_sweep_failed')
       })
       .finally(() => {
