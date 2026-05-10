@@ -3,8 +3,18 @@
 //
 // Outbox publisher unit tests covering Redis stream delivery and retry state.
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { publishBatch, startOutboxPublisher } from '../../../../../../apps/agent-coordinator/src/jobs/outbox-publisher.js'
+
+beforeAll(() => {
+  process.env.ISSUER_URL ??= 'http://issuer.test'
+  process.env.AGENT_COORDINATOR_AUDIENCE ??= 'coord.test'
+  process.env.STS_URL ??= 'http://sts.test'
+  process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
+  process.env.DATABASE_URL ??= 'postgres://x'
+  process.env.REDIS_URL ??= 'redis://x'
+  process.env.STREAMS_MAXLEN ??= '12345'
+})
 
 function mockClient(rows: unknown[]) {
   return {
@@ -30,7 +40,7 @@ describe('publishBatch', () => {
     await publishBatch(db as never, redis as never, 50, 10)
 
     expect(redis.xadd).toHaveBeenCalledWith(
-      'caracal.invocations.lifecycle', '*',
+      'caracal.invocations.lifecycle', 'MAXLEN', '~', '12345', '*',
       'outbox_id', 'outbox-1',
       'dedupe_key', 'invocation.created:inv-1',
       'event', 'created',
@@ -51,7 +61,7 @@ describe('publishBatch', () => {
     await publishBatch(db as never, redis as never, 50, 10)
 
     expect(redis.xadd).toHaveBeenCalledWith(
-      'caracal.agents.lifecycle', '*',
+      'caracal.agents.lifecycle', 'MAXLEN', '~', '12345', '*',
       'outbox_id', 'outbox-1',
       'dedupe_key', 'spawn:agent-1',
       'nested', '{"id":"inv-1"}',

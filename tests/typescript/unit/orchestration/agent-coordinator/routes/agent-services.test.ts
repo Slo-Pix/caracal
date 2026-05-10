@@ -30,9 +30,15 @@ function buildApp() {
 describe('POST /v1/zones/:zoneId/agent-services', () => {
   it('registers an agent service', async () => {
     const { app, db } = buildApp()
-    db.query
-      .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'svc-1', zone_id: 'z1', application_id: 'app-1' }] })
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+        .mockResolvedValueOnce({ rows: [{ id: 'svc-1', zone_id: 'z1', application_id: 'app-1' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
 
     await app.ready()
     const res = await app.inject({
@@ -47,11 +53,19 @@ describe('POST /v1/zones/:zoneId/agent-services', () => {
 
     expect(res.statusCode).toBe(201)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'svc-1', application_id: 'app-1' })
+    expect(client.query).toHaveBeenCalledWith('COMMIT')
   })
 
   it('rejects applications outside the zone', async () => {
     const { app, db } = buildApp()
-    db.query.mockResolvedValueOnce({ rows: [] })
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
     await app.ready()
     const res = await app.inject({
       method: 'POST',
@@ -63,6 +77,7 @@ describe('POST /v1/zones/:zoneId/agent-services', () => {
     })
     expect(res.statusCode).toBe(404)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'application_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
   })
 })
 
@@ -93,6 +108,7 @@ describe('POST /v1/zones/:zoneId/agents/:id/heartbeat', () => {
     const client = {
       query: vi.fn()
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1', status: 'active' }] })
         .mockResolvedValueOnce({ rows: [{ id: 'agent-1', zone_id: 'z1', application_id: 'app-1', last_active_at: new Date() }] })
         .mockResolvedValueOnce({ rows: [{ id: 'svc-1', zone_id: 'z1', application_id: 'app-1' }] })
         .mockResolvedValue({ rows: [] }),

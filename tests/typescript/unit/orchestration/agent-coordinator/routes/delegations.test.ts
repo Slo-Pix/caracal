@@ -162,7 +162,7 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
           { id: 'src-1', application_id: 'issuer-1' },
           { id: 'dst-1', application_id: 'receiver-1' },
         ] })
-        .mockResolvedValueOnce({ rows: [{ scopes: ['read'] }] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'issuer-1', scopes: ['read'] }] })
         .mockResolvedValueOnce({ rows: [] }),
       release: vi.fn(),
     }

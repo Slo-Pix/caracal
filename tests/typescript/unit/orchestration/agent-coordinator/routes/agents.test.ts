@@ -31,8 +31,8 @@ function buildApp() {
 
 interface SpawnStage {
   refs?: { application_exists: boolean; session_exists: boolean }
-  count?: { n: string }
-  parent?: { depth: number; child_count: number; max_children: number } | null
+  count?: { app_n: string; zone_n: string }
+  parent?: { depth: number; child_count: number; max_children: number; application_id?: string } | null
   insert?: { rows: unknown[] }
   withTopology?: boolean
   outbox?: boolean
@@ -83,7 +83,7 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
     const { app, db } = buildApp()
     db.connect.mockResolvedValueOnce(spawnClient({
       refs: { application_exists: true, session_exists: true },
-      count: { n: '200' },
+      count: { app_n: '200', zone_n: '200' },
     }))
     await app.ready()
     const res = await app.inject({
@@ -92,14 +92,14 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
       payload: { application_id: 'app-1', session_sid: 'sid-1' },
     })
     expect(res.statusCode).toBe(429)
-    expect(JSON.parse(res.body)).toMatchObject({ error: 'agent_limit_exceeded' })
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'agent_zone_limit_exceeded' })
   })
 
   it('returns 404 when parent not found', async () => {
     const { app, db } = buildApp()
     db.connect.mockResolvedValueOnce(spawnClient({
       refs: { application_exists: true, session_exists: true },
-      count: { n: '0' },
+      count: { app_n: '0', zone_n: '0' },
       parent: null,
     }))
     await app.ready()
@@ -116,7 +116,7 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
     const { app, db } = buildApp()
     db.connect.mockResolvedValueOnce(spawnClient({
       refs: { application_exists: true, session_exists: true },
-      count: { n: '1' },
+      count: { app_n: '1', zone_n: '1' },
       parent: { depth: 1, child_count: 10, max_children: 10, application_id: 'app-1' },
     }))
     await app.ready()
@@ -133,7 +133,7 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
     const { app, db } = buildApp()
     db.connect.mockResolvedValueOnce(spawnClient({
       refs: { application_exists: true, session_exists: true },
-      count: { n: '1' },
+      count: { app_n: '1', zone_n: '1' },
       parent: { depth: 10, child_count: 0, max_children: 10, application_id: 'app-1' },
     }))
     await app.ready()
@@ -150,7 +150,7 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
     const { app, db } = buildApp()
     const client = spawnClient({
       refs: { application_exists: true, session_exists: true },
-      count: { n: '0' },
+      count: { app_n: '0', zone_n: '0' },
       insert: { rows: [{ id: 'agent-new', zone_id: 'z1', application_id: 'app-1', parent_id: null }] },
       outbox: true,
     })
@@ -187,6 +187,7 @@ describe('DELETE /v1/zones/:zoneId/agents/:id — cascade terminate', () => {
     const client = {
       query: vi.fn()
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
         .mockResolvedValueOnce({ rows: [
           { id: 'agent-root', session_sid: 'sid-root', parent_id: null },
@@ -199,11 +200,17 @@ describe('DELETE /v1/zones/:zoneId/agents/:id — cascade terminate', () => {
     await app.ready()
     const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/agents/agent-root' })
     expect(res.statusCode).toBe(204)
-    const outboxCalls = client.query.mock.calls.filter((call) => String(call[0]).includes('caracal_outbox'))
-    expect(outboxCalls.length).toBe(4)
-    const topics = outboxCalls.map((call) => call[1]?.[1])
+    const outboxCalls = client.query.mock.calls.filter((call) => String(call[0]).includes('INSERT INTO caracal_outbox'))
+    expect(outboxCalls.length).toBe(1)
+    const params = (outboxCalls[0]?.[1] ?? []) as unknown[]
+    const topics = params.filter((_, i) => i % 4 === 1)
     expect(topics).toEqual(expect.arrayContaining([
       'caracal.sessions.revoke', 'caracal.agents.lifecycle',
+    ]))
+    const dedupeKeys = params.filter((_, i) => i % 4 === 2)
+    expect(dedupeKeys).toEqual(expect.arrayContaining([
+      'agent_terminate:agent-root', 'terminate:agent-root',
+      'agent_terminate:agent-child', 'terminate:agent-child',
     ]))
   })
 })

@@ -20,7 +20,10 @@ function buildApp() {
   const app = Fastify({ logger: false })
   const db = { query: vi.fn(), connect: vi.fn() }
   app.decorate('db', db as never)
-  app.decorate('redis', {} as never)
+  app.decorate('redis', {
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+  } as never)
   app.addHook('preHandler', async (req) => {
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
       zoneId: 'z1', scopes: ['coordinator.admin'],
