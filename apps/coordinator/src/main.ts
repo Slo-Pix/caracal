@@ -9,6 +9,7 @@ import { buildRedis, closeRedis } from './redis.js'
 import { startOutboxPublisher } from './jobs/outbox-publisher.js'
 import { startTTLSweeper } from './jobs/ttl-sweeper.js'
 import { startDeadlineEnforcer } from './jobs/deadline-enforcer.js'
+import { startRetentionCleaner } from './jobs/retention-cleaner.js'
 import { cfg } from './config.js'
 
 const app = await buildApp()
@@ -17,6 +18,7 @@ const log = app.log
 const outbox = startOutboxPublisher(db, redis, { log })
 const ttl = startTTLSweeper(db, { log })
 const deadline = startDeadlineEnforcer(db, { log })
+const retention = startRetentionCleaner(db, { log })
 
 let shuttingDown = false
 async function shutdown(signal: string): Promise<void> {
@@ -30,7 +32,7 @@ async function shutdown(signal: string): Promise<void> {
   grace.unref()
   try {
     await app.close()
-    await Promise.all([outbox.stop(), ttl.stop(), deadline.stop()])
+    await Promise.all([outbox.stop(), ttl.stop(), deadline.stop(), retention.stop()])
     await db.end()
     await closeRedis()
     app.log.info('shutdown_complete')
