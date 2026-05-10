@@ -4,6 +4,7 @@
 // @caracalai/core — configuration, errors, and logging for TypeScript services.
 
 export * from './config.js';
+export * from './cliconfig.js';
 export * from './crypto.js';
 export * from './env.js';
 export * from './envfile.js';
