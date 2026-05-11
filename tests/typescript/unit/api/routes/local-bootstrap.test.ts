@@ -61,6 +61,8 @@ describe('POST /v1/local/bootstrap', () => {
     expect(client.query.mock.calls[0][0]).toBe('BEGIN')
     expect(client.query.mock.calls.at(-1)?.[0]).toBe('COMMIT')
     expect(client.query.mock.calls.some((call) => String(call[0]).includes('INSERT INTO secrets'))).toBe(true)
+    const bindingCall = client.query.mock.calls.find((call) => String(call[0]).includes('gateway_resource_bindings'))
+    expect(bindingCall?.[1]).toEqual(['resource://example', 'zone1', 'app1'])
     expect(client.release).toHaveBeenCalledTimes(1)
   })
 
