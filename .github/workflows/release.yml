@@ -33,7 +33,7 @@ concurrency:
 
 env:
   NODE_VERSION: '24'
-  PNPM_VERSION: '10.28.0'
+  PNPM_VERSION: '11.0.9'
   GO_VERSION: '1.26'
   PYTHON_VERSION: '3.12'
   GOTOOLCHAIN: auto
