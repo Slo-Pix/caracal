@@ -91,27 +91,6 @@ func TestTokenTTL(t *testing.T) {
 	}
 }
 
-func TestSameTokenPrincipal(t *testing.T) {
-	if !sameTokenPrincipal(
-		map[string]any{"sub": "user1", "client_id": "app1"},
-		map[string]any{"sub": "user1", "client_id": "app1"},
-	) {
-		t.Fatal("matching subject and client must be same principal")
-	}
-	if sameTokenPrincipal(
-		map[string]any{"sub": "user1", "client_id": "app1"},
-		map[string]any{"sub": "user1", "client_id": "app2"},
-	) {
-		t.Fatal("different clients must be distinct principals")
-	}
-	if sameTokenPrincipal(
-		map[string]any{"sub": "user1", "client_id": "app1"},
-		map[string]any{"sub": "user2", "client_id": "app1"},
-	) {
-		t.Fatal("different subjects must be distinct principals")
-	}
-}
-
 func TestBuildAuditEventFields(t *testing.T) {
 	result := &OPAResult{
 		Decision:         "allow",
@@ -193,7 +172,6 @@ type stubDB struct {
 	agentIndex    int
 	agentErr      error
 	edge          *DelegationEdge
-	edges         map[string]*DelegationEdge
 	edgeErr       error
 	path          []string
 	pathErr       error
@@ -218,12 +196,7 @@ func (s *stubDB) UpdateGrantTokens(_ context.Context, _ string, _ int, _, _ []by
 func (s *stubDB) GetProvider(_ context.Context, _ string) (*ProviderConfig, error) {
 	return nil, errors.New("stub")
 }
-func (s *stubDB) GetDelegationEdge(_ context.Context, id string) (*DelegationEdge, error) {
-	if s.edges != nil {
-		if e, ok := s.edges[id]; ok {
-			return e, s.edgeErr
-		}
-	}
+func (s *stubDB) GetDelegationEdge(_ context.Context, _ string) (*DelegationEdge, error) {
 	return s.edge, s.edgeErr
 }
 func (s *stubDB) GetResourceRateLimit(_ context.Context, _, _ string) (*ResourceRateLimit, error) {
@@ -284,11 +257,7 @@ func (s *stubDB) UpdateApplicationSecretHash(_ context.Context, _, _, _ string) 
 // TestExchangePartialDeny verifies that partial OPA evaluation status causes HTTP 403.
 // This is the hard invariant: a partial result must never produce a token.
 func TestExchangePartialDeny(t *testing.T) {
-	credType := "confidential"
-	hash, err := hashClientSecret("hunter2")
-	if err != nil {
-		t.Fatalf("hash secret: %v", err)
-	}
+	credType := "public"
 	db := &stubDB{
 		app: &Application{
 			ID:                 "app1",
@@ -296,7 +265,6 @@ func TestExchangePartialDeny(t *testing.T) {
 			Name:               "Test App",
 			RegistrationMethod: "managed",
 			CredentialType:     &credType,
-			ClientSecretHash:   &hash,
 		},
 		resource: &Resource{
 			ID:         "res1",
@@ -329,11 +297,9 @@ result := {"decision": "partial", "evaluation_status": "partial", "determining_p
 	}
 
 	form := url.Values{
-		"grant_type":        {"urn:ietf:params:oauth:grant-type:token-exchange"},
-		"zone_id":           {"zone1"},
-		"application_id":    {"app1"},
-		"client_assertion":  {"hunter2"},
-		"resource":          {"https://api.example.com"},
+		"grant_type": {"urn:ietf:params:oauth:grant-type:token-exchange"},
+		"client_id":  {"zone1:app1"},
+		"resource":   {"https://api.example.com"},
 	}
 	req := httptest.NewRequest(http.MethodPost, "/oauth/2/token",
 		strings.NewReader(form.Encode()))
@@ -351,7 +317,7 @@ func TestValidateSessionReferencesRequiresAgentSessionForDelegation(t *testing.T
 	srv := &Server{db: &stubDB{}}
 	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
 		DelegationEdgeID: "edge1",
-	}, false)
+	})
 	if err == nil || err.Description != "delegation edge requires source agent session" {
 		t.Fatalf("want source agent session error, got %#v", err)
 	}
@@ -396,7 +362,7 @@ func TestValidateSessionReferencesAcceptsActiveGraphEdge(t *testing.T) {
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
-	}, false)
+	})
 	if err != nil || proof == nil || proof.edge.ID != "edge1" || proof.graphEpoch != 7 {
 		t.Fatalf("want active delegation proof, got proof=%#v err=%#v", proof, err)
 	}
@@ -441,7 +407,7 @@ func TestValidateSessionReferencesRejectsDelegationBudget(t *testing.T) {
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read write",
-	}, false)
+	})
 	if err == nil || err.Description != "requested scopes exceed delegation budget" {
 		t.Fatalf("want budget error, got %#v", err)
 	}
@@ -487,7 +453,7 @@ func TestValidateSessionReferencesRejectsDelegationTTLConstraint(t *testing.T) {
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 		TTLSeconds:       60,
-	}, false)
+	})
 	if err == nil || err.Description != "requested ttl exceeds delegation ttl" {
 		t.Fatalf("want ttl constraint error, got %#v", err)
 	}
@@ -531,7 +497,7 @@ func TestValidateSessionReferencesRejectsMalformedDelegationConstraints(t *testi
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
-	}, false)
+	})
 	if err == nil || err.Description != "delegation constraints invalid" {
 		t.Fatalf("want malformed constraint error, got %#v", err)
 	}
@@ -539,11 +505,7 @@ func TestValidateSessionReferencesRejectsMalformedDelegationConstraints(t *testi
 
 func TestExchangeRejectsResourceOutsideDelegationEdge(t *testing.T) {
 	now := time.Now()
-	credentialType := "confidential"
-	hash, hashErr := hashClientSecret("hunter2")
-	if hashErr != nil {
-		t.Fatalf("hash secret: %v", hashErr)
-	}
+	credentialType := "public"
 	boundResourceID := "res-bound"
 	source := &AgentSession{
 		ID:            "agent-src",
@@ -568,7 +530,6 @@ func TestExchangeRejectsResourceOutsideDelegationEdge(t *testing.T) {
 			Name:               "Test App",
 			RegistrationMethod: "managed",
 			CredentialType:     &credentialType,
-			ClientSecretHash:   &hash,
 		},
 		resource: &Resource{
 			ID:         "res-other",
@@ -594,9 +555,7 @@ func TestExchangeRejectsResourceOutsideDelegationEdge(t *testing.T) {
 	}
 	srv := &Server{db: db}
 	_, _, code, apiErr := srv.exchange(context.Background(), TokenExchangeRequest{
-		ZoneID:           "zone1",
-		ApplicationID:    "app1",
-		ClientAssertion:  "hunter2",
+		ClientID:         "zone1:app1",
 		Resources:        []string{"resource://api/other"},
 		Scope:            "read",
 		AgentSessionID:   source.ID,
@@ -645,7 +604,7 @@ func TestValidateSessionReferencesRejectsInvalidDelegationPath(t *testing.T) {
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
-	}, false)
+	})
 	if err == nil || err.Description != "delegation path invalid" {
 		t.Fatalf("want invalid path error, got %#v", err)
 	}
@@ -693,7 +652,7 @@ func TestValidateSessionReferencesRejectsMaxHopOverflow(t *testing.T) {
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
-	}, false)
+	})
 	if err == nil || err.Description != "delegation path invalid" {
 		t.Fatalf("want max-hop path error, got %#v", err)
 	}
@@ -717,51 +676,31 @@ func TestValidateSessionReferencesAcceptsDeepDelegationPath(t *testing.T) {
 		SpawnedAt:     now.Add(-time.Minute),
 		TTLSeconds:    600,
 	}
-	edges := map[string]*DelegationEdge{
-		"edge0": {
-			ID: "edge0", ZoneID: "zone1",
-			SourceSessionID: source.ID, TargetSessionID: "agent-mid1",
-			IssuerAppID: "app1", ReceiverAppID: "appA",
-			Status: "active", ExpiresAt: now.Add(time.Minute),
-		},
-		"edge2": {
-			ID: "edge2", ZoneID: "zone1",
-			SourceSessionID: "agent-mid1", TargetSessionID: target.ID,
-			IssuerAppID: "appA", ReceiverAppID: "app2",
-			Status: "active", ExpiresAt: now.Add(time.Minute),
-		},
-	}
-	edge1 := &DelegationEdge{
-		ID:              "edge1",
-		ZoneID:          "zone1",
-		SourceSessionID: source.ID,
-		TargetSessionID: target.ID,
-		IssuerAppID:     source.ApplicationID,
-		ReceiverAppID:   target.ApplicationID,
-		Scopes:          []string{"read"},
-		Status:          "active",
-		ExpiresAt:       now.Add(time.Minute),
-		ConstraintsJSON: []byte(`{"max_hops":3}`),
-	}
-	edges["edge1"] = edge1
 	db := &stubDB{
 		agentSessions: []*AgentSession{source, target},
-		path:          []string{"edge1"},
+		path:          []string{"edge0", "edge1", "edge2"},
 		graphEpoch:    12,
-		edge:          edge1,
-		edges:         edges,
+		edge: &DelegationEdge{
+			ID:              "edge1",
+			ZoneID:          "zone1",
+			SourceSessionID: source.ID,
+			TargetSessionID: target.ID,
+			IssuerAppID:     source.ApplicationID,
+			ReceiverAppID:   target.ApplicationID,
+			Scopes:          []string{"read"},
+			Status:          "active",
+			ExpiresAt:       now.Add(time.Minute),
+			ConstraintsJSON: []byte(`{"max_hops":3}`),
+		},
 	}
 	srv := &Server{db: db}
 	proof, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
 		AgentSessionID:   source.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
-	}, false)
-	if err != nil || proof == nil || len(proof.path) != 1 || proof.graphEpoch != 12 {
-		t.Fatalf("want delegation proof, got proof=%#v err=%#v", proof, err)
-	}
-	if len(proof.chain) != 2 || proof.chain[0].AppID != "app1" || proof.chain[1].AppID != "app2" {
-		t.Fatalf("want 2-hop chain, got %#v", proof.chain)
+	})
+	if err != nil || proof == nil || len(proof.path) != 3 || proof.graphEpoch != 12 {
+		t.Fatalf("want deep delegation proof, got proof=%#v err=%#v", proof, err)
 	}
 }
 
