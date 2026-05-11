@@ -1,7 +1,147 @@
 ---
 title: Error Reference
-description: Error codes returned by services and SDKs and how to resolve them.
+description: Every error code returned by Caracal services and SDKs, with HTTP status mappings and resolution guidance.
 pageType: reference
 ---
 
-Error codes returned by services and SDKs and how to resolve them.
+Error responses from Caracal services follow a consistent JSON envelope:
+
+```json
+{
+  "error": "error_code",
+  "description": "Human-readable explanation"
+}
+```
+
+The TypeScript SDK raises `CaracalError` with `code` and `description` fields. The Python SDK raises `CaracalError` with the same fields. The Go SDK returns typed `*CaracalError` values with `Code` and `Description`.
+
+---
+
+## Authentication errors
+
+Returned by the Gateway and STS when mandate validation fails. Always accompanied by a `WWW-Authenticate: Bearer` header on 401 responses.
+
+| Code | HTTP | Cause | Resolution |
+| --- | --- | --- | --- |
+| `missing_token` | 401 | `Authorization` header is absent or empty | Include a valid `Authorization: Bearer {mandate}` header |
+| `invalid_token` | 401 | JWT is malformed, expired, or has an invalid signature | Obtain a fresh mandate from the STS; check system clock sync |
+| `invalid_zone` | 401 | `zone_id` in the JWT does not match the zone expected by this service | Verify the mandate was issued for the correct zone; check `zone_id` in config |
+| `session_revoked` | 401 | The session identified by `sid` has been revoked | Re-authenticate to create a new session |
+| `insufficient_scope` | 403 | The mandate does not include a scope required by the resource | Request a mandate with the required scope; check resource binding configuration |
+| `agent_required` | 403 | The resource requires an agent session but the mandate is a user or application session | Use an agent session mandate for this operation |
+| `delegation_required` | 403 | The resource requires a delegated mandate but no delegation chain is present | Obtain a mandate through the delegation flow before calling this resource |
+| `chain_mismatch` | 403 | The delegation chain in the JWT is inconsistent with the delegation graph | Re-obtain the mandate; the graph may have changed since the mandate was issued |
+| `hop_count_exceeded` | 403 | The delegation chain has more hops than the `max_hops` caveat allows | Reduce delegation depth; check `max_hops` constraints on parent delegation edges |
+
+---
+
+## Core and API errors
+
+Returned by the STS and API for request-level or server-level failures.
+
+| Code | HTTP | Cause | Resolution |
+| --- | --- | --- | --- |
+| `access_denied` | 403 | OPA policy evaluated the request and returned a deny decision | Review the active policy set for the zone; check the principal's granted scopes |
+| `invalid_token` | 400 | Token exchange input is malformed or contains an invalid claim | Validate the input token format and claims before submitting |
+| `resource_not_found` | 404 | The requested zone, session, policy, or resource does not exist | Verify the resource ID; check that the resource was created before referencing it |
+| `internal_error` | 500 | Unhandled server error | Check service logs; retry with exponential backoff |
+| `policy_eval_failed` | 500 | OPA returned `evaluation_status` other than `"complete"` | Check OPA health and the policy bundle; verify the OPA container is running and responsive |
+| `provider_rate_limited` | 429 | An upstream provider has rate-limited this service | Back off and retry; check provider-specific rate limit configuration |
+| `interaction_required` | 401 | The current session lacks sufficient assurance for this operation | Re-authenticate with elevated assurance before retrying |
+| `sts_unavailable` | 503 | The STS did not respond or returned an error | Check STS health at `GET http://localhost:8080/ready`; restart if necessary |
+| `credential_expired_not_renewable` | 401 | The credential used for authentication has expired and cannot be renewed | Re-authenticate with a valid credential |
+| `payload_too_large` | 413 | The request body exceeds the size limit | Reduce payload size; check if the operation can be split into smaller requests |
+
+---
+
+## Agent session limit errors
+
+Returned by the Coordinator with HTTP 429 when any agent session limit is exceeded.
+
+| Code | HTTP | Limit exceeded | Resolution |
+| --- | --- | --- | --- |
+| `agent_zone_limit_exceeded` | 429 | Active sessions in the zone reached `MAX_PER_ZONE` (default: 50) | Terminate idle agent sessions before creating new ones; raise `MAX_PER_ZONE` if appropriate |
+| `agent_limit_exceeded` | 429 | Active sessions for the application reached `MAX_PER_APP` (default: 200) | Terminate idle agent sessions; raise `MAX_PER_APP` if appropriate |
+| `agent_children_limit_exceeded` | 429 | The parent agent has reached `MAX_CHILDREN` (default: 10) child sessions | Terminate completed child sessions before spawning new ones |
+| `agent_depth_limit_exceeded` | 429 | The delegation chain has reached `MAX_DEPTH` (default: 10) | Redesign the agent hierarchy to use fewer nesting levels |
+
+---
+
+## Gateway denial codes
+
+The Gateway records specific denial reasons in its metrics. These are not returned to clients directly (clients receive an auth error code instead), but they appear in `GET /metrics`:
+
+| Metric field | Trigger |
+| --- | --- |
+| `denials_missing_auth` | No `Authorization` header |
+| `denials_bad_bearer` | Bearer token malformed |
+| `denials_expiring` | Mandate TTL expired |
+| `denials_bad_routing` | No matching binding for the request path |
+| `denials_path_traversal` | Path traversal detected in the request URI |
+| `denials_signature` | JWT signature verification failed |
+| `denials_jti_replay` | JTI already seen — replay attempt or clock skew |
+| `denials_revoked` | Session revoked |
+| `denials_binding` | Scope or resource binding does not match |
+
+---
+
+## SDK error types
+
+### TypeScript
+
+```typescript
+import { CaracalError } from '@caracal/core';
+
+try {
+  await client.spawn(/* ... */);
+} catch (err) {
+  if (err instanceof CaracalError) {
+    console.log(err.code);        // e.g. "agent_children_limit_exceeded"
+    console.log(err.description); // human-readable explanation
+    console.log(err.statusCode);  // HTTP status (if from an HTTP response)
+  }
+}
+```
+
+### Python
+
+```python
+from caracalai_sdk import CaracalError
+
+try:
+    await client.spawn(...)
+except CaracalError as e:
+    print(e.code)        # e.g. "agent_children_limit_exceeded"
+    print(e.description) # human-readable explanation
+```
+
+### Go
+
+```go
+import "github.com/garudex/caracal/packages/core/go/errors"
+
+result, err := client.Spawn(ctx, opts)
+if err != nil {
+    var cerr *errors.CaracalError
+    if errors.As(err, &cerr) {
+        fmt.Println(cerr.Code)        // e.g. "agent_children_limit_exceeded"
+        fmt.Println(cerr.Description) // human-readable explanation
+    }
+}
+```
+
+---
+
+## Retry guidance
+
+| HTTP status | Retry? | Strategy |
+| --- | --- | --- |
+| 400 | No | Fix the request |
+| 401 `invalid_token` | Yes | Refresh mandate, then retry once |
+| 401 `session_revoked` | No | Re-authenticate |
+| 403 | No | Fix scope or delegation chain |
+| 404 | No | Fix resource reference |
+| 429 | Yes | Exponential backoff with jitter; check limit configuration |
+| 500 `policy_eval_failed` | No | Fix OPA configuration |
+| 500 `internal_error` | Yes | Exponential backoff; alert if sustained |
+| 503 | Yes | Exponential backoff; check service health |

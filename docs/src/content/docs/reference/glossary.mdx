@@ -1,7 +1,268 @@
 ---
 title: Glossary
-description: Definitions for every term used across Caracal docs and code.
+description: Definitions for every term used across Caracal documentation and source code.
 pageType: reference
 ---
 
-Definitions for every term used across Caracal docs and code.
+Terms are listed alphabetically. Where a term has a specific representation in code (struct name, JWT claim, config key), the code name is shown alongside the definition.
+
+---
+
+## Agent session
+
+A stateful authorization context that represents an AI agent running on behalf of a user or application. Agent sessions have a parent session (user or application), a zone, a depth, a child count, and a TTL. They are created through the Coordinator and are subject to zone-wide and application-wide limits.
+
+Agent sessions participate in delegation chains: when an agent spawns a child agent, it delegates a constrained subset of its authority downward through a delegation edge.
+
+See also: [Ephemeral agent](#ephemeral-agent), [Delegation edge](#delegation-edge), [Agent session limits](#agent-session-limits).
+
+---
+
+## Agent session limits
+
+The four hard limits that apply to every agent session:
+
+| Limit | Default | Config key |
+| --- | --- | --- |
+| Maximum hierarchy depth | 10 | `MAX_DEPTH` |
+| Maximum children per agent | 10 | `MAX_CHILDREN` |
+| Maximum active sessions per zone | 50 | `MAX_PER_ZONE` |
+| Maximum active sessions per application | 200 | `MAX_PER_APP` |
+
+Exceeding any limit returns a 429 response with an `agent_*_limit_exceeded` error code. Default session TTL is 3600 seconds.
+
+---
+
+## Ambient mandate
+
+A JWT with `"use": "ambient"` and a 60-minute TTL. Ambient mandates represent long-running identity — they are issued for an entire session rather than for a single call. Use them for background tasks, streaming sessions, or any context where a per-call exchange for every request is impractical.
+
+Ambient mandates carry the full delegation chain but are not scoped to a specific resource or operation. They are accepted by services that do not perform per-operation resource validation.
+
+Contrast with [Per-call mandate](#per-call-mandate).
+
+---
+
+## Audit chain
+
+A tamper-evident linked structure over all audit events in a zone. Each event carries:
+- `content_sha256`: SHA-256 hash of its own payload.
+- `prev_content_sha256`: Hash of the preceding event.
+- `chain_hmac`: HMAC-SHA256 over this event linked to its predecessor, keyed by `AUDIT_HMAC_KEY`.
+- `chain_seq`: Monotonic per-zone sequence number.
+
+Any deletion, reordering, or modification of an event is detectable by the Audit service's tamper sweeper. A break in `chain_seq` continuity is a `tamper_chain_breaks` event; a mismatch in a hash or HMAC is a `tamper_mismatch_total` event.
+
+---
+
+## Baggage
+
+W3C Baggage header entries propagated alongside requests to carry Caracal context across service boundaries. Four entries:
+
+| Key | Content |
+| --- | --- |
+| `caracal.agent_session` | Agent session ID |
+| `caracal.delegation_edge` | Current delegation edge ID |
+| `caracal.parent_edge` | Parent delegation edge ID |
+| `caracal.hop` | Current hop count in the delegation chain |
+
+Baggage is forwarded by the Gateway alongside the `traceparent` header for distributed tracing correlation.
+
+---
+
+## Caveat
+
+A constraint embedded in a delegation edge that further restricts the authority delegated to a child agent. Caveats narrow scope; they cannot expand it. Fields:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `ttl_seconds` | integer | Reduces the child session's TTL |
+| `max_hops` | integer | Limits further delegation depth |
+| `budget` | integer | Caps the number of scopes the child may hold |
+| `policy_approved` | boolean | Marks the edge as policy-reviewed |
+
+---
+
+## Chain hop
+
+`ChainHop` — A record of one delegation step in the `delegation_chain` JWT claim. Each hop records the source session, the delegation edge, and the target session, allowing full chain reconstruction from the mandate alone.
+
+---
+
+## Coordinator
+
+The Caracal service (port 4000) responsible for agent session lifecycle: creating, suspending, resuming, and terminating agent sessions. The Coordinator owns the `agent_sessions` and `delegation_edges` tables and publishes lifecycle events to the Redis streams consumed by STS and Audit.
+
+---
+
+## DEK
+
+Data Encryption Key. In Caracal's key management model, each zone's ECDSA P-256 signing key is a DEK. It is encrypted at rest with the zone's [KEK](#kek) using ChaCha20-Poly1305 and stored in the `secrets` table.
+
+---
+
+## Delegation edge
+
+A record in the `delegation_edges` table representing one step of authority transfer from a parent agent session to a child agent session. The edge carries the delegating session ID, the receiving session ID, the scope granted, and any [caveats](#caveat) attached by the parent. Delegation edges are immutable once created.
+
+In a JWT, the current delegation edge is identified by `delegation_edge_id`. The full chain is carried in `delegation_chain` as an ordered array of `ChainHop` records.
+
+---
+
+## Delegation graph
+
+The complete directed graph of delegation edges within a zone. The STS traverses this graph when validating a mandate's chain of authority. The graph epoch is tracked as `delegation_graph_epoch` in the JWT and is used to detect stale chain assertions.
+
+---
+
+## Delegation path
+
+The ordered list of session IDs from the root session to the current session, derived from the delegation chain. Represented as `delegation_path` in the JWT claims.
+
+---
+
+## Ephemeral agent
+
+An agent session created for a single bounded operation, terminated immediately on completion. Ephemeral agents have a narrowly scoped mandate (often scoped to one resource and one operation) and cannot spawn children. Their authority ends the moment they terminate.
+
+The key property of ephemeral agents is non-transferability: because the session is terminated before any other request can use its mandate, there is no window in which the authority could be used for unintended operations.
+
+---
+
+## Gateway
+
+The Caracal service (port 8081) that enforces mandate validity on every inbound request before proxying to upstream services. The Gateway verifies the mandate's signature, scope, expiry, and revocation status. It does not issue or exchange mandates — it only validates and proxies.
+
+---
+
+## Grant
+
+An authorization decision that permits a specific principal to perform a specific action on a specific resource, within a specific session scope. Grants are evaluated by OPA at mandate issuance time. A grant is the result of a successful OPA evaluation combined with a scope match.
+
+---
+
+## Hop count
+
+`hop_count` — The number of delegation steps between the root session and the current session. Carried in the JWT claims. Compared against `max_hops` caveats during chain validation. A mandate rejected for `hop_count_exceeded` means the delegation chain has exceeded its allowed depth.
+
+---
+
+## JWKS
+
+JSON Web Key Set. The STS publishes its active zone signing keys at `/v1/zones/{zoneId}/jwks`. During a 24-hour grace period following key rotation, the JWKS contains two keys — the newly active key and its predecessor — so that mandates signed with the old key remain valid until they expire.
+
+Clients must cache the JWKS for at most 5 minutes.
+
+---
+
+## KEK
+
+Key Encryption Key (`ZONE_KEK`). A 32-byte hex-encoded secret held in the environment. The KEK encrypts and decrypts each zone's signing key (DEK) using ChaCha20-Poly1305. It must not be all zeros. If the KEK is compromised, all zone signing keys must be treated as exposed and must be rotated immediately.
+
+---
+
+## Mandate
+
+The general term for a JWT issued by the STS that grants a principal authority to perform operations. Mandates come in two forms: [per-call](#per-call-mandate) (15-minute TTL, `"use": "per_call"`) and [ambient](#ambient-mandate) (60-minute TTL, `"use": "ambient"`). Both are signed with the zone's ECDSA P-256 key and carry the full delegation chain.
+
+---
+
+## MCP governance
+
+A mode setting that controls how the Caracal CLI handles tool calls made through MCP (Model Context Protocol) servers. Two modes:
+
+| Mode | Behavior |
+| --- | --- |
+| `block` | Rejects tool calls that do not have a valid mandate |
+| `log` | Logs unauthorized tool calls but allows them to proceed |
+
+Configured in `caracal.toml` under `mcp_governance.mode`.
+
+---
+
+## OPA
+
+Open Policy Agent. Caracal uses OPA to evaluate authorization policy at mandate issuance time. The STS submits an `OPAInput` and expects an `OPAResult` with `evaluation_status: "complete"`. If `evaluation_status` is not `"complete"`, the STS rejects the exchange with `policy_eval_failed`.
+
+OPA input fields: `principal`, `resource`, `action`, `session`, `delegation_edge`, `context`.
+OPA output fields: `decision`, `evaluation_status`, `determining_policies`, `diagnostics`.
+
+---
+
+## Outbox
+
+Transactional outbox pattern used by the API and Coordinator to guarantee that events are published to Redis streams even if the Redis write fails. Events are written to Postgres in the same transaction as the state change, then a background poller reads and publishes them to Redis. If Redis is unavailable, events queue in Postgres and are delivered when Redis recovers.
+
+API outbox: 250ms poll, batch size 32, max 100 delivery attempts.
+Coordinator outbox: 1000ms poll, batch size 50, max 10 delivery attempts.
+
+---
+
+## Per-call mandate
+
+A JWT with `"use": "per_call"` and a 15-minute TTL. Per-call mandates are scoped to a specific resource and operation. They are issued fresh for each outbound call by the SDK's transport layer. Because they are short-lived and resource-scoped, they are the preferred form for most operations.
+
+Contrast with [Ambient mandate](#ambient-mandate).
+
+---
+
+## Policy set
+
+A versioned collection of OPA rules stored in the `policy_versions` table. Policy versions are immutable once committed — new policies create new rows rather than updating existing ones. The active policy version for a zone is the one with the highest sequence number.
+
+---
+
+## Revocation store
+
+An interface (`RevocationStore`) with two methods: `isRevoked(sid)` and `markRevoked(sid, ttlMs)`. Two implementations exist:
+- `InMemoryRevocationStore`: for development and testing only; data is lost on restart.
+- `RedisRevocationStore`: for production; backed by the `caracal.sessions.revoke` stream.
+
+Services that use the Gateway for all traffic are protected immediately on revocation. Services accessed directly must run a `RedisRevocationConsumer` to receive revocation events; until the consumer acknowledges the event, revoked mandates within their TTL are accepted.
+
+---
+
+## Scope
+
+A string that identifies a permission within a zone. Scopes are attached to delegation edges and mandates. They control what operations a mandate authorizes. The STS validates that the requested scope is within the delegating session's granted scopes when issuing a mandate for a child agent.
+
+---
+
+## Session
+
+A stateful identity context. Sessions come in three sub-types:
+- **User sessions**: Created when a user authenticates. `sub_type: "user"`.
+- **Application sessions**: Created when an application authenticates with a client credential. `sub_type: "application"`.
+- **Agent sessions**: Created by the Coordinator for AI agents. `sub_type: "agent"`. Carries `agent_session_id`.
+
+Session state is stored in the `sessions` table. Active sessions can be revoked through the `caracal session revoke` CLI command or the API.
+
+---
+
+## STS
+
+Security Token Service. The Caracal service (port 8080) that issues and validates mandates. The STS evaluates OPA policy, traverses the delegation graph, signs JWTs with the zone's ECDSA P-256 key, and publishes to the audit stream. It holds the zone signing key in a 15-minute in-memory cache keyed by zone ID.
+
+---
+
+## Step-up challenge
+
+An `interaction_required` error response from the STS or Gateway indicating that the current session does not have sufficient assurance for the requested operation. The caller must obtain a new session with elevated assurance (e.g., re-authentication or additional factor) before retrying.
+
+---
+
+## Subject token
+
+A token representing the identity that an agent session is acting on behalf of. The subject token is passed to the Caracal SDK client when constructing an agent session and is carried in the `sub` claim of the resulting mandate.
+
+---
+
+## Zone
+
+The top-level organizational boundary in Caracal. Each zone has its own signing key, policy set, session namespace, and audit stream partition. Mandates from one zone are not valid in another zone. `zone_id` identifies the zone in JWT claims, API paths, and configuration.
+
+---
+
+## Zone signing key
+
+The ECDSA P-256 private key used to sign all mandates for a zone. Stored encrypted in the `secrets` table (encrypted with the zone's KEK). Cached in-memory by the STS for 15 minutes. Rotated via `caracal zone rotate-key`. During the 24-hour grace period after rotation, the STS accepts mandates signed by either the active key or its predecessor.

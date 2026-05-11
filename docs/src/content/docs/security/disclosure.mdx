@@ -1,7 +1,88 @@
 ---
 title: Disclosure Policy
-description: How to report a vulnerability via GitHub advisories or email.
+description: How to report a Caracal security vulnerability, what to expect in response, and what is in scope.
 pageType: reference
 ---
 
-How to report a vulnerability via GitHub advisories or email.
+Garudex Labs takes security vulnerabilities in Caracal seriously. This page describes how to report a vulnerability, what the response process looks like, and what is in scope.
+
+---
+
+## Reporting a vulnerability
+
+**Preferred channel:** GitHub Security Advisories at `github.com/garudex-labs/caracal/security/advisories`. Use the **Report a vulnerability** button. This creates a private advisory visible only to you and the Garudex Labs security team until disclosure.
+
+**Email:** If you cannot use GitHub advisories, email `security@garudex.io`. Encrypt the report using the PGP key linked from the repository's security policy file if the content is sensitive.
+
+Include in your report:
+
+- A clear description of the vulnerability and the affected component (Gateway, STS, Coordinator, Control-Plane API, a specific SDK, or a specific connector)
+- Steps to reproduce, including the minimum configuration required
+- The impact you observed or assessed
+- Whether you have a proof-of-concept; if so, include it or describe it
+
+Do not open a public GitHub issue for security vulnerabilities. Public disclosure before a fix is available puts all Caracal deployments at risk.
+
+---
+
+## Response timeline
+
+| Stage | Target |
+| --- | --- |
+| Acknowledgment | 2 business days |
+| Initial triage (severity assessment, scope confirmation) | 5 business days |
+| Status update | Every 7 days until resolution |
+| Fix and coordinated disclosure | Dependent on severity; see below |
+
+**Severity guidance:**
+
+- **Critical / High** (unauthenticated RCE, authentication bypass, cross-zone data access, cryptographic break): target fix within 14 days. Coordinated public disclosure after the fix is released.
+- **Medium** (authenticated privilege escalation, partial information disclosure, degraded-mode bypass): target fix within 30 days.
+- **Low** (hardening gaps, missing defense-in-depth, configuration issues): addressed in the next scheduled release.
+
+If a vulnerability is already being actively exploited, the timeline may be compressed and disclosure may happen with less lead time than usual. We will notify you before any public disclosure.
+
+---
+
+## Scope
+
+The following are in scope:
+
+- **Caracal OSS services:** Gateway, STS, Coordinator, Control-Plane API — as implemented in the `caracal/` directory of the public repository
+- **Oficial SDKs:** `@caracalai/sdk` (TypeScript), `caracal-sdk` (Python), `@caracalai/transport-a2a`
+- **Official connectors:** Express middleware, FastMCP connector, Go `net/http` middleware, Postgres backend, Redis revocation store and consumer
+
+Issues must be reproducible against the current `main` branch or the latest published release.
+
+---
+
+## Out of scope
+
+The following are not in scope for this policy:
+
+- **Deployment configuration vulnerabilities:** An insecure deployment (e.g., `JTI_FAIL_OPEN=true`, missing TLS, weak admin token entropy) is an operator configuration error, not a Caracal vulnerability. Review the [Hardening Checklist](./hardening/) for required production settings.
+- **Compromised infrastructure keys (`ZONE_KEK`, `STREAMS_HMAC_KEY`, `AUDIT_HMAC_KEY`):** Key compromise is documented in the [Threat Model](./threat-model/) as an operator responsibility. Report key management design concerns separately.
+- **Upstream MCP server vulnerabilities:** Caracal proxies requests to upstream servers but does not control their implementation.
+- **Third-party dependencies with no Caracal-specific attack path:** If a transitive dependency has a CVE but exploiting it requires capabilities Caracal does not expose, it is out of scope.
+- **Social engineering, phishing, or physical attacks.**
+- **Denial-of-service via resource exhaustion** without a memory-safety or logic component: volumetric DoS is an operational concern handled at the infrastructure layer.
+
+---
+
+## Coordinated disclosure
+
+Garudex Labs follows coordinated disclosure. We ask that you:
+
+- Give us the response timeline above before publishing or sharing the vulnerability details
+- Avoid accessing, modifying, or exfiltrating data beyond what is necessary to demonstrate the vulnerability
+- Avoid disrupting production deployments
+
+We will not pursue legal action against researchers who report in good faith and follow this policy.
+
+---
+
+## CVEs and acknowledgment
+
+For vulnerabilities that meet CVE criteria, Garudex Labs will request a CVE identifier through the appropriate CNA. The CVE will reference the affected version range and the fix release.
+
+Reporters who disclose in good faith will be acknowledged by name (or handle, or anonymously — your choice) in the GitHub security advisory and in the release notes for the fix. If you do not want to be named, say so in your report.

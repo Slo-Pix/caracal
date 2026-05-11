@@ -1,7 +1,112 @@
 ---
 title: Compatibility Matrix
-description: Supported runtimes, databases, Redis versions, and SDK and service version pairings.
+description: Supported runtime versions, infrastructure versions, and SDK pairings for the Caracal system.
 pageType: reference
 ---
 
-Supported runtimes, databases, Redis versions, and SDK and service version pairings.
+All version requirements listed here reflect the pinned versions in the Caracal repository. Using earlier versions is unsupported.
+
+---
+
+## Runtime requirements
+
+### TypeScript and Node.js
+
+| Component | Minimum version | Notes |
+| --- | --- | --- |
+| Node.js | 24 | Required by the CLI (`engines.node: ">=24"`) |
+| TypeScript | 5.x | Required by all TypeScript packages |
+
+The TypeScript SDK, connectors (Express, net/http JS), and CLI all require Node.js 24 or later. Earlier Node.js releases are not tested and are not supported.
+
+### Python
+
+| Component | Minimum version | Notes |
+| --- | --- | --- |
+| Python | 3.11 | Required by all Python packages (`requires-python = ">=3.11"`) |
+
+The Python SDK, FastMCP connector, Redis connector, and the LynxCapital example all require Python 3.11 or later. Python 3.10 and earlier are not supported.
+
+### Go
+
+| Component | Minimum version | Notes |
+| --- | --- | --- |
+| Go | 1.26 | Required by all Go modules (`go 1.26` in all `go.mod` files) |
+
+The Go SDK, net/http connector, Redis revocation connector, and all Go services (STS, Gateway, Audit, Coordinator relay) require Go 1.26. Earlier Go releases are not supported.
+
+---
+
+## Infrastructure requirements
+
+### Postgres
+
+| Requirement | Value |
+| --- | --- |
+| Version | Postgres 18 |
+| Base image | `postgres:18-alpine` |
+| Extensions | None required beyond core |
+
+Postgres 17 and earlier are not tested and may not support all features used in the schema (partitioning, advisory locks, or generated column behavior). Use the pinned `postgres:18-alpine` image for Docker deployments.
+
+### Redis
+
+| Requirement | Value |
+| --- | --- |
+| Version | Redis 8 |
+| Base image | `redis:8-alpine` |
+| Required policy | `maxmemory-policy noeviction` |
+| Persistence | AOF (`appendonly yes`, `appendfsync everysec`) |
+
+Redis 7 and earlier are not tested. The noeviction policy is mandatory — eviction of stream or session data causes correctness failures in the revocation pipeline.
+
+---
+
+## Package versions
+
+All packages in the Caracal repository are released together and must be used at matching versions. Mixing package versions across a release boundary (e.g., using SDK v1.2.0 with core v1.1.0) is unsupported.
+
+### TypeScript packages
+
+| Package | Import path |
+| --- | --- |
+| Core | `@caracal/core` |
+| SDK | `@caracal/sdk` |
+| Express connector | `@caracal/connector-express` |
+| Redis connector | `@caracal/connector-redis` |
+
+### Python packages
+
+| Package | Import name |
+| --- | --- |
+| Core | `caracalai_core` |
+| SDK | `caracalai_sdk` |
+| FastMCP connector | `caracalai_connector_fastmcp` |
+| Redis connector | `caracalai_connector_redis` |
+
+### Go modules
+
+| Module | Import path |
+| --- | --- |
+| Core | `github.com/garudex/caracal/packages/core/go` |
+| SDK | `github.com/garudex/caracal/packages/sdk/go` |
+| net/http connector | `github.com/garudex/caracal/packages/connectors/nethttp/go` |
+| Redis connector | `github.com/garudex/caracal/packages/connectors/redis/go` |
+
+---
+
+## Service compatibility
+
+Caracal services and client packages must run at the same release version. The five services (STS, API, Gateway, Coordinator, Audit) are versioned and deployed together. Deploying mismatched service versions is unsupported and may produce undefined behavior in the delegation graph traversal, audit chain, or mandate validation.
+
+---
+
+## Docker Compose
+
+The provided `docker-compose.yml` at `infra/docker/docker-compose.yml` pins all service images to their tested versions. For production deployments, do not override image tags unless you have validated the alternative image against the full test suite.
+
+---
+
+## Browser support (docs and UI)
+
+The Caracal documentation site and any web UI components in examples target modern evergreen browsers (Chrome, Firefox, Safari, Edge — current and one prior release). Internet Explorer is not supported.

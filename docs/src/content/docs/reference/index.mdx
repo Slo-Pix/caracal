@@ -1,7 +1,40 @@
 ---
 title: Reference
-description: Glossary, error codes, configuration, and compatibility.
+description: Complete technical reference for Caracal — error codes, configuration, glossary, and compatibility.
 pageType: landing
 ---
 
-Glossary, error codes, configuration, and compatibility.
+The Reference section documents every contract, configuration key, error code, and term used across the Caracal system. Use it when you need exact values, not explanations.
+
+## What's in this section
+
+| Page | Use it to look up |
+| --- | --- |
+| [Glossary](./glossary/) | Definitions for every Caracal term — mandate, zone, delegation edge, session, scope, and more |
+| [Error Reference](./errors/) | Every error code returned by services and SDKs — HTTP status, cause, and resolution |
+| [Configuration Reference](./configuration/) | All environment variables for each service, `caracal.toml` schema, and SDK config types |
+| [Compatibility Matrix](./compatibility/) | Supported runtime versions, service pairings, and database versions |
+
+## Fast lookups
+
+**Got an error code?** Go to [Error Reference](./errors/) and search for the code.
+
+**Configuring a service for the first time?** Go to [Configuration Reference](./configuration/) and jump to the service section.
+
+**Unfamiliar term in the docs?** Go to [Glossary](./glossary/).
+
+**Choosing a runtime or checking version support?** Go to [Compatibility Matrix](./compatibility/).
+
+## System overview
+
+Caracal has five services, each with its own configuration scope:
+
+| Service | Port | Role |
+| --- | --- | --- |
+| STS | 8080 | Issues and validates mandates; evaluates OPA policy |
+| API | 3000 | Zone, session, delegation, and policy management |
+| Gateway | 8081 | Mandate verification and upstream proxying |
+| Coordinator | 4000 | Agent session lifecycle and delegation orchestration |
+| Audit | 9090 | Event ingestion, chain verification, and export |
+
+All services require Postgres and Redis. Configuration is entirely through environment variables — there are no config files for services. Client-side configuration uses `caracal.toml` for CLI operations and typed config structs for SDK use.
