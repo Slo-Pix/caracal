@@ -63,7 +63,7 @@ func newFakeSTS(t *testing.T, upstream string, calls *int32) *httptest.Server {
 func newProxyForTest(_ *testing.T, sts *httptest.Server, allowPrivate bool) *proxy {
 	stsClient := newSTSClient(sts.URL, 2*time.Second)
 	guard := newUpstreamGuard(nil, allowPrivate)
-	return newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), nil, nil)
+	return newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), nil, nil, &GatewayMetrics{})
 }
 
 // testBindings returns a bindingStore preloaded with the resource identifiers used
@@ -416,7 +416,7 @@ func TestProxyBodySizeLimitEnforced(t *testing.T) {
 
 	stsClient := newSTSClient(sts.URL, 2*time.Second)
 	guard := newUpstreamGuard(nil, true)
-	p := newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), nil, nil)
+	p := newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), nil, nil, &GatewayMetrics{})
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
