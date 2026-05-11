@@ -1,7 +1,303 @@
 ---
 title: STS Token Endpoint
-description: The RFC 8693 token exchange endpoint that gates every agent action.
+description: RFC 8693 token exchange, step-up challenges, JWKS, and OPA policy evaluation — complete request and response reference.
 pageType: api
 ---
 
-The RFC 8693 token exchange endpoint that gates every agent action.
+The Security Token Service (STS) issues short-lived ES256-signed mandates via RFC 8693 token exchange. Every mandate is issued per-resource, policy-evaluated, and cryptographically bound to the zone's current signing key. The STS runs on port `8080`.
+
+## `POST /oauth/2/token`
+
+**Content-Type:** `application/x-www-form-urlencoded`  
+**Max body size:** 64 KB
+
+Exchanges an ambient session token (or acts as an application credential) for a short-lived per-resource mandate. The `resource` parameter is repeatable — include it multiple times to request a single mandate covering multiple resources.
+
+### Request fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `grant_type` | string | No | Grant type identifier; omit or use `urn:ietf:params:oauth:grant-type:token-exchange` |
+| `zone_id` | string | Yes | Zone identifier |
+| `application_id` | string | Yes | Authenticated application ID |
+| `resource` | string | Yes (1+) | Resource identifier; repeat the parameter for multiple resources |
+| `subject_token` | string | Cond. | Ambient JWT from a prior token exchange; omit for pure application-credential exchanges |
+| `subject_token_type` | string | No | `urn:ietf:params:oauth:token-type:access_token` when `subject_token` present |
+| `actor_token` | string | No | JWT identifying the calling actor when distinct from the subject |
+| `scope` | string | No | Space-separated scopes to request; must be subset of the resource's declared scopes |
+| `client_secret` | string | Cond. | Client credential; required for confidential clients unless `client_assertion` provided |
+| `client_assertion` | string | Cond. | JWT-based client assertion; alternative to `client_secret` |
+| `client_assertion_type` | string | No | Assertion type URI, e.g. `urn:ietf:params:oauth:client-assertion-type:jwt-bearer` |
+| `session_id` | string | No | STS session ID to bind the mandate to |
+| `agent_session_id` | string | No | Agent session ID for delegation context |
+| `delegation_edge_id` | string | No | Delegation edge ID; required when operating under a delegated authority |
+| `challenge_id` | string | No | Step-up challenge ID from a prior `interaction_required` response |
+| `challenge_response` | string | No | Base64url-encoded 32-byte secret that satisfies the challenge |
+| `ttl_seconds` | integer | No | Requested mandate lifetime in seconds; clamped to ≤ 900 for per-call, ≤ 3600 for ambient |
+
+### Validation steps
+
+The STS performs these checks in order. The first failure terminates the request.
+
+1. **Client authentication** — Verifies `client_secret` (scrypt hash match) or `client_assertion`. Public clients are not supported. Returns `401 access_denied` on failure.
+2. **Resource validation** — For each resource: verifies existence in zone, validates requested scopes, checks rate limits, verifies grant requirements.
+3. **Subject token validation** — If `subject_token` present: verifies ES256 signature against zone JWKS, checks issuer, audience, `zone_id` claim, and that `use` equals `"ambient"`. Verifies session record is active.
+4. **Actor token validation** — If `actor_token` present: same JWT checks as subject token. Verifies actor and subject are distinct principals.
+5. **Agent session ownership** — If `agent_session_id` present without `delegation_edge_id`: verifies agent session is active and owned by the authenticated application.
+6. **Delegation edge validation** — If `delegation_edge_id` present: verifies edge is active; checks source session matches `agent_session_id`; validates delegation constraints (scope budget, TTL, max hops); traverses the delegation graph to verify path integrity and absence of cycles; re-validates all edges on the path.
+7. **OPA policy evaluation** — Evaluates the zone's compiled Rego policy bundle. Returns `403 policy_eval_failed` if evaluation status is not `"complete"` or decision is `"deny"`.
+
+### Success response
+
+**HTTP 200** `application/json`
+
+```json
+{
+  "access_token": "<ES256-signed JWT>",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "scope": "read write",
+  "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+  "target_resources": ["resource://my-mcp-server"],
+  "upstreams": {
+    "resource://my-mcp-server": {
+      "url": "https://mcp.internal/",
+      "auth_mode": "caracal_jwt",
+      "auth_header": "Authorization",
+      "auth_scheme": "Bearer"
+    }
+  }
+}
+```
+
+**`upstreams` fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `url` | string | Upstream service URL; used by the Gateway to forward the request |
+| `auth_mode` | string | `caracal_jwt` — forward the Caracal mandate; `provider_oauth` — inject a brokered OAuth2 token; `provider_apikey` — inject a raw credential |
+| `auth_header` | string | Header name the upstream expects (e.g., `Authorization`) |
+| `auth_scheme` | string | Token prefix (e.g., `Bearer`) |
+| `provider_token` | string | Present only when `auth_mode` is `provider_oauth` or `provider_apikey`; the actual upstream credential |
+| `expires_at` | integer | Unix timestamp when the provider token expires; present only when `provider_token` is set |
+
+### JWT claims
+
+The issued mandate contains:
+
+```json
+{
+  "iss": "https://sts.example.com",
+  "sub": "user_or_app_id",
+  "aud": ["resource://my-mcp-server"],
+  "exp": 1746000000,
+  "iat": 1745999100,
+  "jti": "unique-jti",
+  "zone_id": "zone1",
+  "client_id": "app1",
+  "scope": "read write",
+  "sid": "session-id",
+  "use": "per_call",
+  "sub_type": "user",
+  "target": ["resource://my-mcp-server"],
+  "agent_session_id": "agent-id",
+  "delegation_edge_id": "edge-id",
+  "source_session_id": "source-session",
+  "target_session_id": "target-session",
+  "delegation_path": ["edge1", "edge2"],
+  "delegation_chain": [
+    { "app": "app1", "session": "agent1", "edge": "edge1" }
+  ],
+  "hop_count": 1,
+  "delegation_graph_epoch": 42
+}
+```
+
+Claims for agent session and delegation are present only when those parameters were provided in the exchange request.
+
+### Error responses
+
+| Error code | HTTP status | Condition |
+| --- | --- | --- |
+| `invalid_token` | 400 | Malformed request — missing `resource`, invalid `ttl_seconds`, or `resource` repeatable parameter absent |
+| `access_denied` | 401 | Invalid `client_secret` or `client_assertion`; public client attempted |
+| `invalid_token` | 401 | `subject_token` or `actor_token` signature invalid, expired, or zone mismatch; `use` claim not `"ambient"`; subject and actor are the same principal |
+| `access_denied` | 401 | Step-up challenge response invalid, expired, or does not match the request's resource set |
+| `access_denied` | 401 | Too many failed challenge attempts (throttled) |
+| `access_denied` | 403 | Session inactive or expired; session subject mismatch; agent session not owned by caller |
+| `access_denied` | 403 | Delegation edge inactive, expired, or revoked; edge source mismatch; delegation path invalid or cyclical; delegation constraints violated |
+| `policy_eval_failed` | 403 | OPA evaluation status is not `"complete"`, or decision is `"deny"` |
+| `access_denied` | 429 | Too many failed step-up challenge attempts |
+| `policy_eval_failed` | 503 | OPA engine is unavailable (fail-closed) |
+| `internal_error` | 500 | Token issuance or session creation failed |
+
+Error body:
+
+```json
+{
+  "error": "access_denied",
+  "error_description": "delegation edge is not active",
+  "requestId": "req-abc"
+}
+```
+
+---
+
+## Step-up challenges
+
+When OPA policy evaluation returns a `step_up_required` diagnostic, the STS rejects the exchange and creates a challenge. The caller must satisfy the challenge and retry.
+
+### Challenge response — `401 interaction_required`
+
+```json
+{
+  "error": "interaction_required",
+  "error_description": "Step-up authorization required for this resource",
+  "challenge_id": "01HZ...",
+  "challenge_type": "mfa",
+  "challenge_secret": "<base64url 32-byte secret>",
+  "challenge_expires_at": "2026-05-11T21:00:00Z",
+  "requestId": "req-abc"
+}
+```
+
+The `challenge_secret` must be presented back as `challenge_response` in the retry request. The secret is single-use and expires in 5 minutes. Rate limit: after repeated failures the STS responds with `429 access_denied`.
+
+**Retry after satisfaction:**
+
+```
+POST /oauth/2/token
+...all original fields...
+challenge_id=01HZ...
+challenge_response=<the challenge_secret value>
+```
+
+### `GET /step-up/{id}` — Query challenge status
+
+Returns the current state of a challenge without consuming it.
+
+**Response:**
+
+```json
+{
+  "id": "01HZ...",
+  "challenge_type": "mfa",
+  "satisfied": false,
+  "consumed": false,
+  "expires_at": "2026-05-11T21:00:00Z"
+}
+```
+
+---
+
+## `GET /.well-known/jwks.json`
+
+Returns the current signing keys for a zone.
+
+**Query parameters:**
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `zone_id` | Yes | Zone identifier; JWKS is per-zone |
+
+**Response — HTTP 200:**
+
+```json
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "use": "sig",
+      "kid": "key-id",
+      "alg": "ES256",
+      "x": "<base64url>",
+      "y": "<base64url>"
+    }
+  ]
+}
+```
+
+Returns the two most recent zone signing keys to support zero-downtime key rotation. `Cache-Control: public, max-age=300, must-revalidate` is set on every response.
+
+**Errors:** HTTP 400 if `zone_id` is missing; HTTP 404 if the zone has no signing keys.
+
+---
+
+## OPA policy evaluation
+
+For every token exchange the STS evaluates `data.caracal.authz.result` against the zone's compiled policy bundle. The policy receives this `input` object:
+
+```json
+{
+  "principal": {
+    "type": "Application",
+    "id": "app1",
+    "zone_id": "zone1",
+    "credential_type": "public | confidential",
+    "agent_session_id": "agent-id | empty"
+  },
+  "resource": {
+    "type": "Resource",
+    "id": "resource-uuid",
+    "identifier": "resource://my-mcp-server",
+    "scopes": ["read", "write"]
+  },
+  "action": {
+    "id": "TokenExchange"
+  },
+  "session": {
+    "id": "session-id"
+  },
+  "delegation_edge": {
+    "id": "edge-id",
+    "source_session_id": "source",
+    "target_session_id": "target",
+    "issuer_application_id": "app1",
+    "receiver_application_id": "app2",
+    "resource_id": "resource-uuid",
+    "scopes": ["read"],
+    "edge_version": 0,
+    "path": ["edge1"],
+    "graph_epoch": 42,
+    "constraints_json": {}
+  },
+  "context": {
+    "actor_claims": {},
+    "subject_claims": {},
+    "trace_id": "req-abc",
+    "session_id": "session-id",
+    "agent_session_id": "agent-id",
+    "delegation_edge_id": "edge-id",
+    "challenge_resolved": false,
+    "requested_scopes": ["read"]
+  }
+}
+```
+
+`session` and `delegation_edge` are `null` when those parameters were not present in the exchange request.
+
+The policy must return:
+
+```json
+{
+  "decision": "allow | deny",
+  "evaluation_status": "complete | partial | error",
+  "determining_policies": [],
+  "diagnostics": [
+    { "step_up_required": "mfa" }
+  ]
+}
+```
+
+Only `evaluation_status: "complete"` is treated as a valid response. Any other status causes a `503 policy_eval_failed` or `403 policy_eval_failed` depending on the failure mode.
+
+---
+
+## Other endpoints
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/health` | Liveness; always returns `200 {"ok": true}` |
+| `GET` | `/ready` | Readiness; `200` when database and Redis are reachable, `503` otherwise |
+| `GET` | `/metrics` | Prometheus-style JSON counters |

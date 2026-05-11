@@ -1,7 +1,202 @@
 ---
 title: Coordinator
-description: Agent lifecycle service that opens sessions, exchanges delegations, and verifies tokens.
+description: TypeScript/Fastify service that owns agent lifecycle, invocation persistence, delegation graph management, and TTL enforcement for the agent plane.
 pageType: architecture
 ---
 
-Agent lifecycle service that opens sessions, exchanges delegations, and verifies tokens.
+The Coordinator manages the agent plane of Caracal. It is the authority for agent session creation and termination, agent-to-agent delegation edges, and durable invocation records. Agents interact with the Coordinator to spawn child sessions, register their service endpoints, enqueue invocations, and report invocation results.
+
+**Default port:** 4000  
+**Language:** TypeScript (Node.js 24+)  
+**Framework:** Fastify 5.2.1
+
+---
+
+## Responsibilities
+
+The Coordinator owns:
+
+- **Agent lifecycle** — spawn, suspend, resume, and cascade-terminate agent sessions with enforced depth and count limits.
+- **Service registration** — agents announce their endpoint URL, protocol versions, and health status.
+- **Invocation persistence** — durable, idempotent RPC records with status tracking (`pending` → `running` → `succeeded`|`failed`|`timed_out`).
+- **Deadline enforcement** — cancels invocations that exceed their `timeout_ms`.
+- **TTL enforcement** — terminates agent sessions whose `ttl_seconds` has elapsed.
+- **Delegation graph** — creates and revokes directed authority edges between agent sessions.
+- **Retention** — deletes old delegation edges and outbox rows beyond the configured retention window.
+
+The Coordinator does **not** execute agent code, evaluate policies, issue tokens, manage zone configuration, or ingest audit events.
+
+---
+
+## Authentication
+
+All Coordinator endpoints require a bearer JWT issued by the STS:
+
+```
+Authorization: Bearer <STS-issued JWT>
+```
+
+The token must carry:
+- `aud` matching `AGENT_COORDINATOR_AUDIENCE`.
+- `scope` containing `AGENT_COORDINATOR_SCOPE` (typically `agent:lifecycle`).
+
+The Coordinator verifies tokens using JWKS fetched from `{ISSUER_URL}/.well-known/jwks.json` (LRU cache, max 256 entries).
+
+---
+
+## API routes
+
+All routes are zone-scoped: `/zones/:zoneId/...`
+
+### Agent sessions
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/zones/:zoneId/agents` | Spawn an agent session |
+| `GET` | `/zones/:zoneId/agents` | List agent sessions (cursor pagination) |
+| `GET` | `/zones/:zoneId/agents/:id` | Fetch one agent session |
+| `POST` | `/zones/:zoneId/agents/:id/suspend` | Suspend an agent |
+| `POST` | `/zones/:zoneId/agents/:id/resume` | Resume a suspended agent |
+| `DELETE` | `/zones/:zoneId/agents/:id` | Cascade-terminate an agent |
+
+**Spawn constraints** — enforced under a distributed lock on `coordinator:agent_spawn:{zoneId}`:
+
+| Constraint | Limit |
+| --- | --- |
+| Max depth (spawn hierarchy) | 10 |
+| Max children per agent | 10 |
+| Max agent sessions per zone | 50 |
+| Max agent sessions per application | 200 |
+
+Spawn is idempotent — pass an `Idempotency-Key` header to guarantee at-most-one creation across concurrent callers.
+
+**Cascade termination** — `DELETE` terminates the target agent and all its descendants recursively. A termination event is published to the outbox for each terminated session.
+
+### Agent services
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/zones/:zoneId/agents/:agentId/services` | Register a service endpoint |
+| `GET` | `/zones/:zoneId/agents/:agentId/services` | List services for an agent |
+| `PATCH` | `/zones/:zoneId/agents/:agentId/services/:serviceId` | Update service metadata or health |
+| `POST` | `/zones/:zoneId/agents/:agentId/services/:serviceId/heartbeat` | Record a heartbeat |
+
+Service health values: `starting`, `healthy`, `degraded`, `unhealthy`.
+
+### Invocations
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/zones/:zoneId/invocations` | Enqueue an invocation |
+| `GET` | `/zones/:zoneId/invocations/:id` | Fetch invocation status |
+| `POST` | `/zones/:zoneId/invocations/:id/cancel` | Request cancellation |
+| `POST` | `/zones/:zoneId/invocations/:id/complete` | Report result (agent → coordinator) |
+
+Invocations are idempotent on `(zone_id, service_id, idempotency_key)`. A duplicate enqueue returns the existing record. Status transitions: `pending` → `running` → `succeeded` | `failed` | `timed_out` | `canceled` | `dead`.
+
+`dead` is the terminal state for invocations that exhausted all retry attempts without a successful result.
+
+### Delegations
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `POST` | `/zones/:zoneId/delegations` | Create a delegation edge |
+| `GET` | `/zones/:zoneId/delegations` | List delegation edges |
+| `DELETE` | `/zones/:zoneId/delegations/:edgeId` | Revoke a delegation edge |
+
+Delegation edges carry optional `constraints_json` (e.g., resource restrictions, scope limits, expiry). Revocation is propagated via the outbox.
+
+---
+
+## Database schema
+
+The Coordinator owns four tables:
+
+**`agent_sessions`** — `id`, `zone_id`, `application_id`, `session_sid` (parent user session), `parent_id` (self-referential FK), `status` (`active`|`suspended`|`terminated`), `depth`, `capabilities` (array), `ttl_seconds`, `spawned_at`, `suspended_at`, `terminated_at`, timestamps. Indexed on `(zone_id, application_id)` and `(zone_id, status)`.
+
+**`agent_services`** — `id`, `zone_id`, `application_id`, `endpoint_url`, `protocol_versions` (array), `framework_name`, `framework_version`, `capabilities` (array), `health`, `metadata_json` (JSONB), `last_heartbeat_at`, timestamps. Unique constraint on `(zone_id, application_id, endpoint_url)`.
+
+**`agent_invocations`** — `id`, `zone_id`, `service_id`, `source_session_id`, `target_session_id`, `idempotency_key`, `method`, `params_json` (JSONB), `status`, `attempts`, `max_attempts`, `timeout_ms`, `retry_policy_json` (JSONB), `error_json` (JSONB), `deadline_at`, `started_at`, `completed_at`, timestamps. Unique on `(zone_id, service_id, idempotency_key)`. Indexed on status, session IDs, and `(deadline_at WHERE status='running')`.
+
+**`delegation_edges`** — `id`, `zone_id`, `source_agent_id` (FK → agent_sessions), `target_agent_id` (FK → agent_sessions), `constraints_json` (JSONB), timestamps.
+
+---
+
+## Background workers
+
+The Coordinator runs four background workers alongside the HTTP server:
+
+**OutboxPublisher** — polls the `caracal_outbox` table every `OUTBOX_INTERVAL_MS` (default 1000 ms), publishes ready rows to Redis streams, retries with exponential backoff up to `OUTBOX_MAX_ATTEMPTS`.
+
+**TTL Sweeper** — runs every `TTL_SWEEP_INTERVAL_MS` (default 60 s). Queries `agent_sessions` for active sessions whose `spawned_at + ttl_seconds` has elapsed and terminates them.
+
+**Deadline Enforcer** — runs every `DEADLINE_SWEEP_INTERVAL_MS` (default 5 s). Queries `agent_invocations` for `running` invocations past `deadline_at` and marks them `timed_out`.
+
+**Retention Cleaner** — runs every `RETENTION_CLEANUP_INTERVAL_MS` (default 900 s). Deletes delegation edges older than `DELEGATION_RETENTION_DAYS` (default 90) and outbox rows older than `OUTBOX_RETENTION_DAYS` (default 7).
+
+---
+
+## Redis usage
+
+**Streams produced** (via outbox):
+
+| Stream | Event |
+| --- | --- |
+| `caracal.sessions.revoke` | Agent session terminated |
+| `caracal.policy.invalidate` | Delegation policy change |
+
+**Distributed lock:**
+
+- Key: `coordinator:agent_spawn:{zoneId}` — held briefly during spawn constraint checks to prevent race conditions when multiple callers spawn concurrently against the same zone limits.
+
+---
+
+## Startup sequence
+
+1. Parse configuration; validate required env vars.
+2. Connect to PostgreSQL (pool max `DB_POOL_MAX` connections).
+3. Connect to Redis.
+4. Start OutboxPublisher.
+5. Start TTL Sweeper.
+6. Start Deadline Enforcer.
+7. Start Retention Cleaner.
+8. Register signal handlers (SIGTERM, SIGINT).
+9. Listen on `0.0.0.0:4000`.
+
+The Coordinator does not run database migrations. All schema changes are managed by the Control-Plane API.
+
+---
+
+## Scaling
+
+The Coordinator is stateless. All durable state is in PostgreSQL. Scale horizontally for invocation throughput.
+
+The spawn distributed lock (`coordinator:agent_spawn:{zoneId}`) is held for milliseconds per request. Under very high spawn rates for the same zone, lock contention is the primary bottleneck — mitigate by distributing spawns across zones or increasing per-zone limits.
+
+Invocation idempotency is enforced at the database level via a unique constraint on `(zone_id, service_id, idempotency_key)`. Concurrent duplicate enqueues produce a unique constraint violation; the Coordinator catches this and returns the existing record.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `4000` | HTTP listen port |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string |
+| `STS_URL` | — | STS URL for agent token exchanges |
+| `ISSUER_URL` | — | JWT issuer URL for JWKS verification |
+| `AGENT_COORDINATOR_AUDIENCE` | — | Required `aud` claim in bearer JWTs |
+| `AGENT_COORDINATOR_SCOPE` | — | Required scope in bearer JWTs |
+| `DB_POOL_MAX` | `20` | PostgreSQL pool size |
+| `OUTBOX_INTERVAL_MS` | `1000` | Outbox poll interval |
+| `OUTBOX_BATCH_SIZE` | `50` | Events per outbox dispatch batch |
+| `OUTBOX_MAX_ATTEMPTS` | `10` | Max outbox retry attempts |
+| `TTL_SWEEP_INTERVAL_MS` | `60000` | Agent TTL enforcement interval |
+| `DEADLINE_SWEEP_INTERVAL_MS` | `5000` | Invocation deadline enforcement interval |
+| `RETENTION_CLEANUP_INTERVAL_MS` | `900000` | Retention cleanup interval |
+| `DELEGATION_RETENTION_DAYS` | `90` | Delegation edge retention period |
+| `OUTBOX_RETENTION_DAYS` | `7` | Outbox row retention period |
+| `JWKS_CACHE_MAX` | `256` | JWKS LRU cache size |
+| `SHUTDOWN_GRACE_MS` | `15000` | Graceful shutdown wait |
+| `LOG_LEVEL` | `info` | Logging verbosity |

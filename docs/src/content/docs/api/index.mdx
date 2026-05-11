@@ -1,7 +1,37 @@
 ---
 title: API Reference
-description: HTTP surfaces exposed by the Caracal services.
+description: HTTP surfaces exposed by the Caracal services — base URLs, authentication methods, and a map of every API.
 pageType: landing
 ---
 
-HTTP surfaces exposed by the Caracal services.
+Caracal exposes four HTTP services, each with a distinct purpose and authentication model. This section documents every endpoint, request and response schema, and operational behavior for each service.
+
+## Services
+
+| Service | Default port | Purpose | Auth method |
+| --- | --- | --- | --- |
+| [Control-Plane API](./control-plane/) | 3000 | Manage zones, applications, resources, policies, grants, and sessions | Admin bearer token (SHA-256 hashed, stored in `admin_tokens`) |
+| [STS](./sts/) | 8080 | Issue mandates via RFC 8693 token exchange | Client secret or client assertion per request |
+| [Coordinator](./coordinator/) | 4000 | Manage agent sessions and delegation edges | STS-issued JWT with coordinator scopes |
+| [Gateway](./gateway/) | 8081 | Authenticate and proxy inbound MCP calls to upstream services | Ambient bearer token issued by STS |
+
+## Base URL conventions
+
+All services expose `/health` and `/ready` endpoints without authentication. The Control-Plane API and Coordinator prefix their resource routes with `/v1` or `/zones/{zoneId}`. The STS uses `/oauth/2/token` for token exchange and `/.well-known/jwks.json` for JWKS. The Gateway has no resource routes — every path is proxied to the upstream.
+
+## Error format
+
+All four services return JSON error bodies on failure:
+
+```json
+{
+  "error": "error_code",
+  "error_description": "human-readable message"
+}
+```
+
+The Control-Plane API adds `"issues"` for Zod validation failures and `"detail"` for elaborated errors. The STS includes `"requestId"` on most error responses. HTTP status codes follow standard semantics: 400 for malformed requests, 401 for authentication failures, 403 for authorization failures, 404 for not-found, 409 for conflicts, 422 for semantic validation failures, and 429 for rate limits.
+
+## Redis event streams
+
+All services participate in a Redis stream architecture for real-time propagation of revocations, policy invalidations, and audit events. Stream topics, message schemas, publishers, consumer groups, and HMAC signing are documented in [Event Topics](./event-topics/).
