@@ -4,20 +4,9 @@
 // FastMCP token verifier that delegates to @caracalai/transport-mcp.
 
 import { authenticate, extractBearer } from '@caracalai/transport-mcp'
-import type { AuthErrorCode } from '@caracalai/transport-mcp'
-import type { RevocationStore } from '@caracalai/revocation'
+import type { AuthDeps, AuthErrorCode } from '@caracalai/transport-mcp'
 
-export interface FastMcpAuthOptions {
-  issuer: string
-  audience: string
-  zoneId?: string
-  requiredScopes?: string[]
-  revocations: RevocationStore
-  requireAgent?: boolean
-  requireDelegation?: boolean
-  requireChainContains?: string[]
-  maxHopCount?: number
-}
+export type FastMcpAuthOptions = AuthDeps
 
 export interface FastMcpContext {
   sub: string

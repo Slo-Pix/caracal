@@ -28,6 +28,7 @@ class CaracalAuth:
         require_agent: bool = False,
         require_delegation: bool = False,
         require_chain_contains: list[str] | None = None,
+        max_hop_count: int | None = None,
     ) -> None:
         self.issuer = issuer
         self.audience = audience
@@ -37,6 +38,7 @@ class CaracalAuth:
         self.require_agent = require_agent
         self.require_delegation = require_delegation
         self.require_chain_contains = require_chain_contains or []
+        self.max_hop_count = max_hop_count
 
     async def __call__(self, token: str) -> Claims:
         result = await authenticate(
@@ -49,6 +51,7 @@ class CaracalAuth:
             require_agent=self.require_agent,
             require_delegation=self.require_delegation,
             require_chain_contains=self.require_chain_contains,
+            max_hop_count=self.max_hop_count,
         )
         if result.error is not None:
             raise CaracalAuthError(result.error.code, result.error.description)

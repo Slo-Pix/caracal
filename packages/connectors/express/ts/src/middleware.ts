@@ -5,8 +5,7 @@
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express'
 import type { Claims } from '@caracalai/identity'
-import type { RevocationStore } from '@caracalai/revocation'
-import { authenticate, extractBearer, type AuthError } from '@caracalai/transport-mcp'
+import { authenticate, extractBearer, type AuthDeps, type AuthError } from '@caracalai/transport-mcp'
 import {
   AgentKind,
   bind,
@@ -16,14 +15,7 @@ import {
   type CoordinatorClient,
 } from '@caracalai/sdk/advanced'
 
-export interface MiddlewareOptions {
-  issuer: string
-  audience: string
-  zoneId?: string
-  requiredScopes?: string[]
-  requireAgent?: boolean
-  requireDelegation?: boolean
-  revocations: RevocationStore
+export interface MiddlewareOptions extends AuthDeps {
   bindContext?: boolean
   /** When set, auto-spawn an ephemeral agent session per request. */
   ephemeralAgent?: {

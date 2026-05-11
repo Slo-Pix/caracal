@@ -10,6 +10,30 @@ import { join } from 'node:path';
 export const DEFAULT_API_URL = 'http://localhost:3000';
 export const DEFAULT_COORDINATOR_URL = 'http://localhost:4000';
 
+export interface Credential {
+  env: string;
+  resource: string;
+}
+
+export interface OptionalCredential extends Credential {
+  on_failure: 'warn' | 'error';
+}
+
+export interface McpGovernance {
+  mode: 'block' | 'log';
+}
+
+export interface CliConfig {
+  zone_url: string;
+  zone_id: string;
+  application_id: string;
+  app_client_secret: string;
+  continue_on_failure?: boolean;
+  credentials?: Credential[];
+  optional_credentials?: OptionalCredential[];
+  mcp_governance?: McpGovernance;
+}
+
 // Resolves the path to caracal.toml using the documented precedence:
 //   $CARACAL_CONFIG → ./caracal.toml (cwd / $PWD / $INIT_CWD) → $XDG_CONFIG_HOME/caracal/caracal.toml
 // Returns undefined when no candidate exists on disk.
