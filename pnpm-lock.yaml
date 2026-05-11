@@ -5001,6 +5001,7 @@ snapshots:
       vfile-message: 4.0.3
 
   esbuild@0.27.7:
+    requiresBuild: true
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.27.7
       '@esbuild/android-arm': 0.27.7
@@ -6773,6 +6774,7 @@ snapshots:
   setprototypeof@1.2.0: {}
 
   sharp@0.34.5:
+    requiresBuild: true
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
