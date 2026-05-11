@@ -5,9 +5,14 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import unittest
+
+import jwt as pyjwt
+from cryptography.hazmat.primitives.asymmetric import ec
 
 sys.path.append(str(Path(__file__).parents[3] / "shared" / "test-utils" / "python"))
 
@@ -18,10 +23,29 @@ from caracalai_identity.verify import (
     AgentIdentityRequiredError,
     ChainMismatchError,
     DelegationRequiredError,
+    HopCountExceededError,
     TokenInvalidError,
     verify_chain_contains,
     verify_config,
 )
+
+
+def _mint_no_kid_token() -> tuple[str, dict]:
+    key = ec.generate_private_key(ec.SECP256R1())
+    now = datetime.now(timezone.utc)
+    payload = {
+        "iss": "https://sts.example.com",
+        "aud": "resource://api",
+        "sub": "user1",
+        "zone_id": "zone1",
+        "scope": "read",
+        "iat": now,
+        "exp": now + timedelta(minutes=15),
+    }
+    token = pyjwt.encode(payload, key, algorithm="ES256")
+    jwk = json.loads(pyjwt.algorithms.ECAlgorithm.to_jwk(key.public_key()))
+    jwk.update({"use": "sig", "alg": "ES256"})
+    return token, jwk
 
 
 class StubCache:
@@ -30,6 +54,7 @@ class StubCache:
 
     async def get_keys(self, issuer: str) -> list[dict]:
         return self.keys
+
 
 
 class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
@@ -114,6 +139,38 @@ class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
         cfg = JwtConfig(issuer="https://sts.example.com", audience="resource://api")
         with self.assertRaises(TokenInvalidError):
             await verify_config("not.a.jwt", cfg)
+
+    async def test_raises_hop_count_exceeded(self) -> None:
+        with self.assertRaises(HopCountExceededError):
+            await self._verify({"hop_count": 5}, max_hop_count=1)
+
+    async def test_reads_graph_epoch_fallback(self) -> None:
+        claims = await self._verify({"graph_epoch": 99})
+        self.assertEqual(claims.graph_epoch, 99)
+
+    async def test_raises_for_unknown_kid(self) -> None:
+        token, _ = mint_es256_token()
+        _, wrong_jwk = mint_es256_token()
+        wrong_jwk["kid"] = "other-kid"
+        verify._cache = StubCache([wrong_jwk])
+        cfg = JwtConfig(issuer="https://sts.example.com", audience="resource://api")
+        with self.assertRaises(TokenInvalidError):
+            await verify_config(token, cfg)
+
+    async def test_raises_when_all_key_candidates_fail(self) -> None:
+        token, _ = mint_es256_token()
+        _, wrong_jwk = mint_es256_token()
+        verify._cache = StubCache([wrong_jwk])
+        cfg = JwtConfig(issuer="https://sts.example.com", audience="resource://api")
+        with self.assertRaises(TokenInvalidError):
+            await verify_config(token, cfg)
+
+    async def test_resolves_no_kid_token_using_all_keys(self) -> None:
+        token, jwk = _mint_no_kid_token()
+        verify._cache = StubCache([jwk])
+        cfg = JwtConfig(issuer="https://sts.example.com", audience="resource://api")
+        claims = await verify_config(token, cfg)
+        self.assertEqual(claims.sub, "user1")
 
 
 class VerifyChainContainsTests(unittest.TestCase):

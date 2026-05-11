@@ -49,6 +49,19 @@ class CaracalAuthTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(claims.zone_id, "zone2")
 
+    async def test_raises_caracal_auth_error_on_failure(self) -> None:
+        auth = CaracalAuth(
+            "https://sts.example.com",
+            "resource://api",
+            InMemoryRevocationStore(),
+        )
+
+        with self.assertRaises(CaracalAuthError) as cm:
+            await auth("")
+
+        self.assertEqual(cm.exception.code, "missing_token")
+        self.assertIsInstance(cm.exception.description, str)
+
 
 if __name__ == "__main__":
     unittest.main()
