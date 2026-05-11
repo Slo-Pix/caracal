@@ -344,41 +344,50 @@ func joinURLPath(upstreamPath, requestPath string) string {
 // Issue K — without it, an attacker holding a leaked token keeps the SSE pipe open
 // indefinitely even after revocation.
 func copyResponse(w http.ResponseWriter, resp *http.Response, revocations *revocationStore, sid string) {
+	// X-Caracal-Identity is the gateway-side mirror of the Caracal JWT for
+	// provider-native auth modes. Echoing it back to clients would surface a
+	// short-TTL but still usable bearer; strip it before fan-out.
+	resp.Header.Del("X-Caracal-Identity")
 	for key, vals := range resp.Header {
 		for _, val := range vals {
 			w.Header().Add(key, val)
 		}
 	}
-	w.WriteHeader(resp.StatusCode)
-
 	flusher, _ := w.(http.Flusher)
 	if flusher == nil {
+		w.WriteHeader(resp.StatusCode)
 		_, _ = io.Copy(w, resp.Body)
 		return
 	}
+	w.Header().Add("Trailer", "X-Caracal-Revoked")
+	w.WriteHeader(resp.StatusCode)
 	flusher.Flush()
-	streamCopy(w, resp.Body, flusher, revocations, sid)
+	if streamCopy(w, resp.Body, flusher, revocations, sid) {
+		w.Header().Set("X-Caracal-Revoked", "true")
+	}
 }
 
 // streamCopy reads from src in small chunks and flushes after every successful write.
 // On every chunk boundary it re-checks the revocation cache for sid and aborts the
-// stream if the session has been revoked while data is in flight.
-func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations *revocationStore, sid string) {
+// stream if the session has been revoked while data is in flight. Returns true when
+// the stream was truncated due to revocation so the caller can emit the
+// X-Caracal-Revoked trailer.
+func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations *revocationStore, sid string) bool {
 	buf := make([]byte, 4*1024)
 	for {
 		if revocations.IsRevoked(sid) {
 			_ = src.Close()
-			return
+			return true
 		}
 		n, rerr := src.Read(buf)
 		if n > 0 {
 			if _, werr := w.Write(buf[:n]); werr != nil {
-				return
+				return false
 			}
 			flusher.Flush()
 		}
 		if rerr != nil {
-			return
+			return false
 		}
 	}
 }

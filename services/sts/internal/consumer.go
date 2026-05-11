@@ -27,9 +27,18 @@ const (
 
 // startConsumers creates consumer groups and starts background reader goroutines.
 func (s *Server) startConsumers(ctx context.Context) {
-	_ = s.redis.EnsureGroup(ctx, streamRevoke, groupRevoke)
-	_ = s.redis.EnsureGroup(ctx, streamPolicy, groupPolicy)
-	_ = s.redis.EnsureGroup(ctx, streamKeys, groupKeys)
+	if err := s.redis.EnsureGroup(ctx, streamRevoke, groupRevoke); err != nil {
+		s.log.Error().Err(err).Str("stream", streamRevoke).Msg("consumer group ensure failed")
+		return
+	}
+	if err := s.redis.EnsureGroup(ctx, streamPolicy, groupPolicy); err != nil {
+		s.log.Error().Err(err).Str("stream", streamPolicy).Msg("consumer group ensure failed")
+		return
+	}
+	if err := s.redis.EnsureGroup(ctx, streamKeys, groupKeys); err != nil {
+		s.log.Error().Err(err).Str("stream", streamKeys).Msg("consumer group ensure failed")
+		return
+	}
 
 	baseConsumer := uniqueConsumerID("sts")
 	go s.consumeRevocations(ctx, baseConsumer+"-revocations")

@@ -44,7 +44,7 @@ func TestMiddlewareAcceptsValidScopedToken(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 	issuer := jwksServer(t, &privateKey.PublicKey, nil)
-	token := signedToken(t, privateKey, issuer, "resource://api", map[string]interface{}{
+	token := signedToken(t, privateKey, issuer, "resource://api", map[string]any{
 		"sub":     "user1",
 		"zone_id": "zone1",
 		"scope":   "read write",
@@ -80,7 +80,7 @@ func TestMiddlewareRejectsMissingRequiredScope(t *testing.T) {
 		t.Fatalf("generate key: %v", err)
 	}
 	issuer := jwksServer(t, &privateKey.PublicKey, nil)
-	token := signedToken(t, privateKey, issuer, "resource://api", map[string]interface{}{
+	token := signedToken(t, privateKey, issuer, "resource://api", map[string]any{
 		"sub":     "user1",
 		"zone_id": "zone1",
 		"scope":   "read",
@@ -162,7 +162,7 @@ func jwksServer(t *testing.T, publicKey *ecdsa.PublicKey, calls *int64) string {
 			return
 		}
 		response.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(response).Encode(map[string]interface{}{"keys": []map[string]string{{
+		json.NewEncoder(response).Encode(map[string]any{"keys": []map[string]string{{
 			"kty": "EC",
 			"crv": "P-256",
 			"kid": "kid1",
@@ -174,7 +174,7 @@ func jwksServer(t *testing.T, publicKey *ecdsa.PublicKey, calls *int64) string {
 	return server.URL
 }
 
-func signedToken(t *testing.T, privateKey *ecdsa.PrivateKey, issuer, audience string, claims map[string]interface{}) string {
+func signedToken(t *testing.T, privateKey *ecdsa.PrivateKey, issuer, audience string, claims map[string]any) string {
 	t.Helper()
 	mapClaims := jwt.MapClaims{
 		"iss": issuer,

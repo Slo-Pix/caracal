@@ -21,6 +21,7 @@ ErrorCode = Literal[
     "agent_required",
     "delegation_required",
     "chain_mismatch",
+    "hop_count_exceeded",
 ]
 
 
