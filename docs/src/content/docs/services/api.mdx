@@ -1,7 +1,175 @@
 ---
 title: Control-Plane API
-description: Fastify REST service that owns zone, policy, resource, and grant state.
+description: TypeScript/Fastify service that owns all control-plane state — zones, applications, resources, providers, policies, grants, sessions, and the transactional outbox.
 pageType: architecture
 ---
 
-Fastify REST service that owns zone, policy, resource, and grant state.
+The Control-Plane API is a TypeScript service built on Fastify 5. It is the single source of truth for all Caracal configuration and state. Every zone, application, resource, provider, policy, grant, and session is created, updated, and deleted through this service. Other services (STS, Gateway, Coordinator) read from the same PostgreSQL database but do not write to API-owned tables.
+
+**Default port:** 3000  
+**Language:** TypeScript (Node.js 24+)  
+**Framework:** Fastify 5.2.1
+
+---
+
+## Responsibilities
+
+The API owns:
+
+- **Zones** — tenant boundaries with per-zone data encryption keys.
+- **Applications** — OAuth 2.0 client identities (managed and DCR).
+- **Resources** — protected API endpoints with upstream URLs and scope definitions.
+- **Providers** — external OAuth2/OIDC/apikey/workload credential providers.
+- **Policies** — Rego source (versioned, immutable after creation, validated on write).
+- **Policy sets** — versioned bundles of policy versions, activatable atomically.
+- **Grants** — explicit application-to-resource authorizations on behalf of a user.
+- **Sessions** — user and application session records (created externally, managed here).
+- **Teams and invitations** — zone membership management.
+- **Step-up challenges** — MFA verification lifecycle.
+- **Admin tokens** — hashed bearer tokens for API authentication.
+- **Transactional outbox** — durable event publishing to Redis streams.
+
+The API does **not** issue tokens, evaluate policies, proxy requests, coordinate agents, or ingest audit events.
+
+---
+
+## Authentication
+
+All `/v1/*` routes require a bearer token in the `Authorization` header:
+
+```
+Authorization: Bearer <admin-token>
+```
+
+The token is SHA-256 hashed and looked up in the `admin_tokens` table. Comparison is timing-safe. Token scope (`global` or `zone`) is checked against the route's zone context.
+
+The bootstrap endpoint (`POST /v1/local/bootstrap`) is only available when `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true` is set, and is restricted to loopback connections.
+
+---
+
+## API routes
+
+All routes are prefixed with `/v1`. The full route surface:
+
+### Zones
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/zones` | List all zones |
+| `POST` | `/zones` | Create a zone |
+| `GET` | `/zones/:id` | Fetch one zone |
+| `PATCH` | `/zones/:id` | Update zone fields |
+
+Zone creation generates a random 32-byte DEK encrypted under the zone KEK.
+
+### Applications
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/zones/:zoneId/applications` | List active applications |
+| `POST` | `/zones/:zoneId/applications` | Create an application |
+| `GET` | `/zones/:zoneId/applications/:id` | Fetch one application |
+| `PATCH` | `/zones/:zoneId/applications/:id` | Update application fields |
+| `DELETE` | `/zones/:zoneId/applications/:id` | Soft-delete (sets `archived_at`) |
+| `POST` | `/zones/:zoneId/applications/dcr` | Dynamic Client Registration |
+
+### Resources, Providers, Policies, Policy Sets
+
+The same CRUD pattern applies:
+
+| Resource | Base path |
+| --- | --- |
+| Resources | `/zones/:zoneId/resources` |
+| Providers | `/zones/:zoneId/providers` |
+| Policies | `/zones/:zoneId/policies` |
+| Policy versions | `/zones/:zoneId/policies/:id/versions` |
+| Policy sets | `/zones/:zoneId/policy-sets` |
+
+Policies are validated for Rego syntax on write. Policy versions are immutable — update a policy by posting a new version.
+
+### Grants, Sessions, Step-up, Teams
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET/POST/PATCH/DELETE` | `/zones/:zoneId/grants` | Grant lifecycle |
+| `GET` | `/zones/:zoneId/sessions` | List sessions (read-only) |
+| `GET/POST/PATCH` | `/zones/:zoneId/step-up-challenges` | Challenge lifecycle |
+| `GET/POST` | `/zones/:zoneId/teams` | Team management |
+| `GET/POST` | `/zones/:zoneId/invitations` | Invitation management |
+
+---
+
+## Database schema
+
+The API runs all Postgres migrations on startup, serialized with an advisory lock so concurrent replicas do not conflict. Key tables:
+
+**`zones`** — `id`, `org_id`, `name`, `slug` (unique), `dek_ciphertext` (encrypted zone DEK), `kek_arn`, `dcr_enabled`, `pkce_required`, `login_flow`, timestamps.
+
+**`applications`** — `id`, `zone_id`, `name`, `registration_method` (`managed`|`dcr`), `credential_type`, `client_secret_hash`, `traits` (array), `expires_at` (DCR), `archived_at`, timestamps. Indexed on `(zone_id, expires_at)` for DCR GC.
+
+**`policies` + `policy_versions`** — `policies`: `id`, `zone_id`, `name`, `owner_type`, `archived_at`, `created_by`. `policy_versions`: `id`, `policy_id`, `version` (integer), `content` (Rego source), `content_sha256`, `schema_version`, `archived_at`.
+
+**`sessions`** — `id` (JWT `sid` claim), `zone_id`, `session_type` (`user`|`application`), `subject_id`, `status` (`active`|`revoked`|`expired`), `expires_at`, `claims_json` (JSONB). Indexed on `(zone_id, subject_id, status)` and `(expires_at WHERE status='active')` for the session reaper.
+
+**`delegated_grants`** — `id`, `zone_id`, `application_id`, `user_id`, `resource_id`, `scopes` (array), `status`, `access_token_ct` (encrypted), `refresh_token_ct` (encrypted), `expires_at`.
+
+**`secrets`** — per-zone encrypted credential storage. `id`, `zone_id`, `entity_id`, `name`, `type` (`token`|`password`), `ciphertext`, `nonce`, `dek_id`.
+
+**`event_outbox`** — `id`, `stream_name`, `payload_json`, `attempts`, `available_at`, `request_id`. Written inside mutation transactions; read by the outbox dispatcher.
+
+---
+
+## Transactional outbox
+
+The API publishes events to Redis streams via an outbox table, not by calling Redis directly. Every mutation that needs to propagate an event — policy activation, session revocation, application update — inserts a row into `event_outbox` inside the same database transaction as the mutation.
+
+A background **OutboxDispatcher** polls `event_outbox` every 250 ms (default), publishes ready rows to their target Redis stream, and marks them delivered. Failed deliveries are retried with exponential backoff (`2^attempts` seconds, capped at 60 s with jitter), up to 100 attempts.
+
+This guarantees that events are never lost due to a Redis hiccup at write time, and that an API crash mid-transaction does not produce a partial write.
+
+Redis streams published:
+
+| Stream | Trigger | Consumer(s) |
+| --- | --- | --- |
+| `caracal.sessions.revoke` | Session terminated | Gateway, STS |
+| `caracal.policy.invalidate` | Policy set activated | STS, Gateway |
+
+---
+
+## Startup sequence
+
+1. Parse configuration from environment.
+2. Connect to PostgreSQL; open connection pool (max 20 connections by default).
+3. Run Postgres migrations under advisory lock.
+4. Seed `CARACAL_ADMIN_TOKEN` into `admin_tokens` if the env var is set.
+5. Register Fastify plugins (schema validation, logging, auth hook, admin audit hook).
+6. Register all route plugins.
+7. Start OutboxDispatcher background loop.
+8. Start DCR GC timer (removes expired DCR applications).
+9. Start session reaper timer (removes expired session records).
+10. Listen on `0.0.0.0:3000`.
+
+---
+
+## Scaling
+
+The API is fully stateless. All state is in PostgreSQL and Redis. Run any number of replicas. Migrations are serialized by advisory lock — the first replica to start acquires the lock, runs migrations, releases it; others wait and proceed.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `3000` | HTTP listen port |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string |
+| `CARACAL_ADMIN_TOKEN` | — | Bootstrap token (seeded on startup if set) |
+| `CARACAL_LOCAL_BOOTSTRAP_ENABLED` | `false` | Enables loopback-only bootstrap endpoint |
+| `CARACAL_DB_POOL_MAX` | `20` | PostgreSQL pool size |
+| `CARACAL_DB_STATEMENT_TIMEOUT_MS` | `15000` | Statement timeout |
+| `CARACAL_OUTBOX_POLL_MS` | `250` | Outbox dispatcher poll interval |
+| `CARACAL_OUTBOX_BATCH` | `32` | Events per outbox dispatch batch |
+| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | Max outbox retry attempts |
+| `CARACAL_SHUTDOWN_TIMEOUT_MS` | `15000` | Graceful shutdown grace period |
+| `LOG_LEVEL` | `info` | Logging verbosity |

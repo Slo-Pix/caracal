@@ -1,7 +1,166 @@
 ---
 title: Gateway
-description: MCP reverse proxy that verifies mandates and exchanges credentials on every request.
+description: Go reverse proxy that verifies inbound mandates, exchanges a fresh per-call token on every request, enforces SSRF allowlists, and tracks JTI replay.
 pageType: architecture
 ---
 
-MCP reverse proxy that verifies mandates and exchanges credentials on every request.
+The Gateway is a transparent MCP reverse proxy. It sits in front of upstream MCP resource servers and enforces Caracal's mandate requirements on every inbound request. The Gateway does not issue tokens — it validates the caller's existing JWT, then calls the STS to obtain a fresh per-call mandate before forwarding the request upstream.
+
+**Default port:** 8081  
+**Language:** Go  
+**Framework:** `net/http` (stdlib)
+
+---
+
+## Responsibilities
+
+The Gateway owns:
+
+- **Mandate verification** — verifies the caller's bearer JWT signature using zone JWKS from the STS.
+- **Per-request token exchange** — calls `POST /oauth/2/token` on the STS for every proxied request, obtaining a fresh 15-minute mandate scoped to the target resource.
+- **SSRF protection** — enforces an upstream host allowlist; blocks RFC 1918 addresses by default.
+- **JTI replay detection** — records JTI claims in Redis with a per-token TTL to detect token reuse.
+- **Revocation sync** — subscribes to `caracal.sessions.revoke` to maintain an in-process revocation set.
+- **Binding management** — reads application-to-resource upstream URL mappings from PostgreSQL and refreshes them every 30 seconds.
+- **TLS enforcement** — requires TLS in production; refuses to start without a cert unless `INSECURE_HTTP=true`.
+
+The Gateway does **not** evaluate policies (STS does this during the exchange it triggers), manage configuration, issue tokens, or persist any data.
+
+---
+
+## Per-request flow
+
+Every request processed by the Gateway follows this path:
+
+1. **Extract bearer** — reads `Authorization: Bearer <token>` from the request. Returns 401 if absent or malformed.
+2. **Verify JWT** — fetches the zone's JWKS from the STS (cached 5 min, stale-while-revalidate) and verifies the ES256 signature, `exp`, and `aud` claims. Returns 401 on failure.
+3. **Check JTI** — if Redis is configured, checks whether the JWT's `jti` claim has already been seen. Returns 403 if replayed.
+4. **Check revocation** — checks the in-process revocation set (populated from `caracal.sessions.revoke`). Returns 401 if the session is revoked.
+5. **Exchange mandate** — calls `POST {STS_URL}/oauth/2/token` with the caller's token as `subject_token` and the target resource as `resource`. Returns 401 or 403 if the STS denies.
+6. **Forward request** — sends the original request to the upstream URL, replacing the `Authorization` header with the new per-call mandate. Adds `X-Request-Id` header.
+7. **Stream response** — copies the upstream response body back to the client verbatim, including chunked encoding and streaming.
+
+If the upstream returns an error, the Gateway returns 502 (unreachable) or 504 (timeout).
+
+---
+
+## Binding management
+
+The Gateway resolves the upstream URL for each proxied request from application-resource bindings loaded from PostgreSQL. Bindings are loaded at startup and refreshed every 30 seconds in the background.
+
+A binding maps an inbound path pattern to an upstream MCP resource server URL. The Gateway uses the `resource` claim in the JWT to identify which upstream to forward to. If no binding exists for the resource, the request is rejected.
+
+Binding refresh is non-blocking — requests continue to use the previous bindings while a refresh is in progress.
+
+---
+
+## SSRF protection
+
+The Gateway validates the upstream URL of every binding before proxying. By default, requests to RFC 1918 addresses (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16) and loopback (127.0.0.0/8) are rejected.
+
+Two environment variables control this:
+
+- `ALLOW_PRIVATE_UPSTREAMS=true` — allows RFC 1918 upstreams (development or private-network deployments). In production, also requires `UPSTREAM_HOST_ALLOWLIST`.
+- `UPSTREAM_HOST_ALLOWLIST=host1,host2` — comma-separated allowlist. When `ALLOW_PRIVATE_UPSTREAMS=true` is set in production, this list is required. Only listed hosts are permitted.
+
+---
+
+## JWT verification
+
+The Gateway verifies each bearer token locally using JWKS from the STS. It does not call the STS for verification — only for the subsequent token exchange.
+
+- **JWKS source:** `GET {STS_URL}/.well-known/jwks.json?zone_id=<zone_id>`
+- **Cache:** LRU with max 256 entries; 5-minute TTL per zone; stale-while-revalidate on fetch error.
+- **Algorithm:** ES256 only.
+- **Claims checked:** signature, `exp`, `aud` (must match resource identifier).
+
+---
+
+## JTI replay detection
+
+When Redis is configured, the Gateway records each JWT's `jti` claim in a Redis set keyed as `gateway:jti:{jti_hash}` with a TTL matching the token's remaining lifetime. A second request with the same `jti` returns 403.
+
+`JTI_FAIL_OPEN=true` allows requests through if the Redis JTI lookup itself fails (development only; the default `false` rejects the request if JTI tracking is unavailable).
+
+---
+
+## Revocation sync
+
+The Gateway subscribes to the `caracal.sessions.revoke` Redis stream using a consumer group. When a session is revoked (by the API), the stream carries the session ID. The Gateway adds it to an in-process revocation set checked on every request.
+
+Revocation propagates from the API → Redis stream → Gateway's in-process set in under 5 seconds under normal conditions. Tokens issued before revocation that have not been used are rejected on the next request.
+
+---
+
+## TLS
+
+In production (`CARACAL_ENV=production`), the Gateway requires:
+
+- `TLS_CERT_FILE` — path to a PEM certificate file.
+- `TLS_KEY_FILE` — path to the matching PEM private key.
+
+The STS URL must also be HTTPS unless `INSECURE_STS=true` is set. Setting `INSECURE_HTTP=true` or `INSECURE_STS=true` in production is a startup error.
+
+In development (`CARACAL_ENV=dev`), both flags may be set to allow plaintext for local testing.
+
+---
+
+## Request timeouts
+
+| Timeout | Default | Variable |
+| --- | --- | --- |
+| STS call | 5 s | `STS_TIMEOUT` |
+| Upstream resource | 30 s | `UPSTREAM_TIMEOUT` |
+| Read header | 5 s | `READ_HEADER_TIMEOUT` |
+| Full read | 30 s | `READ_TIMEOUT` |
+| Write | 60 s | `WRITE_TIMEOUT` |
+| Idle (keep-alive) | 120 s | `IDLE_TIMEOUT` |
+| Max request body | 10 MB | `MAX_REQUEST_BYTES` |
+
+---
+
+## Startup sequence
+
+1. Parse configuration; validate production security constraints (TLS files, STS HTTPS).
+2. Connect to PostgreSQL; load bindings.
+3. Create STS client.
+4. Create JWKS cache.
+5. Create upstream guard (SSRF allowlist).
+6. Connect to Redis (if `REDIS_URL` is set).
+7. Create JTI tracker (if Redis configured).
+8. Start binding refresh goroutine (every 30 s).
+9. Start revocation consumer goroutine (if Redis configured).
+10. Listen on `0.0.0.0:8081` with TLS (or plaintext if `INSECURE_HTTP=true`).
+
+---
+
+## Scaling
+
+The Gateway is stateless per request. Scale horizontally for throughput. Per-instance state:
+
+- **JWKS cache** — per-zone entries rebuilt on miss or TTL expiry.
+- **Bindings** — whole binding table, refreshed every 30 s.
+- **Revocation set** — in-process set populated from Redis stream. Each replica consumes its own view of the stream. New replicas start with an empty revocation set and fill it as stream messages arrive, so there is a brief window after cold start where a just-revoked session might be accepted. Use Redis JTI tracking to close this window.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8081` | HTTP(S) listen port (production: must be 8081) |
+| `CARACAL_ENV` | `production` | `production` or `dev`; controls security enforcement |
+| `STS_URL` | — | STS base URL (must be HTTPS in production) |
+| `STS_TIMEOUT` | `5s` | Timeout for STS token exchange calls |
+| `UPSTREAM_TIMEOUT` | `30s` | Timeout for upstream resource calls |
+| `DATABASE_URL` | — | PostgreSQL (bindings) |
+| `REDIS_URL` | `""` | Redis (optional; enables JTI tracking and revocation sync) |
+| `STREAMS_HMAC_KEY` | `""` | Hex key to verify stream message signatures |
+| `TLS_CERT_FILE` | — | TLS certificate (required in production) |
+| `TLS_KEY_FILE` | — | TLS private key (required in production) |
+| `INSECURE_HTTP` | `false` | Allow plaintext (development only) |
+| `INSECURE_STS` | `false` | Allow STS over HTTP (development only) |
+| `ALLOW_PRIVATE_UPSTREAMS` | `false` | Allow RFC 1918 upstream hosts |
+| `UPSTREAM_HOST_ALLOWLIST` | `""` | Comma-separated upstream host allowlist |
+| `JTI_FAIL_OPEN` | `false` | Allow requests if JTI Redis lookup fails (development only) |
+| `LOG_LEVEL` | `info` | Logging verbosity |

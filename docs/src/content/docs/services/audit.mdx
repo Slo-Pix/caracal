@@ -1,7 +1,189 @@
 ---
 title: Audit
-description: Stream consumer that persists audit events into Postgres with HMAC integrity.
+description: Go service that consumes the audit event stream, verifies HMAC chain integrity, persists events to PostgreSQL, and optionally exports to S3 in Parquet format.
 pageType: architecture
 ---
 
-Stream consumer that persists audit events into Postgres with HMAC integrity.
+The Audit service is a dedicated stream consumer. It reads audit events produced by the STS from a Redis stream, verifies their chain HMAC integrity, and writes them to PostgreSQL. Optionally, it exports events to S3 in Parquet format on a rolling schedule. It is the only service that writes to the `audit_events` table.
+
+**Default port:** 9090  
+**Language:** Go  
+**Framework:** `net/http` (stdlib)
+
+---
+
+## Responsibilities
+
+The Audit service owns:
+
+- **Event ingestion** — consumes `caracal.audit.events` from Redis using a consumer group with at-least-once delivery.
+- **Signature verification** — verifies each event's HMAC signature (`_sig` field) against `STREAMS_HMAC_KEY`.
+- **Chain HMAC verification** — validates that each event's chain HMAC correctly chains from the previous event for its zone, detecting tampered or inserted events.
+- **Event persistence** — writes verified events to the `audit_events` PostgreSQL table.
+- **Tamper detection** — sets `tamper_detected = true` on any event whose chain HMAC does not verify.
+- **S3 export** — serializes events to Parquet and uploads to S3 (if configured).
+- **Retention** — deletes events older than `AUDIT_RETENTION_DAYS` (default 365 days).
+- **DLQ management** — moves events that fail after `AUDIT_MAX_DELIVERIES` attempts to `audit_events_dlq`.
+- **PEL drain** — on startup, reclaims any pending consumer group entries from a previous crash.
+
+The Audit service does **not** serve audit queries (queries run against the database directly or via the API), produce events, enforce policy, or manage configuration.
+
+---
+
+## Event ingestion
+
+**Stream:** `caracal.audit.events`  
+**Consumer group:** `audit-ingestor`  
+**Consumer name:** `$HOSTNAME` (e.g., `audit-worker-0`)
+
+The Audit service uses Redis Streams' consumer group semantics. Each event is claimed by one consumer. On successful write to PostgreSQL, the consumer calls `XACK` to acknowledge the event. On failure, the event remains in the Pending Entry List (PEL) and is reclaimable by another consumer.
+
+### Processing sequence for each event
+
+1. Read messages from the stream (`XREADGROUP`), up to 100 at a time.
+2. Verify the `_sig` HMAC field against `STREAMS_HMAC_KEY` (if configured). Skip events with invalid signatures; acknowledge them to avoid reprocessing.
+3. Deserialize the event payload.
+4. Compute and verify the chain HMAC against the previous event for the same zone.
+5. Write the event to `audit_events`. Set `tamper_detected = true` if chain verification fails.
+6. Acknowledge the event (`XACK`).
+7. If write fails after `AUDIT_MAX_DELIVERIES` attempts, insert into `audit_events_dlq` and acknowledge.
+
+### HMAC chain integrity
+
+Each audit event produced by the STS includes:
+
+- A stream signature (`_sig`): HMAC-SHA256 of the stream name and message fields, signed with `STREAMS_HMAC_KEY`.
+- A chain HMAC computed as: `HMAC-SHA256(AUDIT_HMAC_KEY, previous_event_hash || current_event_payload)`.
+
+The chain links events sequentially within a zone. An attacker who modifies or deletes an event breaks the chain, and all subsequent events in the chain fail verification. Tampered events are marked but not discarded — the tamper flag is visible in audit queries.
+
+If `AUDIT_HMAC_KEY` is not set, chain verification is skipped (development mode).
+
+---
+
+## PEL drain and XAUTOCLAIM
+
+**On startup:** The service reads its PEL — entries claimed by a previous instance that crashed before acknowledging — and reprocesses them. This prevents event loss across restarts.
+
+**Periodic XAUTOCLAIM:** Every `AUDIT_CLAIM_IDLE_SECS` (default 30 s), the service runs `XAUTOCLAIM` to reclaim entries that have been in the PEL for longer than the idle threshold. This handles orphaned entries from crashed consumers in a multi-replica deployment.
+
+---
+
+## Database schema
+
+**`audit_events`:**
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | TEXT | Event ID (from stream entry) |
+| `zone_id` | TEXT | Zone the event belongs to |
+| `event_type` | TEXT | Event classification (e.g., `token_exchange`, `agent_spawn`) |
+| `actor_id` | TEXT | Subject or application ID that triggered the event |
+| `resource_id` | TEXT | Target resource (nullable) |
+| `decision` | TEXT | Policy decision (`allow`, `deny`, `partial`) |
+| `evaluation_status` | TEXT | OPA evaluation status (`complete`, `error`) |
+| `request_id` | TEXT | Correlation ID for the originating request |
+| `payload_json` | JSONB | Full event payload |
+| `determining_policies_json` | JSONB | Policies that determined the decision |
+| `diagnostics_json` | JSONB | OPA evaluation diagnostics |
+| `hmac_chain` | TEXT | Chain HMAC value for this event |
+| `tamper_detected` | BOOLEAN | True if chain verification failed |
+| `occurred_at` | TIMESTAMPTZ | Event timestamp |
+| `exported_at` | TIMESTAMPTZ | When exported to S3 (null if not yet exported) |
+| `created_at` | TIMESTAMPTZ | When inserted into the table |
+
+Indexed on `(zone_id, occurred_at)`, `(occurred_at)`, and `(exported_at)`.
+
+**`audit_events_dlq`:**
+
+Dead-letter queue for events that exhausted all delivery attempts.
+
+| Column | Type | Description |
+| --- | --- | --- |
+| `id` | TEXT | DLQ entry ID |
+| `stream_entry_id` | TEXT | Original Redis stream entry ID |
+| `original_event_json` | JSONB | Raw event payload |
+| `error` | TEXT | Last error message |
+| `attempts` | INT | Number of delivery attempts |
+| `created_at` | TIMESTAMPTZ | When moved to DLQ |
+
+---
+
+## S3 export
+
+When `AUDIT_EXPORT_S3_ENDPOINT` and `AUDIT_EXPORT_S3_BUCKET` are set, the Audit service exports events to S3 in Parquet format on a rolling schedule.
+
+One Audit replica holds the export leader lease (a Redis distributed lock). Only the leader exports. Other replicas perform ingestion and chain verification but skip export.
+
+Exported events have `exported_at` set to the export timestamp. The retention rotator uses this to determine which events have been archived before deletion.
+
+**Compatible storage:** any S3-compatible endpoint — AWS S3, MinIO, Google Cloud Storage (S3-compatible mode).
+
+---
+
+## Retention
+
+The retention rotator runs every `AUDIT_RETENTION_INTERVAL_MS` and deletes `audit_events` rows where `occurred_at < NOW() - AUDIT_RETENTION_DAYS`. If S3 export is enabled, only exported events are deleted.
+
+One Audit replica holds the retention leader lease. Retention deletes happen in batches of `AUDIT_MAX_DELIVERIES × 100` rows to avoid long lock holds on the table.
+
+---
+
+## Redis usage
+
+**Consumes:**
+
+| Stream | Consumer group | Purpose |
+| --- | --- | --- |
+| `caracal.audit.events` | `audit-ingestor` | Primary event ingestion |
+
+**Keys:**
+
+- Export leader lease: `audit:leader:export` (TTL-based distributed lock)
+- Retention leader lease: `audit:leader:retention` (TTL-based distributed lock)
+
+---
+
+## Startup sequence
+
+1. Parse configuration; warn if `AUDIT_HMAC_KEY` is unset (required in production).
+2. Connect to PostgreSQL and Redis.
+3. Initialize consumer (register with consumer group; drain PEL from previous run).
+4. Initialize PGWriter (batched insert into `audit_events`).
+5. Initialize tamper sweeper (periodic chain HMAC re-verification).
+6. Initialize S3 exporter (if `AUDIT_EXPORT_S3_ENDPOINT` is set).
+7. Initialize retention rotator.
+8. Acquire leader leases (export, retention).
+9. Replay any events from `AUDIT_REPLAY_DIR` (if configured — entries written by STS when Redis is temporarily unavailable).
+10. Listen on `0.0.0.0:9090`.
+
+---
+
+## Scaling
+
+Scale horizontally by adding replicas. Each replica joins the `audit-ingestor` consumer group and receives a partition of the stream. Redis consumer group semantics guarantee at-least-once delivery — the same event will not be delivered to two replicas simultaneously.
+
+- **Ingestion and chain verification** — all replicas participate.
+- **S3 export** — only the leader exports. Other replicas skip export until they acquire the lease (on leader failure, the next replica to retry acquires the lock).
+- **Retention** — only the leader runs retention deletes.
+
+Increase the number of replicas to reduce consumer lag. Each additional replica adds throughput proportional to the stream's partition distribution. Monitor PEL size — a growing PEL indicates that consumers are crashing before acknowledging, which may indicate a database or network issue.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `9090` | HTTP listen port |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string |
+| `AUDIT_HMAC_KEY` | `""` | Hex key for event chain HMAC (required in production) |
+| `AUDIT_EXPORT_S3_ENDPOINT` | `""` | S3-compatible endpoint (empty = export disabled) |
+| `AUDIT_EXPORT_S3_BUCKET` | `""` | S3 bucket name |
+| `AUDIT_EXPORT_S3_REGION` | `us-east-1` | S3 region |
+| `AUDIT_RETENTION_DAYS` | `365` | Event retention duration in days |
+| `AUDIT_MAX_DELIVERIES` | `5` | Max delivery attempts before DLQ |
+| `AUDIT_CLAIM_IDLE_SECS` | `30` | PEL orphan timeout for XAUTOCLAIM |
+| `AUDIT_TAMPER_ROLLING_HOURS` | `4` | Rolling window for tamper sweep |
+| `HOSTNAME` | `audit-worker-0` | Consumer name (should be unique per replica) |
