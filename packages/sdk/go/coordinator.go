@@ -49,6 +49,7 @@ type SpawnRequest struct {
 
 // SpawnResponse from the coordinator.
 type SpawnResponse struct {
+	ID             string `json:"id"`
 	AgentSessionID string `json:"agent_session_id"`
 }
 
@@ -91,6 +92,7 @@ type DelegationRequest struct {
 
 // DelegationResponse from the coordinator.
 type DelegationResponse struct {
+	ID               string `json:"id"`
 	DelegationEdgeID string `json:"delegation_edge_id"`
 }
 
@@ -115,6 +117,9 @@ func SpawnAgent(ctx context.Context, client *CoordinatorClient, bearer string, r
 
 	var out SpawnResponse
 	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/agents", req.ZoneID), bearer, body, &out)
+	if out.AgentSessionID == "" {
+		out.AgentSessionID = out.ID
+	}
 	return out, err
 }
 
@@ -141,6 +146,9 @@ func CreateDelegation(ctx context.Context, client *CoordinatorClient, bearer str
 
 	var out DelegationResponse
 	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/delegations", req.ZoneID), bearer, body, &out)
+	if out.DelegationEdgeID == "" {
+		out.DelegationEdgeID = out.ID
+	}
 	return out, err
 }
 

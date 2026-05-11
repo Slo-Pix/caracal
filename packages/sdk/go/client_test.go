@@ -7,9 +7,11 @@ package sdk_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	sdk "github.com/garudex-labs/caracal/sdk"
@@ -106,5 +108,60 @@ func TestHTTPClientInjects(t *testing.T) {
 	}
 	if bag[sdk.BaggageHop] != "1" {
 		t.Fatalf("hop not injected: %v", got)
+	}
+}
+
+func TestCoordinatorResponsesUseIDFallback(t *testing.T) {
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		if r.Body != nil {
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				bodies = append(bodies, body)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/agents"):
+			_, _ = w.Write([]byte(`{"id":"agent-1"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/delegations"):
+			_, _ = w.Write([]byte(`{"id":"edge-1"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	client := &sdk.CoordinatorClient{BaseURL: srv.URL}
+	agent, err := sdk.SpawnAgent(context.Background(), client, "tok", sdk.SpawnRequest{
+		ZoneID:        "z",
+		ApplicationID: "app",
+		Kind:          sdk.KindEphemeral,
+		TTLSeconds:    60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agent.AgentSessionID != "agent-1" {
+		t.Fatalf("expected agent-1, got %q", agent.AgentSessionID)
+	}
+	edge, err := sdk.CreateDelegation(context.Background(), client, "tok", sdk.DelegationRequest{
+		ZoneID:                "z",
+		IssuerApplicationID:   "app",
+		SourceSessionID:       "agent-1",
+		TargetSessionID:       "agent-2",
+		ReceiverApplicationID: "app-2",
+		Scopes:                []string{"tool:call"},
+		Constraints:           &sdk.DelegationConstraints{Resources: []string{"calendar"}, MaxDepth: 2},
+		TTLSeconds:            30,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edge.DelegationEdgeID != "edge-1" {
+		t.Fatalf("expected edge-1, got %q", edge.DelegationEdgeID)
+	}
+	if len(bodies) != 2 || bodies[0]["ttl_seconds"] != float64(60) || bodies[1]["ttl_seconds"] != float64(30) {
+		t.Fatalf("unexpected coordinator request bodies: %#v", bodies)
 	}
 }

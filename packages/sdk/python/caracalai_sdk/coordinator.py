@@ -66,6 +66,7 @@ class SpawnRequest:
 @dataclass
 class SpawnResponse:
     agent_session_id: str
+    id: str | None = None
 
 
 @dataclass
@@ -83,6 +84,7 @@ class DelegationRequest:
 @dataclass
 class DelegationResponse:
     delegation_edge_id: str
+    id: str | None = None
 
 
 async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest) -> SpawnResponse:
@@ -106,7 +108,10 @@ async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest)
     )
     resp.raise_for_status()
     data = resp.json()
-    return SpawnResponse(agent_session_id=data["agent_session_id"])
+    agent_session_id = data.get("agent_session_id") or data.get("id")
+    if not agent_session_id:
+        raise KeyError("agent_session_id")
+    return SpawnResponse(agent_session_id=agent_session_id, id=data.get("id"))
 
 
 async def terminate_agent(
@@ -144,4 +149,7 @@ async def create_delegation(
     )
     resp.raise_for_status()
     data = resp.json()
-    return DelegationResponse(delegation_edge_id=data["delegation_edge_id"])
+    delegation_edge_id = data.get("delegation_edge_id") or data.get("id")
+    if not delegation_edge_id:
+        raise KeyError("delegation_edge_id")
+    return DelegationResponse(delegation_edge_id=delegation_edge_id, id=data.get("id"))

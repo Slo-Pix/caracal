@@ -100,6 +100,28 @@ func (a *AuditBuffer) Dropped() uint64 {
 	return a.dropped.Load()
 }
 
+func (a *AuditBuffer) Ready() error {
+	if a == nil {
+		return errors.New("audit buffer unavailable")
+	}
+	info, err := os.Stat(a.replayDir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("audit replay path is not a directory")
+	}
+	f, err := os.CreateTemp(a.replayDir, ".ready-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Remove(name)
+}
+
 func (a *AuditBuffer) sign(data []byte) string {
 	if len(a.hmacKey) == 0 {
 		return ""
