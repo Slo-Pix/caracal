@@ -14,6 +14,7 @@ import { v1Routes } from './routes/v1.js'
 import { db } from './db.js'
 import { redis } from './redis.js'
 import { verifyBearer } from './auth.js'
+import { registerAdminAuditHook } from './admin-audit.js'
 import { ttlSweeperStats } from './jobs/ttl-sweeper.js'
 import { retentionCleanerStats } from './jobs/retention-cleaner.js'
 
@@ -31,6 +32,7 @@ export async function buildApp() {
   app.decorate('db', db)
   app.decorate('redis', redis)
   app.addHook('preHandler', verifyBearer)
+  registerAdminAuditHook(app, db)
   app.get('/health', async () => ({ ok: true }))
   app.get('/ready', async (_req, reply) => {
     try {

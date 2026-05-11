@@ -145,9 +145,9 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
       case 'help':
       case '--help':
       case '-h':
-        return policyHelp()
+        return policySetHelp()
       default:
-        return unknownVerb('policy', verb, policyHelp)
+        return unknownVerb('policy-set', verb, policySetHelp)
     }
   } catch (err) {
     fail(err)

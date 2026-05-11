@@ -112,7 +112,7 @@ export class App {
       const view = this.current()
       const lines: string[] = []
       lines.push(this.bannerLine(sz))
-      lines.push(this.titleLine(view, sz))
+      lines.push(this.titleLine(sz))
       const bodyHeight = Math.max(1, sz.rows - 4)
       const body = view.render({ app: this, size: { rows: bodyHeight, cols: sz.cols }, status: this.status })
       for (let i = 0; i < bodyHeight; i++) {
@@ -134,7 +134,7 @@ export class App {
     return ansi.invert + left + ' '.repeat(middle) + right + ansi.reset
   }
 
-  private titleLine(view: View, sz: Size): string {
+  private titleLine(sz: Size): string {
     const crumbs = this.stack.map((v) => v.title).join(' › ')
     return ansi.bold + pad(truncate(' ' + crumbs, sz.cols), sz.cols) + ansi.reset
   }
