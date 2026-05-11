@@ -1,7 +1,82 @@
 ---
 title: CLI and TUI
-description: Drive the Caracal stack and inspect zones from the terminal.
+description: Complete reference for the caracal CLI and caracal-tui terminal interface — stack management, admin operations, runtime token injection, and observability.
 pageType: landing
 ---
 
-Drive the Caracal stack and inspect zones from the terminal.
+Caracal ships two terminal tools:
+
+- **`caracal`** — command-line interface for stack management, token injection, and administrative operations against the control-plane API.
+- **`caracal-tui`** — interactive terminal UI for browsing zones, applications, resources, policies, sessions, agents, and audit events.
+
+Both tools are compiled with Bun for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64). The runtime is self-contained — no separate Node.js installation is required.
+
+---
+
+## Authentication and endpoints
+
+Most `caracal` commands communicate with the control-plane API. Set these environment variables before using admin commands:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `CARACAL_ADMIN_TOKEN` | — | Bearer token for all `/v1/*` admin API routes. Required for all admin and observability commands. |
+| `CARACAL_API_URL` | `http://localhost:3000` | Control-plane API base URL. In production, set this to your API service address. |
+| `CARACAL_ZONE_ID` | From `caracal.toml` | Default zone for zone-scoped commands. Override per command with `--zone`. |
+| `CARACAL_COORDINATOR_URL` | `http://localhost:4000` | Coordinator service URL. Required only for `agent` and `delegation` commands. |
+| `CARACAL_COORDINATOR_TOKEN` | — | JWT with scope `agent:lifecycle`. Required only for `agent` and `delegation` commands. |
+| `CARACAL_CONFIG` | Auto-resolved | Explicit path to `caracal.toml`. Overrides automatic discovery. |
+
+`CARACAL_ADMIN_TOKEN` is discovered in order: the environment variable → `infra/docker/.env` → `.env` in the current directory. The `caracal init` command writes `caracal.toml` with the local stack credentials after bootstrapping.
+
+In production (`NODE_ENV` is not `development`), `CARACAL_API_URL` and `CARACAL_COORDINATOR_URL` must be set explicitly. In development, localhost defaults are used.
+
+---
+
+## Global flags
+
+These flags are accepted by all commands:
+
+| Flag | Description |
+| --- | --- |
+| `--zone <id>` | Zone ID for zone-scoped commands. Overrides `CARACAL_ZONE_ID` and `caracal.toml`. |
+| `--json` | Emit JSON to stdout instead of a formatted table. Suitable for piping to `jq`. |
+| `--help`, `-h` | Print command help and exit. |
+
+---
+
+## Command sections
+
+| Section | Commands | Purpose |
+| --- | --- | --- |
+| [Stack](./stack/) | `up`, `down`, `status`, `init` | Start, stop, probe, and provision the local stack |
+| [Runtime](./runtime/) | `run`, `credential read` | Inject mandates into subprocesses and print tokens |
+| [Admin](./admin/) | `zone`, `app`, `resource`, `provider`, `policy`, `policy-set`, `grant`, `session` | Manage all control-plane entities |
+| [Observability](./observability/) | `audit tail`, `explain` | Tail the audit stream and inspect policy decisions |
+| [Agents and Delegation](./agents/) | `agent`, `delegation` | Inspect and control agent sessions and delegation edges |
+| [Configuration File](./config-file/) | `caracal.toml` | Config layout, lookup order, credential injection |
+| [TUI Walkthrough](./tui/) | `caracal-tui` | Interactive terminal browser for all admin entities |
+
+---
+
+## Output format
+
+By default, commands render a left-aligned ASCII table:
+
+```
+id              name          registration_method
+--              ----          -------------------
+app_abc123      My App        managed
+app_def456      Service Bot   dcr
+```
+
+- `null` values display as `-`.
+- Arrays display as comma-separated values.
+- Empty result sets display `(no rows)`.
+
+Pass `--json` to receive 2-space-indented JSON on stdout:
+
+```bash
+caracal zone list --json | jq '.[].id'
+```
+
+Errors are written to stderr. Exit code `0` indicates success; `1` indicates a CLI or API error.
