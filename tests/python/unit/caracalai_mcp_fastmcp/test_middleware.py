@@ -62,6 +62,21 @@ class CaracalAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cm.exception.code, "missing_token")
         self.assertIsInstance(cm.exception.description, str)
 
+    async def test_forwards_hop_count_limit(self) -> None:
+        token, jwk = mint_es256_token(claims={"hop_count": 2})
+        self.cache.keys = [jwk]
+        auth = CaracalAuth(
+            "https://sts.example.com",
+            "resource://api",
+            InMemoryRevocationStore(),
+            max_hop_count=1,
+        )
+
+        with self.assertRaises(CaracalAuthError) as cm:
+            await auth(token)
+
+        self.assertEqual(cm.exception.code, "hop_count_exceeded")
+
 
 if __name__ == "__main__":
     unittest.main()

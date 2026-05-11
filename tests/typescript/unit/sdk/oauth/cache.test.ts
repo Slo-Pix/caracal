@@ -74,4 +74,23 @@ describe('InMemoryTokenCache', () => {
     expect(keys[0]).not.toContain('sensitive-subject-token')
     expect(keys[0]).not.toContain('resource://api')
   })
+
+  it('evicts least recently used entry when bounded', () => {
+    const bounded = new InMemoryTokenCache({ maxEntries: 2 })
+    const a = makeToken(900)
+    const b = makeToken(900)
+    const c = makeToken(900)
+    bounded.set('subject-a', 'resource://api', a)
+    bounded.set('subject-b', 'resource://api', b)
+    bounded.get('subject-a', 'resource://api')
+    bounded.set('subject-c', 'resource://api', c)
+    expect(bounded.get('subject-b', 'resource://api')).toBeUndefined()
+    expect(bounded.get('subject-a', 'resource://api')).toBe(a)
+    expect(bounded.get('subject-c', 'resource://api')).toBe(c)
+  })
+
+  it('rejects non-positive maxEntries', () => {
+    expect(() => new InMemoryTokenCache({ maxEntries: 0 })).toThrow()
+    expect(() => new InMemoryTokenCache({ maxEntries: -5 })).toThrow()
+  })
 })

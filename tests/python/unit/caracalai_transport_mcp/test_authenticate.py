@@ -134,6 +134,22 @@ class TransportMcpAuthenticateTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.error.code if result.error else None, "delegation_required")
 
+    async def test_rejects_hop_count_exceeded(self) -> None:
+        token, jwk = mint_es256_token(claims={"hop_count": 2})
+        self.cache.keys = [jwk]
+
+        result = await authenticate(
+            token,
+            "https://sts.example.com",
+            "resource://api",
+            [],
+            "zone1",
+            InMemoryRevocationStore(),
+            max_hop_count=1,
+        )
+
+        self.assertEqual(result.error.code if result.error else None, "hop_count_exceeded")
+
     async def test_rejects_invalid_zone(self) -> None:
         token, jwk = mint_es256_token()
         self.cache.keys = [jwk]

@@ -98,6 +98,7 @@ func (s *Server) tryRefreshBrokeredGrant(ctx context.Context, zoneID, userID, re
 	if err != nil {
 		return sharederr.New(sharederr.CredentialExpired, "credential_expired_not_renewable")
 	}
+	defer clear(refreshToken)
 	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {string(refreshToken)}}
 	body, err := s.refreshProviderToken(ctx, provider.ID, tokenEndpoint, form)
 	if err != nil {
@@ -115,11 +116,12 @@ func (s *Server) tryRefreshBrokeredGrant(ctx context.Context, zoneID, userID, re
 	if err != nil {
 		return sharederr.New(sharederr.Internal, "token re-encryption failed")
 	}
-	newRefresh := tokenResp.RefreshToken
-	if newRefresh == "" {
-		newRefresh = string(refreshToken)
+	var newRefreshCt []byte
+	if tokenResp.RefreshToken != "" {
+		newRefreshCt, err = sealZEK(s.keys.zek, []byte(tokenResp.RefreshToken))
+	} else {
+		newRefreshCt, err = sealZEK(s.keys.zek, refreshToken)
 	}
-	newRefreshCt, err := sealZEK(s.keys.zek, []byte(newRefresh))
 	if err != nil {
 		return sharederr.New(sharederr.Internal, "token re-encryption failed")
 	}
