@@ -12,6 +12,7 @@ import {
   printJSON,
   printTable,
   requireZone,
+  showHelp,
   unknownVerb,
   usage,
 } from './shared.ts'
@@ -26,8 +27,12 @@ function ensureCoordinator(): void {
 }
 
 export async function agentCommand(argv: string[], cfg?: CliConfig): Promise<void> {
-  ensureCoordinator()
   const [verb, ...rest] = argv
+  if (verb === undefined || verb === 'help' || verb === '--help' || verb === '-h') {
+    return agentHelp()
+  }
+
+  ensureCoordinator()
   const ctx = buildAdminClient(cfg)
   const { client } = ctx
   const { positional, flags } = parseArgs(rest)
@@ -76,10 +81,6 @@ export async function agentCommand(argv: string[], cfg?: CliConfig): Promise<voi
         process.stdout.write(`terminated ${id}\n`)
         return
       }
-      case 'help':
-      case '--help':
-      case '-h':
-        return agentHelp()
       default:
         return unknownVerb('agent', verb, agentHelp)
     }
@@ -89,8 +90,12 @@ export async function agentCommand(argv: string[], cfg?: CliConfig): Promise<voi
 }
 
 export async function delegationCommand(argv: string[], cfg?: CliConfig): Promise<void> {
-  ensureCoordinator()
   const [verb, ...rest] = argv
+  if (verb === undefined || verb === 'help' || verb === '--help' || verb === '-h') {
+    return delegationHelp()
+  }
+
+  ensureCoordinator()
   const ctx = buildAdminClient(cfg)
   const { client } = ctx
   const { positional, flags } = parseArgs(rest)
@@ -128,20 +133,16 @@ export async function delegationCommand(argv: string[], cfg?: CliConfig): Promis
         if (!id) return usage('delegation revoke <edge-id> [--zone …]')
         return printJSON(await client.delegations.revoke(zoneId, id))
       }
-      case 'help':
-      case '--help':
-      case '-h':
-        return agentHelp()
       default:
-        return unknownVerb('agent', verb, agentHelp)
+        return unknownVerb('delegation', verb, delegationHelp)
     }
   } catch (err) {
     fail(err)
   }
 }
 
-function agentHelp(): void {
-  process.stdout.write(
+function agentHelp(): never {
+  return showHelp(
     [
       'Usage: caracal agent <verb> [options]',
       '',
@@ -160,13 +161,12 @@ function agentHelp(): void {
       '  --json                  Emit raw JSON',
       '  --help, -h              Show this help',
       '',
-    ].join('\n'),
+    ],
   )
-  process.exit(0)
 }
 
-function delegationHelp(): void {
-  process.stdout.write(
+function delegationHelp(): never {
+  return showHelp(
     [
       'Usage: caracal delegation <verb> [options]',
       '',
@@ -183,8 +183,6 @@ function delegationHelp(): void {
       '  --json                  Emit raw JSON',
       '  --help, -h              Show this help',
       '',
-    ].join('\n'),
+    ],
   )
-  process.exit(0)
 }
-

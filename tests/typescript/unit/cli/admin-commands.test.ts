@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { auditCommand, explainCommand } from '../../../../apps/cli/src/commands/audit.ts'
 import { zoneCommand } from '../../../../apps/cli/src/commands/zone.ts'
-import { agentCommand } from '../../../../apps/cli/src/commands/agent.ts'
+import { agentCommand, delegationCommand } from '../../../../apps/cli/src/commands/agent.ts'
 
 const ORIG_ENV = { ...process.env }
 
@@ -114,6 +114,15 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
   it('agent list refuses to run without coordinator token', async () => {
     await expect(agentCommand(['list'])).rejects.toThrow(/__exit:1/)
     expect(stderr.mock.calls.map((c) => c[0]).join('')).toContain('CARACAL_COORDINATOR_TOKEN')
+  })
+
+  it('delegation help prints delegation commands', async () => {
+    process.env.CARACAL_COORDINATOR_TOKEN = 'coordinator-token'
+    await expect(delegationCommand(['help'])).rejects.toThrow(/__exit:0/)
+    const out = stdout.mock.calls.map((c) => c[0]).join('')
+    expect(out).toContain('Usage: caracal delegation')
+    expect(out).toContain('inbound <session-id>')
+    expect(out).not.toContain('Usage: caracal agent')
   })
 
   it('audit command exits 1 when CARACAL_ADMIN_TOKEN is missing', async () => {

@@ -20,6 +20,17 @@ export const collections = {
           })
           .passthrough()
           .optional(),
+        pageType: z
+          .enum(['concept', 'api', 'workflow', 'config', 'architecture', 'reference', 'landing'])
+          .optional(),
+        concepts: z.array(z.string()).optional(),
+        relatedConcepts: z.array(z.string()).optional(),
+        requires: z.array(z.string()).optional(),
+        keywords: z.array(z.string()).optional(),
+        aliases: z.array(z.string()).optional(),
+        service: z
+          .enum(['sts', 'gateway', 'coordinator', 'audit', 'all', 'sdk'])
+          .optional(),
       }),
     }),
   }),
