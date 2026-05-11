@@ -4,4 +4,47 @@ description: Orient yourself before you install or integrate.
 pageType: landing
 ---
 
-Orient yourself before you install or integrate.
+This page tells you who Caracal is for, what background you need, and where to start depending on your role.
+
+## Who this is for
+
+Caracal is built for teams that run AI agents, autonomous workflows, or multi-service integrations that need auditable, policy-controlled access to tools, APIs, or data. It is a good fit if you need to answer questions like:
+
+- Which agent was allowed to call this API, and under what policy?
+- If an agent misbehaves, can I revoke its access without restarting anything?
+- Can I delegate narrow authority from one agent to a child without copying credentials?
+- How do I enforce that no agent acts outside its declared scope before it acts?
+
+Caracal is not an LLM framework, a prompt router, or an agent scheduler. It is an authorization control plane that sits between agent code and the tools or APIs those agents call.
+
+## What background helps
+
+You do not need to understand all of Caracal upfront. But the following background makes the concepts land faster:
+
+- Familiarity with OAuth 2.0 token exchange (RFC 8693) — Caracal uses this at its core
+- Basic understanding of JWTs — mandates are JWTs signed with ES256
+- A general sense of what a reverse proxy does — the Gateway is one
+- Comfort with Docker Compose for running the local stack
+
+The [Key Ideas at a Glance](./key-ideas/) page covers the domain model in one concise reference if you want a conceptual map before diving in.
+
+## How to read these docs depending on your role
+
+**I want to run the stack and see it work**
+: Start with [Installation](./installation/) → [Quickstart](./quickstart/). Skip the conceptual pages for now and come back to [Concepts](/concepts/) once the stack is running.
+
+**I want to integrate my application with the SDK**
+: Read [What Caracal Does](./what-caracal-does/) to understand the enforcement model, then jump to [First Integration](./first-integration/) and the relevant [SDK page](/sdks/).
+
+**I want to write authorization policies**
+: Read [What Caracal Does](./what-caracal-does/), then [Policy](/concepts/policy/) in Concepts, then [Author a Rego Policy](/guides/author-policy/) in Guides.
+
+**I want to deploy to production**
+: Follow the quickstart locally first, then read [Deployment with Docker Compose](/operations/docker-compose/) and [TLS and Production Hardening](/operations/tls-hardening/) in Operations.
+
+**I want to contribute to Caracal**
+: Read the [Contributing](/contributing/) section and [Local Setup](/contributing/setup/).
+
+## Terminology note
+
+The word **mandate** refers to the short-lived JWT that Caracal issues to an agent. It is the output of a successful OPA policy evaluation at the STS. You will see it used throughout the docs wherever other systems might say "access token."

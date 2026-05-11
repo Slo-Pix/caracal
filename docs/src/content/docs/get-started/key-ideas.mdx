@@ -4,4 +4,168 @@ description: A one-page tour of mandates, policies, delegations, and the audit l
 pageType: concept
 ---
 
-A one-page tour of mandates, policies, delegations, and the audit ledger.
+This page condenses the core Caracal concepts into a quick reference. Read it as a map before diving into the detailed concept pages, or use it to orient yourself after the quickstart.
+
+## The seven core concepts
+
+### Zone
+
+A zone is the top-level tenancy boundary. It owns:
+- Its own ES256 signing key (encrypted at rest with `ZONE_KEK`)
+- All applications, resources, providers, and policies within it
+- One active policy set at any time
+- A scoped audit ledger
+
+Zones are independent. A mandate issued by one zone cannot be verified in another.
+
+### Application
+
+An application is a Caracal-registered client — a service, agent process, or automation that exchanges credentials for mandates. Applications belong to one zone and carry a `credential_type` (typically `token` or `password`) and a client secret.
+
+### Resource
+
+A resource is anything an agent wants to access — an API endpoint, an MCP tool, a data store. Each resource has:
+- An `identifier` string (used in policy and grant definitions)
+- A list of `scopes` that gate access
+- An optional `upstream_url` (used by the Gateway for proxying)
+- An optional `credential_provider_id` (if the Gateway should substitute a provider token)
+
+### Policy
+
+A policy is a versioned Rego document with the entry point `data.caracal.authz.result`. At token-exchange time, the STS evaluates the active policy set and passes a structured input:
+
+```json
+{
+  "principal": { "type": "application", "id": "...", "zone_id": "...", "agent_session_id": "..." },
+  "resource": { "type": "resource", "id": "...", "identifier": "...", "scopes": ["..."] },
+  "action": { "id": "TokenExchange" },
+  "session": { "id": "..." },
+  "delegation_edge": { "id": "...", "constraints": { ... } },
+  "context": { "actor_claims": { ... }, "challenge_resolved": false }
+}
+```
+
+The policy must return:
+
+```json
+{
+  "decision": "allow",
+  "evaluation_status": "complete",
+  "determining_policies": ["..."],
+  "diagnostics": {}
+}
+```
+
+`decision` must be `"allow"` and `evaluation_status` must be `"complete"` for the mandate to be issued. Any other result is a deny.
+
+The following Rego builtins are blocked: `http.send`, `net.*`, `opa.runtime`, `rand.intn`, `time.now_ns`.
+
+### Mandate
+
+A mandate is an ES256-signed JWT issued by the STS after a policy allows the exchange. Two variants exist:
+
+| Type | TTL | Use |
+| ---- | --- | --- |
+| Ambient | 60 min | Re-presented to STS to obtain per-call tokens; carries agent identity |
+| Per-call | 15 min | Presented to Gateway or resources; scoped to specific targets |
+
+Per-call tokens carry a `target` claim (the specific resources they cover), preventing scope creep across resources.
+
+JTI replay protection: each issued token ID is recorded in Redis. The Gateway rejects any per-call token whose JTI has been seen before.
+
+### Delegation
+
+Delegation is a directed edge in the Coordinator's agent graph:
+
+```
+Application A (session S1) → delegates to → Application B (session S2)
+```
+
+Properties:
+- **Cycle detection**: the Coordinator rejects any delegation that would create a cycle
+- **Depth limit**: max 10 hops per chain; max 10 direct children per session; max 50 sessions per zone per app
+- **Constraints**: `ttl_seconds`, `max_hops`, `budget` (max scopes), `policy_approved` flag
+- **Resource restriction**: a delegation can be restricted to a single resource ID
+- **Cascade revocation**: revoking edge S1→S2 terminates S2 and all descendants of S2 recursively
+
+When a delegated agent requests a mandate, the STS embeds the full delegation path in the JWT (`delegation_chain` claim). Resources that need to audit the agent lineage can inspect this chain.
+
+### Audit Ledger
+
+Every token exchange and OPA evaluation produces an `AuditEvent` with:
+- `decision` (`allow` or `deny`)
+- `evaluation_status` and `determining_policies`
+- `diagnostics` from OPA
+- `policy_set_version_id` and `manifest_sha` (exactly which policy version decided)
+- A chain HMAC-SHA256 over consecutive events, enabling tamper detection
+
+Events flow: STS → Redis stream (`caracal.audit.events`) → Audit service → PostgreSQL append-only table.
+
+Nothing in the audit table is ever updated or deleted. Use `caracal audit tail` (live stream) or `caracal explain <request-id>` (full decision trace for a specific exchange) to query it.
+
+---
+
+## The enforcement flow in one diagram
+
+```
+Agent process
+  │
+  ▼ (1) Exchange app credentials
+STS (http://localhost:8080)
+  │ (2) Load active policy set for zone
+  │ (3) OPA evaluation per resource
+  │     → allow: issue mandate
+  │     → deny: 403 + audit event
+  │
+  ▼ (4) Agent holds mandate (15-min per-call JWT)
+Gateway (http://localhost:8081)
+  │ (5) Validate mandate signature (JWKS from STS)
+  │ (6) Check JTI replay cache
+  │ (7) Substitute provider credential if configured
+  │
+  ▼ (8) Forward to upstream resource
+```
+
+---
+
+## The admin provisioning sequence
+
+Before an agent can get a mandate, these objects must exist in the control-plane API:
+
+```
+Zone → Application → Resource → Policy → Policy Set → activate → Grant
+```
+
+For local development, `caracal init` creates all of these automatically. For production, use the CLI admin commands or the `@caracalai/admin` SDK.
+
+---
+
+## Key environment variables
+
+| Variable | Used by | Required |
+| -------- | ------- | -------- |
+| `CARACAL_ADMIN_TOKEN` | CLI, admin SDK | Admin operations only |
+| `CARACAL_COORDINATOR_URL` | All SDKs | Yes |
+| `CARACAL_ZONE_ID` | All SDKs | Yes |
+| `CARACAL_APPLICATION_ID` | All SDKs | Yes |
+| `CARACAL_SUBJECT_TOKEN` | All SDKs | Yes (injected by `caracal run`) |
+| `CARACAL_GATEWAY_URL` | All SDKs | When routing through Gateway |
+| `ZONE_KEK` | STS, API | Required at startup |
+| `AUDIT_HMAC_KEY` | STS, Audit | Required at startup |
+| `STREAMS_HMAC_KEY` | API, Gateway, Coordinator | Required at startup |
+
+---
+
+## Key ports (local stack)
+
+| Service | Port | Protocol |
+| ------- | ---- | -------- |
+| API | 3000 | HTTP |
+| STS | 8080 | HTTP |
+| Gateway | 8081 | HTTP |
+| Audit | 9090 | HTTP |
+| Coordinator | 4000 | HTTP |
+| PostgreSQL | 5432 | TCP |
+| Redis | 6379 | TCP |
+
+In production, STS and Gateway require TLS. The `CARACAL_ENV=dev` flag relaxes TLS requirements for local development only.

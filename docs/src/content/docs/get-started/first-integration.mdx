@@ -4,4 +4,276 @@ description: Wire an application to Caracal and obtain a mandate from the SDK.
 pageType: workflow
 ---
 
-Wire an application to Caracal and obtain a mandate from the SDK.
+This page walks through integrating an application with Caracal using the TypeScript, Python, or Go SDK. By the end you will have an agent that opens a session, obtains a mandate, and calls a resource through the Gateway.
+
+The instructions assume you have a running stack and a `caracal.toml` from the [Quickstart](./quickstart/).
+
+## How the SDK works
+
+The SDK wraps the token exchange and agent lifecycle behind three primitives:
+
+- **`spawn()`** opens an agent session with the Coordinator, obtains an ambient mandate from the STS, and runs your code inside that session context.
+- **`headers()`** returns the HTTP headers that propagate the agent's identity to downstream services (Authorization, traceparent, baggage).
+- **`transport()`** wraps `fetch` (TS/Python) or `*http.Client` (Go) to automatically inject those headers on every outbound request.
+
+When `spawn()` exits — normally or on error — the session is terminated in the Coordinator and the ambient mandate can no longer be used.
+
+## Configuration
+
+All three SDKs read configuration from the same four environment variables:
+
+| Variable | Source | Description |
+| -------- | ------ | ----------- |
+| `CARACAL_COORDINATOR_URL` | Stack | URL of the Coordinator service |
+| `CARACAL_ZONE_ID` | `caracal.toml` | Zone the application belongs to |
+| `CARACAL_APPLICATION_ID` | `caracal.toml` | Application ID in that zone |
+| `CARACAL_SUBJECT_TOKEN` | Obtained at runtime | Ambient mandate for this agent |
+
+The subject token is not a static secret — it is an ambient mandate obtained by exchanging the application's client credentials with the STS. The SDK's `fromEnv()` factory handles this transparently when used with `caracal run`.
+
+Two additional optional variables:
+
+| Variable | Description |
+| -------- | ----------- |
+| `CARACAL_GATEWAY_URL` | URL of the Gateway (needed when routing tool calls through it) |
+| `CARACAL_RESOURCES` | Comma-separated `resourceId=https://upstream/prefix` pairs |
+
+## Using `caracal run` for local development
+
+The easiest way to get valid env vars into a process is `caracal run`. It reads `caracal.toml`, exchanges credentials with the STS, and injects the resulting tokens as environment variables before launching your process:
+
+```sh
+caracal run -- node my-agent.js
+caracal run -- python agent.py
+caracal run -- ./my-go-agent
+```
+
+Inside the launched process, `CARACAL_SUBJECT_TOKEN` is set to a 60-minute ambient mandate and the resource tokens declared in `caracal.toml` are set under their configured env var names (e.g. `RESOURCE_TOKEN`).
+
+## TypeScript
+
+Install the SDK:
+
+```sh
+npm install @caracalai/sdk
+```
+
+Minimal example — spawn an agent and call a resource through the Gateway:
+
+```typescript
+import { Caracal, AgentKind } from "@caracalai/sdk";
+
+const caracal = Caracal.fromEnv();
+
+await caracal.spawn(async () => {
+  const ctx = caracal.current();
+  console.log("Agent session:", ctx?.agentSessionId);
+
+  // All fetch calls through transport() carry the mandate headers.
+  const client = caracal.transport();
+  const response = await client("https://gateway.example.com/my-resource/endpoint", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "summarize" }),
+  });
+
+  const result = await response.json();
+  console.log(result);
+}, { kind: AgentKind.Ephemeral });
+```
+
+`Caracal.fromEnv()` throws if any of the four required env vars are missing. Wrap your process startup in `caracal run` to inject them automatically.
+
+### Express middleware
+
+To protect an incoming HTTP server rather than an outgoing agent, use the Express connector:
+
+```sh
+npm install @caracalai/sdk @caracalai/mcp-express
+```
+
+```typescript
+import express from "express";
+import { Caracal } from "@caracalai/sdk";
+import { caracalMiddleware } from "@caracalai/mcp-express";
+
+const app = express();
+const caracal = Caracal.fromEnv();
+
+app.use(caracalMiddleware(caracal));
+
+app.post("/tool", (req, res) => {
+  const ctx = caracal.current();
+  // ctx.zoneId, ctx.agentSessionId, ctx.scope are available here
+  res.json({ ok: true });
+});
+```
+
+The middleware extracts the agent's mandate from the `Authorization` header and W3C baggage, verifies it, and binds the `CaracalContext` to the request.
+
+## Python
+
+Install the SDK:
+
+```sh
+pip install caracalai-sdk
+```
+
+Minimal example using `async with` spawn:
+
+```python
+import asyncio
+from caracalai_sdk import Caracal, AgentKind
+
+caracal = Caracal.from_env()
+
+async def main():
+    async with caracal.spawn(kind=AgentKind.EPHEMERAL) as ctx:
+        print("Agent session:", ctx.agent_session_id)
+
+        # transport() returns an httpx.AsyncClient pre-configured with mandate headers.
+        async with caracal.transport() as client:
+            response = await client.post(
+                "https://gateway.example.com/my-resource/endpoint",
+                json={"action": "summarize"},
+            )
+            print(response.json())
+
+asyncio.run(main())
+```
+
+### FastAPI ASGI middleware
+
+To protect a FastAPI or Starlette service:
+
+```sh
+pip install caracalai-sdk
+```
+
+```python
+from fastapi import FastAPI
+from caracalai_sdk import Caracal
+
+app = FastAPI()
+caracal = Caracal.from_env()
+
+app.add_middleware(caracal.middleware().__class__, caracal=caracal)
+
+@app.post("/tool")
+async def tool():
+    ctx = caracal.current()
+    # ctx.zone_id, ctx.agent_session_id, ctx.scope are available
+    return {"ok": True}
+```
+
+The ASGI middleware extracts the agent's mandate from inbound request headers and binds the `CaracalContext` to the request scope.
+
+## Go
+
+Install the SDK:
+
+```sh
+go get github.com/garudex-labs/caracal/sdk
+```
+
+Minimal example:
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "io"
+    "net/http"
+
+    caracal "github.com/garudex-labs/caracal/sdk"
+)
+
+func main() {
+    c, err := caracal.FromEnv()
+    if err != nil {
+        panic(err)
+    }
+
+    err = c.Spawn(context.Background(), func(ctx context.Context) error {
+        cc, _ := c.Current(ctx)
+        fmt.Println("Agent session:", cc.AgentSessionID)
+
+        // Transport injects mandate headers on every request.
+        client := c.Transport(nil)
+        resp, err := client.Post(
+            "https://gateway.example.com/my-resource/endpoint",
+            "application/json",
+            nil,
+        )
+        if err != nil {
+            return err
+        }
+        defer resp.Body.Close()
+        body, _ := io.ReadAll(resp.Body)
+        fmt.Println(string(body))
+        return nil
+    })
+    if err != nil {
+        panic(err)
+    }
+}
+```
+
+### net/http middleware
+
+```sh
+go get github.com/garudex-labs/caracal/connectors/nethttp
+```
+
+```go
+import (
+    caracal "github.com/garudex-labs/caracal/sdk"
+    "github.com/garudex-labs/caracal/connectors/nethttp"
+)
+
+c, _ := caracal.FromEnv()
+
+mux := http.NewServeMux()
+mux.HandleFunc("/tool", func(w http.ResponseWriter, r *http.Request) {
+    ctx, _ := c.Current(r.Context())
+    fmt.Fprintln(w, "Agent session:", ctx.AgentSessionID)
+})
+
+http.ListenAndServe(":8090", c.Middleware(mux))
+```
+
+## Delegation example
+
+An agent can delegate a subset of its authority to a child agent. The parent creates a delegation edge with the Coordinator, and the child receives its own mandate scoped to whatever the edge permits.
+
+```typescript
+// TypeScript example
+await caracal.spawn(async () => {
+  // Delegate to a child agent session with narrowed scope.
+  await caracal.delegate(
+    {
+      to: childAgentSessionId,
+      toApplicationId: "app2",
+      scopes: ["resource://example:read"],
+      constraints: { ttlSeconds: 300 },
+    },
+    async () => {
+      // Within this block, the delegated context is active.
+      const child = caracal.current();
+      console.log("Delegation edge:", child?.delegationEdgeId);
+    }
+  );
+});
+```
+
+Revoking the delegation edge from the CLI or admin SDK terminates the child session and all of its descendants immediately.
+
+## What happens if the policy denies the exchange
+
+If the OPA policy denies the token exchange, the STS returns HTTP 403 and the SDK throws an error. No mandate is issued. The denial is recorded in the audit ledger with the determining policies and diagnostics that caused it. Use `caracal audit tail` or `caracal explain` to inspect the decision.
+
+## Next step
+
+You now have a working integration. Read [Key Ideas at a Glance](./key-ideas/) for a concise reference of everything the system does, or jump into [Concepts](/concepts/) to understand the model in depth.

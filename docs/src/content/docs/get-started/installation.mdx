@@ -4,4 +4,147 @@ description: Install the CLI, run the OSS stack with Docker, or pull SDK package
 pageType: workflow
 ---
 
-Install the CLI, run the OSS stack with Docker, or pull SDK packages.
+This page covers installing the `caracal` CLI, the `caracal-tui` terminal UI, and the SDK packages for TypeScript, Python, and Go.
+
+## Install the CLI and TUI
+
+The CLI and TUI are distributed as self-contained binaries for Linux, macOS, and Windows. No runtime is required.
+
+### Linux and macOS
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
+
+The script:
+
+1. Detects your OS and CPU architecture.
+2. Downloads the matching `caracal` and `caracal-tui` binaries from the latest GitHub release.
+3. Verifies each binary against the published `SHA256SUMS` file.
+4. Installs both binaries to `~/.local/bin` by default.
+
+Supported platforms:
+
+| OS | Architectures |
+| -- | ------------- |
+| Linux | `x64`, `arm64` |
+| macOS | `x64`, `arm64` |
+| Windows | `x64` |
+
+**Environment variables that affect the install script:**
+
+| Variable | Default | Description |
+| -------- | ------- | ----------- |
+| `CARACAL_VERSION` | `latest` | Specific release tag to download, e.g. `v2026.05.01` |
+| `CARACAL_INSTALL_DIR` | `~/.local/bin` | Directory to install binaries into |
+| `CARACAL_SKIP_TUI` | unset | Set to `1` to skip downloading the TUI binary |
+
+After installation, ensure `~/.local/bin` is on your `PATH`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Verify the install:
+
+```sh
+caracal --version
+caracal-tui --version
+```
+
+### Windows
+
+```powershell
+irm https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.ps1 | iex
+```
+
+Binaries are placed in `%LOCALAPPDATA%\Programs\caracal` by default. Set `$env:CARACAL_INSTALL_DIR` to override. Only `x64` is available on Windows.
+
+### Build from source
+
+If you prefer to build from the repository:
+
+```sh
+git clone https://github.com/Garudex-Labs/caracal.git
+cd caracal
+pnpm install
+cd apps/cli
+bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/caracal
+```
+
+Building requires [Bun](https://bun.sh/) and pnpm 11.0.9.
+
+---
+
+## Install SDK packages
+
+Install only the packages your application uses.
+
+### TypeScript
+
+```sh
+npm install @caracalai/sdk
+# or
+pnpm add @caracalai/sdk
+```
+
+Additional packages for specific use cases:
+
+```sh
+# MCP server protection
+npm install @caracalai/transport-mcp
+
+# Express middleware
+npm install @caracalai/sdk @caracalai/mcp-express
+
+# Admin API access (for provisioning scripts)
+npm install @caracalai/admin
+```
+
+All `@caracalai/*` packages require **Node.js 24+**.
+
+### Python
+
+```sh
+pip install caracalai-sdk
+```
+
+For FastMCP integration:
+
+```sh
+pip install caracalai-sdk caracalai-connector-fastmcp
+```
+
+All `caracalai-*` packages require **Python 3.11+**.
+
+### Go
+
+```sh
+go get github.com/garudex-labs/caracal/sdk
+```
+
+For the net/http middleware connector:
+
+```sh
+go get github.com/garudex-labs/caracal/connectors/nethttp
+```
+
+Requires **Go 1.26+**.
+
+---
+
+## Stack prerequisites
+
+Running the Caracal OSS stack locally requires Docker 24+ with the Compose v2 plugin. Check your version:
+
+```sh
+docker compose version
+```
+
+The stack uses PostgreSQL 18 and Redis 7. Both are included as pre-built images in the Docker Compose configuration — you do not need to install them separately.
+
+---
+
+## Next step
+
+Once the CLI is installed, go to [Quickstart](./quickstart/) to bring up the full stack.

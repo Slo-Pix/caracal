@@ -4,4 +4,25 @@ description: Install Caracal, run the stack, and ship your first integration.
 pageType: landing
 ---
 
-Install Caracal, run the stack, and ship your first integration.
+Caracal is a self-hosted authorization and delegation system for AI agents and autonomous workflows. It enforces policy before an agent acts — not after — by issuing short-lived, cryptographically signed mandates only when an OPA evaluation permits the exchange.
+
+Follow these pages in order to go from zero to a running stack with a working integration.
+
+## In this section
+
+| Page | What you will do |
+| ---- | ---------------- |
+| [Welcome](./welcome/) | Understand who this is for and how to navigate the docs |
+| [What Caracal Does](./what-caracal-does/) | Learn the core enforcement model before touching code |
+| [Installation](./installation/) | Install the CLI, TUI, and SDK packages |
+| [Quickstart](./quickstart/) | Bring up all seven services with a single command |
+| [First Integration](./first-integration/) | Wire an application to Caracal and obtain a mandate |
+| [Key Ideas at a Glance](./key-ideas/) | Review the core mental model in one concise reference |
+
+## Prerequisites
+
+- **Docker** 24+ with the Compose v2 plugin
+- **curl** or **wget** (required by the shell install script)
+- A POSIX shell (Linux or macOS) or PowerShell 7+ (Windows)
+
+SDK requirements depend on language. See [Installation](./installation/) for details.

@@ -4,4 +4,183 @@ description: Bring up Postgres, Redis, STS, API, Gateway, Audit, and Coordinator
 pageType: workflow
 ---
 
-Bring up Postgres, Redis, STS, API, Gateway, Audit, and Coordinator end to end.
+This quickstart brings up the full Caracal OSS stack on your local machine using Docker Compose, verifies all services are healthy, and creates a local development zone ready for integration.
+
+## What you will run
+
+The stack consists of seven services:
+
+| Service | Port | Purpose |
+| ------- | ---- | ------- |
+| PostgreSQL | 5432 | Persistent state (zones, policies, sessions, audit events) |
+| Redis | 6379 | Event streams, revocation signals, JTI replay tracking |
+| STS | 8080 | Token exchange with OPA policy evaluation |
+| API | 3000 | Control-plane REST — zones, policies, resources, grants |
+| Gateway | 8081 | MCP reverse proxy with mandate verification |
+| Audit | 9090 | Audit event consumer and ledger writer |
+| Coordinator | 4000 | Agent session lifecycle and delegation graph |
+
+All ports are bound to `127.0.0.1` only. They are not exposed on external interfaces.
+
+## Step 1: Clone the repository
+
+```sh
+git clone https://github.com/Garudex-Labs/caracal.git
+cd caracal
+```
+
+## Step 2: Configure the environment
+
+The stack reads credentials from `infra/docker/.env`. The repository includes a development template. Copy it:
+
+```sh
+cp infra/docker/.env.example infra/docker/.env
+```
+
+Open the file and set values for the following required variables:
+
+```sh
+POSTGRES_USER=caracal
+POSTGRES_PASSWORD=<choose a local password>
+POSTGRES_DB=caracal
+
+REDIS_PASSWORD=<choose a local password>
+
+# A 32-byte hex key used to encrypt zone signing keys at rest.
+ZONE_KEK=<generate with: openssl rand -hex 32>
+
+# A 32-byte hex key used to HMAC-sign audit events.
+AUDIT_HMAC_KEY=<generate with: openssl rand -hex 32>
+
+# A 32-byte hex key used to sign Redis stream messages.
+STREAMS_HMAC_KEY=<generate with: openssl rand -hex 32>
+
+# The admin token used by the CLI and admin SDK.
+CARACAL_ADMIN_TOKEN=<choose a secret value>
+```
+
+For development purposes, you can generate all secret values with:
+
+```sh
+openssl rand -hex 32   # run once per secret variable
+```
+
+:::caution
+Never commit `infra/docker/.env` to version control. The repository's `.gitignore` excludes it. These values protect your zone signing keys and audit chain.
+:::
+
+## Step 3: Start the stack
+
+```sh
+caracal up
+```
+
+This runs `docker compose up -d` against the Compose file in `infra/docker/`. The startup sequence is:
+
+1. PostgreSQL and Redis start and pass health checks.
+2. The `init` container runs `provision-streams.sh`, which creates all required Redis consumer groups.
+3. The API starts and runs database migrations automatically on first boot.
+4. STS starts once the API is healthy.
+5. Gateway and Coordinator start once STS is healthy.
+6. Audit starts independently once Redis is ready.
+
+First startup takes 30–60 seconds while Docker pulls images and PostgreSQL initializes.
+
+## Step 4: Check service health
+
+```sh
+caracal status
+```
+
+You should see all five application services reporting healthy:
+
+```
+api          http://localhost:3000/health  ✓ healthy
+sts          http://localhost:8080/health  ✓ healthy
+gateway      http://localhost:8081/health  ✓ healthy
+audit        http://localhost:9090/health  ✓ healthy
+coordinator  http://localhost:4000/health  ✓ healthy
+```
+
+If a service is not healthy within two minutes, check its logs:
+
+```sh
+docker compose -f infra/docker/docker-compose.yml logs sts --tail 50
+```
+
+## Step 5: Initialize a local zone
+
+```sh
+caracal init
+```
+
+`caracal init` calls the local bootstrap endpoint on the API (`POST /v1/local/bootstrap`), which creates:
+
+- A **zone** with ID `zone1`
+- An **application** with ID `app1` and a generated client secret
+- A **resource** with identifier `resource://example`
+- A **policy** that allows all exchanges (development default)
+- A **policy set** with the policy active
+
+It then writes `caracal.toml` in the current directory with the generated values:
+
+```toml
+zone_url = "http://localhost:8080"
+zone_id  = "zone1"
+
+application_id     = "app1"
+app_client_secret  = "<generated secret>"
+
+[[credentials]]
+env      = "RESOURCE_TOKEN"
+resource = "resource://example"
+
+[mcp_governance]
+mode = "block"
+```
+
+The file is written with mode `0600` — it contains your application's client secret.
+
+:::note
+`caracal init` requires the `CARACAL_ADMIN_TOKEN` environment variable to match the value you set in `infra/docker/.env`. Export it before running init if it is not already in your shell:
+
+```sh
+export CARACAL_ADMIN_TOKEN=<the value from your .env file>
+```
+:::
+
+## Step 6: Verify the token exchange
+
+With the stack and `caracal.toml` in place, request a token for the example resource:
+
+```sh
+caracal credential read resource://example
+```
+
+If successful, a JWT is printed to stdout. This is a mandate — an ES256-signed token issued by the STS after the default development policy permitted the exchange.
+
+Decode it to inspect the claims:
+
+```sh
+caracal credential read resource://example | cut -d. -f2 | base64 -d | jq .
+```
+
+You should see claims including `zone_id`, `scope`, `target`, and an expiry (`exp`) 15 minutes from now.
+
+## Stopping the stack
+
+```sh
+caracal down
+```
+
+This stops and removes containers but preserves the named volumes (`postgresData`, `redisData`). State persists across restarts.
+
+## What is running
+
+At this point you have:
+
+- A fully operational seven-service Caracal stack
+- A zone (`zone1`) with an application, resource, and active policy
+- A `caracal.toml` that the CLI and SDKs can read for configuration
+
+Continue to [First Integration](./first-integration/) to wire an application to Caracal using the SDK.
