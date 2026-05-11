@@ -119,16 +119,13 @@ class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(claims.delegation_chain[0].agent_session_id, "s1")
         self.assertEqual(claims.delegation_chain[0].delegation_edge_id, "e1")
 
-    async def test_reads_chain_with_full_key_names(self) -> None:
+    async def test_rejects_long_form_chain_keys(self) -> None:
         chain = [{"application_id": "app-legacy", "agent_session_id": "s2", "delegation_edge_id": "e2"}]
-        claims = await self._verify(
-            {"delegation_chain": chain},
-            require_chain_contains=["app-legacy"],
-        )
-        hop = claims.delegation_chain[0]
-        self.assertEqual(hop.application_id, "app-legacy")
-        self.assertEqual(hop.agent_session_id, "s2")
-        self.assertEqual(hop.delegation_edge_id, "e2")
+        with self.assertRaises(ChainMismatchError):
+            await self._verify(
+                {"delegation_chain": chain},
+                require_chain_contains=["app-legacy"],
+            )
 
     async def test_extracts_delegation_path(self) -> None:
         claims = await self._verify({"delegation_path": ["edge-0", "edge-1"]})
@@ -144,9 +141,9 @@ class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HopCountExceededError):
             await self._verify({"hop_count": 5}, max_hop_count=1)
 
-    async def test_reads_graph_epoch_fallback(self) -> None:
+    async def test_ignores_legacy_graph_epoch(self) -> None:
         claims = await self._verify({"graph_epoch": 99})
-        self.assertEqual(claims.graph_epoch, 99)
+        self.assertIsNone(claims.graph_epoch)
 
     async def test_raises_for_unknown_kid(self) -> None:
         token, _ = mint_es256_token()

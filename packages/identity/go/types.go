@@ -5,6 +5,11 @@
 
 package identity
 
+// DefaultMaxHopCount caps delegation chain depth when verifier callers leave
+// Config.MaxHopCount unset. Matches the coordinator's MAX_DEPTH so a token that
+// would have been blocked at spawn time cannot pass a permissive resource server.
+const DefaultMaxHopCount = 10
+
 // Config configures JWT verification.
 type Config struct {
 	Issuer               string
