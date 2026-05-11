@@ -14,3 +14,6 @@ packages:
   - 'packages/connectors/fastmcp/ts'
   - 'packages/connectors/postgres/ts'
   - 'packages/connectors/redis/ts'
+allowBuilds:
+  esbuild: true
+  sharp: true

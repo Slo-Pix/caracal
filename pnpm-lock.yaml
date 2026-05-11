@@ -3,9 +3,6 @@ lockfileVersion: '9.0'
 settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
-  onlyBuiltDependencies:
-    - esbuild
-    - sharp
 
 importers:
 
@@ -5004,7 +5001,6 @@ snapshots:
     requiresBuild: true
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.27.7
-      '@esbuild/android-arm': 0.27.7
       '@esbuild/android-arm64': 0.27.7
       '@esbuild/android-x64': 0.27.7
       '@esbuild/darwin-arm64': 0.27.7
@@ -6774,7 +6770,6 @@ snapshots:
   setprototypeof@1.2.0: {}
 
   sharp@0.34.5:
-    requiresBuild: true
     dependencies:
       '@img/colour': 1.1.0
       detect-libc: 2.1.2
