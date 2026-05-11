@@ -169,6 +169,27 @@ describe('POST /v1/zones/:zoneId/agents — spawn', () => {
     const outboxCall = client.query.mock.calls.find((call) => String(call[0]).includes('caracal_outbox'))
     expect(outboxCall?.[1]?.[1]).toBe('caracal.agents.lifecycle')
   })
+
+  it('defaults session_sid from the verified bearer and returns the SDK alias', async () => {
+    const { app, db } = buildApp()
+    const client = spawnClient({
+      refs: { application_exists: true, session_exists: true },
+      count: { app_n: '0', zone_n: '0' },
+      insert: { rows: [{ id: 'agent-sdk', zone_id: 'z1', application_id: 'app-1', parent_id: null }] },
+      outbox: true,
+    })
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', kind: 'ephemeral', metadata: { purpose: 'sdk' } },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'agent-sdk', agent_session_id: 'agent-sdk' })
+    const refsCall = client.query.mock.calls.find((call) => String(call[0]).includes('session_exists'))
+    expect(refsCall?.[1]).toEqual(['z1', 'app-1', 'sid-test'])
+  })
 })
 
 describe('GET /v1/zones/:zoneId/agents/:id', () => {

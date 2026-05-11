@@ -178,4 +178,45 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
     expect(res.statusCode).toBe(403)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'delegation_scopes_exceed_resource' })
   })
+
+  it('accepts the SDK wire shape and returns the delegation_edge_id alias', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'src-1', application_id: 'issuer-1' },
+          { id: 'dst-1', application_id: 'receiver-1' },
+        ] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: 'edge-sdk' }] })
+        .mockResolvedValueOnce({ rows: [{ epoch: '1' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: {
+        source_session_id: 'src-1',
+        target_session_id: 'dst-1',
+        issuer_application_id: 'issuer-1',
+        receiver_application_id: 'receiver-1',
+        scopes: ['read'],
+        constraints: { resources: ['calendar'], max_depth: 2 },
+        ttl_seconds: 30,
+      },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'edge-sdk', delegation_edge_id: 'edge-sdk' })
+    const insertCall = client.query.mock.calls.find((call) => String(call[0]).includes('INSERT INTO delegation_edges'))
+    const values = insertCall?.[1] as unknown[]
+    expect(values[8]).toMatchObject({ resources: ['calendar'], max_depth: 2, max_hops: 2, ttl_seconds: 30 })
+  })
 })
