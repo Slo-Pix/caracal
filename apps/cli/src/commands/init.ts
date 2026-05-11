@@ -3,7 +3,7 @@
 //
 // `caracal init`: provisions the local zone via the API and writes caracal.toml.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { discoverAdminToken } from '@caracalai/core'
@@ -29,40 +29,6 @@ function defaultConfigPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME
   const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.config')
   return join(base, 'caracal', 'caracal.toml')
-}
-
-function envFilePath(): string | undefined {
-  const candidates = [
-    process.env.CARACAL_ENV_FILE,
-    join(process.cwd(), 'infra', 'docker', '.env'),
-    join(process.cwd(), '.env'),
-  ].filter((p): p is string => Boolean(p))
-  return candidates.find((p) => existsSync(p))
-}
-
-function upsertEnvVar(path: string, key: string, value: string): boolean {
-  const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  const re = new RegExp(`^${escapeRegex(key)}=.*$`, 'm')
-  const line = `${key}=${value}`
-  if (re.test(text)) {
-    const next = text.replace(re, line)
-    if (next === text) return false
-    writeFileSync(path, next, { mode: 0o600 })
-    return true
-  }
-  const sep = text.length === 0 || text.endsWith('\n') ? '' : '\n'
-  writeFileSync(path, `${text}${sep}${line}\n`, { mode: 0o600 })
-  return true
-}
-
-function mergeResourceBinding(path: string, resource: string, applicationId: string): boolean {
-  const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  const re = /^RESOURCE_APPLICATION_BINDINGS=(.*)$/m
-  const match = re.exec(text)
-  const existing = match ? match[1]!.split(',').map((s) => s.trim()).filter(Boolean) : []
-  const next = existing.filter((entry) => !entry.startsWith(`${resource}=`))
-  next.push(`${resource}=${applicationId}`)
-  return upsertEnvVar(path, 'RESOURCE_APPLICATION_BINDINGS', next.join(','))
 }
 
 function nextArg(argv: string[], i: number, flag: string): string {
@@ -92,10 +58,6 @@ function initHelp(): never {
     ].join('\n'),
   )
   process.exit(0)
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function parseFlags(argv: string[]): InitOptions {
@@ -170,15 +132,6 @@ export async function initCommand(argv: string[]): Promise<void> {
       process.stderr.write(`Error: cannot reach Caracal API at ${opts.apiUrl}: ${desc}\n`)
     }
     process.exit(1)
-  }
-
-  const envPath = envFilePath()
-  if (envPath) {
-    if (mergeResourceBinding(envPath, data.resource, data.application_id)) {
-      process.stdout.write(
-        `Updated RESOURCE_APPLICATION_BINDINGS in ${envPath}; restart the gateway with \`caracal up\` to apply.\n`,
-      )
-    }
   }
 
   if (!data.app_client_secret) {

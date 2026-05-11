@@ -32,6 +32,17 @@ export async function buildApp() {
   app.decorate('redis', redis)
   app.addHook('preHandler', verifyBearer)
   app.get('/health', async () => ({ ok: true }))
+  app.get('/ready', async (_req, reply) => {
+    try {
+      await app.db.query('SELECT 1')
+      const pong = await app.redis.ping()
+      if (pong !== 'PONG') throw new Error(`unexpected redis ping reply: ${pong}`)
+      return { ok: true }
+    } catch (err) {
+      reply.code(503)
+      return { ok: false, error: (err as Error).message }
+    }
+  })
   app.get('/metrics', async () => {
     const { rows: invocations } = await app.db.query(
       `SELECT status, COUNT(*) AS n FROM agent_invocations GROUP BY status`,

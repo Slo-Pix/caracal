@@ -20,10 +20,12 @@ const LIST_MAX_LIMIT = 500
 
 const SpawnBody = z.object({
   application_id: z.string().min(1),
-  session_sid: z.string().min(1),
+  session_sid: z.string().min(1).optional(),
   parent_id: z.string().nullable().default(null),
+  kind: z.enum(['service', 'instance', 'ephemeral']).optional(),
   capabilities: z.array(z.string()).default([]),
   ttl_seconds: z.number().int().min(1).max(86400).default(DEFAULT_TTL),
+  metadata: z.record(z.unknown()).default({}),
 })
 
 const ListQuery = z.object({
@@ -43,6 +45,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/zones/:zoneId/agents', async (req, reply) => {
     const { zoneId } = req.params as { zoneId: string }
     const body = SpawnBody.parse(req.body)
+    const sessionSid = body.session_sid ?? req.caracalAuth?.sessionId
+    if (!sessionSid) {
+      return reply.code(400).send({ error: 'session_sid_required' })
+    }
     if (!ownsApplication(req, body.application_id)
       && !requireScope(req, `coordinator.spawn_for:${body.application_id}`)) {
       return reply.code(403).send({ error: 'application_ownership_required' })
@@ -64,11 +70,11 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
              AND COALESCE(parent_id, '') = COALESCE($4, '')
              AND status IN ('active','suspended')
            LIMIT 1`,
-          [zoneId, body.application_id, body.session_sid, body.parent_id],
+          [zoneId, body.application_id, sessionSid, body.parent_id],
         )
         if (existing[0]) {
           await client.query('ROLLBACK')
-          return reply.code(200).send(existing[0])
+          return reply.code(200).send(agentResponse(existing[0]))
         }
       }
       const { rows: refs } = await client.query(
@@ -79,10 +85,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
                AND (expires_at IS NULL OR expires_at > now())
            ) AS application_exists,
            EXISTS (
-             SELECT 1 FROM sessions
-             WHERE id = $3 AND zone_id = $1 AND status = 'active' AND expires_at > now()
-           ) AS session_exists`,
-        [zoneId, body.application_id, body.session_sid],
+              SELECT 1 FROM sessions
+              WHERE id = $3 AND zone_id = $1 AND status = 'active' AND expires_at > now()
+            ) AS session_exists`,
+        [zoneId, body.application_id, sessionSid],
       )
       if (!refs[0]?.application_exists) {
         await client.query('ROLLBACK')
@@ -138,11 +144,11 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const { rows } = await client.query(
         `INSERT INTO agent_sessions
-         (id, zone_id, application_id, parent_id, session_sid, depth, capabilities, max_children, ttl_seconds)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         (id, zone_id, application_id, parent_id, session_sid, depth, capabilities, max_children, ttl_seconds, metadata_json)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          RETURNING id, zone_id, application_id, parent_id, session_sid, status, depth, spawned_at`,
-        [id, zoneId, body.application_id, body.parent_id, body.session_sid,
-          depth, body.capabilities, MAX_CHILDREN, body.ttl_seconds],
+        [id, zoneId, body.application_id, body.parent_id, sessionSid,
+          depth, body.capabilities, MAX_CHILDREN, body.ttl_seconds, body.metadata],
       )
       if (body.parent_id) {
         await client.query(
@@ -162,7 +168,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         application_id: body.application_id,
       })
       await client.query('COMMIT')
-      return reply.code(201).send(rows[0])
+      return reply.code(201).send(agentResponse(rows[0]))
     } catch (err) {
       await client.query('ROLLBACK')
       throw err
@@ -369,6 +375,15 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       client.release()
     }
   })
+}
+
+function agentResponse(row: unknown): unknown {
+  if (!row || typeof row !== 'object') return row
+  const out = { ...(row as Record<string, unknown>) }
+  if (typeof out.id === 'string') {
+    out.agent_session_id = out.id
+  }
+  return out
 }
 
 interface TerminatedRow {
