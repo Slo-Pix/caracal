@@ -1,7 +1,248 @@
 ---
 title: Hardening Checklist
-description: Production checklist before exposing Caracal to live traffic.
+description: Required configuration and verification steps before exposing Caracal to live traffic — organized by enforcement area.
 pageType: config
 ---
 
-Production checklist before exposing Caracal to live traffic.
+This checklist covers every configuration item that must be verified before Caracal handles production traffic. Each item describes the environment variable or setting, its required value, and the security consequence of misconfiguration.
+
+Items marked **required** must be set. Items marked **strongly recommended** have safe defaults but carry residual risk without them.
+
+---
+
+## Transport security
+
+### TLS on all services
+
+Every service must run with TLS in production. The Gateway enforces this explicitly.
+
+| Service | Variables | Required value |
+| --- | --- | --- |
+| Gateway | `TLS_CERT_FILE`, `TLS_KEY_FILE` | Paths to a valid certificate and private key |
+| STS | Operator-managed | Valid TLS termination at the load balancer or STS process |
+| Coordinator | Operator-managed | Same |
+| Control-Plane API | Operator-managed | Same |
+
+The Gateway rejects `INSECURE_HTTP=true` and `INSECURE_STS=true` in production. Set neither variable, or explicitly set both to `false`. Setting `INSECURE_STS=true` allows the Gateway to communicate with the STS over plaintext HTTP — any token in transit is exposed.
+
+TLS minimum version is 1.2 (enforced in the Gateway's `tls.Config`). Do not configure a lower minimum at the termination layer.
+
+### Service-to-service communication
+
+All inter-service calls (Gateway → STS, Coordinator → STS) must use `https://` scheme URLs. The STS URL supplied to the Gateway via `STS_URL` must start with `https://` in production.
+
+---
+
+## Cryptographic key management
+
+### Zone signing key (`ZONE_KEK`)
+
+The zone key-encryption key protects zone signing keys and provider credentials at rest. It must be:
+
+- Exactly 32 bytes, hex-encoded (64 hex characters)
+- Non-zero (all-zero keys are rejected by the startup validator)
+- Generated with a cryptographically secure random source
+
+Generate a key:
+```sh
+openssl rand -hex 32
+```
+
+Inject it via a secrets manager (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager). Do not store it in plaintext configuration files or commit it to source control.
+
+**Consequence of compromise:** All zone signing keys and provider OAuth tokens and API keys stored by Caracal can be decrypted. All credentials must be rotated.
+
+### Zone signing key rotation
+
+Zone signing keys are rotated by the Control-Plane API. The JWKS endpoint returns the two most recent keys; all verifying services pick up the new key within the 5-minute JWKS cache TTL. Rotation does not invalidate outstanding ambient tokens — existing mandates remain valid until their TTL expires.
+
+**Rotation procedure:**
+1. Call `POST /v1/zones/{zoneId}/keys/rotate`.
+2. Wait up to 5 minutes for JWKS caches to refresh across all services.
+3. Outstanding tokens signed by the old key expire naturally within their TTL.
+
+### Stream integrity (`STREAMS_HMAC_KEY`)
+
+HMAC-signs all Redis stream messages (session revocation, policy invalidation, lifecycle events). Required in production.
+
+- Must be hex-encoded, at least 32 bytes (64 hex characters).
+- Must be identical across all services that publish or consume streams.
+
+Generate a key:
+```sh
+openssl rand -hex 32
+```
+
+**Consequence of absence:** Stream messages are unauthenticated. An attacker with access to Redis can inject fabricated revocation events (denial-of-service against legitimate sessions) or suppress real revocations.
+
+### Audit chain integrity (`AUDIT_HMAC_KEY`)
+
+HMAC-chains audit events in the `audit_events` table. Required if you rely on the audit log for compliance or forensic integrity.
+
+- Must be hex-encoded, at least 32 bytes.
+- Separate from `STREAMS_HMAC_KEY`.
+
+**Consequence of compromise:** An attacker with the key and database write access can forge or modify audit records while maintaining a valid chain. Protect this key with the same care as zone signing keys.
+
+---
+
+## Redis
+
+### Redis is required in production
+
+Redis provides:
+- JTI replay detection (per-call token single-use enforcement)
+- Session revocation stream (sub-second propagation to Gateway and STS)
+- STS rate limiting for token exchange
+- Coordinator outbox dispatch
+
+Without Redis, or with `JTI_FAIL_OPEN=true`, per-call token replay protection is disabled. This allows an attacker who captures a per-call mandate to reuse it any number of times until it expires.
+
+| Variable | Required value | Consequence if wrong |
+| --- | --- | --- |
+| `REDIS_URL` (all services) | Valid Redis connection string | Service degrades or fails |
+| `JTI_FAIL_OPEN` (Gateway) | `false` | Replay protection disabled when Redis unreachable |
+
+`JTI_FAIL_OPEN=false` is the default. Never set it to `true` in production.
+
+### Redis access control
+
+Restrict Redis access to the Caracal service network. Redis does not support per-key ACLs by default — any client with network access can read or write stream entries. Use Redis AUTH passwords and network-level controls (firewall rules, VPC isolation) to limit access to authorized services.
+
+---
+
+## Gateway
+
+### SSRF guard
+
+The Gateway blocks outbound requests to private and loopback IP ranges by default. Do not enable `ALLOW_PRIVATE_UPSTREAMS=true` in production unless your upstream MCP servers run on private addresses, and then restrict permitted hosts explicitly.
+
+| Variable | Safe value | Risk if misconfigured |
+| --- | --- | --- |
+| `ALLOW_PRIVATE_UPSTREAMS` | `false` (default) | Enables SSRF to internal services and cloud metadata endpoints |
+| `UPSTREAM_HOST_ALLOWLIST` | Comma-separated list of permitted upstream hostnames | Without it, any hostname that resolves to a public IP is permitted |
+
+Set `UPSTREAM_HOST_ALLOWLIST` to a strict allowlist of the upstream MCP server hostnames your deployment actually uses. This is the strongest SSRF mitigation available at the Gateway layer.
+
+### Request size limit
+
+`MAX_REQUEST_BYTES` defaults to 10 MiB. Set it to the smallest value that accommodates your workload. Oversized requests are rejected with `413 RequestTooLarge`.
+
+### STS timeout
+
+`STS_TIMEOUT` defaults to 5 seconds. If your STS is consistently slower (e.g., due to high OPA policy complexity), increase it — but be aware that a high timeout makes the Gateway more vulnerable to slowloris-style attacks from callers with nearly-expired tokens.
+
+---
+
+## STS
+
+### Rate limiting
+
+The STS rate-limits token exchanges using Redis. If Redis is unavailable, the STS rejects all exchanges with `503`. This is intentional fail-closed behavior — do not route around it.
+
+Per-client rate limits are enforced per `(zone_id, client_id)`. Verify that your Redis connection is stable before enabling production traffic.
+
+### Step-up authentication throttle
+
+The step-up challenge endpoint applies an in-process throttle: 5 failures within a 2-minute window trigger a 5-minute cooldown per client. This throttle is in-memory and does not survive process restarts. For additional protection, rate-limit the step-up endpoint at the network layer (load balancer, API gateway).
+
+### OPA policy must be active before traffic
+
+If no active policy set exists for a zone, the STS installs a deny-all policy. No mandates are issued for that zone until a policy is activated.
+
+Before routing traffic to a zone:
+1. Create a policy set with at least one version containing valid Rego that declares `package caracal.authz` and emits `data.caracal.authz.result`.
+2. Activate the version: `POST /v1/zones/{zoneId}/policy-sets/{id}/activate`.
+3. Verify the STS acknowledges the activation by checking its logs for the recompilation event.
+
+Do not create a permissive `allow { true }` policy as a placeholder. Use a real policy from day one.
+
+---
+
+## Control-Plane API
+
+### Admin token entropy and scope
+
+Admin tokens are stored as SHA-256 hashes. SHA-256 is fast to compute, so token entropy is the primary defense against brute force.
+
+- Generate admin tokens using at least 32 bytes of random data (`openssl rand -base64 32`).
+- Issue zone-scoped tokens (associated with a specific `zone_id`) rather than global tokens where possible. Zone-scoped tokens cannot access other zones.
+- Rotate tokens immediately if suspected compromised.
+- Rate-limit the admin token endpoint at the network layer — the application layer does not apply per-IP rate limits to admin routes.
+
+### Bootstrap token
+
+The `BOOTSTRAP_ADMIN_TOKEN` environment variable, used only at `POST /v1/bootstrap`, must be replaced with a zone-scoped operational token as soon as initial setup is complete. Do not use the bootstrap token for ongoing operations.
+
+---
+
+## Database
+
+### TLS for Postgres connections
+
+All `DATABASE_URL` connection strings must include SSL mode. Use `sslmode=verify-full` where possible, or at minimum `sslmode=require`.
+
+**Consequence of plaintext database connections:** Session tokens, policy content, delegation edges, audit records, and encrypted credential ciphertext transit the network unprotected.
+
+### Database access controls
+
+Caracal does not use PostgreSQL row-level security or column-level encryption (except for provider credentials and zone signing keys). Unrestricted database access bypasses all application-layer controls. Apply the principle of least privilege:
+
+- Create a dedicated database user for each service.
+- Grant only the tables and operations each service requires.
+- Restrict network access to the database to the Caracal service network.
+
+---
+
+## Monitoring and alerting
+
+### Revocation latency
+
+The Gateway and STS pick up revocation events within one poll cycle (default block duration: 1 second). If the revocation stream consumer is lagging, revoked sessions may continue to receive mandates.
+
+Alert when:
+- The `revocations_active` Gateway metric does not decrease after a known revocation.
+- Redis stream consumer group lag exceeds 5 seconds for `caracal.sessions.revoke`.
+
+### Audit chain integrity
+
+The audit service verifies the HMAC chain on startup and hourly. Chain breaks produce logged errors. Alert when:
+- Audit service logs contain `chain_break` or `hmac_mismatch`.
+- The audit service fails to connect to Postgres on startup.
+
+### Denial rate anomalies
+
+The Gateway exposes per-denial-type counters at `GET /metrics`. Alert on sudden increases in:
+- `denials_signature` — possible key rotation issue or token forgery attempt.
+- `denials_jti_replay` — possible token replay attack.
+- `denials_revoked` — unusually high revocation activity.
+- `sts_exchange_errors` — STS availability or policy evaluation issues.
+
+### Dead-letter queues
+
+Monitor DLQ depths for HMAC failures or unprocessable messages:
+- `caracal.sessions.revoke.dead`
+- `caracal.audit.events.dlq`
+
+A non-zero DLQ depth indicates message processing failures that may require investigation.
+
+---
+
+## Pre-traffic checklist
+
+Run through this list before sending production traffic to any Caracal zone:
+
+- [ ] TLS configured on all four services
+- [ ] `ZONE_KEK` injected from a secrets manager; 32 non-zero bytes, hex-encoded
+- [ ] `STREAMS_HMAC_KEY` set and identical across all services
+- [ ] `AUDIT_HMAC_KEY` set for the audit service
+- [ ] `REDIS_URL` configured for all services; Redis reachable
+- [ ] `JTI_FAIL_OPEN` not set or explicitly `false`
+- [ ] `ALLOW_PRIVATE_UPSTREAMS` not set or explicitly `false`
+- [ ] `UPSTREAM_HOST_ALLOWLIST` set to the expected upstream hostnames
+- [ ] `INSECURE_HTTP` and `INSECURE_STS` not set or explicitly `false`
+- [ ] Database connections use `sslmode=require` or `sslmode=verify-full`
+- [ ] Active policy set deployed to every zone before traffic arrives
+- [ ] Admin tokens generated with ≥ 32 bytes entropy; bootstrap token replaced
+- [ ] Monitoring in place for revocation latency, audit chain, and denial counters
+- [ ] DLQ depths at zero before enabling traffic

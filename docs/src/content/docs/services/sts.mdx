@@ -1,7 +1,267 @@
 ---
 title: STS
-description: Security token service that runs OPA, signs mandates, and emits audit events.
+description: Go service that issues ES256 JWTs via RFC 8693 token exchange, evaluates OPA policies per zone, manages zone signing keys, and publishes audit events.
 pageType: architecture
 ---
 
-Security token service that runs OPA, signs mandates, and emits audit events.
+The Security Token Service (STS) is the authorization core of Caracal. It is the only service that issues JWTs, the only service that evaluates OPA policies, and the only service that publishes audit events. Every token exchange — whether from the SDK, the Gateway, or the Coordinator — flows through the STS.
+
+**Default port:** 8080  
+**Language:** Go  
+**Framework:** `net/http` (stdlib)
+
+---
+
+## Responsibilities
+
+The STS owns:
+
+- **Token issuance** — signs ES256 JWTs using per-zone ECDSA P-256 private keys.
+- **Token exchange** — RFC 8693 flow: validates a subject token, evaluates policy, issues a narrowed per-call mandate.
+- **OPA policy evaluation** — compiles per-zone Rego bundles; evaluates on every exchange.
+- **Zone key management** — decrypts zone signing keys from PostgreSQL using the zone KEK; caches decrypted keys in-process.
+- **JWKS endpoint** — serves zone public keys for downstream JWT verification.
+- **Step-up challenge state** — reads and validates step-up challenge status.
+- **Audit event production** — publishes a signed audit event to `caracal.audit.events` on every token exchange outcome.
+
+The STS does **not** manage application or zone configuration (API), proxy requests (Gateway), coordinate agents (Coordinator), or persist audit events (Audit service).
+
+---
+
+## Token exchange
+
+**Endpoint:** `POST /oauth/2/token`  
+**Content-Type:** `application/x-www-form-urlencoded`
+
+The STS implements RFC 8693 (OAuth 2.0 Token Exchange). The client presents a subject token (ambient JWT) alongside the application's client credentials and the target resource. The STS validates the subject token, compiles and evaluates the zone's OPA policy, and — if allowed — issues a new JWT narrowed to the requested resource.
+
+**Required parameters:**
+
+| Parameter | Description |
+| --- | --- |
+| `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
+| `subject_token` | Caller's ambient JWT |
+| `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` |
+| `resource` | Target resource identifier (repeatable) |
+| `zone_id` | Zone the exchange is scoped to |
+| `application_id` | Requesting application |
+| `client_secret` | Application credential (or `client_assertion` + `client_assertion_type`) |
+
+**Optional parameters:**
+
+| Parameter | Description |
+| --- | --- |
+| `scope` | Requested OAuth scopes (space-separated) |
+| `actor_token` | Delegation proof JWT |
+| `session_id` | Reference to an existing session |
+| `agent_session_id` | Reference to an agent session |
+| `delegation_edge_id` | Delegation edge being exercised |
+| `ttl_seconds` | Override default mandate TTL (max: `MAX_GRANT_TTL_SECONDS`) |
+| `challenge_id` | Step-up challenge ID (if satisfying a step-up requirement) |
+
+**Success response (200):**
+
+```json
+{
+  "access_token": "<ES256 JWT>",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "scope": "tool:call"
+}
+```
+
+**Step-up required (409):**
+
+```json
+{
+  "error": "step_up_required",
+  "challenge": {
+    "id": "chall_abc123",
+    "type": "totp",
+    "request_id": "req_def456"
+  }
+}
+```
+
+### Token classes
+
+The STS issues two distinct token classes:
+
+**Ambient tokens** (60-minute TTL): Issued at login or session creation. Presented as the `subject_token` in subsequent exchanges. Not scoped to a specific resource.
+
+**Per-call mandates** (15-minute TTL): Issued by exchange. Narrowed to specific resources and scopes. Cannot be used again as a `subject_token` — this prevents subject-confusion attacks where a per-call token from one resource is re-exchanged to access a different resource.
+
+### JWT structure
+
+```
+Header: { alg: "ES256", kid: "<kid>", typ: "JWT" }
+
+Payload:
+  iss     — issuer URL (ISSUER_URL env var)
+  sub     — subject ID
+  aud     — target resource identifier(s)
+  scope   — granted OAuth scopes
+  sid     — session ID (revocation key)
+  exp     — expiry (Unix seconds)
+  iat     — issued-at (Unix seconds)
+  zone_id — zone this token belongs to
+  client_id — application ID
+  agent_session_id    — (if agent context)
+  delegation_edge_id  — (if delegation context)
+  hop_count           — delegation chain depth
+  delegation_chain    — array of ChainHop objects
+```
+
+---
+
+## OPA policy evaluation
+
+The STS runs an embedded OPA engine, not an external OPA sidecar. Policy state is per-zone:
+
+**Compilation:** When a token exchange arrives for a zone, the STS looks up the zone's active policy set from PostgreSQL. It compiles the Rego bundle with forbidden built-ins removed: `http.send`, `net.*`, `rand.*`, `time.now_ns`, and `opa.runtime` are not available to zone policies. This prevents policies from making outbound network calls or escaping the evaluation sandbox.
+
+**Evaluation:** The compiled bundle evaluates the `data.caracal.authz` package with:
+- `input.subject_id` — the subject requesting the token
+- `input.application_id` — the requesting application
+- `input.resources` — array of requested resource identifiers
+- `input.scopes` — requested scopes
+- `input.claims` — claims from the subject token
+- `input.agent_session_id`, `input.delegation_edge_id` — if present
+
+**Decision:** Policies must emit a `result` object with `decision`, `evaluation_status`, `determining_policies`, and `diagnostics` fields. If the result's `decision` is `deny`, the exchange is rejected with 401.
+
+**Cache invalidation:** On policy set activation, the API publishes to `caracal.policy.invalidate`. The STS consumes this stream and recompiles the affected zone's bundle. Between publication and consumption (typically under 5 seconds), in-flight exchanges use the previous compiled policy.
+
+**Polling fallback:** The STS polls PostgreSQL for policy changes every `OPA_POLL_SECONDS` (default 60). This ensures policy state eventually converges even if stream delivery fails.
+
+---
+
+## Key management
+
+Each zone has an ECDSA P-256 private key used to sign all tokens issued for that zone. Zone keys are stored encrypted in the `secrets` table using ChaCha20-Poly1305 AEAD, encrypted under a zone KEK.
+
+**Zone KEK:** A 32-byte key provided via `ZONE_KEK` environment variable. In production this is set from a secrets manager. The KEK never leaves the STS process.
+
+**Key cache:** Decrypted private keys are cached in-process with a 15-minute TTL. A cache miss triggers a PostgreSQL read and decryption. The decrypted key is stored in locked memory and never written to disk.
+
+**Key rotation:** New signing keys are added to the zone's JWKS. The JWKS endpoint returns the two most recent zone keys, enabling zero-downtime rotation — existing tokens signed with the previous key remain valid through their TTL.
+
+---
+
+## JWKS endpoint
+
+`GET /.well-known/jwks.json?zone_id=<zone_id>`
+
+Returns the zone's current public signing keys. The response includes the two most recent zone keys.
+
+```json
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "<base64url>",
+      "y": "<base64url>",
+      "kid": "<key_id>",
+      "use": "sig",
+      "alg": "ES256"
+    }
+  ]
+}
+```
+
+Response headers: `Cache-Control: public, max-age=300, must-revalidate`
+
+Clients (Gateway, identity packages) cache JWKS responses for 5 minutes and use stale-while-revalidate on cache errors.
+
+---
+
+## Step-up status
+
+`GET /step-up/{id}`
+
+Returns the status of a step-up challenge. Called by `caracal run` to poll for satisfaction.
+
+```json
+{
+  "id": "chall_abc123",
+  "challenge_type": "totp",
+  "satisfied": false,
+  "consumed": false,
+  "expires_at": "2026-05-11T21:00:00Z"
+}
+```
+
+---
+
+## Redis usage
+
+**Produces:**
+
+| Stream | Event | Description |
+| --- | --- | --- |
+| `caracal.audit.events` | Every exchange outcome | Signed audit event consumed by the Audit service |
+
+**Consumes:**
+
+| Stream | Purpose |
+| --- | --- |
+| `caracal.sessions.revoke` | Revoke in-memory session state on session termination |
+| `caracal.policy.invalidate` | Trigger OPA recompilation for the affected zone |
+
+**Keys:**
+
+- `sts:jti:{zone_id}:{jti_hash}` — JTI deduplication set. TTL matches token lifetime. Prevents replay attacks.
+
+---
+
+## Audit event production
+
+After every token exchange (success or failure), the STS appends a signed audit event to the `caracal.audit.events` Redis stream. If `STREAMS_HMAC_KEY` is set, each message includes a `_sig` field: HMAC-SHA256 of the stream name and message fields, enabling the Audit service to detect tampered stream messages.
+
+The audit buffer accepts events asynchronously. In production, `AUDIT_HMAC_KEY` should also be set — this enables event chain HMAC verification in the Audit service, where each event's HMAC includes the hash of the previous event.
+
+---
+
+## Startup sequence
+
+1. Parse configuration; validate required env vars (`ZONE_KEK`, `ISSUER_URL`, `DATABASE_URL`, `REDIS_URL`). Panic on missing required fields.
+2. Verify `ZONE_KEK` is 32 bytes and not all zeros.
+3. Connect to PostgreSQL and Redis.
+4. Warn if `STREAMS_HMAC_KEY` is unset (required in production for stream signing).
+5. Initialize KeyCache (in-process, 15-minute TTL).
+6. Initialize OPAEngine (per-zone compiled bundle cache).
+7. Start OPA seed goroutine — preloads all zone policies from PostgreSQL at startup.
+8. Start OPA polling goroutine — polls for policy changes every `OPA_POLL_SECONDS`.
+9. Start audit consumer goroutine — consumes `caracal.audit.events` and persists to PostgreSQL.
+10. Replay any pending events from `AUDIT_REPLAY_DIR`.
+11. Listen on `0.0.0.0:8080`.
+
+---
+
+## Scaling
+
+The STS is stateless with respect to request handling. Scale horizontally for token exchange throughput.
+
+Per-instance caches:
+- **KeyCache** — decrypted zone signing keys (15-min TTL). A cold replica fetches and decrypts from PostgreSQL on first exchange for a zone.
+- **OPAEngine** — compiled per-zone policy bundles. Rebuilt on invalidation signal or after the polling interval.
+
+Both caches rebuild independently per replica. There is no cross-replica cache synchronization; invalidation events broadcast to all replicas via the Redis stream, and each replica recompiles its own bundle.
+
+---
+
+## Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP listen port (production: must be 8080) |
+| `DATABASE_URL` | — | PostgreSQL connection string |
+| `REDIS_URL` | — | Redis connection string |
+| `ISSUER_URL` | — | JWT `iss` claim; must match the STS base URL |
+| `ZONE_KEK` | — | 32-byte hex zone encryption key (required) |
+| `STREAMS_HMAC_KEY` | `""` | Hex key for Redis stream HMAC signing (required in production) |
+| `AUDIT_HMAC_KEY` | `""` | Hex key for audit event chain HMAC (required in production) |
+| `AUDIT_REPLAY_DIR` | `/var/lib/caracal/audit-replay` | Directory for pending audit event replay |
+| `MAX_GRANT_TTL_SECONDS` | `3600` | Maximum allowed mandate TTL |
+| `OPA_POLL_SECONDS` | `60` | Policy polling interval |

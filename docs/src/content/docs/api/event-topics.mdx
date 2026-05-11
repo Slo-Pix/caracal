@@ -1,7 +1,189 @@
 ---
 title: Event Topics
-description: Redis stream topics for audit, revocation, and policy invalidation.
+description: Redis stream topics — message schemas, publishers, consumer groups, HMAC signing, outbox pattern, and retention configuration.
 pageType: api
 ---
 
-Redis stream topics for audit, revocation, and policy invalidation.
+Caracal services communicate asynchronously through Redis streams. Events are published via an outbox table to ensure at-least-once delivery. All streams use flat key-value message fields (not JSON-encoded strings). Messages are optionally HMAC-signed using `STREAMS_HMAC_KEY` for origin verification.
+
+## Transport conventions
+
+**Message encoding:** Redis stream entries with flat string key-value fields. All values are strings; JSON objects (like `metadata_json`) are serialized as JSON strings within a single field.
+
+**HMAC signing:** When `STREAMS_HMAC_KEY` is configured (hex-encoded, ≥32 bytes), a `_sig` field is appended to each message. The HMAC payload is: all non-`_sig` fields sorted alphabetically, joined as `{stream_name}\n{key}={value}\n...`, then HMAC-SHA256. Consumers perform a timing-safe comparison. Messages that fail verification are dropped and dead-lettered; they are still acknowledged to prevent blocking the consumer group.
+
+**Outbox pattern:** Mutations that produce stream events first write to the `event_outbox` table within the same database transaction. A background poller (`OutboxDispatcher`) reads pending rows, signs the payload if `STREAMS_HMAC_KEY` is set, and publishes to Redis via `XADD ... MAXLEN ~ {maxlen}`. This guarantees that a stream message is never lost due to a Redis failure at write time.
+
+**Dead-letter queues:** Messages that cannot be consumed (HMAC failure, parse failure, repeated processing errors) are moved to `{stream}.dead`.
+
+---
+
+## `caracal.sessions.revoke`
+
+Session revocation events. Every service that issues or verifies mandates must consume this stream to enforce sub-TTL revocation.
+
+**Publishers:** Control-plane API (grant revocation), Coordinator (agent termination and delegation cascade revocation).
+
+**Consumers:**
+
+| Service | Consumer group | Consumer ID pattern |
+| --- | --- | --- |
+| Gateway | `gateway-revocation` | `gateway-{hostname}-{pid}` |
+| STS | `sts-revocation` | `sts-{hostname}-{pid}` |
+| Resource servers (Redis connector) | configurable; default `resource-revocation` | caller-supplied |
+
+**Message fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `zone_id` | string | Zone the session belongs to |
+| `session_id` | string | Session ID (`sid` claim) to revoke |
+| `reason` | string | Revocation reason, e.g. `"grant_revoked"` or `"agent_terminated"` |
+| `grant_id` | string | Grant ID that triggered revocation (when reason is `grant_revoked`) |
+| `_sig` | string | HMAC-SHA256 hex digest (present when `STREAMS_HMAC_KEY` is set) |
+
+**Retention:** `MAXLEN ~ 100,000`
+
+**Dead-letter queue:** `caracal.sessions.revoke.dead`
+
+### Timing
+
+The Gateway and STS pick up revocation events within one `pollOnce()` cycle (typically under 5 seconds). Mandates issued before the revocation that have not yet expired will be rejected on the next request because both the Gateway and STS check the `sid` claim against their revocation caches on every inbound request.
+
+---
+
+## `caracal.audit.events`
+
+Authorization decision events from the STS. Every token exchange attempt produces an audit event whether it succeeds or fails.
+
+**Publisher:** STS.
+
+**Consumers:**
+
+| Service | Consumer group |
+| --- | --- |
+| Audit service | `audit-ingestor` |
+| SIEM integrations | `siem-export` |
+
+**Message fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | Unique event UUID |
+| `zone_id` | string | Zone where the decision was made |
+| `event_type` | string | `"token_exchange"`, `"authz_decision"`, `"replay_detected"`, etc. |
+| `request_id` | string | Request correlation ID |
+| `decision` | string | `"allow"` or `"deny"` |
+| `policy_set_id` | string | Policy set ID used for evaluation |
+| `policy_set_version_id` | string | Policy set version ID |
+| `manifest_sha` | string | SHA-256 of the policy manifest |
+| `evaluation_status` | string | `"complete"`, `"partial"`, or `"error"` |
+| `determining_policies_json` | string | JSON array of policy IDs that determined the outcome |
+| `diagnostics_json` | string | JSON array of diagnostic objects from OPA evaluation |
+| `metadata_json` | string | JSON object with additional context (client, resource, principal); sensitive fields are redacted |
+| `occurred_at` | string | RFC 3339 Nano timestamp |
+| `sig` | string | HMAC-SHA256 over the `data` field using `AUDIT_HMAC_KEY` (separate from `STREAMS_HMAC_KEY`) |
+
+**Signing:** Audit events use a dedicated `AUDIT_HMAC_KEY` environment variable. The HMAC covers the `data` field (a JSON-serialized copy of the full event) rather than the canonical flat-field format used by other streams.
+
+**Publication:** Events are buffered in-process and batch-flushed every 50 ms or 1 000 events, whichever comes first. Failed batches are persisted to disk for replay on restart.
+
+**Retention:** `MAXLEN ~ 1,000,000`
+
+**Dead-letter queue:** `caracal.audit.events.dlq` (up to 100 000 entries)
+
+---
+
+## `caracal.policy.invalidate`
+
+Policy invalidation signals. When a policy set version is activated, the control-plane API publishes this event so the STS discards its cached compiled policy bundle and reloads from the database.
+
+**Publisher:** Control-plane API (on `POST /v1/zones/{zoneId}/policy-sets/{id}/activate`).
+
+**Consumer:**
+
+| Service | Consumer group |
+| --- | --- |
+| STS | `opa-engine` |
+
+**Message fields:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `zone_id` | string | Zone whose policy set changed |
+| `policy_set_id` | string | Policy set ID |
+| `policy_set_version_id` | string | Newly activated version ID |
+| `shadow_version_id` | string | Shadow version ID (empty string if none) |
+| `_sig` | string | HMAC-SHA256 hex digest |
+
+**Retention:** `MAXLEN ~ 100,000`
+
+**STS behavior:** On receipt, the STS recompiles the Rego bundle for the zone using the new version's manifest. Until the bundle is ready, the zone continues using the previous bundle (fail-open for policy updates, since the old policy is still valid). If no prior bundle exists and compilation fails, the STS installs a deny-all policy (fail-closed).
+
+---
+
+## `caracal.agents.lifecycle`
+
+Agent session lifecycle events from the Coordinator.
+
+**Publisher:** Coordinator (on spawn, suspend, resume, terminate).
+
+**Message fields:** Service-specific payload including `agent_session_id`, `zone_id`, `application_id`, `status`, and `occurred_at`.
+
+---
+
+## `caracal.invocations.lifecycle`
+
+Invocation state change events from the Coordinator.
+
+**Publisher:** Coordinator.
+
+---
+
+## `caracal.delegations.invalidate`
+
+Delegation graph invalidation signals. Published when a delegation edge is revoked or the graph epoch changes.
+
+**Publisher:** Coordinator.
+
+---
+
+## Outbox configuration
+
+Both the control-plane API and Coordinator run an outbox dispatcher that polls the `event_outbox` table and publishes to Redis.
+
+| Environment variable | Default | Description |
+| --- | --- | --- |
+| `CARACAL_OUTBOX_POLL_MS` | `250` | Polling interval in milliseconds |
+| `CARACAL_OUTBOX_BATCH` | `32` | Number of rows fetched per poll |
+| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | Maximum delivery attempts before a row is marked failed |
+| `CARACAL_OUTBOX_STREAM_MAXLEN` | `100000` | `MAXLEN` argument passed to `XADD` |
+
+Failed rows beyond `max_attempts` are not retried and remain in the table for manual inspection. Backoff between retries is exponential with jitter, capped at 60 seconds.
+
+---
+
+## Stream retention
+
+| Stream | `MAXLEN` (approximate) |
+| --- | --- |
+| `caracal.sessions.revoke` | 100 000 |
+| `caracal.audit.events` | 1 000 000 |
+| `caracal.policy.invalidate` | 100 000 |
+| `caracal.audit.events.dlq` | 100 000 |
+| `caracal.sessions.revoke.dead` | 100 000 |
+
+`MAXLEN` is approximate (`~`), meaning Redis may retain slightly more entries than the configured limit. Entries are not time-expired — they are evicted only when the stream exceeds `MAXLEN`.
+
+---
+
+## Publisher and consumer summary
+
+| Stream | Publisher | Consumer(s) |
+| --- | --- | --- |
+| `caracal.sessions.revoke` | API, Coordinator | Gateway, STS, resource servers |
+| `caracal.audit.events` | STS | Audit service, SIEM |
+| `caracal.policy.invalidate` | API | STS |
+| `caracal.agents.lifecycle` | Coordinator | — |
+| `caracal.invocations.lifecycle` | Coordinator | — |
+| `caracal.delegations.invalidate` | Coordinator | — |
