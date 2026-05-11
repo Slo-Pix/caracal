@@ -32,6 +32,7 @@ Every directory has an `instructions.md`. Read it before editing inside.
 git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
 pnpm install
 cp infra/docker/.env.example infra/docker/.env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, CARACAL_ADMIN_TOKEN
+pnpm --filter './packages/**' build
 pnpm caracal up                                  # start postgres, redis, sts, api, gateway, audit, coordinator
 pnpm caracal init                                # provision local zone, write caracal.toml
 ```
