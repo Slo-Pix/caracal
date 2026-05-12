@@ -41,8 +41,28 @@ env:
   IMAGE_OWNER: garudex-labs
 
 jobs:
+  check-maintainer:
+    name: Verify release actor is a maintainer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - name: Check actor against MAINTAINERS
+        run: |
+          set -euo pipefail
+          actor="${{ github.actor }}"
+          if ! grep -oP '(?<=@)\S+' .github/MAINTAINERS | grep -qiF "$actor"; then
+            echo "::error::$actor is not listed in .github/MAINTAINERS and cannot trigger a release."
+            exit 1
+          fi
+          echo "$actor is an authorised maintainer."
+
   validate:
     name: Validate and test
+    needs: check-maintainer
     if: github.repository == 'Garudex-Labs/caracal'
     runs-on: ubuntu-latest
     timeout-minutes: 30
