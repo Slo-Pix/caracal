@@ -26,6 +26,7 @@ permissions:
   contents: write
   packages: write
   id-token: write
+  attestations: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -310,7 +311,6 @@ jobs:
         if: github.event_name == 'push' && inputs.dryRun != true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'
         run: pnpm changeset publish
 
       - name: Dry-run pack and publish
@@ -406,6 +406,7 @@ jobs:
         with:
           packages-dir: ${{ matrix.package }}/dist
           skip-existing: true
+          password: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Dry-run publish to TestPyPI
         if: github.event_name != 'push' || inputs.dryRun == true
