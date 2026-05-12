@@ -192,6 +192,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
 
+      - name: Build TypeScript packages
+        run: pnpm run build:typescript
+
       - name: Resolve release version
         id: ver
         run: |
