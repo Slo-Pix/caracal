@@ -13,6 +13,7 @@ version = "0.1.0"
 description = "Caracal Redis-backed revocation connector."
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["caracalai-revocation", "redis>=5.0"]
 
