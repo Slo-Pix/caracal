@@ -307,11 +307,39 @@ jobs:
       - name: Build TypeScript packages
         run: pnpm run build:typescript
 
-      - name: Publish via Changesets
+      - name: Publish packages
         if: github.event_name == 'push' && inputs.dryRun != true
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: pnpm changeset publish
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          npm whoami
+          for d in \
+            packages/core/ts \
+            packages/oauth/ts \
+            packages/admin/ts \
+            packages/identity/ts \
+            packages/revocation/ts \
+            packages/sdk/ts \
+            packages/transport/mcp/ts \
+            packages/transport/a2a/ts \
+            packages/connectors/express/ts \
+            packages/connectors/fastmcp/ts \
+            packages/connectors/postgres/ts \
+            packages/connectors/redis/ts
+          do
+            name=$(jq -r .name "$d/package.json")
+            ver=$(jq -r .version "$d/package.json")
+            if npm view "$name@$ver" version >/dev/null 2>&1; then
+              echo "skip $name@$ver (already published)"
+              continue
+            fi
+            echo "::group::publish $name@$ver"
+            ( cd "$d" && npm publish --access public )
+            echo "::endgroup::"
+          done
 
       - name: Dry-run pack and publish
         if: github.event_name != 'push' || inputs.dryRun == true
