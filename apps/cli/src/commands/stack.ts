@@ -100,7 +100,7 @@ function runCompose(args: string[], paths: StackPaths): Promise<number> {
   return new Promise((resolveExit) => {
     const env: NodeJS.ProcessEnv = { ...process.env }
     if (paths.mode === 'runtime' && !env.CARACAL_VERSION) {
-      env.CARACAL_VERSION = CARACAL_VERSION
+      env.CARACAL_VERSION = CARACAL_VERSION.startsWith('v') ? CARACAL_VERSION : `v${CARACAL_VERSION}`
     }
     const proc = spawn(
       'docker',

@@ -139,7 +139,24 @@ case ":${PATH}:" in
     *) printf 'caracal-install: add %s to PATH (e.g. export PATH="%s:$PATH")\n' "${INSTALL_DIR}" "${INSTALL_DIR}" ;;
 esac
 
+shadow=""
+IFS=":"
+for dir in ${PATH}; do
+    [ -z "${dir}" ] && continue
+    [ "${dir}" = "${INSTALL_DIR}" ] && break
+    if [ -e "${dir}/caracal" ] || [ -L "${dir}/caracal" ]; then
+        shadow="${dir}/caracal"
+        break
+    fi
+done
+unset IFS
+if [ -n "${shadow}" ]; then
+    printf 'caracal-install: warning: %s appears earlier in PATH than %s.\n' "${shadow}" "${INSTALL_DIR}" >&2
+    printf 'caracal-install: remove it to use the installed binary: rm "%s"\n' "${shadow}" >&2
+fi
+
 printf 'caracal-install: done. Next steps:\n'
+printf '  hash -r            # refresh your shell command cache\n'
 printf '  caracal up         # start stack (Docker required)\n'
 printf '  caracal init       # provision local zone\n'
 printf '  caracal run -- env # smoke test ambient tokens\n'

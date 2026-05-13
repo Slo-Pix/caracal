@@ -65,7 +65,7 @@ the Caracal CLI and bring up the stack the same way any end user would —
 
 ```bash
 # Install the CLI once (no sudo, lands in ~/.local/bin)
-curl -fsSL https://caracal.garudexlabs.com/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
 
 # Bring up the OSS stack (coordinator, gateway, postgres, redis, ...)
 caracal up
@@ -73,11 +73,17 @@ caracal up
 
 The stack listens on:
 
-- Coordinator → `http://localhost:8090`
-- Gateway     → `http://localhost:8091`
+- API         → `http://localhost:3000`
+- Coordinator → `http://localhost:4000`
+- Gateway     → `http://localhost:8081`
 
 The defaults in `.env.example` already point at these. If you run Caracal on
 different hosts/ports, edit the `CARACAL_*` block in your `.env`.
+
+> The Caracal CLI is the *only* end-user surface. If you already had the
+> Caracal monorepo cloned and used `pnpm i -g` from it, remove the stale
+> workspace shim first so the released binary wins:
+> `rm "$(pnpm bin -g)/caracal" 2>/dev/null || true`.
 
 ### 5 — Run Lynx Capital
 
