@@ -39,7 +39,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SUB="$ROOT/scripts/postRelease"
 MANIFEST="$ROOT/releases/$RELEASE/manifest.json"
 FINDINGS_DIR="${FINDINGS_DIR:-$(mktemp -d)}"
-REPORT_OUT="${REPORT_OUT:-$ROOT/docs/src/content/docs/releases/$RELEASE-validation.md}"
+REPORT_OUT="${REPORT_OUT:-$ROOT/releases/$RELEASE/validation.md}"
 
 if [[ ! -f "$MANIFEST" ]]; then
   echo "orchestrator: manifest not found: $MANIFEST" >&2

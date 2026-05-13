@@ -38,17 +38,76 @@ import json, os
 print(json.dumps({k: os.environ["V_"+k] for k in os.environ if k.startswith("V_")}))
 ' $(for k in "${!CONTAINER_VER[@]}"; do printf 'V_%s=%s ' "$k" "${CONTAINER_VER[$k]}"; done))"
   REG="$REGISTRY" PINS="$pinJson" python3 - "$dir/docker-compose.yml" <<'PY'
-import json, os, re, sys
+import json, os, sys
 path = sys.argv[1]
 reg = os.environ["REG"]
 pins = json.loads(os.environ["PINS"])
-txt = open(path).read()
+lines = open(path).read().splitlines(keepends=True)
+
+def indentOf(line):
+    s = line.rstrip("\n")
+    return len(s) - len(s.lstrip(" "))
+
+svcIndent = None
+for line in lines:
+    if line.rstrip("\n").rstrip() == "services:" and indentOf(line) == 0:
+        for follow in lines[lines.index(line) + 1:]:
+            if follow.strip() == "":
+                continue
+            svcIndent = indentOf(follow)
+            break
+        break
+if svcIndent is None:
+    sys.exit("services: section not found")
+childIndent = svcIndent + 2
+
 for svc, ver in pins.items():
-    txt = re.sub(
-        rf"(^\s*{svc}:\n(?:.*\n)*?\s*)(image:.*$)",
-        lambda m, s=svc, v=ver: f"{m.group(1)}image: {reg}/{s}:v{v}",
-        txt, count=1, flags=re.MULTILINE)
-open(path, "w").write(txt)
+    out = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if (
+            indentOf(line) == svcIndent
+            and line.strip() == f"{svc}:"
+        ):
+            out.append(line)
+            i += 1
+            body = []
+            while i < len(lines):
+                cur = lines[i]
+                if cur.strip() == "":
+                    body.append(cur); i += 1; continue
+                if indentOf(cur) <= svcIndent:
+                    break
+                body.append(cur); i += 1
+            j = 0
+            cleaned = []
+            while j < len(body):
+                bl = body[j]
+                if bl.strip() == "build:" and indentOf(bl) == childIndent:
+                    j += 1
+                    while j < len(body):
+                        nxt = body[j]
+                        if nxt.strip() == "" or indentOf(nxt) > childIndent:
+                            j += 1
+                        else:
+                            break
+                    continue
+                cleaned.append(bl); j += 1
+            replaced = False
+            for k, bl in enumerate(cleaned):
+                if bl.strip().startswith("image:") and indentOf(bl) == childIndent:
+                    cleaned[k] = f"{' ' * childIndent}image: {reg}/{svc}:v{ver}\n"
+                    replaced = True
+                    break
+            if not replaced:
+                cleaned.insert(0, f"{' ' * childIndent}image: {reg}/{svc}:v{ver}\n")
+            out.extend(cleaned)
+        else:
+            out.append(line); i += 1
+    lines = out
+
+open(path, "w").write("".join(lines))
 PY
   if runOrEcho docker compose -f "$dir/docker-compose.yml" up -d >"$dir/up" 2>&1; then
     sleep 5

@@ -16,7 +16,9 @@ checkPyPi() {
   matchesOnly "$pkg" || return 0
   local url="https://pypi.org/pypi/$pkg/json"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] curl %s (expect %s)\n' "$url" "$ver"; return 0
+    printf '[dry-run] curl %s (expect %s)\n' "$url" "$ver"
+    logFinding "$AREA" "$pkg" "registry" "pypi" "-" "$SEV_INFO" "$STATUS_PASS" "dry-run: would check $url for $ver" "curl -fsSL $url"
+    return 0
   fi
   local body
   if ! body="$(retryBackoff 10 120 curl -fsSL "$url")"; then
@@ -42,7 +44,9 @@ checkNpm() {
   matchesOnly "$pkg" || return 0
   local url="https://registry.npmjs.org/${pkg}"
   if [[ "$DRY_RUN" == "1" ]]; then
-    printf '[dry-run] curl %s (expect %s)\n' "$url" "$ver"; return 0
+    printf '[dry-run] curl %s (expect %s)\n' "$url" "$ver"
+    logFinding "$AREA" "$pkg" "registry" "npm" "-" "$SEV_INFO" "$STATUS_PASS" "dry-run: would check $url for $ver" "curl -fsSL $url"
+    return 0
   fi
   local body
   if ! body="$(retryBackoff 10 120 curl -fsSL "$url")"; then
