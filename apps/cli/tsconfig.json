@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
+    "target": "ES2024",
     "module": "Preserve",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "types": ["node"],
+    "lib": ["ES2024"],
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
