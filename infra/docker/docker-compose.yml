@@ -54,7 +54,16 @@ services:
     init: true
     stop_grace_period: 30s
     logging: *defaultLogging
-    <<: *defaultSecurity
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       - caracal
     environment:

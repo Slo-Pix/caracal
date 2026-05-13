@@ -54,8 +54,8 @@ RUN pnpm --filter @caracalai/core build && \
     pnpm --filter @caracalai/identity build && \
     pnpm --filter @caracalai/coordinator build && \
     pnpm --filter @caracalai/coordinator deploy --prod --legacy /out && \
-    find /out/node_modules -type d \( -name test -o -name tests -o -name __tests__ -o -name docs -o -name doc -o -name examples -o -name example \) -prune -exec rm -rf {} + 2>/dev/null || true && \
-    find /out/node_modules -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.ts' -o -name '*.map' -o -name '*.flow' -o -name 'LICENSE*' -o -name 'CHANGELOG*' -o -name 'AUTHORS*' -o -name '.npmignore' -o -name '.eslintrc*' -o -name '.prettierrc*' \) -delete 2>/dev/null || true
+    find /out/node_modules -type d \( -name test -o -name tests -o -name __tests__ \) -prune -exec rm -rf {} + 2>/dev/null || true && \
+    find /out/node_modules -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.map' -o -name 'CHANGELOG*' -o -name '.npmignore' -o -name '.eslintrc*' -o -name '.prettierrc*' \) -delete 2>/dev/null || true
 
 FROM ${NODE_IMAGE}
 ENV NODE_ENV=production \
