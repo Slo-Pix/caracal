@@ -7,57 +7,93 @@ with a live agent topology view and SSE log stream.
 ## Requirements
 
 - Python 3.11+
-- Docker (for the mock provider network)
+- Docker
 - An OpenAI API key
 
-## Setup
+## Quick start
+
+### 1 — Install dependencies
 
 ```bash
 cd caracal/examples/lynxCapital
 python -m venv .venv && source .venv/bin/activate
 
-# Install the project plus its three local editable packages (mock provider
-# SDKs and the Caracal Python SDK). With uv: `uv sync` reads pyproject.toml
-# and resolves everything automatically.
 pip install \
   -e ../../packages/sdk/python \
   -e _mock/sdk/lynx_sdk_stripe_treasury \
   -e _mock/sdk/lynx_sdk_tax \
   -e .
-
-cp .env.example .env
-# edit .env and set OPENAI_API_KEY=sk-...
 ```
 
-Start the mock provider network (one container that fronts all 11 external
-services: banking, ERP, OCR, compliance, vendor portal, tax, FX):
+> **uv users:** `uv sync` resolves all four editables automatically via
+> `[tool.uv.sources]` in `pyproject.toml`.
+
+### 2 — Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set `OPENAI_API_KEY=sk-...`. Everything else has working
+defaults for the local mock network.
+
+### 3 — Start the mock provider network
+
+The mock network simulates all 11 external financial services (banking, ERP,
+OCR, FX, compliance, vendor portal, tax) across REST, SSE, gRPC, and MCP.
+Always build it locally — it is not published to any registry.
 
 ```bash
 docker compose -f _mock/docker-compose.yml up -d --build
 ```
 
-Bring up Caracal (Coordinator + Gateway) and point `CARACAL_*` in `.env` at it
-before starting Lynx — Caracal is required, not optional:
+Services started:
+
+| Container | Transport | Port |
+|---|---|---|
+| `mock-rest-1` | REST (13 providers) | 8800 |
+| `mock-fx-stream-1` | SSE (FX rates) | 8810 |
+| `mock-treasury-grpc-1` | gRPC | 50051 |
+| `mock-compliance-grpc-1` | gRPC | 50052 |
+| `mock-vendor-mcp-1` | MCP | 7800 |
+
+### 4 — Start Caracal
+
+Caracal (Coordinator + Gateway) must be running before Lynx starts.
 
 ```bash
 docker compose -f ../../infra/docker/docker-compose.yml up -d
 ```
 
-## Run
+Then confirm the `CARACAL_*` values in `.env` match the running Caracal
+instance (defaults point to `http://localhost:8090` for the coordinator).
+
+### 5 — Run Lynx Capital
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-Open http://localhost:8000.
+Open **http://localhost:8000**.
 
 ## Routes
 
-- `/`      Landing — scenario summary.
-- `/setup` Validates `OPENAI_API_KEY`.
-- `/demo`  Chat + live agent graph.
-- `/logs`  Color-coded runtime activity stream.
-- `/prompts` Example prompts grouped by execution pattern.
+| Path | Description |
+|---|---|
+| `/` | Landing — scenario summary |
+| `/setup` | Validates `OPENAI_API_KEY` and Caracal connectivity |
+| `/demo` | Chat interface + live agent topology graph |
+| `/logs` | Color-coded runtime activity stream |
+| `/prompts` | Example prompts grouped by execution pattern |
+
+## Example prompts
+
+The `/prompts` page lists ready-to-run prompts. A few to start with:
+
+- *"Run the full global payout cycle for this month."*
+- *"Process all US region vendor invoices and submit to QuickBooks."*
+- *"Run treasury close for Q2 and file compliance reports for DE and SG."*
+- *"Audit all open receivables and flag overdue accounts."*
 
 ## Tests
 
@@ -65,12 +101,19 @@ Open http://localhost:8000.
 pytest tests/
 ```
 
+## Tear down
+
+```bash
+docker compose -f _mock/docker-compose.yml down
+docker compose -f ../../infra/docker/docker-compose.yml down
+```
+
 ## Layout
 
 ```
 app/             FastAPI app (api, web, agents, orchestration, services, events, core)
 config/          company.yaml (copy, regions, providers, swarm caps, theme)
-_mock/           Deterministic mock provider network (the only network boundary)
+_mock/           Deterministic mock provider network (local only — not published)
 tests/           Topology, lifecycle, and mock determinism tests
 INSTRUCTIONS.md  Build rules
 ```
