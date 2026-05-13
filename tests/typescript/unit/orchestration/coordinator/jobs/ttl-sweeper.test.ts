@@ -83,10 +83,9 @@ describe('runTTLSweep', () => {
     expect(outboxInserts.length).toBe(2)
     const allDedupes = outboxInserts.flatMap(([, params]) => (params ?? []) as unknown[])
     expect(allDedupes).toEqual(expect.arrayContaining([
-      'agent_terminate:agent-1', 'terminate:agent-1',
-      'agent_terminate:agent-2', 'terminate:agent-2',
-      'agent_terminate:agent-3', 'terminate:agent-3',
+      'terminate:agent-1', 'terminate:agent-2', 'terminate:agent-3',
     ]))
+    expect(allDedupes).not.toContain('agent_terminate:agent-1')
     expect(client.query).toHaveBeenCalledWith('COMMIT')
   })
 

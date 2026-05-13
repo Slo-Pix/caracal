@@ -441,11 +441,6 @@ export async function terminateSubtree(
   const items: OutboxItem[] = []
   for (const row of rows) {
     items.push({
-      topic: Topics.SessionsRevoke,
-      dedupeKey: `agent_terminate:${row.id}`,
-      payload: { zone_id: zoneId, session_id: row.session_sid, reason },
-    })
-    items.push({
       topic: Topics.AgentsLifecycle,
       dedupeKey: `terminate:${row.id}`,
       payload: {

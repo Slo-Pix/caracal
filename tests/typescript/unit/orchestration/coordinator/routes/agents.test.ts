@@ -225,13 +225,11 @@ describe('DELETE /v1/zones/:zoneId/agents/:id — cascade terminate', () => {
     expect(outboxCalls.length).toBe(1)
     const params = (outboxCalls[0]?.[1] ?? []) as unknown[]
     const topics = params.filter((_, i) => i % 4 === 1)
-    expect(topics).toEqual(expect.arrayContaining([
-      'caracal.sessions.revoke', 'caracal.agents.lifecycle',
-    ]))
+    expect(topics).toEqual(expect.arrayContaining(['caracal.agents.lifecycle']))
+    expect(topics).not.toContain('caracal.sessions.revoke')
     const dedupeKeys = params.filter((_, i) => i % 4 === 2)
     expect(dedupeKeys).toEqual(expect.arrayContaining([
-      'agent_terminate:agent-root', 'terminate:agent-root',
-      'agent_terminate:agent-child', 'terminate:agent-child',
+      'terminate:agent-root', 'terminate:agent-child',
     ]))
   })
 })
