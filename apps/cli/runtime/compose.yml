@@ -87,6 +87,7 @@ services:
       ZONE_KEK: ${ZONE_KEK}
       STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
       CARACAL_ADMIN_TOKEN: ${CARACAL_ADMIN_TOKEN}
+      CARACAL_LOCAL_BOOTSTRAP_ENABLED: ${CARACAL_LOCAL_BOOTSTRAP_ENABLED:-true}
       PORT: 3000
     ports:
       - "3000:3000"
@@ -149,7 +150,6 @@ services:
       STS_URL: http://sts:8080
       ISSUER_URL: http://localhost:8080
       STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
-      AGENT_COORDINATOR_AUDIENCE: caracal.coordinator
       AGENT_COORDINATOR_SCOPE: agent:lifecycle
       PORT: 4000
     ports:

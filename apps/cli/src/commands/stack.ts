@@ -44,7 +44,11 @@ function searchRepoRoot(start: string | undefined): string | undefined {
 
 function findRepoRoot(): string | undefined {
   if (process.env.CARACAL_REPO_ROOT) return searchRepoRoot(process.env.CARACAL_REPO_ROOT)
-  return undefined
+  return (
+    searchRepoRoot(process.env.INIT_CWD) ??
+    searchRepoRoot(process.env.PWD) ??
+    searchRepoRoot(process.cwd())
+  )
 }
 
 function devPaths(repoRoot: string): StackPaths {

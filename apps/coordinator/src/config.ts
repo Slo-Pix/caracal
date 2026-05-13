@@ -5,6 +5,12 @@
 
 import { getenv, mustGetenv } from '@caracalai/core'
 
+/**
+ * Coordinator JWT audience. The STS issues ambient tokens with `aud=[ISSUER_URL]`
+ * (see services/sts/internal/jwt.go issueToken). Verification must use the same
+ * value; there is no second source of truth.
+ */
+
 function intEnv(key: string, fallback: number, min = 1): number {
   const raw = process.env[key]
   if (raw === undefined || raw === '') return fallback
@@ -16,13 +22,14 @@ function intEnv(key: string, fallback: number, min = 1): number {
 }
 
 function buildCfg() {
+  const issuerUrl = mustGetenv('ISSUER_URL')
   return {
     port: intEnv('PORT', 4000),
     databaseUrl: mustGetenv('DATABASE_URL'),
     redisUrl: mustGetenv('REDIS_URL'),
     stsUrl: mustGetenv('STS_URL'),
-    issuerUrl: mustGetenv('ISSUER_URL'),
-    audience: mustGetenv('AGENT_COORDINATOR_AUDIENCE'),
+    issuerUrl,
+    audience: issuerUrl,
     requiredScope: mustGetenv('AGENT_COORDINATOR_SCOPE'),
     dbPoolMax: intEnv('DB_POOL_MAX', 20),
     dbStatementTimeoutMs: intEnv('DB_STATEMENT_TIMEOUT_MS', 10_000),
