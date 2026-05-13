@@ -68,7 +68,7 @@ function balancedDelimiters(src: string): string | null {
   return stack.length === 0 ? null : 'unbalanced_delimiters'
 }
 
-export interface RegoCheck {
+interface RegoCheck {
   packageName: string | null
   rules: Set<string>
   error: string | null

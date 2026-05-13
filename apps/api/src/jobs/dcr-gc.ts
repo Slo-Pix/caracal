@@ -20,7 +20,7 @@ export async function runDCRGC(db: DB): Promise<number> {
   return rowCount ?? 0
 }
 
-export async function runDCRGCIfLeader(db: DB): Promise<number | null> {
+async function runDCRGCIfLeader(db: DB): Promise<number | null> {
   const client = await db.connect()
   try {
     const { rows } = await client.query<{ acquired: boolean }>(

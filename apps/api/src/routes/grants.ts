@@ -6,6 +6,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
+import { scopesAllowed } from '@caracalai/core'
 import { STREAM_SESSIONS_REVOKE } from '../redis.js'
 import { enqueueOutbox } from '../outbox.js'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
@@ -24,11 +25,6 @@ const GrantBody = z.object({
   resource_id: z.string().min(1),
   scopes: z.array(Scope).min(1).max(64),
 })
-
-function scopesAllowed(requested: string[], available: string[]): boolean {
-  const allowed = new Set(available)
-  return requested.every(scope => allowed.has(scope))
-}
 
 export const grantsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/zones/:zoneId/grants', async (req, reply) => {

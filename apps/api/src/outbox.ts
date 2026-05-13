@@ -16,7 +16,7 @@ function isProductionLike(): boolean {
   return ne === 'production' || ne === 'staging'
 }
 
-export type OutboxPayload = Record<string, string | number | boolean | null>
+type OutboxPayload = Record<string, string | number | boolean | null>
 
 export interface OutboxRow {
   id: string
