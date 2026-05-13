@@ -31,7 +31,7 @@ func TestDerefStr(t *testing.T) {
 
 func TestStepUpRequired(t *testing.T) {
 	res := &OPAResult{
-		Diagnostics: []map[string]interface{}{
+		Diagnostics: []map[string]any{
 			{"step_up_required": "mfa"},
 		},
 	}
@@ -49,7 +49,7 @@ func TestStepUpRequiredNone(t *testing.T) {
 
 func TestStepUpRequiredNoKey(t *testing.T) {
 	res := &OPAResult{
-		Diagnostics: []map[string]interface{}{
+		Diagnostics: []map[string]any{
 			{"other_key": "value"},
 		},
 	}
@@ -774,7 +774,7 @@ result := {"decision": "allow", "evaluation_status": "complete", "determining_po
 			GraphEpoch:      12,
 		},
 		Context: OPAContext{
-			ActorClaims:     map[string]interface{}{"sub": "app1"},
+			ActorClaims:     map[string]any{"sub": "app1"},
 			AgentSessionID:  "agent-src",
 			RequestedScopes: []string{"read"},
 		},

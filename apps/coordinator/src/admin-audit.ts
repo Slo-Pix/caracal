@@ -41,6 +41,7 @@ export function registerAdminAuditHook(app: FastifyInstance, db: Pool): void {
     const mutating = MUTATING_METHODS.has(req.method)
     if (!mutating && success) return
     const auth = req.caracalAuth
+    if (!auth) return
     const entity = entityFromUrl(req.url)
     try {
       await db.query(

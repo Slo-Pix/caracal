@@ -56,6 +56,7 @@ export interface Config {
     maxAttempts: number
     streamMaxLen: number
   }
+  readyRateLimitPerMin: number
 }
 
 function buildDatabaseUrl(): string {
@@ -91,6 +92,13 @@ function parseIntEnv(name: string, fallback: number): number {
   return parsed
 }
 
+function parseNonNegIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const parsed = parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
 function deriveWorkerId(): string {
   return process.env.CARACAL_WORKER_ID
     ?? `${process.env.HOSTNAME ?? 'api'}:${process.pid}`
@@ -121,5 +129,6 @@ export function loadConfig(): Config {
       maxAttempts: parseIntEnv('CARACAL_OUTBOX_MAX_ATTEMPTS', 100),
       streamMaxLen: parseIntEnv('CARACAL_OUTBOX_STREAM_MAXLEN', 100_000),
     },
+    readyRateLimitPerMin: parseNonNegIntEnv('READY_RATE_LIMIT_PER_MIN', 120),
   }
 }
