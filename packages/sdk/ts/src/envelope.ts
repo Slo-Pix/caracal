@@ -38,11 +38,7 @@ const TRACEPARENT_RE =
 
 function randomHex(byteLen: number): string {
   const bytes = new Uint8Array(byteLen);
-  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < byteLen; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
+  crypto.getRandomValues(bytes);
   let s = "";
   for (const b of bytes) s += b.toString(16).padStart(2, "0");
   return s;

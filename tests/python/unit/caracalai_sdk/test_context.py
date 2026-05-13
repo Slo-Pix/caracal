@@ -7,7 +7,6 @@ Unit tests for CaracalContext ambient context and envelope conversion.
 
 from __future__ import annotations
 
-import asyncio
 import unittest
 
 from caracalai_sdk.advanced import (

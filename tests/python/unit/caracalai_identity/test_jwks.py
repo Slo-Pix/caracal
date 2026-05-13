@@ -27,7 +27,7 @@ class FakeAsyncClient:
     body: dict[str, object] = {"keys": [{"kid": "kid1"}]}
     fetch_delay: float = 0.0
 
-    async def __aenter__(self) -> "FakeAsyncClient":
+    async def __aenter__(self) -> FakeAsyncClient:
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:

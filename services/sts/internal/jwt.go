@@ -153,7 +153,10 @@ func issueToken(ctx context.Context, params IssueParams, keys *KeyCache, issuerU
 	}
 
 	now := time.Now()
-	jti, _ := uuid.NewV7()
+	jti, err := uuid.NewV7()
+	if err != nil {
+		return "", "", fmt.Errorf("generate jti: %w", err)
+	}
 	jtiStr := jti.String()
 	use := params.Use
 	if use == "" {
