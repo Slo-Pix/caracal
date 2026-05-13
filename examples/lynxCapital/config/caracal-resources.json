@@ -1,0 +1,18 @@
+{
+  "mercury":      "http://127.0.0.1:8800/mercury",
+  "wise":         "http://127.0.0.1:8800/wise",
+  "stripe":       "http://127.0.0.1:8800/stripe",
+  "quickbooks":   "http://127.0.0.1:8800/quickbooks",
+  "netsuite":     "http://127.0.0.1:8800/netsuite",
+  "sap":          "http://127.0.0.1:8800/sap",
+  "ocr":          "http://127.0.0.1:8800/ocr",
+  "close":        "http://127.0.0.1:8800/close",
+  "regulatory":   "http://127.0.0.1:8800/regulatory",
+  "billing":      "http://127.0.0.1:8800/billing",
+  "tax":          "http://127.0.0.1:8800/tax",
+  "compliance":   "http://127.0.0.1:8800/compliance",
+  "fx":           "http://127.0.0.1:8800/fx",
+  "treasury":     "grpc://127.0.0.1:50051",
+  "compliance_grpc": "grpc://127.0.0.1:50052",
+  "vendor_portal":   "mcp://127.0.0.1:7800"
+}

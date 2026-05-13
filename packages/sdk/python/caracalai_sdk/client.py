@@ -66,6 +66,23 @@ def _parse_resource_bindings(raw: str | None) -> list[ResourceBinding]:
     return out
 
 
+def _load_resource_bindings_file(path: str | None) -> list[ResourceBinding]:
+    if not path:
+        return []
+    import json
+
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    if isinstance(data, dict):
+        items = data.items()
+    elif isinstance(data, list):
+        items = ((d["resource_id"], d["upstream_prefix"]) for d in data)
+    else:
+        raise ValueError(f"CARACAL_RESOURCES_FILE: unsupported JSON shape in {path!r}")
+    return [ResourceBinding(resource_id=str(rid), upstream_prefix=str(prefix))
+            for rid, prefix in items if rid and prefix]
+
+
 class Caracal:
     def __init__(self, config: CaracalConfig) -> None:
         self.config = config
@@ -91,7 +108,10 @@ class Caracal:
                 application_id=required["CARACAL_APPLICATION_ID"],
                 subject_token=required["CARACAL_SUBJECT_TOKEN"],
                 gateway_url=e.get("CARACAL_GATEWAY_URL") or None,
-                resources=_parse_resource_bindings(e.get("CARACAL_RESOURCES")),
+                resources=(
+                    _load_resource_bindings_file(e.get("CARACAL_RESOURCES_FILE"))
+                    + _parse_resource_bindings(e.get("CARACAL_RESOURCES"))
+                ),
             )
         )
 
@@ -196,6 +216,14 @@ class Caracal:
         return current()
 
     def middleware(self) -> Callable[[ASGIApp], CaracalASGIMiddleware]:
+        """ASGI middleware factory. Install at module load — `app.add_middleware()`
+        only registers middleware before Starlette/FastAPI startup, so this cannot
+        be called from inside a `lifespan` context manager.
+
+            caracal = Caracal.from_env()
+            app = FastAPI()
+            app.add_middleware(caracal.middleware())
+        """
         from .http import CaracalASGIMiddleware
 
         outer = self
@@ -231,6 +259,33 @@ class Caracal:
                 yield request
 
         return httpx.AsyncClient(auth=_CaracalAuth(), **kwargs)
+
+    def sync_transport(self, **kwargs: Any) -> httpx.Client:
+        """Sync counterpart to transport(): returns an httpx.Client that auto-injects
+        the envelope on every request and rewrites resource-bound calls through the
+        configured Caracal gateway. Use with sync httpx-based SDKs."""
+        outer = self
+
+        class _CaracalSyncAuth(httpx.Auth):
+            requires_request_body = False
+
+            def sync_auth_flow(self, request: httpx.Request):
+                rewritten = outer._route_through_gateway(
+                    request.url, request.headers.get("X-Caracal-Resource")
+                )
+                if rewritten is not None:
+                    request.url = httpx.URL(rewritten[0])
+                    request.headers["host"] = request.url.host
+                    request.headers["X-Caracal-Resource"] = rewritten[1]
+                    ctx = current()
+                    token = ctx.subject_token if ctx is not None else outer.config.subject_token
+                    request.headers["Authorization"] = f"Bearer {token}"
+                for k, v in outer.headers().items():
+                    if k not in request.headers:
+                        request.headers[k] = v
+                yield request
+
+        return httpx.Client(auth=_CaracalSyncAuth(), **kwargs)
 
     def _route_through_gateway(
         self,

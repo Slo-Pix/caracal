@@ -77,12 +77,14 @@ class RestClient:
         self._auth = auth
         self._policy = policy
         self._breaker = breaker(provider)
-        self._http = httpx.Client(
+        caracal = caracal_module.get()
+        client_kwargs = dict(
             base_url=base_url,
             timeout=timeout_s,
             transport=transport,
             headers={"User-Agent": f"lynxcapital/{provider}"},
         )
+        self._http = caracal.sync_transport(**client_kwargs) if caracal else httpx.Client(**client_kwargs)
 
     def close(self) -> None:
         self._http.close()
@@ -91,7 +93,6 @@ class RestClient:
             headers: dict[str, str], attempt: int) -> httpx.Response:
         h = dict(headers)
         h["X-Attempt"] = str(attempt)
-        h.update(caracal_module.headers())
         self._auth.apply(h)
         return self._http.request(method, path, json=json, headers=h)
 

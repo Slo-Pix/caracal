@@ -8,10 +8,12 @@
   .setup-wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 48px; }
   h1 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
   .sub { color: #5a6478; font-size: 12px; margin-bottom: 24px; }
-  .panel { border: 1px solid var(--border); border-radius: 4px; padding: 18px; background: #fff; }
+  .panel { border: 1px solid var(--border); border-radius: 4px; padding: 18px; background: #fff; margin-bottom: 16px; }
   .panel h2 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
   .panel p { font-size: 12px; color: #5a6478; margin-bottom: 12px; }
   .panel code { font-family: ui-monospace, monospace; font-size: 11px; background: #1a1f2e; color: #c9d1e0; padding: 1px 5px; border-radius: 2px; }
+  pre.cmd { background: #1a1f2e; color: #c9d1e0; font-family: ui-monospace, monospace; font-size: 11px; padding: 10px 12px; border-radius: 3px; margin: 6px 0 10px; overflow-x: auto; }
+  pre.cmd .c { color: #6c7689; }
   .validate-bar { display: flex; align-items: center; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
   #validate-btn { background: var(--primary); color: #fff; border: none; padding: 8px 18px; font-size: 12px; font-weight: 600; border-radius: 3px; cursor: pointer; }
   #validate-btn:hover { opacity: 0.85; }
@@ -31,8 +33,34 @@
   <p class="sub">Confirm your environment is ready to run the {{ company }} demo.</p>
 
   <div class="panel">
-    <h2>OpenAI API key</h2>
-    <p>The demo agents call OpenAI to generate responses. Set <code>OPENAI_API_KEY</code> in <code>.env</code> or your shell before launching the app.</p>
+    <h2>1 · Start the Caracal stack</h2>
+    <p>Coordinator + Gateway from the monorepo's <code>infra/docker</code> compose. Lynx Capital uses these for identity, delegation, and resource-aware provider access.</p>
+<pre class="cmd"><span class="c"># from repo root</span>
+docker compose -f infra/docker/docker-compose.yml up -d</pre>
+  </div>
+
+  <div class="panel">
+    <h2>2 · Start the provider mocks</h2>
+    <p>13 REST providers, 2 gRPC services, and 1 MCP server, behaving like real external APIs (auth, idempotency, webhooks, rate limits).</p>
+<pre class="cmd"><span class="c"># from examples/lynxCapital</span>
+docker compose -f _mock/docker-compose.yml up -d --build</pre>
+  </div>
+
+  <div class="panel">
+    <h2>3 · Configure environment</h2>
+    <p>Copy the template and fill in <code>OPENAI_API_KEY</code>. Caracal vars already point at the local stack.</p>
+<pre class="cmd">cp .env.example .env
+<span class="c"># edit .env → set OPENAI_API_KEY=sk-...</span></pre>
+  </div>
+
+  <div class="panel">
+    <h2>4 · Run Lynx Capital</h2>
+<pre class="cmd">uv run uvicorn app.main:app --reload --port 8000</pre>
+  </div>
+
+  <div class="panel">
+    <h2>5 · Validate</h2>
+    <p>Confirms <code>OPENAI_API_KEY</code> is set, all four <code>CARACAL_*</code> env vars are present, and the coordinator + gateway are reachable.</p>
 
     <div class="validate-bar">
       <button id="validate-btn">Validate configuration</button>

@@ -46,40 +46,36 @@ For the Lynx integration we rely on the implicit parent→child lineage that
 explicit `delegate()` calls at the orchestrator boundary. Lineage is correct;
 scope-narrowing is not enforced by Caracal yet for these edges.
 
-## 2. `caracal.transport()` is async-only; sync `httpx.Client` users must inject headers manually
+## 2. `caracal.transport()` is async-only; sync `httpx.Client` users must inject headers manually  *(FIXED)*
 
 Lynx Capital's `RestClient` is built on a sync `httpx.Client` with retry,
 breaker, idempotency, and submit-and-poll behavior. The SDK ships an
 `httpx.AsyncClient` from `caracal.transport()` that auto-injects auth and
-rewrites to the gateway — but there is no sync equivalent.
+rewrites to the gateway — but there was no sync equivalent.
 
-The integration falls back to merging `caracal.headers()` into the outbound
-request manually inside `_do()`. This works, but it duplicates what
-`caracal.transport()` does for async callers and skips automatic
-gateway-rewrite.
+**Fixed:** SDK now ships `Caracal.sync_transport(**kwargs) -> httpx.Client`
+with the same auth-injection + gateway-rewrite behavior. `RestClient` uses
+it directly; the manual `headers()` merge inside `_do()` is gone.
 
-**Suggested SDK addition:** `caracal.sync_transport() -> httpx.Client` with
-the same auth-injection + gateway-rewrite behavior, or a
-`caracal.gateway_url(resource_id, path)` helper for sync callers.
+## 3. `Caracal.from_env()` parses `CARACAL_RESOURCES` as a flat env string  *(FIXED)*
 
-## 3. `Caracal.from_env()` parses `CARACAL_RESOURCES` as a flat env string
+Each resource entry is `resource_id=upstream_prefix`, comma-separated. Fine
+for two or three; Lynx Capital has 16 providers, so a single env line was
+unwieldy.
 
-Each resource entry is `resource_id=upstream_prefix`, comma-separated. This is
-fine for two or three resources, but Lynx Capital has 13 REST providers + 2
-gRPC + 1 MCP. Splitting them across `.env` lines requires shell concatenation
-or a single very long line — both error-prone.
+**Fixed:** `Caracal.from_env()` now also reads `CARACAL_RESOURCES_FILE`, a
+path to a JSON file shaped `{ "resource_id": "upstream_prefix", ... }`. The
+two sources merge; the flat form still works.
 
-**Suggested SDK addition:** accept either the flat form *or* a path to a JSON
-file (`CARACAL_RESOURCES_FILE=...`) so resource maps can be version-controlled
-without polluting `.env`.
+Lynx Capital ships `config/caracal-resources.json` and points
+`CARACAL_RESOURCES_FILE` at it in `.env.example`.
 
-## 4. Middleware must be installed at module load, not inside lifespan
+## 4. Middleware must be installed at module load, not inside lifespan  *(FIXED)*
 
-`app.add_middleware(...)` only takes effect before Starlette's startup. That
-means `caracal.middleware()` cannot live inside the `lifespan` async-context
-manager — it has to run at import time. The current SDK README example
-(`async with lifespan: caracal.init()`) is misleading for FastAPI users.
+`app.add_middleware(...)` only takes effect before Starlette's startup, so
+`caracal.middleware()` cannot live inside the `lifespan` async-context
+manager.
 
-**Suggested doc fix:** the FastAPI section should show `Caracal.from_env()` at
-module scope, followed by `app.add_middleware(caracal.middleware())` and a
-note that startup-time init is wrong for ASGI middleware.
+**Fixed:** `Caracal.middleware()`'s docstring now states this explicitly and
+shows the correct module-scope install pattern.
+
