@@ -4,6 +4,7 @@
 // `caracal grant …` admin subcommands.
 
 import type { CliConfig } from '../config.ts'
+import { printSuccess } from '../style.ts'
 import {
   buildAdminClient,
   fail,
@@ -57,7 +58,7 @@ export async function grantCommand(argv: string[], cfg?: CliConfig): Promise<voi
         const id = positional[0]
         if (!id) return usage('grant revoke <id> [--zone …]')
         await client.grants.revoke(zoneId, id)
-        process.stdout.write(`revoked ${id}\n`)
+        printSuccess(`revoked ${id}`)
         return
       }
       case 'help':

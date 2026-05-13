@@ -4,6 +4,7 @@
 // `caracal policy …` and `caracal policy-set …` admin subcommands.
 
 import type { CliConfig } from '../config.ts'
+import { printSuccess } from '../style.ts'
 import {
   buildAdminClient,
   fail,
@@ -73,7 +74,7 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
         const id = positional[0]
         if (!id) return usage('policy delete <id> [--zone …]')
         await client.policies.delete(zoneId, id)
-        process.stdout.write(`archived ${id}\n`)
+        printSuccess(`archived ${id}`)
         return
       }
       case 'help':
@@ -139,7 +140,7 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
         const id = positional[0]
         if (!id) return usage('policy-set delete <id> [--zone …]')
         await client.policySets.delete(zoneId, id)
-        process.stdout.write(`archived ${id}\n`)
+        printSuccess(`archived ${id}`)
         return
       }
       case 'help':

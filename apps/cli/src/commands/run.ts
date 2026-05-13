@@ -6,6 +6,7 @@
 import { spawn } from 'node:child_process'
 import { OAuthClient, InteractionRequiredError } from '@caracalai/oauth'
 import type { CliConfig, Credential } from '../config.ts'
+import { printError, printWarn } from '../style.ts'
 
 const STEP_UP_POLL_MS = 2000
 const STEP_UP_TIMEOUT_MS = 300_000
@@ -63,7 +64,7 @@ function logFailure(cred: Credential, err: unknown): void {
 export async function runCommand(argv: string[], cfg: CliConfig): Promise<void> {
   const commandArgs = argv[0] === '--' ? argv.slice(1) : argv
   if (commandArgs.length === 0) {
-    process.stderr.write('Usage: caracal run <cmd...>\n')
+    printError('Usage: caracal run <cmd...>')
     process.exit(1)
   }
 
@@ -84,9 +85,7 @@ export async function runCommand(argv: string[], cfg: CliConfig): Promise<void> 
       env[cred.env] = await exchangeWithStepUp(client, cfg, cred.resource)
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err)
-      process.stderr.write(
-        `warn: optional credential skipped resource=${cred.resource} reason=${reason}\n`,
-      )
+      printWarn(`optional credential skipped resource=${cred.resource} reason=${reason}`)
     }
   }
 

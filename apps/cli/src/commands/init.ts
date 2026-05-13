@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path'
 import { discoverAdminToken } from '@caracalai/core'
 import { AdminClient, AdminApiError, type LocalBootstrapResult } from '@caracalai/admin'
 import { showHelp } from './shared.ts'
+import { style, printError, printInfo, printSuccess, printWarn } from '../style.ts'
 
 interface InitOptions {
   apiUrl: string
@@ -35,7 +36,7 @@ function defaultConfigPath(): string {
 function nextArg(argv: string[], i: number, flag: string): string {
   const v = argv[i + 1]
   if (v === undefined || v.startsWith('--')) {
-    process.stderr.write(`Error: ${flag} requires a value\n`)
+    printError(`${flag} requires a value`)
     process.exit(1)
   }
   return v
@@ -85,16 +86,14 @@ function parseFlags(argv: string[]): InitOptions {
       case '-h':
         initHelp()
       default:
-        process.stderr.write(`Unknown flag: ${arg}\n`)
+        printError(`unknown flag: ${arg}`)
         process.exit(1)
     }
   }
 
   const token = discoverAdminToken(adminToken)
   if (!token) {
-    process.stderr.write(
-      'Error: CARACAL_ADMIN_TOKEN not set; pass --admin-token, set the env var, or add it to infra/docker/.env\n',
-    )
+    printError('CARACAL_ADMIN_TOKEN not set; pass --admin-token, set the env var, or add it to infra/docker/.env')
     process.exit(1)
   }
   return { apiUrl, zoneUrl, configPath, adminToken: token, force }
@@ -126,24 +125,20 @@ export async function initCommand(argv: string[]): Promise<void> {
     data = await client.bootstrap(opts.force)
   } catch (err) {
     if (err instanceof AdminApiError) {
-      process.stderr.write(`Error: bootstrap failed (${err.status}): ${err.code}\n`)
+      printError(`bootstrap failed (${err.status}): ${err.code}`)
     } else {
       const desc = err instanceof Error ? err.message : String(err)
-      process.stderr.write(`Error: cannot reach Caracal API at ${opts.apiUrl}: ${desc}\n`)
+      printError(`cannot reach Caracal API at ${opts.apiUrl}: ${desc}`)
     }
     process.exit(1)
   }
 
   if (!data.app_client_secret) {
     if (existsSync(opts.configPath)) {
-      process.stdout.write(
-        `Zone already provisioned; existing config at ${opts.configPath} left in place. Re-run with --force to rotate the client secret.\n`,
-      )
+      printInfo(`Zone already provisioned; existing config at ${opts.configPath} left in place. Re-run with --force to rotate the client secret.`)
       return
     }
-    process.stderr.write(
-      'Error: zone already provisioned but no local config exists; re-run with --force to rotate the client secret.\n',
-    )
+    printError('zone already provisioned but no local config exists; re-run with --force to rotate the client secret.')
     process.exit(1)
   }
 
@@ -157,10 +152,10 @@ export async function initCommand(argv: string[]): Promise<void> {
 
   mkdirSync(dirname(opts.configPath), { recursive: true })
   writeFileSync(opts.configPath, toml, { mode: 0o600 })
-  process.stdout.write(`Wrote ${opts.configPath}\n`)
-  process.stdout.write(
-    'Note: Caracal enforces policy only on traffic that reaches the gateway or a Caracal connector.\n' +
-      '      Direct calls to the host or to provider APIs bypass Caracal. Firewall every path that\n' +
-      '      is not fronted by the gateway/connector in production.\n',
+  printSuccess(`Wrote ${style.code(opts.configPath)}`)
+  printWarn(
+    'Caracal enforces policy only on traffic that reaches the gateway or a Caracal connector.\n' +
+      '  Direct calls to the host or to provider APIs bypass Caracal. Firewall every path that is\n' +
+      '  not fronted by the gateway/connector in production.',
   )
 }
