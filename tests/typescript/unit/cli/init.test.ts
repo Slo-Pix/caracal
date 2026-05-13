@@ -46,7 +46,7 @@ describe('initCommand', () => {
         app_client_id: 'zone1:app1',
         app_client_secret: 'secret-1',
         resource: 'resource://example',
-        scope: 'read',
+        scope: 'read agent:lifecycle',
         rotated: false,
       }),
     })
@@ -83,7 +83,7 @@ describe('initCommand', () => {
         app_client_id: 'zone1:app1',
         app_client_secret: 'secret-2',
         resource: 'resource://example',
-        scope: 'read',
+        scope: 'read agent:lifecycle',
         rotated: true,
       }),
     }))
@@ -105,7 +105,7 @@ describe('initCommand', () => {
         app_client_id: 'zone1:app1',
         app_client_secret: null,
         resource: 'resource://example',
-        scope: 'read',
+        scope: 'read agent:lifecycle',
         rotated: false,
       }),
     }))

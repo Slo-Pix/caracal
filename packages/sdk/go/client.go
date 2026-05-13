@@ -177,7 +177,6 @@ func (c *Caracal) fire(hooks []LifecycleHook, ctx context.Context, cc CaracalCon
 type SpawnOptions struct {
 	Kind       AgentKind
 	TTLSeconds int
-	SessionSID string
 	ParentID   string
 	Metadata   map[string]any
 	TraceID    string
@@ -212,7 +211,6 @@ func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opt
 		ZoneID:        c.ZoneID,
 		ApplicationID: c.ApplicationID,
 		SubjectToken:  c.SubjectToken,
-		SessionSID:    o.SessionSID,
 		ParentID:      o.ParentID,
 		Kind:          kind,
 		TTLSeconds:    ttl,
@@ -251,7 +249,6 @@ type DelegateToSpawnOptions struct {
 	DelegationTTLSeconds int
 	Kind                 AgentKind
 	TTLSeconds           int
-	SessionSID           string
 	Metadata             map[string]any
 	TraceID              string
 }
@@ -287,7 +284,6 @@ func (c *Caracal) DelegateToSpawn(ctx context.Context, opts DelegateToSpawnOptio
 		Scopes:               opts.Scopes,
 		Constraints:          opts.Constraints,
 		DelegationTTLSeconds: opts.DelegationTTLSeconds,
-		SessionSID:           opts.SessionSID,
 		Kind:                 kind,
 		TTLSeconds:           ttl,
 		Metadata:             opts.Metadata,
