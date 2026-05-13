@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { CARACAL_VERSION } from '../runtime/version.ts'
 import { installRuntimeAssets, runtimePaths, seedEnvFile } from '../runtime/install.ts'
+import { style, SYMBOL, printError, printInfo } from '../style.ts'
 
 interface StackPaths {
   composeFile: string
@@ -55,14 +56,12 @@ function devPaths(repoRoot: string): StackPaths {
   const composeFile = join(repoRoot, 'infra', 'docker', 'docker-compose.yml')
   const envFile = process.env.CARACAL_ENV_FILE ?? join(repoRoot, 'infra', 'docker', '.env')
   if (!existsSync(envFile)) {
-    process.stderr.write(
-      `Error: env file not found at ${envFile}; copy infra/docker/.env.example to infra/docker/.env first.\n`,
-    )
+    printError(`env file not found at ${envFile}; copy infra/docker/.env.example to infra/docker/.env first.`)
     process.exit(1)
   }
   const { seeded } = seedEnvFile(envFile)
   if (seeded) {
-    process.stdout.write(`caracal: seeded missing secrets in ${envFile}\n`)
+    printInfo(`seeded missing secrets in ${envFile}`)
   }
   return { composeFile, envFile, cwd: repoRoot, mode: 'dev' }
 }
@@ -71,12 +70,12 @@ function runtimeStackPaths(): StackPaths {
   const paths = runtimePaths()
   const { created } = installRuntimeAssets(paths)
   if (created) {
-    process.stdout.write(`caracal: provisioned runtime assets at ${paths.home}\n`)
+    printInfo(`provisioned runtime assets at ${paths.home}`)
   }
   const envFile = process.env.CARACAL_ENV_FILE ?? paths.envFile
   const { seeded } = seedEnvFile(envFile)
   if (seeded) {
-    process.stdout.write(`caracal: seeded missing secrets in ${envFile}\n`)
+    printInfo(`seeded missing secrets in ${envFile}`)
   }
   return { composeFile: paths.composeFile, envFile, cwd: paths.home, mode: 'runtime' }
 }
@@ -108,7 +107,7 @@ function runCompose(args: string[], paths: StackPaths): Promise<number> {
       resolveExit(1)
     })
     proc.on('error', (err) => {
-      process.stderr.write(`Error: failed to invoke docker compose: ${err.message}\n`)
+      printError(`failed to invoke docker compose: ${err.message}`)
       resolveExit(127)
     })
   })
@@ -147,11 +146,15 @@ export async function statusCommand(): Promise<void> {
   )
   const width = SERVICE_PROBES.reduce((m, s) => Math.max(m, s.name.length), 0)
   let allOk = true
+  process.stdout.write(
+    `${style.header('service'.padEnd(width))}  ${style.header('port ')}  ${style.header('status')}  ${style.header('detail')}\n`,
+  )
   for (const { svc, ok, detail } of results) {
-    const status = ok ? 'ok' : 'down'
     if (!ok) allOk = false
+    const mark = ok ? style.success(SYMBOL.ok) : style.error(SYMBOL.fail)
+    const status = ok ? style.success('ok  ') : style.error('down')
     process.stdout.write(
-      `${svc.name.padEnd(width)}  ${String(svc.port).padStart(5)}  ${status.padEnd(4)}  ${detail}\n`,
+      `${svc.name.padEnd(width)}  ${String(svc.port).padStart(5)}  ${mark} ${status}  ${style.label(detail)}\n`,
     )
   }
   process.exit(allOk ? 0 : 1)

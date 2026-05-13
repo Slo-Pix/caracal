@@ -21,25 +21,28 @@ import { sessionCommand } from './commands/session.ts'
 import { auditCommand, explainCommand } from './commands/audit.ts'
 import { agentCommand, delegationCommand } from './commands/agent.ts'
 import { checkMcpGovernance } from './mcp.ts'
+import { style, printError } from './style.ts'
 import type { CliConfig } from './config.ts'
 
 function usage(out: NodeJS.WriteStream = process.stderr): void {
+  const H = (s: string) => style.header(s)
+  const L = (s: string) => style.label(s)
   out.write(
     [
-      'Usage: caracal <command> [options]',
+      `${style.title('Usage:')} caracal <command> [options]`,
       '',
-      'Stack:',
-      '  up                       Build and start the local stack',
-      '  down [-v]                Stop the stack; -v also removes volumes',
-      '  status                   Probe /health on every service',
-      '  init [--force]           Provision the local zone and write caracal.toml',
-      '  purge [targets...]       Centralized cleanup (stack, volumes, logs, config, runtime, cache, all)',
+      H('Stack:'),
+      `  up                       Build and start the local stack`,
+      `  down [-v]                Stop the stack; ${L('-v')} also removes volumes`,
+      `  status                   Probe /health on every service`,
+      `  init [--force]           Provision the local zone and write caracal.toml`,
+      `  purge [targets...]       Centralized cleanup (stack, volumes, logs, config, runtime, cache, all)`,
       '',
-      'Runtime:',
-      '  run [--] <cmd...>        Run a command with RESOURCE_TOKEN injected into env',
-      '  credential read <res>    Print the resolved credential for a resource',
+      H('Runtime:'),
+      `  run [--] <cmd...>        Run a command with RESOURCE_TOKEN injected into env`,
+      `  credential read <res>    Print the resolved credential for a resource`,
       '',
-      'Admin:',
+      H('Admin:'),
       '  zone <list|get|create|patch|delete>',
       '  app  <list|get|create|patch|delete|dcr>',
       '  resource <list|get|create|patch|delete>',
@@ -49,25 +52,26 @@ function usage(out: NodeJS.WriteStream = process.stderr): void {
       '  grant <list|get|create|revoke>',
       '  session list',
       '',
-      'Observability:',
+      H('Observability:'),
       '  audit tail [--decision …] [--request-id …] [--since …] [--limit N]',
       '  explain <request_id>     Show audit row + determining policies + diagnostics',
       '',
-      'Multi-agent (requires CARACAL_COORDINATOR_TOKEN):',
+      H('Multi-agent (requires CARACAL_COORDINATOR_TOKEN):'),
       '  agent <list|get|tree|suspend|resume|terminate>',
       '  delegation <inbound|outbound|traverse|revoke>',
       '',
-      'Common flags:',
-      '  --zone <id>              Zone selector (default: zone_id from caracal.toml or $CARACAL_ZONE_ID)',
+      H('Common flags:'),
+      `  --zone <id>              Zone selector (default: zone_id from caracal.toml or ${L('$CARACAL_ZONE_ID')})`,
       '  --json                   Emit JSON instead of a table',
       '  --help, -h               Show this help',
       '',
-      'Environment:',
-      '  CARACAL_ADMIN_TOKEN      Bearer token for /v1/* admin routes',
-      '  CARACAL_API_URL          API base (default http://localhost:3000)',
-      '  CARACAL_COORDINATOR_URL  Coordinator base (default http://localhost:4000)',
-      '  CARACAL_COORDINATOR_TOKEN JWT for coordinator routes (scope: agent:lifecycle)',
-      '  CARACAL_ZONE_ID          Default zone id for admin commands',
+      H('Environment:'),
+      `  ${L('CARACAL_ADMIN_TOKEN')}      Bearer token for /v1/* admin routes`,
+      `  ${L('CARACAL_API_URL')}          API base (default http://localhost:3000)`,
+      `  ${L('CARACAL_COORDINATOR_URL')}  Coordinator base (default http://localhost:4000)`,
+      `  ${L('CARACAL_COORDINATOR_TOKEN')} JWT for coordinator routes (scope: agent:lifecycle)`,
+      `  ${L('CARACAL_ZONE_ID')}          Default zone id for admin commands`,
+      `  ${L('NO_COLOR / FORCE_COLOR')}   Disable / force terminal colors`,
       '',
     ].join('\n'),
   )
@@ -77,14 +81,14 @@ function loadConfig(required: boolean): CliConfig | undefined {
   const path = resolveCliConfigPath()
   if (!path) {
     if (!required) return undefined
-    process.stderr.write('Error: caracal.toml not found; run `caracal init` to provision the local zone.\n')
+    printError('caracal.toml not found; run `caracal init` to provision the local zone.')
     process.exit(1)
   }
   try {
     return parse(readFileSync(path, 'utf8')) as unknown as CliConfig
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    process.stderr.write(`Error: failed to parse ${path}: ${reason}\n`)
+    printError(`failed to parse ${path}: ${reason}`)
     process.exit(1)
   }
 }
