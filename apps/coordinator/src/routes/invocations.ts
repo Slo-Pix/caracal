@@ -22,15 +22,15 @@ const InvocationBody = z.object({
   idempotency_key: z.string().min(1),
   method: z.string().min(1),
   params: z.unknown().default({}),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
   timeout_ms: z.number().int().min(1).max(900_000).default(30_000),
   retry_policy: RetryPolicy,
 })
 
 const CompleteBody = z.object({
   status: z.enum(['succeeded', 'failed']),
-  error: z.record(z.unknown()).nullable().default(null),
-  metadata: z.record(z.unknown()).default({}),
+  error: z.record(z.string(), z.unknown()).nullable().default(null),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 })
 
 const CancelBody = z.object({

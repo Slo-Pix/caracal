@@ -9,13 +9,14 @@ package internal
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/parquet-go/parquet-go"
 	"github.com/rs/zerolog"
 )
@@ -156,10 +157,6 @@ func (e *ParquetExporter) exportHour(ctx context.Context, hour time.Time) (int64
 }
 
 func isS3PreconditionFailed(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "PreconditionFailed") ||
-		strings.Contains(msg, "status code: 412")
+	var apiErr smithy.APIError
+	return errors.As(err, &apiErr) && apiErr.ErrorCode() == "PreconditionFailed"
 }

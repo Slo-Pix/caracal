@@ -3,7 +3,7 @@
 //
 // JWT bearer verification against STS JWKS endpoint.
 
-import { createRemoteJWKSet, decodeJwt, jwtVerify, errors as joseErrors } from 'jose'
+import { createRemoteJWKSet, decodeJwt, jwtVerify } from 'jose'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { cfg } from './config.js'
 
@@ -63,14 +63,16 @@ export function ownsApplication(req: FastifyRequest, applicationId: string): boo
 const PUBLIC_PATHS = new Set(['/health', '/ready', '/v1/verify'])
 
 function classifyError(err: unknown): string {
-  if (err instanceof joseErrors.JWTExpired) return 'token_expired'
-  if (err instanceof joseErrors.JWTClaimValidationFailed) return 'claim_invalid'
-  if (err instanceof joseErrors.JWSSignatureVerificationFailed) return 'signature_invalid'
-  if (err instanceof joseErrors.JOSEAlgNotAllowed) return 'algorithm_not_allowed'
-  if (err instanceof joseErrors.JWKSNoMatchingKey) return 'jwks_no_matching_key'
-  if (err instanceof joseErrors.JWKSTimeout) return 'jwks_timeout'
-  if (err instanceof joseErrors.JOSEError) return 'jose_error'
-  return 'unknown_error'
+  const code = err && typeof err === 'object' && 'code' in err ? err.code : undefined
+  switch (code) {
+    case 'ERR_JWT_EXPIRED': return 'token_expired'
+    case 'ERR_JWT_CLAIM_VALIDATION_FAILED': return 'claim_invalid'
+    case 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED': return 'signature_invalid'
+    case 'ERR_JOSE_ALG_NOT_ALLOWED': return 'algorithm_not_allowed'
+    case 'ERR_JWKS_NO_MATCHING_KEY': return 'jwks_no_matching_key'
+    case 'ERR_JWKS_TIMEOUT': return 'jwks_timeout'
+    default: return typeof code === 'string' && code.startsWith('ERR_JOSE_') ? 'jose_error' : 'unknown_error'
+  }
 }
 
 function pathOnly(url: string): string {

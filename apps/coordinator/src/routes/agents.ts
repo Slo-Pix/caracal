@@ -25,7 +25,7 @@ const SpawnBody = z.object({
   kind: z.enum(['service', 'instance', 'ephemeral']).optional(),
   capabilities: z.array(z.string()).default([]),
   ttl_seconds: z.number().int().min(1).max(86400).default(DEFAULT_TTL),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 })
 
 const ListQuery = z.object({

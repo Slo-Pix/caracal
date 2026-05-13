@@ -20,14 +20,14 @@ const ServiceBody = z.object({
     version: z.string().optional(),
   }).optional(),
   capabilities: z.array(z.string().min(1)).default([]),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 })
 
 const HeartbeatBody = z.object({
   service_id: z.string().min(1).optional(),
   status: z.enum(['starting', 'healthy', 'degraded', 'unhealthy']).default('healthy'),
   active_invocations: z.number().int().min(0).default(0),
-  metadata: z.record(z.unknown()).default({}),
+  metadata: z.record(z.string(), z.unknown()).default({}),
 })
 
 const ListQuery = z.object({

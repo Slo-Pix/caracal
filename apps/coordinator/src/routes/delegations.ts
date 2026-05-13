@@ -22,8 +22,8 @@ const DelegationBody = z.object({
   receiver_application_id: z.string().min(1),
   resource_id: z.string().min(1).nullable().default(null),
   scopes: z.array(z.string().min(1)).default([]),
-  constraints: z.record(z.unknown()).optional(),
-  constraints_json: z.record(z.unknown()).optional(),
+  constraints: z.record(z.string(), z.unknown()).optional(),
+  constraints_json: z.record(z.string(), z.unknown()).optional(),
   expires_at: z.string().datetime().optional(),
   ttl_seconds: z.number().int().min(1).max(86400).optional(),
 })
