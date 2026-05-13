@@ -34,6 +34,7 @@ loadEnvChain()
 
 export interface Config {
   port: number
+  host: string
   databaseUrl: string
   redisUrl: string
   logLevel: string
@@ -42,6 +43,7 @@ export interface Config {
   shutdownTimeoutMs: number
   workerId: string
   bodyLimitBytes: number
+  requestTimeoutMs: number
   db: {
     poolMax: number
     statementTimeoutMs: number
@@ -107,6 +109,7 @@ function deriveWorkerId(): string {
 export function loadConfig(): Config {
   return {
     port: parseIntEnv('PORT', 3000),
+    host: getenv('HOST', '127.0.0.1'),
     databaseUrl: buildDatabaseUrl(),
     redisUrl: buildRedisUrl(),
     logLevel: getenv('LOG_LEVEL', 'info'),
@@ -115,6 +118,7 @@ export function loadConfig(): Config {
     shutdownTimeoutMs: parseIntEnv('CARACAL_SHUTDOWN_TIMEOUT_MS', 15_000),
     workerId: deriveWorkerId(),
     bodyLimitBytes: parseIntEnv('CARACAL_API_BODY_LIMIT_BYTES', 1_048_576),
+    requestTimeoutMs: parseIntEnv('CARACAL_API_REQUEST_TIMEOUT_MS', 30_000),
     db: {
       poolMax: parseIntEnv('CARACAL_DB_POOL_MAX', 20),
       statementTimeoutMs: parseIntEnv('CARACAL_DB_STATEMENT_TIMEOUT_MS', 15_000),

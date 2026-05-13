@@ -46,6 +46,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   const app = Fastify({
     logger: { level: cfg.logLevel },
     bodyLimit: cfg.bodyLimitBytes,
+    requestTimeout: cfg.requestTimeoutMs,
     genReqId: (req) => {
       const incoming = req.headers['x-request-id']
       const value = Array.isArray(incoming) ? incoming[0] : incoming

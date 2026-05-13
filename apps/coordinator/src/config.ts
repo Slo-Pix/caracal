@@ -25,6 +25,7 @@ function buildCfg() {
   const issuerUrl = mustGetenv('ISSUER_URL')
   return {
     port: intEnv('PORT', 4000),
+    host: getenv('HOST', '127.0.0.1'),
     databaseUrl: mustGetenv('DATABASE_URL'),
     redisUrl: mustGetenv('REDIS_URL'),
     stsUrl: mustGetenv('STS_URL'),
@@ -47,6 +48,7 @@ function buildCfg() {
     delegationRetentionDays: intEnv('DELEGATION_RETENTION_DAYS', 90),
     outboxRetentionDays: intEnv('OUTBOX_RETENTION_DAYS', 7),
     shutdownGraceMs: intEnv('SHUTDOWN_GRACE_MS', 15_000),
+    requestTimeoutMs: intEnv('REQUEST_TIMEOUT_MS', 30_000),
     jwksCacheMax: intEnv('JWKS_CACHE_MAX', 256),
     verifyRateLimitPerMin: intEnv('VERIFY_RATE_LIMIT_PER_MIN', 60, 0),
     invocationRateLimitPerMin: intEnv('INVOCATION_RATE_LIMIT_PER_MIN', 120, 0),
