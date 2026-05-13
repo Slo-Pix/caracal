@@ -41,7 +41,6 @@ dev = [
 [tool.uv.sources]
 lynx-sdk-stripe-treasury  = { path = "_mock/sdk/lynx_sdk_stripe_treasury", editable = true }
 lynx-sdk-tax              = { path = "_mock/sdk/lynx_sdk_tax",             editable = true }
-caracalai-sdk             = { path = "../../packages/sdk/python",          editable = true }
 
 [tool.setuptools.packages.find]
 where = ["."]

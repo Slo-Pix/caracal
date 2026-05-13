@@ -18,8 +18,8 @@ with a live agent topology view and SSE log stream.
 cd caracal/examples/lynxCapital
 python -m venv .venv && source .venv/bin/activate
 
+pip install caracalai-sdk
 pip install \
-  -e ../../packages/sdk/python \
   -e _mock/sdk/lynx_sdk_stripe_treasury \
   -e _mock/sdk/lynx_sdk_tax \
   -e .
@@ -59,14 +59,25 @@ Services started:
 
 ### 4 — Start Caracal
 
-Caracal (Coordinator + Gateway) must be running before Lynx starts.
+Caracal (Coordinator + Gateway) must be running before Lynx starts. Install
+the Caracal CLI and bring up the stack the same way any end user would —
+**do not build from the caracal source tree**:
 
 ```bash
-docker compose -f ../../infra/docker/docker-compose.yml up -d
+# Install the CLI once (no sudo, lands in ~/.local/bin)
+curl -fsSL https://caracal.garudexlabs.com/install.sh | sh
+
+# Bring up the OSS stack (coordinator, gateway, postgres, redis, ...)
+caracal up
 ```
 
-Then confirm the `CARACAL_*` values in `.env` match the running Caracal
-instance (defaults point to `http://localhost:8090` for the coordinator).
+The stack listens on:
+
+- Coordinator → `http://localhost:8090`
+- Gateway     → `http://localhost:8091`
+
+The defaults in `.env.example` already point at these. If you run Caracal on
+different hosts/ports, edit the `CARACAL_*` block in your `.env`.
 
 ### 5 — Run Lynx Capital
 
@@ -105,7 +116,7 @@ pytest tests/
 
 ```bash
 docker compose -f _mock/docker-compose.yml down
-docker compose -f ../../infra/docker/docker-compose.yml down
+caracal down
 ```
 
 ## Layout
