@@ -24,6 +24,7 @@ go_pkgs=(
   ./apps/coordinator/relay/...
   ./packages/transport/mcp/go/...
   ./packages/connectors/nethttp/go/...
+  ./packages/connectors/redis/go/...
   ./packages/identity/go/...
   ./packages/revocation/go/...
   ./packages/sdk/go/...
@@ -88,19 +89,7 @@ if $run_ts; then
   pnpm --dir apps/cli sync-embedded
 
   step "ts: build packages"
-  pnpm --dir packages/core/ts build
-  pnpm --dir packages/oauth/ts build
-  pnpm --dir packages/admin/ts build
-  pnpm --dir packages/sdk/ts build
-  pnpm --dir packages/transport/a2a/ts build
-  pnpm --dir packages/identity/ts build
-  pnpm --dir packages/revocation/ts build
-  pnpm --dir packages/transport/mcp/ts build
-  pnpm --dir packages/connectors/express/ts build
-  pnpm --dir packages/connectors/fastmcp/ts build
-  pnpm --dir packages/connectors/postgres/ts build
-  pnpm --dir apps/api build
-  pnpm --dir apps/coordinator build
+  pnpm run build:typescript
 
   step "ts: lint"
   pnpm -r --if-present lint
@@ -149,10 +138,11 @@ if $run_go; then
   mapfile -t go_cover_pkgs < <("$go_cmd" list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' "${go_pkgs[@]}" | sed '/^$/d')
   "$go_cmd" test -covermode=atomic -coverprofile=coverage/go/coverage.out "${go_cover_pkgs[@]}"
   "$go_cmd" test -race -covermode=atomic \
-    -coverpkg=github.com/garudex-labs/caracal/transport-mcp,github.com/garudex-labs/caracal/revocation \
+    -coverpkg=github.com/garudex-labs/caracal/transport-mcp,github.com/garudex-labs/caracal/revocation,github.com/garudex-labs/caracal/identity \
     -coverprofile=coverage/go/tests.out \
     ./tests/go/unit/revocation \
-    ./tests/go/unit/transport/mcp
+    ./tests/go/unit/transport/mcp \
+    ./tests/go/unit/identity
   tail -n +2 coverage/go/tests.out >> coverage/go/coverage.out
   "$go_cmd" tool cover -func=coverage/go/coverage.out
 fi

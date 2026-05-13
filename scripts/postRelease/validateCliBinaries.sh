@@ -32,15 +32,21 @@ validatePlat() {
     rm -rf "$dir"; return 0
   fi
   if [[ "$DRY_RUN" != "1" ]]; then
-    ( cd "$dir" && grep " $file\$" SHA256SUMS | sha256sum -c - >/dev/null ) || {
-      logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "SHA256 mismatch" "sha256sum -c"
+    ( cd "$dir" && sha256Check SHA256SUMS "$file" ) || {
+      logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "SHA256 mismatch" "sha256 check"
       rm -rf "$dir"; return 0
     }
     if [[ "$archiveExt" == ".zip" ]]; then
-      runOrEcho unzip -q -o "$dir/$file" -d "$dir/extract"
+      if ! runOrEcho unzip -q -o "$dir/$file" -d "$dir/extract"; then
+        logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "archive extraction failed" "unzip $file"
+        rm -rf "$dir"; return 0
+      fi
     else
       mkdir -p "$dir/extract"
-      runOrEcho tar -xzf "$dir/$file" -C "$dir/extract"
+      if ! runOrEcho tar -xzf "$dir/$file" -C "$dir/extract"; then
+        logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "archive extraction failed" "tar -xzf $file"
+        rm -rf "$dir"; return 0
+      fi
     fi
   fi
   local binFile="$dir/extract/${BIN}${binExt}"
@@ -52,7 +58,7 @@ validatePlat() {
       logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "$(head -c 200 "$dir/err")" "./${BIN}${binExt} --version"
     fi
   else
-    logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_INFO" "$STATUS_PASS" "checksum ok; not host-executable" "sha256sum -c"
+    logFinding "$AREA" "$file" "$plat" "github" "-" "$SEV_INFO" "$STATUS_PASS" "checksum ok; not host-executable" "sha256 check"
   fi
   rm -rf "$dir"
 }

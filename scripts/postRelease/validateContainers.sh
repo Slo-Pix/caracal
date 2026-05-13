@@ -38,11 +38,14 @@ validateStack() {
   fi
   local dir; dir="$(mktemp -d)"
   cp "$COMPOSE_SRC" "$dir/docker-compose.yml"
-  local pinJson; pinJson="$(python3 -c '
-import json, os
-print(json.dumps({k: os.environ["V_"+k] for k in os.environ if k.startswith("V_")}))
-' $(for k in "${!CONTAINER_VER[@]}"; do printf 'V_%s=%s ' "$k" "${CONTAINER_VER[$k]}"; done))"
-  REG="$REGISTRY" PREFIX="$IMAGE_PREFIX" PINS="$pinJson" python3 - "$dir/docker-compose.yml" <<'PY'
+  local pinJson
+  pinJson="$("$CARACAL_PYTHON" - "$MANIFEST" <<'PY'
+import json, sys
+with open(sys.argv[1]) as f:
+    print(json.dumps(json.load(f)["containers"]))
+PY
+)"
+  REG="$REGISTRY" PREFIX="$IMAGE_PREFIX" PINS="$pinJson" "$CARACAL_PYTHON" - "$dir/docker-compose.yml" <<'PY'
 import json, os, sys
 path = sys.argv[1]
 reg = os.environ["REG"]
