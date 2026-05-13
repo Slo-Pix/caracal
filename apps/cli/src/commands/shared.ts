@@ -12,6 +12,7 @@ import {
   resolveServiceUrl,
 } from '@caracalai/core/cli'
 import type { CliConfig } from '../config.ts'
+import { style, printError } from '../style.ts'
 
 export { discoverAdminToken }
 
@@ -23,9 +24,7 @@ export interface AdminContext {
 export function buildAdminClient(cfg?: CliConfig): AdminContext {
   const adminToken = discoverAdminToken()
   if (!adminToken) {
-    process.stderr.write(
-      'Error: CARACAL_ADMIN_TOKEN not set; export it or add it to infra/docker/.env\n',
-    )
+    printError('CARACAL_ADMIN_TOKEN not set; export it or add it to infra/docker/.env')
     process.exit(1)
   }
   const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
@@ -92,14 +91,14 @@ export function flagList(flags: Record<string, string | boolean>, key: string): 
 export function requireZone(ctx: AdminContext, flags: Record<string, string | boolean>): string {
   const zoneId = flagString(flags, 'zone') ?? ctx.zoneId
   if (!zoneId) {
-    process.stderr.write('Error: --zone <id> required (or set CARACAL_ZONE_ID, or add zone_id to caracal.toml)\n')
+    printError('--zone <id> required (or set CARACAL_ZONE_ID, or add zone_id to caracal.toml)')
     process.exit(1)
   }
   return zoneId
 }
 
 export function usage(line: string): never {
-  process.stderr.write(`Usage: caracal ${line}\n`)
+  process.stderr.write(`${style.label('Usage:')} caracal ${line}\n`)
   process.exit(1)
 }
 
@@ -113,21 +112,21 @@ export function unknownVerb(group: string, verb: string | undefined, help: () =>
     help()
     process.exit(0)
   }
-  process.stderr.write(`Error: unknown ${group} verb '${verb}'\n`)
+  printError(`unknown ${group} verb '${verb}'`)
   help()
   process.exit(1)
 }
 
 export function fail(err: unknown): never {
   if (err instanceof AdminApiError) {
-    process.stderr.write(`Error: ${err.code} (HTTP ${err.status})\n`)
+    printError(`${err.code} (HTTP ${err.status})`)
     if (err.body && typeof err.body === 'object') {
       process.stderr.write(JSON.stringify(err.body, null, 2) + '\n')
     } else if (err.body) {
       process.stderr.write(String(err.body) + '\n')
     }
   } else {
-    process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`)
+    printError(err instanceof Error ? err.message : String(err))
   }
   process.exit(1)
 }
@@ -147,13 +146,15 @@ export function printTable(rows: readonly object[], columns: readonly string[]):
 
 function printTableImpl(rows: readonly Record<string, unknown>[], columns: readonly string[]): void {
   if (rows.length === 0) {
-    process.stdout.write('(no rows)\n')
+    process.stdout.write(style.label('(no rows)') + '\n')
     return
   }
   const cells = rows.map((row) => columns.map((c) => formatCell(row[c])))
   const widths = columns.map((c, i) => Math.max(c.length, ...cells.map((row) => row[i]!.length)))
-  process.stdout.write(columns.map((c, i) => pad(c, widths[i]!)).join('  ') + '\n')
-  process.stdout.write(widths.map((w) => '-'.repeat(w)).join('  ') + '\n')
+  process.stdout.write(
+    style.header(columns.map((c, i) => pad(c, widths[i]!)).join('  ')) + '\n',
+  )
+  process.stdout.write(style.label(widths.map((w) => '-'.repeat(w)).join('  ')) + '\n')
   for (const row of cells) {
     process.stdout.write(row.map((v, i) => pad(v, widths[i]!)).join('  ') + '\n')
   }
@@ -168,7 +169,7 @@ function formatCell(value: unknown): string {
 
 export function readContent(value: string | undefined): string {
   if (!value) {
-    process.stderr.write('Error: missing content; use --file <path> or --content <inline>\n')
+    printError('missing content; use --file <path> or --content <inline>')
     process.exit(1)
   }
   if (value.startsWith('@')) {

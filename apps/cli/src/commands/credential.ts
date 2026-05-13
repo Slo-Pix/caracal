@@ -5,10 +5,11 @@
 
 import { OAuthClient } from '@caracalai/oauth'
 import type { CliConfig } from '../config.ts'
+import { printError } from '../style.ts'
 
 export async function credentialReadCommand(resource: string, cfg: CliConfig): Promise<void> {
   if (!resource) {
-    process.stderr.write('Usage: caracal credential read <resource>\n')
+    printError('Usage: caracal credential read <resource>')
     process.exit(1)
   }
 

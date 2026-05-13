@@ -4,6 +4,7 @@
 // `caracal audit …` and `caracal explain <request_id>` debuggability commands.
 
 import type { CliConfig } from '../config.ts'
+import { printError } from '../style.ts'
 import {
   buildAdminClient,
   fail,
@@ -82,7 +83,7 @@ export async function explainCommand(argv: string[], cfg?: CliConfig): Promise<v
   const { positional, flags } = parseArgs(argv)
   const requestId = positional[0]
   if (!requestId) {
-    process.stderr.write('Usage: caracal explain <request_id> [--zone …] [--json]\n')
+    printError('Usage: caracal explain <request_id> [--zone …] [--json]')
     process.exit(1)
   }
   const zoneId = requireZone(ctx, flags)

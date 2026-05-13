@@ -5,6 +5,7 @@
 
 import type { CliConfig } from '../config.ts'
 import type { ProviderKind } from '@caracalai/admin'
+import { printSuccess } from '../style.ts'
 import {
   buildAdminClient,
   fail,
@@ -78,7 +79,7 @@ export async function providerCommand(argv: string[], cfg?: CliConfig): Promise<
         const id = positional[0]
         if (!id) return usage('provider delete <id> [--zone …]')
         await client.providers.delete(zoneId, id)
-        process.stdout.write(`deleted ${id}\n`)
+        printSuccess(`deleted ${id}`)
         return
       }
       case 'help':
