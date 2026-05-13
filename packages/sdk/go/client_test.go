@@ -165,3 +165,77 @@ func TestCoordinatorResponsesUseIDFallback(t *testing.T) {
 		t.Fatalf("unexpected coordinator request bodies: %#v", bodies)
 	}
 }
+
+func TestSpawnAgentDerivesIdempotencyKey(t *testing.T) {
+	var seen http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Clone()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"agent_session_id":"a-1"}`))
+	}))
+	defer srv.Close()
+	client := &sdk.CoordinatorClient{BaseURL: srv.URL}
+	_, err := sdk.SpawnAgent(context.Background(), client, "tok", sdk.SpawnRequest{
+		ZoneID: "z", ApplicationID: "app", SessionSID: "sid", ParentID: "parent",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := seen.Get("Idempotency-Key")
+	if len(key) != 64 {
+		t.Fatalf("expected 64-char idempotency key, got %q", key)
+	}
+}
+
+func TestSpawnAgentExplicitIdempotencyKey(t *testing.T) {
+	var seen http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Clone()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"agent_session_id":"a-1"}`))
+	}))
+	defer srv.Close()
+	client := &sdk.CoordinatorClient{BaseURL: srv.URL}
+	_, err := sdk.SpawnAgent(context.Background(), client, "tok", sdk.SpawnRequest{
+		ZoneID: "z", ApplicationID: "app", IdempotencyKey: "user-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := seen.Get("Idempotency-Key"); got != "user-key" {
+		t.Fatalf("expected user-key, got %q", got)
+	}
+}
+
+func TestFromEnvRejectsExpiredJWT(t *testing.T) {
+	// Header.Payload.Sig where payload claims exp=1000000 (year 1970).
+	expired := "eyJhbGciOiJFUzI1NiJ9.eyJleHAiOjEwMDAwMDB9.sig"
+	t.Setenv("CARACAL_COORDINATOR_URL", "http://coord")
+	t.Setenv("CARACAL_ZONE_ID", "z")
+	t.Setenv("CARACAL_APPLICATION_ID", "app")
+	t.Setenv("CARACAL_SUBJECT_TOKEN", expired)
+	if _, err := sdk.FromEnv(); err == nil {
+		t.Fatal("expected error for expired bootstrap token")
+	}
+}
+
+func TestFromEnvSortsResourcesLongestFirst(t *testing.T) {
+	t.Setenv("CARACAL_COORDINATOR_URL", "http://coord")
+	t.Setenv("CARACAL_ZONE_ID", "z")
+	t.Setenv("CARACAL_APPLICATION_ID", "app")
+	t.Setenv("CARACAL_SUBJECT_TOKEN", "tok")
+	t.Setenv("CARACAL_RESOURCES", strings.Join([]string{
+		"short=https://api.example.com/v1",
+		"long=https://api.example.com/v1/accounts/treasury",
+		"mid=https://api.example.com/v1/accounts",
+	}, ","))
+	c, err := sdk.FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Resources) != 3 || c.Resources[0].ResourceID != "long" ||
+		c.Resources[1].ResourceID != "mid" || c.Resources[2].ResourceID != "short" {
+		t.Fatalf("bindings not sorted longest-first: %+v", c.Resources)
+	}
+}

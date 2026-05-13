@@ -7,11 +7,15 @@ package sdk
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strings"
+	"time"
 )
 
 // Caracal binds the four config values needed to integrate with Caracal.
@@ -58,14 +62,68 @@ func FromEnv() (*Caracal, error) {
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("caracal: FromEnv missing %v", missing)
 	}
+	if err := validateSubjectToken(tok); err != nil {
+		return nil, err
+	}
 	return &Caracal{
 		Coordinator:   &CoordinatorClient{BaseURL: url},
 		ZoneID:        zone,
 		ApplicationID: app,
 		SubjectToken:  tok,
 		GatewayURL:    os.Getenv("CARACAL_GATEWAY_URL"),
-		Resources:     parseResourceBindings(os.Getenv("CARACAL_RESOURCES")),
+		Resources:     sortBindingsLongestFirst(parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))),
 	}, nil
+}
+
+// sortBindingsLongestFirst returns a copy of bindings sorted by upstream prefix
+// length descending so that the most specific prefix wins during gateway
+// routing. Stable across equal lengths.
+func sortBindingsLongestFirst(bindings []ResourceBinding) []ResourceBinding {
+	if len(bindings) <= 1 {
+		return bindings
+	}
+	out := append([]ResourceBinding(nil), bindings...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return len(out[i].UpstreamPrefix) > len(out[j].UpstreamPrefix)
+	})
+	return out
+}
+
+// validateSubjectToken performs a local sanity check on the bootstrap subject
+// token. When the token has a JWT shape, decodes the payload and rejects
+// tokens that are malformed or already expired. Opaque tokens are accepted.
+func validateSubjectToken(token string) error {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		payload, err = base64.URLEncoding.DecodeString(parts[1])
+		if err != nil {
+			return nil
+		}
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return nil
+	}
+	if claims.Exp == 0 {
+		return nil
+	}
+	if claims.Exp <= time.Now().Unix() {
+		return fmt.Errorf("caracal: CARACAL_SUBJECT_TOKEN is expired — refresh the bootstrap token before starting")
+	}
+	return nil
+}
+
+// Close releases any persistent transport state held by Caracal. Currently a
+// no-op placeholder for symmetry with Python and TS SDKs; safe to call from
+// shutdown handlers.
+func (c *Caracal) Close() error {
+	return nil
 }
 
 // parseResourceBindings reads the CARACAL_RESOURCES env format

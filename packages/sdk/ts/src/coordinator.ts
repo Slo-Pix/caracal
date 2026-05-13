@@ -33,6 +33,7 @@ export interface SpawnRequest {
   kind?: AgentKind;
   ttlSeconds?: number;
   metadata?: Record<string, unknown>;
+  idempotencyKey?: string;
 }
 
 export interface SpawnResponse {
@@ -62,14 +63,17 @@ async function call<T>(
   path: string,
   bearer: string,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const fetchFn = client.fetchImpl ?? fetch;
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    authorization: `Bearer ${bearer}`,
+    ...(extraHeaders ?? {}),
+  };
   const res = await fetchFn(`${client.baseUrl}${path}`, {
     method,
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${bearer}`,
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) {
@@ -84,16 +88,49 @@ export async function spawnAgent(
   bearer: string,
   req: SpawnRequest,
 ): Promise<SpawnResponse> {
-  const res = await call<SpawnResponse>(client, "POST", `/zones/${encodeURIComponent(req.zoneId)}/agents`, bearer, {
-    application_id: req.applicationId,
-    session_sid: req.sessionSid,
-    parent_id: req.parentId,
-    kind: req.kind ?? AgentKind.Instance,
-    ttl_seconds: req.ttlSeconds,
-    metadata: req.metadata,
-  });
+  const key = req.idempotencyKey ?? deriveIdempotencyKey(req);
+  const headers = key ? { "idempotency-key": key } : undefined;
+  const res = await call<SpawnResponse>(
+    client,
+    "POST",
+    `/zones/${encodeURIComponent(req.zoneId)}/agents`,
+    bearer,
+    {
+      application_id: req.applicationId,
+      session_sid: req.sessionSid,
+      parent_id: req.parentId,
+      kind: req.kind ?? AgentKind.Instance,
+      ttl_seconds: req.ttlSeconds,
+      metadata: req.metadata,
+    },
+    headers,
+  );
   if (!res.agent_session_id && res.id) res.agent_session_id = res.id;
   return res;
+}
+
+/**
+ * Stable key for SDK-issued spawn retries. Returns undefined when no stable
+ * inputs are present — in that case the caller's retry would still require a
+ * fresh session.
+ */
+function deriveIdempotencyKey(req: SpawnRequest): string | undefined {
+  if (!req.sessionSid && !req.parentId) return undefined;
+  const seed = [
+    req.applicationId,
+    req.sessionSid ?? "",
+    req.parentId ?? "",
+    String(req.kind ?? AgentKind.Instance),
+  ].join("|");
+  return sha256Hex(seed);
+}
+
+function sha256Hex(input: string): string {
+  // Node has node:crypto. Browsers/Bun expose WebCrypto, but spawn is always
+  // server-side here, so the sync createHash path is acceptable.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createHash } = require("node:crypto") as typeof import("node:crypto");
+  return createHash("sha256").update(input).digest("hex");
 }
 
 export async function terminateAgent(

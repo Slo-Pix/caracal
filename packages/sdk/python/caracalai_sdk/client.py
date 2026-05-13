@@ -47,6 +47,15 @@ class CaracalConfig:
     default_kind: AgentKind = AgentKind.INSTANCE
     default_ttl_seconds: int | None = None
 
+    def __post_init__(self) -> None:
+        self.resources = sort_bindings_longest_first(self.resources)
+
+
+def sort_bindings_longest_first(bindings: list[ResourceBinding]) -> list[ResourceBinding]:
+    """Sort resource bindings by upstream prefix length descending so the most
+    specific prefix wins during gateway routing. Stable across equal lengths."""
+    return sorted(bindings, key=lambda b: len(b.upstream_prefix), reverse=True)
+
 
 def _parse_resource_bindings(raw: str | None) -> list[ResourceBinding]:
     if not raw:
@@ -83,6 +92,33 @@ def _load_resource_bindings_file(path: str | None) -> list[ResourceBinding]:
             for rid, prefix in items if rid and prefix]
 
 
+def _validate_subject_token(token: str) -> None:
+    """Local sanity check on the bootstrap subject token. When the token has a
+    JWT shape (three dot-separated segments), decodes the payload (no signature
+    verification — that's the verifier's job) and rejects tokens that are
+    malformed or already expired. Opaque tokens are accepted unchanged."""
+    import base64
+    import json
+    import time
+
+    parts = token.split(".")
+    if len(parts) != 3:
+        return
+    payload_b64 = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64.encode("ascii")))
+    except Exception:
+        return
+    exp = payload.get("exp")
+    if exp is None:
+        return
+    if not isinstance(exp, (int, float)) or exp <= time.time():
+        raise RuntimeError(
+            "CARACAL_SUBJECT_TOKEN is expired or has an invalid `exp` claim — "
+            "refresh the bootstrap token before starting the application"
+        )
+
+
 class Caracal:
     def __init__(self, config: CaracalConfig) -> None:
         self.config = config
@@ -101,6 +137,7 @@ class Caracal:
         missing = [k for k, v in required.items() if not v]
         if missing:
             raise RuntimeError(f"Caracal.from_env: missing {', '.join(missing)}")
+        _validate_subject_token(required["CARACAL_SUBJECT_TOKEN"])
         return cls(
             CaracalConfig(
                 coordinator=CoordinatorClient(base_url=required["CARACAL_COORDINATOR_URL"]),
@@ -214,6 +251,10 @@ class Caracal:
 
     def current(self) -> CaracalContext | None:
         return current()
+
+    async def close(self) -> None:
+        """Release the coordinator's HTTP client. Idempotent."""
+        await self.config.coordinator.close()
 
     def middleware(self) -> Callable[[ASGIApp], CaracalASGIMiddleware]:
         """ASGI middleware factory. Install at module load — `app.add_middleware()`

@@ -201,4 +201,50 @@ describe("agent lifecycle and delegation", () => {
       ttl_seconds: 30,
     });
   });
+
+  it("derives a stable Idempotency-Key on spawn when session_sid or parent_id is present", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fakeFetch = vi.fn(async (input: any, init: RequestInit = {}) => {
+      calls.push({ url: String(input), init });
+      if (init.method === "POST" && String(input).endsWith("/agents")) {
+        return new Response(JSON.stringify({ id: "agent-1" }), { status: 200 });
+      }
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+    const c = new Caracal({
+      ...dummyConfig,
+      coordinator: { baseUrl: "https://coordinator.example.com", fetchImpl: fakeFetch },
+    });
+    await c.spawn(async () => { return; }, { sessionSid: "sid-1", parentId: "parent-1" });
+    const headers = new Headers(calls[0].init.headers as HeadersInit);
+    const key = headers.get("idempotency-key");
+    expect(key).toBeTruthy();
+    expect(key!.length).toBe(64);
+  });
+});
+
+describe("config resource sorting and token validation", () => {
+  it("sorts bindings longest-prefix-first", () => {
+    const c = new Caracal({
+      ...dummyConfig,
+      resources: [
+        { resourceId: "short", upstreamPrefix: "https://api.example.com/v1" },
+        { resourceId: "long", upstreamPrefix: "https://api.example.com/v1/accounts/treasury" },
+        { resourceId: "mid", upstreamPrefix: "https://api.example.com/v1/accounts" },
+      ],
+    });
+    expect(c.config.resources?.map((b) => b.resourceId)).toEqual(["long", "mid", "short"]);
+  });
+
+  it("rejects expired bootstrap JWT in fromEnv", () => {
+    const header = Buffer.from('{"alg":"ES256"}').toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ exp: 1_000_000 })).toString("base64url");
+    const token = `${header}.${payload}.sig`;
+    expect(() => Caracal.fromEnv({
+      CARACAL_COORDINATOR_URL: "http://coord",
+      CARACAL_ZONE_ID: "z",
+      CARACAL_APPLICATION_ID: "app",
+      CARACAL_SUBJECT_TOKEN: token,
+    } as any)).toThrow(/expired/);
+  });
 });

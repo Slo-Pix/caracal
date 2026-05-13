@@ -8,6 +8,8 @@ package sdk
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,13 +40,14 @@ const (
 
 // SpawnRequest parameters for coordinator agent spawn.
 type SpawnRequest struct {
-	ZoneID        string
-	ApplicationID string
-	SessionSID    string
-	ParentID      string
-	Kind          AgentKind
-	TTLSeconds    int
-	Metadata      map[string]any
+	ZoneID         string
+	ApplicationID  string
+	SessionSID     string
+	ParentID       string
+	Kind           AgentKind
+	TTLSeconds     int
+	Metadata       map[string]any
+	IdempotencyKey string
 }
 
 // SpawnResponse from the coordinator.
@@ -115,17 +118,38 @@ func SpawnAgent(ctx context.Context, client *CoordinatorClient, bearer string, r
 		body["metadata"] = req.Metadata
 	}
 
+	extra := map[string]string{}
+	key := req.IdempotencyKey
+	if key == "" {
+		key = deriveIdempotencyKey(req)
+	}
+	if key != "" {
+		extra["Idempotency-Key"] = key
+	}
+
 	var out SpawnResponse
-	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/agents", req.ZoneID), bearer, body, &out)
+	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/agents", req.ZoneID), bearer, body, extra, &out)
 	if out.AgentSessionID == "" {
 		out.AgentSessionID = out.ID
 	}
 	return out, err
 }
 
+// deriveIdempotencyKey produces a stable key for SDK-issued spawn retries.
+// Returns empty when no stable inputs are present — in that case the caller's
+// retry would still require a fresh session.
+func deriveIdempotencyKey(req SpawnRequest) string {
+	if req.SessionSID == "" && req.ParentID == "" {
+		return ""
+	}
+	seed := req.ApplicationID + "|" + req.SessionSID + "|" + req.ParentID + "|" + string(req.Kind)
+	sum := sha256.Sum256([]byte(seed))
+	return hex.EncodeToString(sum[:])
+}
+
 // TerminateAgent calls DELETE /zones/:zoneId/agents/:id.
 func TerminateAgent(ctx context.Context, client *CoordinatorClient, bearer, zoneID, agentSessionID string) {
-	_ = doJSON(ctx, client, "DELETE", fmt.Sprintf("/zones/%s/agents/%s", zoneID, agentSessionID), bearer, nil, nil)
+	_ = doJSON(ctx, client, "DELETE", fmt.Sprintf("/zones/%s/agents/%s", zoneID, agentSessionID), bearer, nil, nil, nil)
 }
 
 // CreateDelegation calls POST /zones/:zoneId/delegations.
@@ -145,14 +169,14 @@ func CreateDelegation(ctx context.Context, client *CoordinatorClient, bearer str
 	}
 
 	var out DelegationResponse
-	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/delegations", req.ZoneID), bearer, body, &out)
+	err := doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/delegations", req.ZoneID), bearer, body, nil, &out)
 	if out.DelegationEdgeID == "" {
 		out.DelegationEdgeID = out.ID
 	}
 	return out, err
 }
 
-func doJSON(ctx context.Context, client *CoordinatorClient, method, path, bearer string, body any, out any) error {
+func doJSON(ctx context.Context, client *CoordinatorClient, method, path, bearer string, body any, extraHeaders map[string]string, out any) error {
 	var bodyReader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -170,6 +194,9 @@ func doJSON(ctx context.Context, client *CoordinatorClient, method, path, bearer
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Authorization", "Bearer "+bearer)
+	for k, v := range extraHeaders {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := client.http().Do(req)
 	if err != nil {

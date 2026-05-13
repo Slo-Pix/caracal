@@ -96,6 +96,69 @@ class SpawnAgentTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["ttl_seconds"], 60)
         self.assertEqual(body["metadata"], {"purpose": "test"})
 
+    async def test_derives_idempotency_key_when_stable_inputs_present(self) -> None:
+        captured: list[httpx.Request] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req)
+            return httpx.Response(200, json={"agent_session_id": "a-1"})
+
+        await spawn_agent(
+            _client(handler), "tok",
+            SpawnRequest(
+                zone_id="z",
+                application_id="app",
+                session_sid="sid-1",
+                parent_id="parent-1",
+            ),
+        )
+        key = captured[0].headers.get("idempotency-key")
+        self.assertIsNotNone(key)
+        self.assertEqual(len(key), 64)
+
+    async def test_explicit_idempotency_key_overrides_derived(self) -> None:
+        captured: list[httpx.Request] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req)
+            return httpx.Response(200, json={"agent_session_id": "a-1"})
+
+        await spawn_agent(
+            _client(handler), "tok",
+            SpawnRequest(
+                zone_id="z",
+                application_id="app",
+                session_sid="sid-1",
+                idempotency_key="user-supplied-key",
+            ),
+        )
+        self.assertEqual(captured[0].headers.get("idempotency-key"), "user-supplied-key")
+
+    async def test_no_idempotency_key_when_no_stable_inputs(self) -> None:
+        captured: list[httpx.Request] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req)
+            return httpx.Response(200, json={"agent_session_id": "a-1"})
+
+        await spawn_agent(
+            _client(handler), "tok",
+            SpawnRequest(zone_id="z", application_id="app"),
+        )
+        self.assertNotIn("idempotency-key", captured[0].headers)
+
+
+class CoordinatorLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_is_idempotent(self) -> None:
+        async def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"agent_session_id": "a-1"})
+
+        c = _client(handler)
+        c._http()
+        await c.close()
+        await c.close()
+        self.assertIsNone(c._client)
+
 
 class TerminateAgentTests(unittest.IsolatedAsyncioTestCase):
     async def test_swallows_errors(self) -> None:

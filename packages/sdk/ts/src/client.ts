@@ -60,7 +60,11 @@ export class Caracal {
   private agentStartHooks: LifecycleHook[] = [];
   private agentEndHooks: LifecycleHook[] = [];
 
-  constructor(public readonly config: CaracalConfig) {}
+  constructor(public readonly config: CaracalConfig) {
+    if (config.resources && config.resources.length > 1) {
+      this.config = { ...config, resources: sortBindingsLongestFirst(config.resources) };
+    }
+  }
 
   static fromEnv(env: NodeJS.ProcessEnv = process.env): Caracal {
     const url = env.CARACAL_COORDINATOR_URL;
@@ -77,6 +81,7 @@ export class Caracal {
     if (missing.length) {
       throw new Error(`Caracal.fromEnv: missing ${missing.join(", ")}`);
     }
+    validateSubjectToken(subjectToken!);
     return new Caracal({
       coordinator: { baseUrl: url! },
       zoneId: zoneId!,
@@ -85,6 +90,10 @@ export class Caracal {
       gatewayUrl,
       resources: parseResourceBindings(env.CARACAL_RESOURCES),
     });
+  }
+
+  async close(): Promise<void> {
+    // Reserved for future transport state. Symmetric with Python/Go SDKs.
   }
 
   spawn<T>(fn: () => Promise<T>, opts: SpawnOptions = {}): Promise<T> {
@@ -286,5 +295,46 @@ function parseResourceBindings(raw: string | undefined): ResourceBinding[] | und
       out.push({ resourceId, upstreamPrefix });
     }
   }
-  return out.length ? out : undefined;
+  return out.length ? sortBindingsLongestFirst(out) : undefined;
+}
+
+/**
+ * Sort resource bindings by upstream prefix length descending so the most
+ * specific prefix wins during gateway routing. Returns a new array; stable
+ * across equal lengths.
+ */
+export function sortBindingsLongestFirst(bindings: ResourceBinding[]): ResourceBinding[] {
+  return [...bindings].sort((a, b) => b.upstreamPrefix.length - a.upstreamPrefix.length);
+}
+
+/**
+ * Local sanity check on the bootstrap subject token. When the token has a JWT
+ * shape, decodes the payload and rejects tokens that are malformed or already
+ * expired. Opaque tokens are accepted.
+ */
+function validateSubjectToken(token: string): void {
+  const parts = token.split(".");
+  if (parts.length !== 3) return;
+  let payloadJson: string;
+  try {
+    const padded = parts[1] + "=".repeat((4 - (parts[1].length % 4)) % 4);
+    const b64 = padded.replace(/-/g, "+").replace(/_/g, "/");
+    payloadJson = typeof Buffer !== "undefined"
+      ? Buffer.from(b64, "base64").toString("utf-8")
+      : atob(b64);
+  } catch {
+    return;
+  }
+  let payload: { exp?: number };
+  try {
+    payload = JSON.parse(payloadJson);
+  } catch {
+    return;
+  }
+  if (typeof payload.exp !== "number") return;
+  if (payload.exp <= Math.floor(Date.now() / 1000)) {
+    throw new Error(
+      "CARACAL_SUBJECT_TOKEN is expired — refresh the bootstrap token before starting the application",
+    );
+  }
 }

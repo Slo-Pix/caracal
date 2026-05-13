@@ -31,6 +31,13 @@ class CoordinatorClient:
             self._client = httpx.AsyncClient(timeout=self.timeout)
         return self._client
 
+    async def close(self) -> None:
+        """Close the lazy HTTP client. Idempotent and safe to call from FastAPI
+        lifespan shutdown."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
 
 @dataclass
 class DelegationConstraints:
@@ -61,6 +68,7 @@ class SpawnRequest:
     kind: AgentKind = AgentKind.INSTANCE
     ttl_seconds: int | None = None
     metadata: dict[str, Any] | None = None
+    idempotency_key: str | None = None
 
 
 @dataclass
@@ -101,10 +109,15 @@ async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest)
     if req.metadata:
         body["metadata"] = req.metadata
 
+    headers = {"authorization": f"Bearer {bearer}"}
+    key = req.idempotency_key or _derive_idempotency_key(req)
+    if key:
+        headers["idempotency-key"] = key
+
     resp = await client._http().post(
         f"{client.base_url}/zones/{req.zone_id}/agents",
         json=body,
-        headers={"authorization": f"Bearer {bearer}"},
+        headers=headers,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -112,6 +125,23 @@ async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest)
     if not agent_session_id:
         raise KeyError("agent_session_id")
     return SpawnResponse(agent_session_id=agent_session_id, id=data.get("id"))
+
+
+def _derive_idempotency_key(req: SpawnRequest) -> str | None:
+    """Stable key for SDK-issued spawn retries. Skipped when the caller has
+    given no stable inputs (no session_sid and no parent_id) — in that case a
+    retry would still need a fresh session anyway."""
+    import hashlib
+
+    if not req.session_sid and not req.parent_id:
+        return None
+    seed = "|".join([
+        req.application_id,
+        req.session_sid or "",
+        req.parent_id or "",
+        str(req.kind),
+    ])
+    return hashlib.sha256(seed.encode("utf-8")).hexdigest()
 
 
 async def terminate_agent(

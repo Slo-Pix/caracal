@@ -48,6 +48,40 @@ class FromEnvTests(unittest.TestCase):
         self.assertEqual(c.config.zone_id, "z1")
         self.assertEqual(c.config.subject_token, "t1")
 
+    def test_rejects_expired_jwt_subject_token(self) -> None:
+        import base64
+        import json
+
+        header = base64.urlsafe_b64encode(b'{"alg":"ES256"}').rstrip(b"=").decode()
+        payload = base64.urlsafe_b64encode(
+            json.dumps({"exp": 1_000_000}).encode()
+        ).rstrip(b"=").decode()
+        token = f"{header}.{payload}.sig"
+        with self.assertRaises(RuntimeError) as cm:
+            Caracal.from_env({
+                "CARACAL_COORDINATOR_URL": "http://x",
+                "CARACAL_ZONE_ID": "z1",
+                "CARACAL_APPLICATION_ID": "a1",
+                "CARACAL_SUBJECT_TOKEN": token,
+            })
+        self.assertIn("expired", str(cm.exception))
+
+
+class ResourceBindingSortTests(unittest.TestCase):
+    def test_post_init_sorts_bindings_longest_prefix_first(self) -> None:
+        cfg = CaracalConfig(
+            coordinator=CoordinatorClient(base_url="http://x"),
+            zone_id="z",
+            application_id="a",
+            subject_token="t",
+            resources=[
+                ResourceBinding("short", "https://api.example.com/v1"),
+                ResourceBinding("long", "https://api.example.com/v1/accounts/treasury"),
+                ResourceBinding("mid", "https://api.example.com/v1/accounts"),
+            ],
+        )
+        self.assertEqual([b.resource_id for b in cfg.resources], ["long", "mid", "short"])
+
 
 def _build_caracal() -> Caracal:
     return Caracal(
@@ -97,6 +131,35 @@ class GatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
             response = await client.get("https://api.example.com/v1/events?limit=10")
 
         self.assertEqual(response.status_code, 204)
+
+    async def test_longest_prefix_wins_when_bindings_overlap(self) -> None:
+        c = Caracal(
+            CaracalConfig(
+                coordinator=CoordinatorClient(base_url="http://coord"),
+                zone_id="z",
+                application_id="app",
+                subject_token="tok",
+                gateway_url="https://gateway.example.com/proxy",
+                resources=[
+                    ResourceBinding("broad", "https://api.example.com/v1"),
+                    ResourceBinding("treasury", "https://api.example.com/v1/accounts/treasury"),
+                    ResourceBinding("accounts", "https://api.example.com/v1/accounts"),
+                ],
+            )
+        )
+
+        seen: list[str] = []
+
+        async def handler(request):
+            seen.append(request.headers["X-Caracal-Resource"])
+            return httpx.Response(204)
+
+        async with c.transport(transport=httpx.MockTransport(handler)) as client:
+            await client.get("https://api.example.com/v1/accounts/treasury/balance")
+            await client.get("https://api.example.com/v1/accounts/payable")
+            await client.get("https://api.example.com/v1/markets/spot")
+
+        self.assertEqual(seen, ["treasury", "accounts", "broad"])
 
 
 class LifecycleTests(unittest.IsolatedAsyncioTestCase):
