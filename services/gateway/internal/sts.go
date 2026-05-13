@@ -18,28 +18,11 @@ import (
 	"time"
 
 	sharederr "github.com/garudex-labs/caracal/core/errors"
+	corests "github.com/garudex-labs/caracal/core/sts"
 )
 
 // stsErrorBodyLimit caps the bytes we read from STS error responses.
 const stsErrorBodyLimit = 16 * 1024
-
-// upstreamDirective mirrors STS UpstreamDirective so the gateway can build the
-// outbound Authorization header from the credential class STS chose for the resource.
-type upstreamDirective struct {
-	URL           string `json:"url"`
-	AuthMode      string `json:"auth_mode"`
-	AuthHeader    string `json:"auth_header,omitempty"`
-	AuthScheme    string `json:"auth_scheme,omitempty"`
-	ProviderToken string `json:"provider_token,omitempty"`
-	ExpiresAt     int64  `json:"expires_at,omitempty"`
-}
-
-// tokenResponse mirrors the STS RFC 8693 response shape.
-type tokenResponse struct {
-	AccessToken string                       `json:"access_token"`
-	ExpiresIn   int                          `json:"expires_in"`
-	Upstreams   map[string]upstreamDirective `json:"upstreams"`
-}
 
 // stsClient performs token exchanges against the configured STS.
 type stsClient struct {
@@ -50,7 +33,7 @@ type stsClient struct {
 // stsResult holds the successful token and upstream directive from a single Exchange call.
 type stsResult struct {
 	AccessToken string
-	Upstream    upstreamDirective
+	Upstream    corests.UpstreamDirective
 	Latency     time.Duration
 }
 
@@ -144,7 +127,7 @@ func (c *stsClient) Exchange(ctx context.Context, subjectToken string, bind bind
 		return exchangeOutcome{Status: http.StatusBadGateway,
 			ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: fmt.Errorf("sts response content-type invalid")}
 	}
-	var tr tokenResponse
+	var tr corests.TokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, stsErrorBodyLimit)).Decode(&tr); err != nil {
 		return exchangeOutcome{Status: http.StatusBadGateway,
 			ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: err}

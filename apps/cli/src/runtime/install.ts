@@ -16,7 +16,7 @@ export interface RuntimePaths {
   provisionScript: string
 }
 
-export function defaultRuntimeHome(): string {
+function defaultRuntimeHome(): string {
   if (process.env.CARACAL_HOME) return process.env.CARACAL_HOME
   if (platform() === 'darwin') return join(homedir(), 'Library', 'Application Support', 'caracal')
   const xdg = process.env.XDG_DATA_HOME

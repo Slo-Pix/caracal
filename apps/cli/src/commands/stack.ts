@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { CARACAL_VERSION } from '../runtime/version.ts'
 import { installRuntimeAssets, runtimePaths, seedEnvFile } from '../runtime/install.ts'
 
-export interface StackPaths {
+interface StackPaths {
   composeFile: string
   envFile: string
   cwd: string
