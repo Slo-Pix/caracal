@@ -3,11 +3,13 @@
 //
 // `caracal purge`: centralized cleanup for selectable targets across dev and runtime installs.
 
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, rmSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { createInterface } from 'node:readline'
 import { join } from 'node:path'
 import { resolveCliConfigPath } from '@caracalai/core/cli'
+import { CARACAL_VERSION } from '../runtime/version.ts'
 import { runtimePaths } from '../runtime/install.ts'
 import { resolvePaths } from './stack.ts'
 import { showHelp } from './shared.ts'
@@ -21,7 +23,7 @@ import {
   printHeader,
 } from '../style.ts'
 
-type TargetId = 'stack' | 'volumes' | 'logs' | 'config' | 'runtime' | 'cache'
+type TargetId = 'stack' | 'volumes' | 'logs' | 'config' | 'runtime' | 'cache' | 'images' | 'binary'
 
 interface Target {
   id: TargetId
@@ -31,11 +33,19 @@ interface Target {
   run: (ctx: PurgeContext) => Promise<void>
 }
 
+interface ComposeStack {
+  label: string
+  composeFile: string
+  envFile: string
+  cwd: string
+}
+
 interface PurgeContext {
   mode: 'dev' | 'runtime'
   composeFile: string
   envFile: string
   cwd: string
+  stacks: ComposeStack[]
   configPath: string | undefined
   runtimeHome: string
   repoRoot: string | undefined
@@ -56,12 +66,14 @@ function purgeHelp(): never {
       '  config      Remove caracal.toml (zone client secret and config)',
       '  runtime     Remove runtime assets at $CARACAL_HOME (.env, compose.yml)',
       '  cache       Remove build artifacts: apps/*/dist, coverage/, node_modules/.cache (dev only)',
-      '  all         All targets except `volumes` and `runtime` (use --include-destructive to add them)',
+      '  images      Remove cached Caracal docker images (caracal/*, ghcr.io/garudex-labs/caracal-*)',
+      '  binary      Uninstall caracal CLI binaries from $CARACAL_INSTALL_DIR (default ~/.local/bin)',
+      '  all         Purge every applicable target (destructive — wipes volumes, runtime, config, images, binary)',
       '',
       'Options:',
       '  --yes, -y                Skip confirmation prompt',
       '  --dry-run                Show what would be removed without doing it',
-      '  --include-destructive    With `all`, also wipe `volumes` and `runtime`',
+      '  --safe                   With `all`, skip destructive targets (volumes, runtime)',
       '  --help, -h               Show this help',
       '',
     ],
@@ -73,11 +85,23 @@ function buildContext(dryRun: boolean): PurgeContext {
   const runtime = runtimePaths()
   const configPath = resolveCliConfigPath()
   const repoRoot = paths.mode === 'dev' ? paths.cwd : undefined
+  const stacks: ComposeStack[] = [
+    { label: paths.mode, composeFile: paths.composeFile, envFile: paths.envFile, cwd: paths.cwd },
+  ]
+  if (paths.mode === 'dev' && existsSync(runtime.composeFile)) {
+    stacks.push({
+      label: 'runtime',
+      composeFile: runtime.composeFile,
+      envFile: existsSync(runtime.envFile) ? runtime.envFile : paths.envFile,
+      cwd: runtime.home,
+    })
+  }
   return {
     mode: paths.mode,
     composeFile: paths.composeFile,
     envFile: paths.envFile,
     cwd: paths.cwd,
+    stacks,
     configPath,
     runtimeHome: runtime.home,
     repoRoot,
@@ -85,16 +109,21 @@ function buildContext(dryRun: boolean): PurgeContext {
   }
 }
 
-function runCompose(args: string[], ctx: PurgeContext): Promise<number> {
+function runCompose(args: string[], ctx: PurgeContext, stack?: ComposeStack): Promise<number> {
+  const s = stack ?? ctx.stacks[0]!
   return new Promise((resolveExit) => {
     if (ctx.dryRun) {
-      process.stdout.write(`  ${style.label('[dry-run]')} docker compose ${style.code(args.join(' '))}\n`)
+      process.stdout.write(`  ${style.label('[dry-run]')} docker compose ${style.code(`-f ${s.composeFile} ${args.join(' ')}`)}\n`)
       return resolveExit(0)
+    }
+    const env: NodeJS.ProcessEnv = { ...process.env }
+    if (!env.CARACAL_VERSION) {
+      env.CARACAL_VERSION = CARACAL_VERSION.startsWith('v') ? CARACAL_VERSION : `v${CARACAL_VERSION}`
     }
     const proc = spawn(
       'docker',
-      ['compose', '--env-file', ctx.envFile, '-f', ctx.composeFile, ...args],
-      { stdio: 'inherit', cwd: ctx.cwd },
+      ['compose', '--env-file', s.envFile, '-f', s.composeFile, ...args],
+      { stdio: 'inherit', cwd: s.cwd, env },
     )
     proc.on('exit', (code) => resolveExit(typeof code === 'number' ? code : 1))
     proc.on('error', (err) => {
@@ -102,6 +131,42 @@ function runCompose(args: string[], ctx: PurgeContext): Promise<number> {
       resolveExit(127)
     })
   })
+}
+
+function listCaracalImages(): string[] {
+  const out = spawnSync('docker', ['images', '--format', '{{.Repository}}:{{.Tag}}'], { encoding: 'utf8' })
+  if (out.status !== 0 || typeof out.stdout !== 'string') return []
+  return out.stdout
+    .split('\n')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && (s.startsWith('caracal/') || s.startsWith('ghcr.io/garudex-labs/caracal-')))
+}
+
+function removeImages(images: string[], ctx: PurgeContext): Promise<number> {
+  return new Promise((resolveExit) => {
+    if (ctx.dryRun) {
+      for (const img of images) {
+        process.stdout.write(`  ${style.label('[dry-run]')} docker image rm ${style.code(img)}\n`)
+      }
+      return resolveExit(0)
+    }
+    const proc = spawn('docker', ['image', 'rm', '-f', ...images], { stdio: 'inherit' })
+    proc.on('exit', (code) => resolveExit(typeof code === 'number' ? code : 1))
+    proc.on('error', (err) => {
+      process.stderr.write(`  ${style.error(SYMBOL.fail)} docker image rm failed: ${err.message}\n`)
+      resolveExit(127)
+    })
+  })
+}
+
+async function runComposeAll(args: string[], ctx: PurgeContext): Promise<void> {
+  for (const stack of ctx.stacks) {
+    if (ctx.stacks.length > 1) {
+      process.stdout.write(`  ${style.label(`[${stack.label}]`)} ${stack.composeFile}\n`)
+    }
+    const code = await runCompose(args, ctx, stack)
+    if (code !== 0) throw new Error(`compose ${args.join(' ')} exited ${code} for ${stack.label} stack`)
+  }
 }
 
 function removePath(path: string, ctx: PurgeContext, label: string): void {
@@ -122,21 +187,25 @@ const TARGETS: Target[] = [
   {
     id: 'stack',
     label: 'Stop & remove containers',
-    describe: (ctx) => `compose down (${ctx.mode} stack)`,
+    describe: (ctx) =>
+      ctx.stacks.length > 1
+        ? `compose down --remove-orphans across ${ctx.stacks.length} projects (${ctx.stacks.map((s) => s.label).join(', ')})`
+        : `compose down --remove-orphans (${ctx.stacks[0]!.label} stack)`,
     available: () => true,
     run: async (ctx) => {
-      const code = await runCompose(['down'], ctx)
-      if (code !== 0) throw new Error(`compose down exited ${code}`)
+      await runComposeAll(['down', '--remove-orphans'], ctx)
     },
   },
   {
     id: 'volumes',
     label: 'Remove data volumes (DESTRUCTIVE)',
-    describe: () => 'compose down -v — wipes Postgres and Redis volumes',
+    describe: (ctx) =>
+      ctx.stacks.length > 1
+        ? `compose down -v --remove-orphans across ${ctx.stacks.length} projects — wipes all Caracal data`
+        : 'compose down -v --remove-orphans — wipes Postgres and Redis volumes',
     available: () => true,
     run: async (ctx) => {
-      const code = await runCompose(['down', '-v'], ctx)
-      if (code !== 0) throw new Error(`compose down -v exited ${code}`)
+      await runComposeAll(['down', '-v', '--remove-orphans'], ctx)
     },
   },
   {
@@ -145,8 +214,7 @@ const TARGETS: Target[] = [
     describe: () => 'compose down (without -v) drops log files; restart with `caracal up`',
     available: () => true,
     run: async (ctx) => {
-      const code = await runCompose(['down'], ctx)
-      if (code !== 0) throw new Error(`compose down exited ${code}`)
+      await runComposeAll(['down', '--remove-orphans'], ctx)
     },
   },
   {
@@ -195,7 +263,47 @@ const TARGETS: Target[] = [
       }
     },
   },
+  {
+    id: 'images',
+    label: 'Remove Caracal docker images (DESTRUCTIVE)',
+    describe: (ctx) => {
+      const imgs = listCaracalImages()
+      if (imgs.length === 0) return '(no caracal images cached)'
+      return `${imgs.length} image(s): ${imgs.slice(0, 3).join(', ')}${imgs.length > 3 ? ', …' : ''}`
+    },
+    available: () => listCaracalImages().length > 0,
+    run: async (ctx) => {
+      const imgs = listCaracalImages()
+      if (imgs.length === 0) {
+        process.stdout.write(`  ${style.label('(skip) images: none cached')}\n`)
+        return
+      }
+      const code = await removeImages(imgs, ctx)
+      if (code !== 0) throw new Error(`docker image rm exited ${code}`)
+    },
+  },
+  {
+    id: 'binary',
+    label: 'Uninstall caracal CLI binaries (DESTRUCTIVE)',
+    describe: (ctx) => {
+      const found = caracalBinaries()
+      if (found.length === 0) return '(no caracal binaries on $PATH)'
+      return found.join(', ')
+    },
+    available: () => caracalBinaries().length > 0,
+    run: async (ctx) => {
+      for (const bin of caracalBinaries()) {
+        removePath(bin, ctx, `bin/${bin.split('/').pop()}`)
+      }
+    },
+  },
 ]
+
+function caracalBinaries(): string[] {
+  const installDir = process.env.CARACAL_INSTALL_DIR ?? join(homedir(), '.local', 'bin')
+  const candidates = [join(installDir, 'caracal'), join(installDir, 'caracal-tui')]
+  return candidates.filter((p) => existsSync(p))
+}
 
 function targetById(id: string): Target | undefined {
   return TARGETS.find((t) => t.id === id)
@@ -214,17 +322,16 @@ function prompt(question: string): Promise<string> {
 async function selectInteractively(ctx: PurgeContext): Promise<Target[]> {
   const usable = TARGETS.filter((t) => t.available(ctx))
   printHeader('Select purge targets')
-  process.stdout.write(style.label('Enter comma-separated numbers, "all", or "q" to quit.\n'))
+  process.stdout.write(style.label('Enter comma-separated numbers, "all" for full reset, "safe" to skip destructive, or "q" to quit.\n'))
   usable.forEach((t, i) => {
-    const destructive = t.id === 'volumes' || t.id === 'runtime'
+    const destructive = isDestructive(t)
     const labelStr = destructive ? style.warn(t.label) : t.label
     process.stdout.write(`  ${style.title(`${i + 1}.`)} ${labelStr} ${style.label(`— ${t.describe(ctx)}`)}\n`)
   })
-  const answer = await prompt(style.prompt('> '))
-  if (answer === '' || answer.toLowerCase() === 'q') return []
-  if (answer.toLowerCase() === 'all') {
-    return usable.filter((t) => t.id !== 'volumes' && t.id !== 'runtime')
-  }
+  const answer = (await prompt(style.prompt('> '))).toLowerCase()
+  if (answer === '' || answer === 'q') return []
+  if (answer === 'all') return usable
+  if (answer === 'safe') return usable.filter((t) => !isDestructive(t))
   const picks = answer.split(',').map((s) => parseInt(s.trim(), 10))
   const selected: Target[] = []
   for (const n of picks) {
@@ -237,22 +344,26 @@ async function selectInteractively(ctx: PurgeContext): Promise<Target[]> {
   return selected
 }
 
-function expandAll(includeDestructive: boolean): Target[] {
-  if (includeDestructive) return [...TARGETS]
-  return TARGETS.filter((t) => t.id !== 'volumes' && t.id !== 'runtime')
+function isDestructive(t: Target): boolean {
+  return t.id === 'volumes' || t.id === 'runtime' || t.id === 'config' || t.id === 'images' || t.id === 'binary'
+}
+
+function expandAll(safe: boolean): Target[] {
+  if (safe) return TARGETS.filter((t) => !isDestructive(t))
+  return [...TARGETS]
 }
 
 export async function purgeCommand(argv: string[]): Promise<void> {
   let yes = false
   let dryRun = false
-  let includeDestructive = false
+  let safe = false
   const requested: string[] = []
 
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') purgeHelp()
     else if (arg === '--yes' || arg === '-y') yes = true
     else if (arg === '--dry-run') dryRun = true
-    else if (arg === '--include-destructive') includeDestructive = true
+    else if (arg === '--safe') safe = true
     else if (arg.startsWith('--')) {
       printError(`unknown flag ${arg}`)
       process.exit(1)
@@ -271,7 +382,7 @@ export async function purgeCommand(argv: string[]): Promise<void> {
       return
     }
   } else if (requested.includes('all')) {
-    targets = expandAll(includeDestructive).filter((t) => t.available(ctx))
+    targets = expandAll(safe).filter((t) => t.available(ctx))
   } else {
     targets = []
     for (const name of requested) {
@@ -295,11 +406,10 @@ export async function purgeCommand(argv: string[]): Promise<void> {
   printHeader(`Caracal purge — ${ctx.mode} mode${dryRun ? ' (dry-run)' : ''}`)
   process.stdout.write(style.label('Will purge:\n'))
   for (const t of targets) {
-    const destructive = t.id === 'volumes' || t.id === 'runtime'
-    const labelStr = destructive ? style.warn(t.label) : t.label
+    const labelStr = isDestructive(t) ? style.warn(t.label) : t.label
     process.stdout.write(`  ${style.label(SYMBOL.bullet)} ${labelStr} ${style.label(`— ${t.describe(ctx)}`)}\n`)
   }
-  const destructive = targets.some((t) => t.id === 'volumes' || t.id === 'runtime')
+  const destructive = targets.some(isDestructive)
   if (destructive && !dryRun) {
     process.stdout.write('\n')
     printWarn('Destructive targets selected: data WILL be lost.')
