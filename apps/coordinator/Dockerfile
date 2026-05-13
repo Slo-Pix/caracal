@@ -6,7 +6,7 @@
 # syntax=docker/dockerfile:1.7
 ARG GO_IMAGE=golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1
 ARG NODE_IMAGE=node:24-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f
-ARG PNPM_VERSION=11.0.9
+ARG PNPM_VERSION=11.1.1
 
 FROM ${GO_IMAGE} AS go-builder
 ENV CGO_ENABLED=0 GOOS=linux GOFLAGS=-mod=readonly
@@ -53,7 +53,7 @@ COPY apps/coordinator/src/ apps/coordinator/src/
 RUN pnpm --filter @caracalai/core build && \
     pnpm --filter @caracalai/identity build && \
     pnpm --filter @caracalai/coordinator build && \
-    pnpm --filter @caracalai/coordinator deploy --prod --legacy /out && \
+    pnpm --filter @caracalai/coordinator deploy --prod /out && \
     find /out/node_modules -type d \( -name test -o -name tests -o -name __tests__ \) -prune -exec rm -rf {} + 2>/dev/null || true && \
     find /out/node_modules -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.map' -o -name 'CHANGELOG*' -o -name '.npmignore' -o -name '.eslintrc*' -o -name '.prettierrc*' \) -delete 2>/dev/null || true
 

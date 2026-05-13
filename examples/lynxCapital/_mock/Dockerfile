@@ -3,7 +3,7 @@
 #
 # Mock provider container: runs any of the mock servers depending on CMD.
 
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
