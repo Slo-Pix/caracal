@@ -15,7 +15,15 @@ with a live agent topology view and SSE log stream.
 ```bash
 cd caracal/examples/lynxCapital
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
+
+# Install the project plus its three local editable packages (mock provider
+# SDKs and the Caracal Python SDK). With uv: `uv sync` reads pyproject.toml
+# and resolves everything automatically.
+pip install \
+  -e ../../packages/sdk/python \
+  -e _mock/sdk/lynx_sdk_stripe_treasury \
+  -e _mock/sdk/lynx_sdk_tax \
+  -e .
 
 cp .env.example .env
 # edit .env and set OPENAI_API_KEY=sk-...

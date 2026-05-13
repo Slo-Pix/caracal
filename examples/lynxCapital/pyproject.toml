@@ -25,9 +25,6 @@ dependencies = [
     "httpx>=0.27",
     "grpcio>=1.62",
     "python-dotenv>=1.0",
-    "lynx-sdk-stripe-treasury",
-    "lynx-sdk-tax",
-    "caracalai-sdk",
 ]
 
 [project.optional-dependencies]
@@ -36,10 +33,15 @@ dev = [
     "grpcio-tools>=1.62",
 ]
 
+# Local-only packages (mock provider SDKs + Caracal SDK). They are not
+# published; install them as editables alongside the project. With `uv` the
+# `[tool.uv.sources]` table below resolves them automatically; with plain
+# `pip` use the install line in the README.
+
 [tool.uv.sources]
-lynx-sdk-stripe-treasury = { path = "_mock/sdk/lynx_sdk_stripe_treasury", editable = true }
-lynx-sdk-tax             = { path = "_mock/sdk/lynx_sdk_tax",             editable = true }
-caracalai-sdk            = { path = "../../packages/sdk/python",          editable = true }
+lynx-sdk-stripe-treasury  = { path = "_mock/sdk/lynx_sdk_stripe_treasury", editable = true }
+lynx-sdk-tax              = { path = "_mock/sdk/lynx_sdk_tax",             editable = true }
+caracalai-sdk             = { path = "../../packages/sdk/python",          editable = true }
 
 [tool.setuptools.packages.find]
 where = ["."]
