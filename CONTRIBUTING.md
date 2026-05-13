@@ -46,6 +46,7 @@ pnpm caracal up [--build]           # start (optionally force rebuild)
 pnpm caracal down [-v]              # stop (optionally wipe volumes)
 pnpm caracal status                 # /health probe every service
 pnpm caracal init [--force]         # provision zone (rotate secret with --force)
+pnpm caracal purge [targets...]     # centralized cleanup (stack/volumes/logs/config/runtime/cache)
 pnpm caracal run -- <cmd>           # run with RESOURCE_TOKEN injected
 pnpm caracal credential read <res>  # resolve a credential
 pnpm caracal --help

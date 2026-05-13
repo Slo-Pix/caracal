@@ -161,12 +161,12 @@ class CoordinatorLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TerminateAgentTests(unittest.IsolatedAsyncioTestCase):
-    async def test_swallows_errors(self) -> None:
+    async def test_propagates_errors(self) -> None:
         async def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(500)
 
-        # Must not raise
-        await terminate_agent(_client(handler), "tok", "z", "agent-1")
+        with self.assertRaises(httpx.HTTPStatusError):
+            await terminate_agent(_client(handler), "tok", "z", "agent-1")
 
     async def test_succeeds_on_204(self) -> None:
         async def handler(req: httpx.Request) -> httpx.Response:

@@ -147,14 +147,11 @@ def _derive_idempotency_key(req: SpawnRequest) -> str | None:
 async def terminate_agent(
     client: CoordinatorClient, bearer: str, zone_id: str, agent_session_id: str
 ) -> None:
-    try:
-        resp = await client._http().delete(
-            f"{client.base_url}/zones/{zone_id}/agents/{agent_session_id}",
-            headers={"authorization": f"Bearer {bearer}"},
-        )
-        resp.raise_for_status()
-    except Exception:
-        pass
+    resp = await client._http().delete(
+        f"{client.base_url}/zones/{zone_id}/agents/{agent_session_id}",
+        headers={"authorization": f"Bearer {bearer}"},
+    )
+    resp.raise_for_status()
 
 
 async def create_delegation(

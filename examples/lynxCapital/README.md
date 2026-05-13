@@ -133,6 +133,8 @@ pytest tests/
 ```bash
 docker compose -f _mock/docker-compose.yml down
 caracal down
+# or, for a full reset (containers + volumes + caracal.toml):
+caracal purge --include-destructive all
 ```
 
 ## Layout
