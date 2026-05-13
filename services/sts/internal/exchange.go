@@ -83,8 +83,7 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 
 	requestID := r.Header.Get("X-Request-Id")
 	if requestID == "" {
-		id, _ := uuid.NewV7()
-		requestID = id.String()
+		requestID = uuid.Must(uuid.NewV7()).String()
 	}
 
 	resp, challenge, code, apiErr := s.exchange(r.Context(), req, requestID)
@@ -306,7 +305,10 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		return nil, nil, http.StatusForbidden, sharederr.New(sharederr.AccessDenied, "policy denied")
 	}
 
-	sid, _ := uuid.NewV7()
+	sid, err := uuid.NewV7()
+	if err != nil {
+		return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "generate session id")
+	}
 	sessID := sid.String()
 	now := time.Now()
 	ttl, ttlErr := tokenTTL(req.TTLSeconds, req.SubjectToken == "")
@@ -501,7 +503,7 @@ func buildAuditEvent(requestID, zoneID, decision, status string, result *OPAResu
 }
 
 func buildAuditEventWithBundle(requestID, zoneID, decision, status string, result *OPAResult, meta map[string]any, bundle ZoneBundleInfo) AuditEvent {
-	id, _ := uuid.NewV7()
+	id := uuid.Must(uuid.NewV7())
 	dpJSON, _ := json.Marshal(result.DeterminingPolicies)
 	diagJSON, _ := json.Marshal(result.Diagnostics)
 	var metaJSON json.RawMessage

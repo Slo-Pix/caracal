@@ -5,10 +5,13 @@
 
 package revocation
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // Store reports whether a session id has been revoked and accepts new revocations.
 type Store interface {
-	IsRevoked(sid string) bool
+	IsRevoked(ctx context.Context, sid string) bool
 	MarkRevoked(sid string, ttl time.Duration)
 }

@@ -6,6 +6,7 @@
 package revocation
 
 import (
+	"context"
 	"sync"
 	"time"
 )
@@ -26,7 +27,7 @@ func NewInMemoryStore(defaultTTL time.Duration) *InMemoryStore {
 }
 
 // IsRevoked reports whether sid is currently revoked, evicting expired entries.
-func (s *InMemoryStore) IsRevoked(sid string) bool {
+func (s *InMemoryStore) IsRevoked(_ context.Context, sid string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	expiresAt, ok := s.entries[sid]
