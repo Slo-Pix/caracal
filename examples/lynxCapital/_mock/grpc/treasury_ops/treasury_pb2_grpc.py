@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from _mock.grpc.treasury_ops import treasury_pb2 as treasury__pb2
+from . import treasury_pb2 as treasury__pb2
 
 GRPC_GENERATED_VERSION = '1.78.0'
 GRPC_VERSION = grpc.__version__

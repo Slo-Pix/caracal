@@ -29,6 +29,8 @@ dependencies = [
     "grpcio>=1.80",
     "protobuf>=6.33,<7",
     "python-dotenv>=1.2",
+    "caracalai-sdk>=0.1.1",
+    "redis>=5.2",
 ]
 
 [project.optional-dependencies]
@@ -37,10 +39,8 @@ dev = [
     "grpcio-tools>=1.80",
 ]
 
-# Local-only packages (mock provider SDKs + Caracal SDK). They are not
-# published; install them as editables alongside the project. With `uv` the
-# `[tool.uv.sources]` table below resolves them automatically; with plain
-# `pip` use the install line in the README.
+# Local-only packages (mock provider SDKs). They are not published; install
+# them as editables alongside the project — see the install line in README.
 
 # Global resolution floors for transitive deps (Dependabot / GHSA minima).
 [tool.uv]
@@ -49,10 +49,6 @@ constraint-dependencies = [
     "langchain-core>=1.3.3",
     "mako>=1.3.12",
 ]
-
-[tool.uv.sources]
-lynx-sdk-stripe-treasury  = { path = "_mock/sdk/lynx_sdk_stripe_treasury", editable = true }
-lynx-sdk-tax              = { path = "_mock/sdk/lynx_sdk_tax",             editable = true }
 
 [tool.setuptools.packages.find]
 where = ["."]

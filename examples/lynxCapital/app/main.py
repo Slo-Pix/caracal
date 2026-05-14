@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_streams()
+        await caracal_module.close()
 
 
 app = FastAPI(title="Lynx Capital", lifespan=lifespan)

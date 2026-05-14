@@ -18,15 +18,13 @@ with a live agent topology view and SSE log stream.
 cd caracal/examples/lynxCapital
 python -m venv .venv && source .venv/bin/activate
 
-pip install caracalai-sdk
+pip install -e .
 pip install \
   -e _mock/sdk/lynx_sdk_stripe_treasury \
-  -e _mock/sdk/lynx_sdk_tax \
-  -e .
+  -e _mock/sdk/lynx_sdk_tax
 ```
 
-> **uv users:** `uv sync` resolves all four editables automatically via
-> `[tool.uv.sources]` in `pyproject.toml`.
+The `caracalai-sdk>=0.1.1` pin lives in `pyproject.toml`.
 
 ### 2 — Configure environment
 
@@ -59,22 +57,35 @@ Services started:
 
 ### 4 — Start Caracal
 
-Caracal (Coordinator + Gateway) must be running before Lynx starts. Install
-the Caracal CLI and bring up the stack the same way any end user would —
-**do not build from the caracal source tree**:
+Caracal (Coordinator + Gateway + STS + Redis) must be running before Lynx
+starts. Install the latest CLI (`v2026.05.14` channel) and bring up the
+stack the same way any end user would — **do not build from the caracal
+source tree**:
 
 ```bash
 # Install the CLI once (no sudo, lands in ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
 
-# Bring up the OSS stack (coordinator, gateway, postgres, redis, ...)
+# Bring up the OSS stack (coordinator, gateway, STS, postgres, redis, ...)
 caracal up
 
 # Provision a local zone + application. This writes
 # ~/.config/caracal/caracal.toml with zone_id / application_id /
-# app_client_secret — Lynx reads that file at startup and exchanges
-# the client_secret for a real STS access token.
+# app_client_secret. Lynx reads the file at startup and exchanges the
+# client_secret for a real STS access token.
 caracal init --force
+
+# Register every external provider as a Caracal resource so the gateway
+# knows where to forward calls. The mock REST aggregator hosts all 13
+# providers behind a single prefix.
+for p in mercury-bank wise-payouts stripe-treasury netsuite sap-erp \
+         ocr-vision close-engine regulatory-filings customer-billing \
+         compliance-nexus treasury-ops; do
+  caracal resource add "lynx/${p}" --upstream "http://${p}.mock"
+done
+
+# Inspect live agent sessions, tickets, and delegation tree
+caracal-tui
 ```
 
 The stack listens on:
@@ -94,11 +105,14 @@ different hosts/ports, edit the `CARACAL_*` block in your `.env`.
 
 ### 5 — Run Lynx Capital
 
+Pick one path:
+
 ```bash
-# Make sure the venv is active (the prompt should start with `(.venv)`),
-# then start the app. Using `python -m uvicorn` guarantees the venv's
-# uvicorn — not a system-wide one — picks up the right grpcio/protobuf.
+# Local Python (development)
 python -m uvicorn app.main:app --reload --port 8000
+
+# Container (production-like — joins the mock and caracal networks)
+docker compose up -d --build
 ```
 
 Open **http://localhost:8000**.
