@@ -41,7 +41,7 @@ await seedBootstrapAdminToken(db, {
 })
 
 const shutdown = new ShutdownRegistry({
-  timeoutMs: cfg.shutdownTimeoutMs,
+  timeoutMs: cfg.shutdownGraceMs,
   log,
 })
 

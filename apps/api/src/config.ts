@@ -40,7 +40,7 @@ export interface Config {
   logLevel: string
   bootstrapAdminToken: string | null
   localBootstrapEnabled: boolean
-  shutdownTimeoutMs: number
+  shutdownGraceMs: number
   workerId: string
   bodyLimitBytes: number
   requestTimeoutMs: number
@@ -102,7 +102,7 @@ function parseNonNegIntEnv(name: string, fallback: number): number {
 }
 
 function deriveWorkerId(): string {
-  return process.env.CARACAL_WORKER_ID
+  return process.env.WORKER_ID
     ?? `${process.env.HOSTNAME ?? 'api'}:${process.pid}`
 }
 
@@ -115,23 +115,23 @@ export function loadConfig(): Config {
     logLevel: getenv('LOG_LEVEL', 'info'),
     bootstrapAdminToken: process.env.CARACAL_ADMIN_TOKEN ?? null,
     localBootstrapEnabled: parseBool(process.env.CARACAL_LOCAL_BOOTSTRAP_ENABLED, false),
-    shutdownTimeoutMs: parseIntEnv('CARACAL_SHUTDOWN_TIMEOUT_MS', 15_000),
+    shutdownGraceMs: parseIntEnv('SHUTDOWN_GRACE_MS', 15_000),
     workerId: deriveWorkerId(),
-    bodyLimitBytes: parseIntEnv('CARACAL_API_BODY_LIMIT_BYTES', 1_048_576),
-    requestTimeoutMs: parseIntEnv('CARACAL_API_REQUEST_TIMEOUT_MS', 30_000),
+    bodyLimitBytes: parseIntEnv('API_BODY_LIMIT_BYTES', 1_048_576),
+    requestTimeoutMs: parseIntEnv('REQUEST_TIMEOUT_MS', 30_000),
     db: {
-      poolMax: parseIntEnv('CARACAL_DB_POOL_MAX', 20),
-      statementTimeoutMs: parseIntEnv('CARACAL_DB_STATEMENT_TIMEOUT_MS', 15_000),
-      idleInTxTimeoutMs: parseIntEnv('CARACAL_DB_IDLE_IN_TX_TIMEOUT_MS', 30_000),
-      connectionTimeoutMs: parseIntEnv('CARACAL_DB_CONNECTION_TIMEOUT_MS', 5_000),
-      idleTimeoutMs: parseIntEnv('CARACAL_DB_IDLE_TIMEOUT_MS', 30_000),
+      poolMax: parseIntEnv('DB_POOL_MAX', 20),
+      statementTimeoutMs: parseIntEnv('DB_STATEMENT_TIMEOUT_MS', 15_000),
+      idleInTxTimeoutMs: parseIntEnv('DB_IDLE_IN_TX_TIMEOUT_MS', 30_000),
+      connectionTimeoutMs: parseIntEnv('DB_CONNECTION_TIMEOUT_MS', 5_000),
+      idleTimeoutMs: parseIntEnv('DB_IDLE_TIMEOUT_MS', 30_000),
     },
     outbox: {
-      pollIntervalMs: parseIntEnv('CARACAL_OUTBOX_POLL_MS', 250),
-      batchSize: parseIntEnv('CARACAL_OUTBOX_BATCH', 32),
-      lockDurationSec: parseIntEnv('CARACAL_OUTBOX_LOCK_SEC', 30),
-      maxAttempts: parseIntEnv('CARACAL_OUTBOX_MAX_ATTEMPTS', 100),
-      streamMaxLen: parseIntEnv('CARACAL_OUTBOX_STREAM_MAXLEN', 100_000),
+      pollIntervalMs: parseIntEnv('OUTBOX_POLL_MS', 250),
+      batchSize: parseIntEnv('OUTBOX_BATCH_SIZE', 32),
+      lockDurationSec: parseIntEnv('OUTBOX_LOCK_SEC', 30),
+      maxAttempts: parseIntEnv('OUTBOX_MAX_ATTEMPTS', 100),
+      streamMaxLen: parseIntEnv('OUTBOX_STREAM_MAXLEN', 100_000),
     },
     readyRateLimitPerMin: parseNonNegIntEnv('READY_RATE_LIMIT_PER_MIN', 120),
   }

@@ -41,7 +41,7 @@ func loadConfig() Config {
 		panic("AUDIT_HMAC_KEY: required when CARACAL_MODE=runtime")
 	}
 	retention := config.PositiveIntEnv("AUDIT_RETENTION_DAYS", 365)
-	maxDeliv := config.PositiveInt64Env("AUDIT_MAX_DELIVERIES", 5)
+	maxDeliv := config.PositiveInt64Env("AUDIT_MAX_DELIVERIES", 8)
 	idleSecs := config.PositiveInt64Env("AUDIT_CLAIM_IDLE_SECS", 30)
 	rolling := config.PositiveIntEnv("AUDIT_TAMPER_ROLLING_HOURS", 4)
 	return Config{
