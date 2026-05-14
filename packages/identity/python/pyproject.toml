@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "caracalai-identity"
-version = "0.1.0"
+version = "0.1.1"
 description = "Caracal JWT verification, JWKS cache, scope evaluation, and claim shapes"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
