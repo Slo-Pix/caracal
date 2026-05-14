@@ -154,10 +154,10 @@ Both the control-plane API and Coordinator run an outbox dispatcher that polls t
 
 | Environment variable | Default | Description |
 | --- | --- | --- |
-| `CARACAL_OUTBOX_POLL_MS` | `250` | Polling interval in milliseconds |
-| `CARACAL_OUTBOX_BATCH` | `32` | Number of rows fetched per poll |
-| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | Maximum delivery attempts before a row is marked failed |
-| `CARACAL_OUTBOX_STREAM_MAXLEN` | `100000` | `MAXLEN` argument passed to `XADD` |
+| `OUTBOX_POLL_MS` | `250` | Polling interval in milliseconds |
+| `OUTBOX_BATCH_SIZE` | `32` | Number of rows fetched per poll |
+| `OUTBOX_MAX_ATTEMPTS` | `100` | Maximum delivery attempts before a row is marked failed |
+| `OUTBOX_STREAM_MAXLEN` | `100000` | `MAXLEN` argument passed to `XADD` |
 
 Failed rows beyond `max_attempts` are not retried and remain in the table for manual inspection. Backoff between retries is exponential with jitter, capped at 60 seconds.
 

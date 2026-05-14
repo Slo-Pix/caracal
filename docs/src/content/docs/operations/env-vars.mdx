@@ -57,7 +57,6 @@ Services accept either `REDIS_URL` or the individual `REDIS_*` variables.
 | `MAX_GRANT_TTL_SECONDS` | `3600` | Maximum token lifetime in seconds |
 | `OPA_POLL_SECONDS` | `60` | Interval (seconds) between OPA policy bundle polls |
 | `LOG_LEVEL` | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
-| `CARACAL_ENV` | `development` | Environment label |
 
 ---
 
@@ -74,20 +73,21 @@ Services accept either `REDIS_URL` or the individual `REDIS_*` variables.
 | `STREAMS_HMAC_KEY` | — | 32-byte hex-encoded key for signing outbox stream messages |
 | `CARACAL_LOCAL_BOOTSTRAP_ENABLED` | `false` | Set `true` to enable local-dev auto-bootstrap on startup |
 | `LOG_LEVEL` | `info` | Log verbosity |
-| `CARACAL_SHUTDOWN_TIMEOUT_MS` | `15000` | Graceful shutdown window in milliseconds |
-| `CARACAL_API_BODY_LIMIT_BYTES` | `1048576` | Request body size limit (1 MB) |
+| `SHUTDOWN_GRACE_MS` | `15000` | Graceful shutdown window in milliseconds |
+| `API_BODY_LIMIT_BYTES` | `1048576` | Request body size limit (1 MB) |
+| `REQUEST_TIMEOUT_MS` | `30000` | HTTP request timeout |
 | **Database pool** | | |
-| `CARACAL_DB_POOL_MAX` | `20` | Maximum Postgres connection pool size |
-| `CARACAL_DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-statement timeout |
-| `CARACAL_DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Idle-in-transaction timeout |
-| `CARACAL_DB_CONNECTION_TIMEOUT_MS` | `5000` | Connection acquisition timeout |
-| `CARACAL_DB_IDLE_TIMEOUT_MS` | `30000` | Idle connection eviction timeout |
+| `DB_POOL_MAX` | `20` | Maximum Postgres connection pool size |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000` | Per-statement timeout |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Idle-in-transaction timeout |
+| `DB_CONNECTION_TIMEOUT_MS` | `5000` | Connection acquisition timeout |
+| `DB_IDLE_TIMEOUT_MS` | `30000` | Idle connection eviction timeout |
 | **Outbox dispatcher** | | |
-| `CARACAL_OUTBOX_POLL_MS` | `250` | Outbox poll interval in milliseconds |
-| `CARACAL_OUTBOX_BATCH` | `32` | Messages to lock per poll cycle |
-| `CARACAL_OUTBOX_LOCK_SEC` | `30` | Advisory lock duration for outbox rows |
-| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | Max delivery attempts before a message is marked `dead` |
-| `CARACAL_OUTBOX_STREAM_MAXLEN` | `100000` | XADD MAXLEN for all outbox-published streams |
+| `OUTBOX_POLL_MS` | `250` | Outbox poll interval in milliseconds |
+| `OUTBOX_BATCH_SIZE` | `32` | Messages to lock per poll cycle |
+| `OUTBOX_LOCK_SEC` | `30` | Advisory lock duration for outbox rows |
+| `OUTBOX_MAX_ATTEMPTS` | `100` | Max delivery attempts before a message is marked `dead` |
+| `OUTBOX_STREAM_MAXLEN` | `100000` | XADD MAXLEN for all outbox-published streams |
 | `READY_RATE_LIMIT_PER_MIN` | `120` | Rate limit for `/ready` health probe per source IP per minute (0 to disable) |
 
 ---
@@ -101,11 +101,6 @@ Services accept either `REDIS_URL` or the individual `REDIS_*` variables.
 | `STS_URL` | — | **Required.** STS base URL with scheme (http or https) |
 | `STREAMS_HMAC_KEY` | — | **Required in production.** 32-byte hex-encoded key for verifying stream signatures |
 | `PORT` | — | **Must be `8081`.** Enforced at startup; any other value panics. |
-| `CARACAL_ENV` | `production` | Must be `production` or `dev`. Controls which safety checks are enforced. |
-| `INSECURE_HTTP` | `false` | Set `true` to run without TLS. Forbidden when `CARACAL_ENV=production`. |
-| `INSECURE_STS` | `false` | Set `true` to allow HTTP to STS. Forbidden when `CARACAL_ENV=production`. |
-| `TLS_CERT_FILE` | — | Path to TLS certificate. Required unless `INSECURE_HTTP=true`. |
-| `TLS_KEY_FILE` | — | Path to TLS private key. Required unless `INSECURE_HTTP=true`. |
 | `ALLOW_PRIVATE_UPSTREAMS` | `false` | Allow proxying to private/loopback upstream URLs |
 | `UPSTREAM_HOST_ALLOWLIST` | — | Comma-separated upstream host allowlist. Required in production when `ALLOW_PRIVATE_UPSTREAMS=true`. |
 | `JTI_FAIL_OPEN` | `false` | Skip JTI replay check on Redis error. Forbidden in production. |
@@ -129,7 +124,7 @@ Services accept either `REDIS_URL` or the individual `REDIS_*` variables.
 | `AUDIT_HMAC_KEY` | — | **Required in production.** 32-byte hex-encoded HMAC key for audit chain verification |
 | `PORT` | — | **Must be `9090`.** |
 | `AUDIT_RETENTION_DAYS` | `365` | Number of days to retain audit events. Older monthly partitions are dropped. |
-| `AUDIT_MAX_DELIVERIES` | `5` | Max delivery attempts for an audit event before DLQ routing |
+| `AUDIT_MAX_DELIVERIES` | `8` | Max delivery attempts for an audit event before DLQ routing |
 | `AUDIT_CLAIM_IDLE_SECS` | `30` | Seconds before an unclaimed PEL entry is reclaimed by another consumer |
 | `AUDIT_TAMPER_ROLLING_HOURS` | `4` | Rolling window for tamper detection sweep |
 | `AUDIT_EXPORT_S3_ENDPOINT` | — | S3-compatible endpoint URL for Parquet export (e.g., MinIO) |
@@ -137,7 +132,6 @@ Services accept either `REDIS_URL` or the individual `REDIS_*` variables.
 | `AUDIT_EXPORT_S3_REGION` | `us-east-1` | AWS region for S3 export |
 | `HOSTNAME` | `audit-worker-0` | Consumer name for the audit stream consumer group |
 | `LOG_LEVEL` | `info` | Log verbosity |
-| `CARACAL_ENV` | `development` | Environment label |
 
 ---
 

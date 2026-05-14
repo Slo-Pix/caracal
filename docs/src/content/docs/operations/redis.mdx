@@ -80,11 +80,11 @@ This guarantees at-least-once delivery without distributed transaction coordinat
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `CARACAL_OUTBOX_POLL_MS` | `250` | How often the dispatcher checks for pending rows |
-| `CARACAL_OUTBOX_BATCH` | `32` | Rows acquired per poll cycle |
-| `CARACAL_OUTBOX_LOCK_SEC` | `30` | How long a row is locked before another dispatcher can claim it |
-| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | After this many failed deliveries, the row is marked `dead` |
-| `CARACAL_OUTBOX_STREAM_MAXLEN` | `100000` | XADD MAXLEN applied to all outbox-published streams |
+| `OUTBOX_POLL_MS` | `250` | How often the dispatcher checks for pending rows |
+| `OUTBOX_BATCH_SIZE` | `32` | Rows acquired per poll cycle |
+| `OUTBOX_LOCK_SEC` | `30` | How long a row is locked before another dispatcher can claim it |
+| `OUTBOX_MAX_ATTEMPTS` | `100` | After this many failed deliveries, the row is marked `dead` |
+| `OUTBOX_STREAM_MAXLEN` | `100000` | XADD MAXLEN applied to all outbox-published streams |
 
 **Coordinator outbox publisher tuning:**
 

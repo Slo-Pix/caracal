@@ -164,12 +164,12 @@ The API is fully stateless. All state is in PostgreSQL and Redis. Run any number
 | `PORT` | `3000` | HTTP listen port |
 | `DATABASE_URL` | — | PostgreSQL connection string |
 | `REDIS_URL` | — | Redis connection string |
-| `CARACAL_ADMIN_TOKEN` | — | Bootstrap token (seeded on startup if set) |
+| `CARACAL_ADMIN_TOKEN` | — | Bootstrap admin token. Seeded into the database on first startup. |
 | `CARACAL_LOCAL_BOOTSTRAP_ENABLED` | `false` | Enables loopback-only bootstrap endpoint |
-| `CARACAL_DB_POOL_MAX` | `20` | PostgreSQL pool size |
-| `CARACAL_DB_STATEMENT_TIMEOUT_MS` | `15000` | Statement timeout |
-| `CARACAL_OUTBOX_POLL_MS` | `250` | Outbox dispatcher poll interval |
-| `CARACAL_OUTBOX_BATCH` | `32` | Events per outbox dispatch batch |
-| `CARACAL_OUTBOX_MAX_ATTEMPTS` | `100` | Max outbox retry attempts |
-| `CARACAL_SHUTDOWN_TIMEOUT_MS` | `15000` | Graceful shutdown grace period |
+| `DB_POOL_MAX` | `20` | PostgreSQL pool size |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000` | Statement timeout |
+| `OUTBOX_POLL_MS` | `250` | Outbox dispatcher poll interval |
+| `OUTBOX_BATCH_SIZE` | `32` | Events per outbox dispatch batch |
+| `OUTBOX_MAX_ATTEMPTS` | `100` | Max outbox retry attempts |
+| `SHUTDOWN_GRACE_MS` | `15000` | Graceful shutdown grace period |
 | `LOG_LEVEL` | `info` | Logging verbosity |

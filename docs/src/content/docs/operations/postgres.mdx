@@ -74,7 +74,7 @@ Stores encrypted credential material (tokens, passwords). Ciphertext encrypted w
 
 ## Connection pool sizing
 
-All TypeScript services (API, Coordinator) manage a `pg.Pool` or pgx pool. Default pool size is 20 connections per service replica. Adjust `CARACAL_DB_POOL_MAX` (API) and `DB_POOL_MAX` (Coordinator) based on `max_connections` in your Postgres instance.
+All TypeScript services (API, Coordinator) manage a `pg.Pool` or pgx pool. Default pool size is 20 connections per service replica. Adjust `DB_POOL_MAX` based on `max_connections` in your Postgres instance.
 
 Rule of thumb: `(replicas × pool_max) + overhead < max_connections`. With 3 replicas of API (pool 20), 2 of Coordinator (pool 20), and STS + Gateway + Audit connecting without pools, target at least `100–120` Postgres connections.
 
@@ -82,10 +82,10 @@ Statement timeouts prevent runaway queries:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CARACAL_DB_STATEMENT_TIMEOUT_MS` | `15000` | Kills queries running longer than 15 s |
-| `CARACAL_DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Kills idle-in-transaction connections after 30 s |
-| `CARACAL_DB_CONNECTION_TIMEOUT_MS` | `5000` | Fails connection acquisition after 5 s |
-| `CARACAL_DB_IDLE_TIMEOUT_MS` | `30000` | Returns idle pool connections after 30 s |
+| `DB_STATEMENT_TIMEOUT_MS` | `15000` | Kills queries running longer than 15 s |
+| `DB_IDLE_IN_TX_TIMEOUT_MS` | `30000` | Kills idle-in-transaction connections after 30 s |
+| `DB_CONNECTION_TIMEOUT_MS` | `5000` | Fails connection acquisition after 5 s |
+| `DB_IDLE_TIMEOUT_MS` | `30000` | Returns idle pool connections after 30 s |
 
 ---
 
