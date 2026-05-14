@@ -13,6 +13,9 @@ import { runMigrations } from './migrate.js'
 import { ShutdownRegistry } from './lifecycle.js'
 import { OutboxDispatcher } from './outbox.js'
 import { seedBootstrapAdminToken } from './auth.js'
+import { assertRuntimeSafe } from '@caracalai/core'
+
+assertRuntimeSafe()
 
 const cfg = loadConfig()
 const db = newDB({
