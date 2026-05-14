@@ -77,6 +77,11 @@ for d in "${packages[@]}"; do
     name="$(awk -F'"' '/^name = /{print $2; exit}' "$d/pyproject.toml")"
     ver="$(awk -F'"' '/^version = /{print $2; exit}' "$d/pyproject.toml")"
 
+    if [[ "$ver" == *"+dev."* || "$ver" == *"-dev."* ]]; then
+        say_error "refusing to publish dev-stamped version: ${name}==${ver}"
+        exit 1
+    fi
+
     if curl -fsSL -o /dev/null "https://${host}/pypi/${name}/${ver}/json"; then
         say_warn "skip ${name}==${ver} (already on ${repo})"
         continue
