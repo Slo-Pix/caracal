@@ -274,33 +274,36 @@ def _tax_call(action: str, payload: dict) -> dict:
 
 
 def _treasury_call(action: str, payload: dict) -> dict:
-    from app.services.transport.grpc_client import parse_json_payload
+    from google.protobuf.json_format import MessageToDict
     from app.services.transport.proto.treasury_ops import treasury_pb2 as pb2
     from app.services.transport.proto.treasury_ops import treasury_pb2_grpc as pb2_grpc
     c = _treasury_client()
     if action == "get_cash_position":
-        req = pb2.CashPositionRequest(entity_id=str(payload.get("region", "")))
-        return parse_json_payload(c.unary(pb2_grpc.TreasuryOpsStub, "GetCashPosition", req))
-    if action == "forecast_liquidity":
-        req = pb2.ForecastRequest(entity_id=str(payload.get("region", "")),
+        req = pb2.CashPositionRequest(region=str(payload.get("region", "")))
+        msg = c.unary(pb2_grpc.TreasuryOpsStub, "GetCashPosition", req)
+    elif action == "forecast_liquidity":
+        req = pb2.ForecastRequest(region=str(payload.get("region", "")),
                                   horizon_days=int(payload.get("horizon_days", 0)))
-        return parse_json_payload(c.unary(pb2_grpc.TreasuryOpsStub, "ForecastLiquidity", req))
-    if action == "place_fx_hedge":
-        pair = f"{payload.get('from_currency','USD')}{payload.get('to_currency','USD')}"
-        req = pb2.FxHedgeRequest(pair=pair,
+        msg = c.unary(pb2_grpc.TreasuryOpsStub, "ForecastLiquidity", req)
+    elif action == "place_fx_hedge":
+        req = pb2.FxHedgeRequest(from_currency=str(payload.get("from_currency", "")),
+                                 to_currency=str(payload.get("to_currency", "")),
                                  notional=float(payload.get("notional", 0.0)),
-                                 tenor=str(payload.get("tenor_days", "30")))
-        return parse_json_payload(c.unary(pb2_grpc.TreasuryOpsStub, "PlaceFxHedge", req))
-    if action == "transfer_funds":
+                                 tenor_days=int(payload.get("tenor_days", 0)))
+        msg = c.unary(pb2_grpc.TreasuryOpsStub, "PlaceFxHedge", req)
+    elif action == "transfer_funds":
         req = pb2.TransferRequest(
-            from_account=str(payload.get("from_region", "")),
-            to_account=str(payload.get("to_region", "")),
-            amount=float(payload.get("amount_usd", 0.0)),
+            from_region=str(payload.get("from_region", "")),
+            to_region=str(payload.get("to_region", "")),
+            amount_usd=float(payload.get("amount_usd", 0.0)),
             currency="USD",
             idempotency_key=idempotency_key("treasury"),
         )
-        return parse_json_payload(c.unary(pb2_grpc.TreasuryOpsStub, "TransferFunds", req))
-    raise KeyError(f"unknown treasury action: {action}")
+        msg = c.unary(pb2_grpc.TreasuryOpsStub, "TransferFunds", req)
+    else:
+        raise KeyError(f"unknown treasury action: {action}")
+    return MessageToDict(msg, preserving_proto_field_name=True,
+                         always_print_fields_with_no_presence=True)
 
 
 def _vendor_portal_call(action: str, payload: dict) -> dict:

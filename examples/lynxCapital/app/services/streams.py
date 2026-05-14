@@ -39,22 +39,27 @@ def _run_compliance_stream() -> None:
     client = GrpcClient(
         provider="compliance-nexus",
         target=os.environ["LYNX_COMPLIANCE_GRPC"],
-        auth_header="metadata-token",
+        auth_header="authorization",
         auth_env="LYNX_COMPLIANCE_KEY",
     )
+    cursor = ""
     while not _grpc_stop.is_set():
         try:
-            request = compliance_pb2.SubscribeRequest(cursor="")
+            request = compliance_pb2.StreamRequest(cursor=cursor)
             for delta in client.server_stream(
-                compliance_pb2_grpc.ComplianceStub, "WatchlistDeltas", request,
+                compliance_pb2_grpc.ComplianceFeedStub, "StreamWatchlistDeltas", request,
             ):
                 if _grpc_stop.is_set():
                     return
+                cursor = delta.cursor
                 _publish_compliance({
-                    "vendor_id": delta.vendor_id,
-                    "status":    delta.status,
-                    "reason":    delta.reason,
                     "cursor":    delta.cursor,
+                    "list_name": delta.list_name,
+                    "action":    delta.action,
+                    "entity_id": delta.entity_id,
+                    "country":   delta.country,
+                    "reason":    delta.reason,
+                    "ts":        delta.ts,
                 })
         except Exception:
             if _grpc_stop.is_set():

@@ -165,6 +165,21 @@ def treasury_grpc(rest_url) -> str:
 
 
 @pytest.fixture(scope="session")
+def compliance_grpc(rest_url) -> str:
+    from _mock.grpc.compliance_stream.server import serve
+
+    port = _free_port()
+    addr = f"127.0.0.1:{port}"
+    runner = _AsyncServerThread(lambda: serve(addr))
+    runner.start()
+    time.sleep(0.2)
+    os.environ["LYNX_COMPLIANCE_GRPC"] = addr
+    os.environ.setdefault("LYNX_COMPLIANCE_KEY", "dev-compliance-nexus-key")
+    yield addr
+    runner.stop()
+
+
+@pytest.fixture(scope="session")
 def vendor_mcp() -> tuple[str, int]:
     from _mock.mcp.vendor_portal.server import serve
 
