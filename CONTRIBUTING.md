@@ -16,18 +16,6 @@ Throughout this doc:
 - `<os>` ∈ `linux` · `darwin` · `windows`
 - `<arch>` ∈ `x64` · `arm64` (Windows: `x64` only; binary has a `.exe` suffix)
 
-## Setup
-
-```bash
-git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
-pnpm install
-cp infra/docker/.env.example infra/docker/.env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, CARACAL_ADMIN_TOKEN
-pnpm caracal up                                  # build + start the full stack
-pnpm caracal init                                # provision local zone, write caracal.toml
-```
-
-Drop the `pnpm` prefix with `pnpm link --global` (undo with `pnpm unlink --global caracal`).
-
 ## Modes: dev vs runtime
 
 Every artifact is bound to one of two modes at build time.
@@ -41,24 +29,18 @@ Every artifact is bound to one of two modes at build time.
 
 The base CalVer is centralized in `apps/cli/runtime/release.json` (consumed by `stampDev`). Release CI must pass `CARACAL_RELEASE_VERSION=v<calver>` explicitly; without it, `build:release` produces a developer-local binary that targets `localhost/caracal-<svc>:dev-<sha>` instead of pulling from GHCR.
 
-### Test a release-style binary locally
 
-Run from the repo root:
+## Setup
 
 ```bash
-pnpm --dir apps/cli build:release                          # stamp runtime + build local images + bun compile (all targets)
-BIN="$(pwd)/apps/cli/dist/caracal-<os>-<arch>"             # absolute path; survives cd
-"$BIN" --version                                           # → caracal dev-<sha> [runtime]
-(cd /tmp && "$BIN" up && "$BIN" status && "$BIN" down)
+git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
+pnpm install
+cp infra/docker/.env.example infra/docker/.env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, CARACAL_ADMIN_TOKEN
+pnpm caracal up                                  # build + start the full stack
+pnpm caracal init                                # provision local zone, write caracal.toml
 ```
 
-The local `build:release` stamps the binary with `CARACAL_VERSION=dev-<sha>` and `CARACAL_REGISTRY=localhost/`, then runs `docker compose build` to produce `localhost/caracal-{svc}:dev-<sha>` for each service. The release-style binary resolves to those images — no GHCR pull, no auth, fully reproducible from your checkout.
-
-CI publishes against GHCR with `CARACAL_RELEASE_VERSION=v2026.05.12 pnpm --dir apps/cli build:release`, which skips the local image build and stamps the binary to pull `ghcr.io/garudex-labs/caracal-{svc}:v2026.05.12`.
-
-`pnpm caracal …` only works inside the repo (it resolves through `scripts.caracal` in the root `package.json`). Outside the repo, invoke the binary directly.
-
-Override the version a release binary targets (also useful for pinning during dev): `CARACAL_VERSION=v2026.04.01 caracal up`.
+Drop the `pnpm` prefix with `pnpm link --global` (undo with `pnpm unlink --global caracal`).
 
 ## Stack Commands
 
@@ -110,12 +92,6 @@ scripts/testCi.sh --smoke        # post-merge smoke (pnpm -r build + go vet)
 scripts/testCi.sh --ts | --go | --py
 ```
 
-## Code Style
-
-- Header and naming rules are enforced by `.claude/rules/` and `.github/instructions/`.
-- One implementation per feature — no fallback paths, shims, or dead branches.
-- Match surrounding abstraction level. Don't introduce helpers a single caller could inline.
-
 ## Submitting Changes
 
 1. Branch off `main`. Keep commits focused.
@@ -138,6 +114,19 @@ Output: `apps/<cli|tui>/dist/caracal[-tui]-<os>-<arch>[.exe]` (Windows binaries 
 ## Releases
 
 Release artifacts share one CalVer: `vYYYY.MM.DD` (suffix `.N` for same-day re-cuts). Only maintainers listed in `.github/MAINTAINERS` may cut releases.
+
+### Test a release-style binary locally
+
+Run from the repo root:
+
+```bash
+pnpm --dir apps/cli build:release                          # stamp runtime + build local images + bun compile (all targets)
+BIN="$(pwd)/apps/cli/dist/caracal-<os>-<arch>"             # absolute path; survives cd
+"$BIN" --version                                           # → caracal dev-<sha> [runtime]
+(cd /tmp && "$BIN" up && "$BIN" status && "$BIN" down)
+```
+
+The local `build:release` stamps the binary with `CARACAL_VERSION=dev-<sha>` and `CARACAL_REGISTRY=localhost/`, then runs `docker compose build` to produce `localhost/caracal-{svc}:dev-<sha>` for each service. The release-style binary resolves to those images — no GHCR pull, no auth, fully reproducible from your checkout.
 
 ### Cutting a release
 
@@ -171,7 +160,7 @@ CARACAL_RELEASE=v2026.05.12 FINDINGS_DIR=/tmp/findings \
 ./scripts/publishPypi.sh --testpypi   # TestPyPI
 ```
 
-Interactive picker (↑/↓ to move, space to toggle, `a` all, enter confirms), prompts for the registry token, builds and uploads each selected package, skips versions already published. Both scripts refuse to publish dev-stamped versions (`+dev.<sha>` / `-dev.<sha>`).
+Skips versions already published. Both scripts refuse to publish dev-stamped versions (`+dev.<sha>` / `-dev.<sha>`).
 
 ### Published artifacts
 
