@@ -3,6 +3,9 @@
 //
 // CLI status command unit tests for service health reporting.
 
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { statusCommand } from '../../../../apps/cli/src/commands/stack.js'
 
@@ -11,6 +14,8 @@ describe('statusCommand', () => {
 
   beforeEach(() => {
     stdout = ''
+    vi.stubEnv('CARACAL_MODE', 'runtime')
+    vi.stubEnv('CARACAL_HOME', mkdtempSync(join(tmpdir(), 'caracal-home-')))
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
       stdout += chunk.toString()
       return true
@@ -21,6 +26,7 @@ describe('statusCommand', () => {
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
 

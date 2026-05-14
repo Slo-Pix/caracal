@@ -24,11 +24,11 @@ describe('resolvePaths', () => {
     vi.unstubAllEnvs()
   })
 
-  it('uses dev mode for a source checkout even when CARACAL_HOME is set', () => {
+  it('uses dev mode when CARACAL_MODE=dev and CARACAL_REPO_ROOT is set', () => {
     const repoRoot = repoFixture()
-    vi.stubEnv('INIT_CWD', repoRoot)
-    vi.stubEnv('PWD', repoRoot)
-    vi.stubEnv('CARACAL_HOME', mkdtempSync(join(tmpdir(), 'caracal-home-')))
+    vi.stubEnv('CARACAL_MODE', 'dev')
+    vi.stubEnv('CARACAL_REPO_ROOT', repoRoot)
+    vi.stubEnv('CARACAL_ENV_FILE', join(repoRoot, 'infra', 'docker', '.env'))
 
     const paths = resolvePaths()
 
@@ -37,13 +37,10 @@ describe('resolvePaths', () => {
     expect(paths.composeFile).toBe(join(repoRoot, 'infra', 'docker', 'docker-compose.yml'))
   })
 
-  it('uses runtime mode only when explicitly requested', () => {
-    const repoRoot = repoFixture()
+  it('uses runtime mode when CARACAL_MODE=runtime', () => {
     const home = mkdtempSync(join(tmpdir(), 'caracal-home-'))
-    vi.stubEnv('INIT_CWD', repoRoot)
-    vi.stubEnv('PWD', repoRoot)
+    vi.stubEnv('CARACAL_MODE', 'runtime')
     vi.stubEnv('CARACAL_HOME', home)
-    vi.stubEnv('CARACAL_STACK_MODE', 'runtime')
 
     const paths = resolvePaths()
 
