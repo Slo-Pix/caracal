@@ -67,6 +67,16 @@ async def validate_setup():
         steps.append({"id": "caracal_gateway", "label": "Caracal gateway reachable",
                       "ok": ok, "detail": detail})
 
+    from app.api.hooks import required_secret_envs
+    missing_secrets = [k for k in required_secret_envs() if not os.environ.get(k)]
+    steps.append({
+        "id": "webhook_secrets",
+        "label": "Webhook signing secrets set",
+        "ok": not missing_secrets,
+        "detail": "All provider hook secrets present." if not missing_secrets
+                  else f"Missing: {', '.join(missing_secrets)}",
+    })
+
     overall = all(s["ok"] for s in steps)
     return JSONResponse({"ok": overall, "steps": steps})
 

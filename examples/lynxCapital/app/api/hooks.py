@@ -23,7 +23,7 @@ from app.events.types import Event
 router = APIRouter(prefix="/hooks", tags=["webhooks"])
 
 
-_DEFAULT_SECRETS = {
+_SECRET_ENV = {
     "mercury-bank":         "LYNX_MERCURY_HOOK_SECRET",
     "wise-payouts":         "LYNX_WISE_HOOK_SECRET",
     "stripe-treasury":      "LYNX_STRIPE_HOOK_SECRET",
@@ -38,17 +38,50 @@ _DEFAULT_SECRETS = {
 }
 
 
-_SEEN: deque[str] = deque(maxlen=4096)
-_SEEN_SET: set[str] = set()
-_SEEN_LOCK = threading.Lock()
 _TOLERANCE_S = 5 * 60
 
 
+class _Dedup:
+    """Webhook event-id dedup. Backed by Redis when LYNX_REDIS_URL is set;
+    otherwise an in-process bounded LRU. Redis-backed entries expire after
+    `_TOLERANCE_S * 2` seconds, matching the upstream replay window."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._seen: deque[str] = deque(maxlen=4096)
+        self._set: set[str] = set()
+        self._redis = None
+        url = os.getenv("LYNX_REDIS_URL")
+        if url:
+            import redis
+            self._redis = redis.Redis.from_url(url, decode_responses=True)
+
+    def seen(self, event_id: str) -> bool:
+        if self._redis is not None:
+            key = f"lynx:hook:seen:{event_id}"
+            added = self._redis.set(key, "1", nx=True, ex=_TOLERANCE_S * 2)
+            return added is None
+        with self._lock:
+            if event_id in self._set:
+                return True
+            self._seen.append(event_id)
+            self._set.add(event_id)
+            if len(self._seen) == self._seen.maxlen and len(self._set) > self._seen.maxlen:
+                self._set.intersection_update(self._seen)
+            return False
+
+
+_dedup = _Dedup()
+
+
 def _secret(provider: str) -> str:
-    env = _DEFAULT_SECRETS.get(provider)
+    env = _SECRET_ENV.get(provider)
     if env is None:
         raise HTTPException(status_code=404, detail={"error": f"unknown provider: {provider}"})
-    return os.getenv(env, f"dev-{provider}-secret")
+    val = os.getenv(env)
+    if not val:
+        raise HTTPException(status_code=503, detail={"error": f"webhook secret missing: {env}"})
+    return val
 
 
 def _parse_signature(header: str) -> tuple[str, str]:
@@ -70,17 +103,6 @@ def _verify(provider: str, body: bytes, header: str) -> None:
         raise HTTPException(status_code=401, detail={"error": "signature mismatch"})
 
 
-def _dedupe(event_id: str) -> bool:
-    with _SEEN_LOCK:
-        if event_id in _SEEN_SET:
-            return True
-        _SEEN.append(event_id)
-        _SEEN_SET.add(event_id)
-        if len(_SEEN) == _SEEN.maxlen and len(_SEEN_SET) > _SEEN.maxlen:
-            _SEEN_SET.intersection_update(_SEEN)
-        return False
-
-
 @router.post("/{provider}")
 async def receive(
     provider: str,
@@ -91,7 +113,7 @@ async def receive(
     body = await request.body()
     _verify(provider, body, x_lynx_signature)
     event_id = x_lynx_event_id or sha256(body).hexdigest()
-    if _dedupe(event_id):
+    if _dedup.seen(event_id):
         return {"ack": True, "deduped": True}
     try:
         payload = await request.json()
@@ -104,3 +126,7 @@ async def receive(
         payload={"provider": provider, "event_id": event_id, "body": payload},
     ))
     return {"ack": True}
+
+
+def required_secret_envs() -> list[str]:
+    return list(_SECRET_ENV.values())

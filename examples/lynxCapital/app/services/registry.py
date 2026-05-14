@@ -12,8 +12,6 @@ import threading
 from dataclasses import dataclass
 from typing import Any, Callable
 
-import httpx
-
 from app.services.resilience import RetryPolicy, idempotency_key
 from app.services.transport.rest import AuthSpec, RestClient, RestEndpoint
 
@@ -21,7 +19,6 @@ from app.services.transport.rest import AuthSpec, RestClient, RestEndpoint
 _REST_PROVIDERS: dict[str, dict] = {
     "mercury-bank": {
         "base_url_env": "LYNX_MERCURY_URL",
-        "base_url_default": "http://mercury-bank.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_MERCURY_KEY"),
         "timeout_s": 4.0,
         "actions": {
@@ -31,7 +28,6 @@ _REST_PROVIDERS: dict[str, dict] = {
     },
     "wise-payouts": {
         "base_url_env": "LYNX_WISE_URL",
-        "base_url_default": "http://wise-payouts.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_WISE_KEY"),
         "timeout_s": 4.0,
         "actions": {
@@ -41,7 +37,6 @@ _REST_PROVIDERS: dict[str, dict] = {
     },
     "quickbooks": {
         "base_url_env": "LYNX_QB_URL",
-        "base_url_default": "http://quickbooks.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_QB_KEY"),
         "timeout_s": 4.0,
         "actions": {
@@ -52,7 +47,6 @@ _REST_PROVIDERS: dict[str, dict] = {
     },
     "customer-billing": {
         "base_url_env": "LYNX_BILLING_URL",
-        "base_url_default": "http://customer-billing.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_BILLING_KEY"),
         "timeout_s": 4.0,
         "actions": {
@@ -64,7 +58,6 @@ _REST_PROVIDERS: dict[str, dict] = {
     },
     "fx-rates": {
         "base_url_env": "LYNX_FX_URL",
-        "base_url_default": "http://fx-rates.mock",
         "auth": AuthSpec("X-API-Key", "", "LYNX_FX_KEY"),
         "timeout_s": 3.0,
         "actions": {
@@ -74,7 +67,6 @@ _REST_PROVIDERS: dict[str, dict] = {
     },
     "compliance-nexus": {
         "base_url_env": "LYNX_COMPLIANCE_URL",
-        "base_url_default": "http://compliance-nexus.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_COMPLIANCE_KEY"),
         "timeout_s": 4.0,
         "actions": {
@@ -90,7 +82,6 @@ _REST_PROVIDERS: dict[str, dict] = {
 _REST_JOB_PROVIDERS: dict[str, dict] = {
     "netsuite": {
         "base_url_env": "LYNX_NETSUITE_URL",
-        "base_url_default": "http://netsuite.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_NETSUITE_KEY"),
         "timeout_s": 6.0,
         "poll_path": "/services/rest/v1/jobs",
@@ -104,7 +95,6 @@ _REST_JOB_PROVIDERS: dict[str, dict] = {
     },
     "sap-erp": {
         "base_url_env": "LYNX_SAP_URL",
-        "base_url_default": "http://sap-erp.mock",
         "auth": AuthSpec("X-SAP-Token", "", "LYNX_SAP_KEY"),
         "timeout_s": 6.0,
         "poll_path": "/sap/opu/odata/sap/jobs",
@@ -118,7 +108,6 @@ _REST_JOB_PROVIDERS: dict[str, dict] = {
     },
     "ocr-vision": {
         "base_url_env": "LYNX_OCR_URL",
-        "base_url_default": "http://ocr-vision.mock",
         "auth": AuthSpec("X-API-Key", "", "LYNX_OCR_KEY"),
         "timeout_s": 8.0,
         "poll_path": "/v1/documents/jobs",
@@ -129,7 +118,6 @@ _REST_JOB_PROVIDERS: dict[str, dict] = {
     },
     "close-engine": {
         "base_url_env": "LYNX_CLOSE_URL",
-        "base_url_default": "http://close-engine.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_CLOSE_KEY"),
         "timeout_s": 8.0,
         "poll_path": "/v1/close/jobs",
@@ -143,7 +131,6 @@ _REST_JOB_PROVIDERS: dict[str, dict] = {
     },
     "regulatory-filings": {
         "base_url_env": "LYNX_REGULATORY_URL",
-        "base_url_default": "http://regulatory-filings.mock",
         "auth": AuthSpec("Authorization", "Bearer ", "LYNX_REGULATORY_KEY"),
         "timeout_s": 8.0,
         "poll_path": "/v1/regulatory/jobs",
@@ -158,16 +145,11 @@ _REST_JOB_PROVIDERS: dict[str, dict] = {
 }
 
 
-_HTTP_TRANSPORT: httpx.BaseTransport | None = None
-_TRANSPORT_LOCK = threading.Lock()
-
-
-def set_http_transport(transport: httpx.BaseTransport | None) -> None:
-    """Override the httpx transport (used by tests with ASGITransport)."""
-    global _HTTP_TRANSPORT
-    with _TRANSPORT_LOCK:
-        _HTTP_TRANSPORT = transport
-    reset()
+def _required_env(name: str) -> str:
+    val = os.environ.get(name)
+    if not val:
+        raise RuntimeError(f"provider env var not set: {name}")
+    return val
 
 
 @dataclass
@@ -186,12 +168,11 @@ def _build_rest(provider: str) -> _RestEntry:
     cfg = _REST_PROVIDERS.get(provider) or _REST_JOB_PROVIDERS.get(provider)
     if cfg is None:
         raise KeyError(f"REST provider not configured: {provider}")
-    base_url = os.getenv(cfg["base_url_env"], cfg["base_url_default"])
+    base_url = _required_env(cfg["base_url_env"])
     client = RestClient(
         provider, base_url, cfg["auth"],
         timeout_s=cfg.get("timeout_s", 5.0),
         policy=cfg.get("policy", RetryPolicy()),
-        transport=_HTTP_TRANSPORT,
     )
     if provider in _REST_JOB_PROVIDERS:
         return _RestEntry(client, cfg.get("sync_actions", {}), cfg.get("job_actions", {}),
@@ -221,9 +202,10 @@ def _stripe_client():
     if c is not None:
         return c
     from lynx_sdk_stripe_treasury import StripeTreasuryClient
-    base = os.getenv("LYNX_STRIPE_URL", "http://stripe-treasury.mock")
-    c = StripeTreasuryClient(api_key=os.getenv("LYNX_STRIPE_KEY", ""),
-                             base_url=base, transport=_HTTP_TRANSPORT)
+    c = StripeTreasuryClient(
+        api_key=_required_env("LYNX_STRIPE_KEY"),
+        base_url=_required_env("LYNX_STRIPE_URL"),
+    )
     _CLIENT_CACHE["stripe-treasury"] = c
     return c
 
@@ -233,9 +215,10 @@ def _tax_client():
     if c is not None:
         return c
     from lynx_sdk_tax import TaxClient
-    base = os.getenv("LYNX_TAX_URL", "http://tax-rules.mock")
-    c = TaxClient(api_key=os.getenv("LYNX_TAX_KEY", ""),
-                  base_url=base, transport=_HTTP_TRANSPORT)
+    c = TaxClient(
+        api_key=_required_env("LYNX_TAX_KEY"),
+        base_url=_required_env("LYNX_TAX_URL"),
+    )
     _CLIENT_CACHE["tax-rules"] = c
     return c
 
@@ -245,8 +228,7 @@ def _treasury_client():
     if c is not None:
         return c
     from app.services.transport.grpc_client import GrpcClient
-    target = os.getenv("LYNX_TREASURY_GRPC", "treasury-ops.mock:50051")
-    c = GrpcClient("treasury-ops", target,
+    c = GrpcClient("treasury-ops", _required_env("LYNX_TREASURY_GRPC"),
                    auth_header="metadata-token", auth_env="LYNX_TREASURY_KEY")
     _CLIENT_CACHE["treasury-ops"] = c
     return c
@@ -257,8 +239,8 @@ def _vendor_portal_client():
     if c is not None:
         return c
     from app.services.transport.mcp import McpClient
-    host = os.getenv("LYNX_MCP_HOST", "vendor-portal.mock")
-    port = int(os.getenv("LYNX_MCP_PORT", "7800"))
+    host = _required_env("LYNX_MCP_HOST")
+    port = int(_required_env("LYNX_MCP_PORT"))
     c = McpClient("vendor-portal", host, port, auth_env="LYNX_VENDOR_PORTAL_KEY")
     _CLIENT_CACHE["vendor-portal"] = c
     return c
@@ -293,8 +275,8 @@ def _tax_call(action: str, payload: dict) -> dict:
 
 def _treasury_call(action: str, payload: dict) -> dict:
     from app.services.transport.grpc_client import parse_json_payload
-    from _mock.grpc.treasury_ops import treasury_pb2 as pb2
-    from _mock.grpc.treasury_ops import treasury_pb2_grpc as pb2_grpc
+    from app.services.transport.proto.treasury_ops import treasury_pb2 as pb2
+    from app.services.transport.proto.treasury_ops import treasury_pb2_grpc as pb2_grpc
     c = _treasury_client()
     if action == "get_cash_position":
         req = pb2.CashPositionRequest(entity_id=str(payload.get("region", "")))
