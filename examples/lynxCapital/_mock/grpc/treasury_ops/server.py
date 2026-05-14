@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from typing import Any
 
 import grpc
 
@@ -53,34 +54,75 @@ async def _apply_faults(action: str, payload: dict, context: grpc.aio.ServicerCo
     return token
 
 
+def _coerce(value: Any, default: Any) -> Any:
+    return default if value is None else value
+
+
 class TreasuryOps(pb2_grpc.TreasuryOpsServicer):
     async def GetCashPosition(self, request, context):
-        payload = {"entity_id": request.entity_id}
+        payload = {"region": request.region}
         await _apply_faults("get_cash_position", payload, context)
-        return pb2.CashPositionResponse(json=json.dumps(cases.resolve("treasury-ops", "get_cash_position", payload)))
+        c = cases.resolve("treasury-ops", "get_cash_position", payload)
+        return pb2.CashPositionResponse(
+            region=_coerce(c.get("region"), ""),
+            cash_usd=float(_coerce(c.get("cash_usd"), 0.0)),
+            operating=float(_coerce(c.get("operating"), 0.0)),
+            reserves=float(_coerce(c.get("reserves"), 0.0)),
+            as_of=_coerce(c.get("as_of"), ""),
+        )
 
     async def ForecastLiquidity(self, request, context):
-        payload = {"entity_id": request.entity_id, "horizon_days": request.horizon_days}
+        payload = {"region": request.region, "horizon_days": request.horizon_days}
         await _apply_faults("forecast_liquidity", payload, context)
-        return pb2.ForecastResponse(json=json.dumps(cases.resolve("treasury-ops", "forecast_liquidity", payload)))
+        c = cases.resolve("treasury-ops", "forecast_liquidity", payload)
+        return pb2.ForecastResponse(
+            horizon_days=int(_coerce(c.get("horizon_days"), 0)),
+            outflow_usd=float(_coerce(c.get("outflow_usd"), 0.0)),
+            inflow_usd=float(_coerce(c.get("inflow_usd"), 0.0)),
+            net=float(_coerce(c.get("net"), 0.0)),
+            shortfall_risk=_coerce(c.get("shortfall_risk"), ""),
+        )
 
     async def PlaceFxHedge(self, request, context):
-        payload = {"pair": request.pair, "notional": request.notional, "tenor": request.tenor}
+        payload = {
+            "from_currency": request.from_currency,
+            "to_currency":   request.to_currency,
+            "notional":      request.notional,
+            "tenor_days":    request.tenor_days,
+        }
         await _apply_faults("place_fx_hedge", payload, context)
-        result = cases.resolve("treasury-ops", "place_fx_hedge", payload)
-        deliver("treasury-ops", "treasury.hedge.executed", result, delay_s=0.6)
-        return pb2.FxHedgeResponse(json=json.dumps(result))
+        c = cases.resolve("treasury-ops", "place_fx_hedge", payload)
+        result = pb2.FxHedgeResponse(
+            hedge_id=_coerce(c.get("hedge_id"), ""),
+            from_currency=_coerce(c.get("from_currency"), ""),
+            to_currency=_coerce(c.get("to_currency"), ""),
+            notional=float(_coerce(c.get("notional"), 0.0)),
+            forward_rate=float(_coerce(c.get("forward_rate"), 0.0)),
+            tenor_days=int(_coerce(c.get("tenor_days"), 0)),
+            status=_coerce(c.get("status"), ""),
+            error=_coerce(c.get("error"), ""),
+        )
+        deliver("treasury-ops", "treasury.hedge.executed", c, delay_s=0.6)
+        return result
 
     async def TransferFunds(self, request, context):
         payload = {
-            "from_account": request.from_account, "to_account": request.to_account,
-            "amount": request.amount, "currency": request.currency,
+            "from_region": request.from_region, "to_region": request.to_region,
+            "amount_usd":  request.amount_usd,  "currency":  request.currency,
             "idempotency_key": request.idempotency_key,
         }
         await _apply_faults("transfer_funds", payload, context)
-        result = cases.resolve("treasury-ops", "transfer_funds", payload)
-        deliver("treasury-ops", "treasury.transfer.completed", result, delay_s=0.4)
-        return pb2.TransferResponse(json=json.dumps(result))
+        c = cases.resolve("treasury-ops", "transfer_funds", payload)
+        result = pb2.TransferResponse(
+            transfer_id=_coerce(c.get("transfer_id"), ""),
+            from_region=_coerce(c.get("from_region"), ""),
+            to_region=_coerce(c.get("to_region"), ""),
+            amount_usd=float(_coerce(c.get("amount_usd"), 0.0)),
+            status=_coerce(c.get("status"), ""),
+            value_date=_coerce(c.get("value_date"), ""),
+        )
+        deliver("treasury-ops", "treasury.transfer.completed", c, delay_s=0.4)
+        return result
 
 
 async def serve(addr: str = "0.0.0.0:50051") -> None:

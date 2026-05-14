@@ -60,12 +60,57 @@ wheels = [
 ]
 
 [[package]]
+name = "async-timeout"
+version = "5.0.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a5/ae/136395dfbfe00dfc94da3f3e136d0b13f394cba8f4841120e34226265780/async_timeout-5.0.1.tar.gz", hash = "sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3", size = 9274, upload-time = "2024-11-06T16:41:39.6Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl", hash = "sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c", size = 6233, upload-time = "2024-11-06T16:41:37.9Z" },
+]
+
+[[package]]
 name = "bracex"
 version = "2.6"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/63/9a/fec38644694abfaaeca2798b58e276a8e61de49e2e37494ace423395febc/bracex-2.6.tar.gz", hash = "sha256:98f1347cd77e22ee8d967a30ad4e310b233f7754dbf31ff3fceb76145ba47dc7", size = 26642, upload-time = "2025-06-22T19:12:31.254Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9d/2a/9186535ce58db529927f6cf5990a849aa9e052eea3e2cfefe20b9e1802da/bracex-2.6-py3-none-any.whl", hash = "sha256:0b0049264e7340b3ec782b5cb99beb325f36c3782a32e36e876452fd49a09952", size = 11508, upload-time = "2025-06-22T19:12:29.781Z" },
+]
+
+[[package]]
+name = "caracalai-core"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f6/9d/801608dfaa3524c36f80af847457e6d6041cc0d6b5671a3dcc3b5af4518d/caracalai_core-0.1.1.tar.gz", hash = "sha256:3de9ad9ec6c3380ae3c0a1e9b3d4fe6856208d0a01d962337ae796a96f5a210b", size = 6343, upload-time = "2026-05-14T09:36:59.236Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/74/d12184ed4a0fd48b7bdcc558d5fffb3d4461cc7f981a140dac6f997530fc/caracalai_core-0.1.1-py3-none-any.whl", hash = "sha256:3bfd1aadb65b31aaa4744a95fbb18e0c241f7b3e3ad14febeb6eb3a3549eff0e", size = 7098, upload-time = "2026-05-14T09:36:58.097Z" },
+]
+
+[[package]]
+name = "caracalai-identity"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "caracalai-core" },
+    { name = "httpx" },
+    { name = "pyjwt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/8d/8c664aea7f839c358a40ab544b80ddf41a6dd0676bcf27234109448caaf7/caracalai_identity-0.1.1.tar.gz", hash = "sha256:b7fae7c6a1af6f1f8e524c14fd26006abb424b8d5cf8a359a5997141c5b61695", size = 8446, upload-time = "2026-05-14T09:37:00.916Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/c4/eef744148ccfb94b525f9c14f4dfe8eb97a68a5bf79c6c2cc83c2f13b98d/caracalai_identity-0.1.1-py3-none-any.whl", hash = "sha256:21e49b14eae4b3749d03afe22311643d32029a8a9ccdb541891a875f90377c09", size = 9871, upload-time = "2026-05-14T09:36:59.896Z" },
+]
+
+[[package]]
+name = "caracalai-sdk"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "caracalai-identity" },
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/d8/73b562457985170cb3547546d81863a046b521f39b074dfc1a01a00aae0f/caracalai_sdk-0.1.1.tar.gz", hash = "sha256:45d06b0c840a0e0f066df719cf8291c898cdb34d1a4b89b50930c40aba006a74", size = 16501, upload-time = "2026-05-14T09:40:16.963Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/00/f10d680c95f5b890a4cb43e87968bbe314bd3c4a5e29fd75bf1fb6653848/caracalai_sdk-0.1.1-py3-none-any.whl", hash = "sha256:d4f8182af36e56a070893ffd048e1d03f6a4a4cdaf58378537fe49e65be2ded3", size = 20726, upload-time = "2026-05-14T09:40:15.664Z" },
 ]
 
 [[package]]
@@ -903,6 +948,7 @@ name = "lynx-capital"
 version = "0.1.1"
 source = { editable = "." }
 dependencies = [
+    { name = "caracalai-sdk" },
     { name = "deepagents" },
     { name = "fastapi" },
     { name = "grpcio" },
@@ -918,6 +964,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "redis" },
     { name = "sse-starlette" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -930,6 +977,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "caracalai-sdk", specifier = ">=0.1.1" },
     { name = "deepagents", specifier = ">=0.6" },
     { name = "fastapi", specifier = ">=0.136" },
     { name = "grpcio", specifier = ">=1.80" },
@@ -947,6 +995,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
     { name = "python-dotenv", specifier = ">=1.2" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "redis", specifier = ">=5.2" },
     { name = "sse-starlette", specifier = ">=3.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.46" },
 ]
@@ -1363,6 +1412,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.12.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c2/27/a3b6e5bf6ff856d2509292e95c8f57f0df7017cf5394921fc4e4ef40308a/pyjwt-2.12.1.tar.gz", hash = "sha256:c74a7a2adf861c04d002db713dd85f84beb242228e671280bf709d765b03672b", size = 102564, upload-time = "2026-03-13T19:27:37.25Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e5/7a/8dd906bd22e79e47397a61742927f6747fe93242ef86645ee9092e610244/pyjwt-2.12.1-py3-none-any.whl", hash = "sha256:28ca37c070cad8ba8cd9790cd940535d40274d22f80ab87f3ac6a713e6e8454c", size = 29726, upload-time = "2026-03-13T19:27:35.677Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1440,6 +1498,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/da/92/1446574745d74df0c92e6aa4a7b0b3130706a4142b2d1a5869f2eaa423c6/pyyaml-6.0.3-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:16249ee61e95f858e83976573de0f5b2893b3677ba71c9dd36b9cf8be9ac6d65", size = 829923, upload-time = "2025-09-25T21:32:54.537Z" },
     { url = "https://files.pythonhosted.org/packages/f0/7a/1c7270340330e575b92f397352af856a8c06f230aa3e76f86b39d01b416a/pyyaml-6.0.3-cp314-cp314t-win_amd64.whl", hash = "sha256:4ad1906908f2f5ae4e5a8ddfce73c320c2a1429ec52eafd27138b7f1cbe341c9", size = 174062, upload-time = "2025-09-25T21:32:55.767Z" },
     { url = "https://files.pythonhosted.org/packages/f1/12/de94a39c2ef588c7e6455cfbe7343d3b2dc9d6b6b2f40c4c6565744c873d/pyyaml-6.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:ebc55a14a21cb14062aa4162f906cd962b28e2e9ea38f9b4391244cd8de4ae0b", size = 149341, upload-time = "2025-09-25T21:32:56.828Z" },
+]
+
+[[package]]
+name = "redis"
+version = "7.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "async-timeout", marker = "python_full_version < '3.11.3'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7b/7f/3759b1d0d72b7c92f0d70ffd9dc962b7b7b5ee74e135f9d7d8ab06b8a318/redis-7.4.0.tar.gz", hash = "sha256:64a6ea7bf567ad43c964d2c30d82853f8df927c5c9017766c55a1d1ed95d18ad", size = 4943913, upload-time = "2026-03-24T09:14:37.53Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/3a/95deec7db1eb53979973ebd156f3369a72732208d1391cd2e5d127062a32/redis-7.4.0-py3-none-any.whl", hash = "sha256:a9c74a5c893a5ef8455a5adb793a31bb70feb821c86eccb62eebef5a19c429ec", size = 409772, upload-time = "2026-03-24T09:14:35.968Z" },
 ]
 
 [[package]]
