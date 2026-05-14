@@ -50,11 +50,12 @@ COPY packages/identity/ts/tsconfig.json packages/identity/ts/tsconfig.json
 COPY packages/identity/ts/src packages/identity/ts/src
 COPY apps/coordinator/tsconfig.json apps/coordinator/tsconfig.json
 COPY apps/coordinator/src/ apps/coordinator/src/
-RUN pnpm --filter @caracalai/core build && \
-    pnpm --filter @caracalai/identity build && \
-    pnpm --filter @caracalai/coordinator build && \
-    pnpm --filter @caracalai/coordinator deploy --prod /out && \
-    find /out/node_modules -type d \( -name test -o -name tests -o -name __tests__ \) -prune -exec rm -rf {} + 2>/dev/null || true && \
+RUN set -e; \
+    pnpm --filter @caracalai/core build; \
+    pnpm --filter @caracalai/identity build; \
+    pnpm --filter @caracalai/coordinator build; \
+    pnpm --filter @caracalai/coordinator deploy --prod --legacy /out; \
+    find /out/node_modules -type d \( -name test -o -name tests -o -name __tests__ \) -prune -exec rm -rf {} + 2>/dev/null || true; \
     find /out/node_modules -type f \( -name '*.md' -o -name '*.markdown' -o -name '*.map' -o -name 'CHANGELOG*' -o -name '.npmignore' -o -name '.eslintrc*' -o -name '.prettierrc*' \) -delete 2>/dev/null || true
 
 FROM ${NODE_IMAGE}
