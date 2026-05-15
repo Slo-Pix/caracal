@@ -3,6 +3,8 @@
 //
 // Translate raw Error messages from fetch / SDK into actionable hints for the user.
 
+import { scrubTokens as coreScrub } from '@caracalai/engine'
+
 interface AdminApiErrorLike {
   name: string
   status: number
@@ -20,7 +22,17 @@ function isAdminApiError(err: unknown): err is AdminApiErrorLike {
   )
 }
 
+const AUTH_HEADER = /Authorization:\s*\S+/gi
+
+export function scrubTokens(s: string): string {
+  return coreScrub(s).replace(AUTH_HEADER, 'Authorization: ***')
+}
+
 export function explainError(err: unknown): string {
+  return scrubTokens(rawExplain(err))
+}
+
+function rawExplain(err: unknown): string {
   if (isAdminApiError(err)) {
     const detail = typeof err.body === 'object' && err.body !== null && 'message' in err.body
       ? String((err.body as { message: unknown }).message)

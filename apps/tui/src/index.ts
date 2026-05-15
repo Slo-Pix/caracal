@@ -3,6 +3,7 @@
 //
 // Caracal TUI entry point: bootstraps the AdminClient and launches the menu.
 
+import '@caracalai/engine/scrubCwdEnv'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import { AdminClient } from '@caracalai/admin'
