@@ -15,17 +15,25 @@ cli() { redis-cli -h "$HOST" -p "$PORT" -a "$PASS" --no-auth-warning "$@"; }
 
 STREAMS=(
   "caracal.audit.events"
+  "caracal.audit.events.dlq"
   "caracal.policy.invalidate"
   "caracal.sessions.revoke"
+  "caracal.keys.invalidate"
   "caracal.agents.lifecycle"
+  "caracal.invocations.lifecycle"
+  "caracal.delegations.invalidate"
   "caracal.providers.ratelimit"
 )
 EXPECTED_GROUPS=(
   "caracal.audit.events:audit-ingestor"
   "caracal.audit.events:siem-export"
+  "caracal.audit.events.dlq:audit-dlq-observer"
   "caracal.policy.invalidate:opa-engine"
   "caracal.sessions.revoke:sts-revocation"
+  "caracal.keys.invalidate:sts-keys"
   "caracal.agents.lifecycle:coordinator-relay"
+  "caracal.invocations.lifecycle:invocations-observer"
+  "caracal.delegations.invalidate:delegations-observer"
 )
 
 echo "=== Streams exist ==="
