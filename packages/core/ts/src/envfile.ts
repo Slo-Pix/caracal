@@ -40,12 +40,12 @@ export function runtimeEnvFile(): string {
 export function discoverAdminToken(explicit?: string): string | undefined {
   if (explicit) return explicit;
   if (process.env.CARACAL_ADMIN_TOKEN) return process.env.CARACAL_ADMIN_TOKEN;
-  const candidates = [
-    process.env.CARACAL_ENV_FILE,
-    runtimeEnvFile(),
-    join(process.cwd(), '.env'),
-    join(process.cwd(), 'infra', 'docker', '.env'),
-  ].filter((p): p is string => Boolean(p));
+  const candidates: string[] = [];
+  if (process.env.CARACAL_ENV_FILE) candidates.push(process.env.CARACAL_ENV_FILE);
+  candidates.push(runtimeEnvFile());
+  if (process.env.CARACAL_REPO_ROOT) {
+    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', '.env'));
+  }
   for (const path of candidates) {
     const env = readEnvFile(path);
     if (env.CARACAL_ADMIN_TOKEN) return env.CARACAL_ADMIN_TOKEN;

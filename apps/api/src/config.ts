@@ -4,7 +4,7 @@
 // API service configuration loaded from environment variables.
 
 import { existsSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { loadEnvFile } from 'node:process'
 import { getenv, mustGetenv } from '@caracalai/core'
 
@@ -12,15 +12,9 @@ function loadEnvChain(): void {
   const seen = new Set<string>()
   const candidates: string[] = []
 
-  if (process.env.CARACAL_ENV_FILE) candidates.push(process.env.CARACAL_ENV_FILE)
-  candidates.push(resolve(process.cwd(), '.env'))
-
-  let dir = process.cwd()
-  for (let depth = 0; depth < 6; depth++) {
-    candidates.push(join(dir, 'infra', 'docker', '.env'))
-    const parent = dirname(dir)
-    if (parent === dir) break
-    dir = parent
+  if (process.env.CARACAL_ENV_FILE) candidates.push(resolve(process.env.CARACAL_ENV_FILE))
+  if (process.env.CARACAL_REPO_ROOT) {
+    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', '.env'))
   }
 
   for (const path of candidates) {

@@ -3,6 +3,7 @@
 //
 // Caracal CLI entry point — stack, runtime, and admin subcommands.
 
+import './runtime/scrubCwdEnv.ts'
 import { parse } from 'smol-toml'
 import { readFileSync } from 'fs'
 import { resolveCliConfigPath } from '@caracalai/core/cli'

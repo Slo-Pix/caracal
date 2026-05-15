@@ -13,7 +13,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgresData:/var/lib/postgresql
     healthcheck:
@@ -28,7 +28,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-512mb}
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redisData:/data
       - type: tmpfs
@@ -60,7 +60,7 @@ services:
       ISSUER_URL: http://localhost:8080
       PORT: 8080
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s
@@ -84,7 +84,7 @@ services:
       PORT: 3000
       HOST: 0.0.0.0
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s
@@ -107,7 +107,7 @@ services:
       STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
       PORT: 8081
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s
@@ -131,7 +131,7 @@ services:
       AUDIT_EXPORT_S3_BUCKET: ${AUDIT_EXPORT_S3_BUCKET:-}
       PORT: "9090"
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s
@@ -155,7 +155,7 @@ services:
       PORT: 4000
       HOST: 0.0.0.0
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/ready || exit 1"]
       interval: 5s
