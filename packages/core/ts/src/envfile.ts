@@ -24,7 +24,7 @@ export function readEnvFile(path: string): Record<string, string> {
 
 /**
  * Resolve the runtime home written to by `caracal up` in installed mode.
- * Mirrors the layout in apps/cli/src/runtime/install.ts so consumers
+ * Mirrors the layout in packages/engine/src/runtime.ts so consumers
  * outside the CLI (SDK helpers, tests, scripts) reach the same file.
  */
 export function runtimeEnvFile(): string {

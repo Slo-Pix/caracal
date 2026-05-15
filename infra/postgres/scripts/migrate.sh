@@ -7,6 +7,11 @@
 
 set -eu
 
+if [ -n "${PGPASSWORD_FILE:-}" ] && [ -r "${PGPASSWORD_FILE}" ]; then
+    PGPASSWORD=$(cat "${PGPASSWORD_FILE}")
+    export PGPASSWORD
+fi
+
 migrations_dir="${MIGRATIONS_DIR:-/migrations}"
 lock_key="${MIGRATION_ADVISORY_LOCK_KEY:-4732518903281471}"
 
