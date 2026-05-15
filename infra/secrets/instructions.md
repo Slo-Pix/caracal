@@ -5,10 +5,10 @@
   Kubernetes manifests under `caracal/infra/`.
 
 ## Required
-- Must generate dev secrets via `bash secret-init.sh`; output lands in `files/`.
+- Must generate dev secrets via `pnpm secrets:init`; output lands in `files/`.
 - Must keep the `files/` directory gitignored at all times.
-- Must use `openssl rand -hex` for every key/password.
-- Must use 0400 permissions on every generated secret file.
+- Must use cryptographically random hex strings for every key/password (Node's `crypto.randomBytes`).
+- Must use 0400 permissions on every generated secret file (POSIX only; Windows inherits NTFS ACLs).
 - Production deployments must source secrets from an external manager
   (Vault, AWS Secrets Manager, GCP Secret Manager, or Kubernetes Secrets) and
   mount them at the same paths the dev stack uses.

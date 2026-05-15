@@ -36,7 +36,7 @@ The base CalVer is centralized in `packages/engine/runtime/release.json` (consum
 git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
 pnpm install
 cp infra/docker/.env.example infra/docker/.env   # set POSTGRES_PASSWORD, REDIS_PASSWORD, CARACAL_ADMIN_TOKEN
-infra/secrets/secret-init.sh                     # generate Docker secret files (gitignored)
+pnpm secrets:init                                # generate Docker secret files (gitignored)
 pnpm caracal up                                  # build + start the full stack
 pnpm caracal init                                # provision local zone, write caracal.toml
 ```

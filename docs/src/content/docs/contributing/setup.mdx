@@ -58,10 +58,10 @@ pnpm install
 
 ```sh
 cp infra/docker/.env.example infra/docker/.env
-infra/secrets/secret-init.sh
+pnpm secrets:init
 ```
 
-`infra/docker/.env.example` documents every required and optional variable. Copy it to `infra/docker/.env` and set your values. `secret-init.sh` generates the Docker secret files in `infra/secrets/files/` (gitignored) that the compose stack mounts for postgres, Redis, and the application services. Run it once before the first `caracal up`; it is idempotent and safe to re-run.
+`infra/docker/.env.example` documents every required and optional variable. Copy it to `infra/docker/.env` and set your values. `pnpm secrets:init` generates the Docker secret files in `infra/secrets/files/` (gitignored) that the compose stack mounts for postgres, Redis, and the application services. Run it once before the first `caracal up`; it is idempotent and safe to re-run.
 
 The variables you most often need to set in `infra/docker/.env`:
 

@@ -151,7 +151,7 @@ CARACAL_LOCAL_BOOTSTRAP_ENABLED=true
 **2. Generate Docker secret files:**
 
 ```bash
-infra/secrets/secret-init.sh
+pnpm secrets:init
 ```
 
 This creates per-secret files in `infra/secrets/files/` (gitignored) that the compose stack mounts as Docker secrets. The passwords it generates must match the values you set in `infra/docker/.env`. Run it once; it is idempotent.
