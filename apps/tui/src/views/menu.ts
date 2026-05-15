@@ -90,21 +90,21 @@ function parseEnv(list: string): Record<string, string> {
 }
 
 const ENTRIES: Entry[] = [
-  { key: '1', label: 'Zones',         needsZone: false, open: zonesView },
-  { key: '2', label: 'Applications',  needsZone: true,  open: applicationsView },
-  { key: '3', label: 'Resources',     needsZone: true,  open: resourcesView },
-  { key: '4', label: 'Providers',     needsZone: true,  open: providersView },
-  { key: '5', label: 'Policies',      needsZone: true,  open: policiesView },
-  { key: '6', label: 'Policy-sets',   needsZone: true,  open: policySetsView },
-  { key: '7', label: 'Grants',        needsZone: true,  open: grantsView },
-  { key: '8', label: 'Sessions',      needsZone: true,  open: sessionsView },
-  { key: '9', label: 'Audit (live)',  needsZone: true,  open: auditView },
-  { key: '0', label: 'Agents',        needsZone: true,  open: agentsView },
-  { key: 'g', label: 'Delegations',   needsZone: true,  open: delegationsView },
-  { key: 'x', label: 'Audit explain', needsZone: true,  open: auditExplainEntry },
-  { key: 'c', label: 'Credential',    needsZone: false, open: credentialEntry },
-  { key: 's', label: 'Stack',         needsZone: false, open: stackEntry },
-  { key: 'u', label: 'Run',           needsZone: false, open: runEntry },
+  { key: '1', label: 'zone',         needsZone: false, open: zonesView },
+  { key: '2', label: 'app',          needsZone: true,  open: applicationsView },
+  { key: '3', label: 'resource',     needsZone: true,  open: resourcesView },
+  { key: '4', label: 'provider',     needsZone: true,  open: providersView },
+  { key: '5', label: 'policy',       needsZone: true,  open: policiesView },
+  { key: '6', label: 'policy-set',   needsZone: true,  open: policySetsView },
+  { key: '7', label: 'grant',        needsZone: true,  open: grantsView },
+  { key: '8', label: 'session',      needsZone: true,  open: sessionsView },
+  { key: '9', label: 'audit',        needsZone: true,  open: auditView },
+  { key: '0', label: 'agent',        needsZone: true,  open: agentsView },
+  { key: 'g', label: 'delegation',   needsZone: true,  open: delegationsView },
+  { key: 'x', label: 'explain',      needsZone: true,  open: auditExplainEntry },
+  { key: 'c', label: 'credential',   needsZone: false, open: credentialEntry },
+  { key: 's', label: 'stack',        needsZone: false, open: stackEntry },
+  { key: 'u', label: 'run',          needsZone: false, open: runEntry },
 ]
 
 function auditExplainEntry(ctx: Ctx): View {

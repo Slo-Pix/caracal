@@ -26,6 +26,10 @@
     "./cli": {
       "import": "./dist/cliconfig.js",
       "types": "./dist/cliconfig.d.ts"
+    },
+    "./commands": {
+      "import": "./dist/commands.js",
+      "types": "./dist/commands.d.ts"
     }
   },
   "files": [
