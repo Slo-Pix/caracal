@@ -18,6 +18,15 @@ assertRuntimeSafe()
 const app = await buildApp()
 const redis = buildRedis()
 const log = app.log
+
+process.on('unhandledRejection', (reason) => {
+  log.fatal({ reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) }, 'unhandledRejection')
+  process.exit(1)
+})
+process.on('uncaughtException', (err) => {
+  log.fatal({ stack: err.stack ?? err.message }, 'uncaughtException')
+  process.exit(1)
+})
 const outbox = startOutboxPublisher(db, redis, { log })
 const ttl = startTTLSweeper(db, { log })
 const deadline = startDeadlineEnforcer(db, { log })

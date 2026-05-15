@@ -21,6 +21,19 @@ function intEnv(key: string, fallback: number, min = 1): number {
   return n
 }
 
+function boolEnv(key: string, fallback: boolean): boolean {
+  const raw = process.env[key]
+  if (raw === undefined || raw === '') return fallback
+  switch (raw.toLowerCase()) {
+    case '1': case 'true': case 'yes': case 'on':
+      return true
+    case '0': case 'false': case 'no': case 'off':
+      return false
+    default:
+      throw new Error(`Invalid boolean env var ${key}: ${raw}`)
+  }
+}
+
 function buildCfg() {
   const issuerUrl = mustGetenv('ISSUER_URL')
   return {
@@ -56,6 +69,7 @@ function buildCfg() {
     coordinatorRateLimitPerMin: intEnv('COORDINATOR_RATE_LIMIT_PER_MIN', 600, 0),
     dedupeWindowSec: intEnv('RELAY_DEDUPE_WINDOW_SEC', 3600),
     logLevel: getenv('LOG_LEVEL', 'info'),
+    trustProxy: boolEnv('TRUST_PROXY', false),
   }
 }
 

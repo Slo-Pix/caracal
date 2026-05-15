@@ -31,6 +31,7 @@ export async function buildApp() {
   const app = Fastify({
     logger: { transport: { target: 'pino/file', options: { destination: '/dev/stderr' } } },
     requestTimeout: cfg.requestTimeoutMs,
+    trustProxy: cfg.trustProxy,
   })
   app.decorate('db', db)
   app.decorate('redis', redis)

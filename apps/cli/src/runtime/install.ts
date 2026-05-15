@@ -4,7 +4,7 @@
 // Runtime mode helpers: locate $CARACAL_HOME, install bundled assets, generate secrets.
 
 import { randomBytes } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import { COMPOSE_YML, ENV_EXAMPLE } from '../runtime/embedded.ts'
@@ -61,6 +61,10 @@ export function installRuntimeAssets(paths: RuntimePaths = runtimePaths()): { cr
   if (!existsSync(paths.envFile)) {
     writeFileSync(paths.envFile, seedEnv(ENV_EXAMPLE), { mode: 0o600 })
     created = true
+  } else {
+    // Defensive: env file holds DB/Redis/admin secrets; force tight perms even
+    // if it was created by an earlier version or copied from .env.example.
+    try { chmodSync(paths.envFile, 0o600) } catch { /* permissions may be unsupported */ }
   }
   return { created }
 }

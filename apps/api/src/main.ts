@@ -24,6 +24,15 @@ const log = (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string
   process.stdout.write(`[${level}] ${line}\n`)
 }
 
+process.on('unhandledRejection', (reason) => {
+  log('error', 'unhandledRejection', { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) })
+  process.exit(1)
+})
+process.on('uncaughtException', (err) => {
+  log('error', 'uncaughtException', { stack: err.stack ?? err.message })
+  process.exit(1)
+})
+
 const db = newDB({
   connectionString: cfg.databaseUrl,
   max: cfg.db.poolMax,
