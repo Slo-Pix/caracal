@@ -75,4 +75,16 @@ describe('dispatch', () => {
     await expect(dispatch(makeOpts(vi.fn() as Executor), [])).rejects.toThrow('exit:0')
     expect(exit).toHaveBeenCalledWith(0)
   })
+
+  it('renders Usage line using the configured binary label', async () => {
+    exitSpy()
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
+    const registry = buildRegistry(SHELL_COMMANDS, executors)
+    await expect(
+      dispatch({ binary: 'caracal cli', version: '0.0.0', mode: 'dev', registry }, ['--help']),
+    ).rejects.toThrow('exit:0')
+    const out = stdout.mock.calls.map((c) => String(c[0])).join('')
+    expect(out).toContain('Usage: caracal cli')
+  })
 })
