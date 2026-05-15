@@ -1,0 +1,78 @@
+// Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+// Caracal, a product of Garudex Labs
+//
+// Unit tests for the shared dispatcher kernel: whitelist enforcement, usage rendering, version handling.
+
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { dispatch } from '../../../../apps/cli/src/dispatcher.ts'
+import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
+import { SHELL_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+
+function makeOpts(run: Executor) {
+  const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, run]))
+  const registry = buildRegistry(SHELL_COMMANDS, executors)
+  return { binary: 'caracal', version: '0.0.0', mode: 'dev' as const, registry }
+}
+
+const exitSpy = () => vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit:${code ?? 0}`) }) as never)
+
+afterEach(() => { vi.restoreAllMocks() })
+
+describe('dispatch', () => {
+  it('routes a valid command to its executor', async () => {
+    const run = vi.fn() as Executor
+    await dispatch(makeOpts(run), ['status'])
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('passes remaining argv to the executor', async () => {
+    const run = vi.fn() as Executor
+    await dispatch(makeOpts(run), ['up', '--detach'])
+    expect(run).toHaveBeenCalledWith(['--detach'], undefined)
+  })
+
+  it('strips a leading -- separator', async () => {
+    const run = vi.fn() as Executor
+    await dispatch(makeOpts(run), ['--', 'status'])
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('rejects unknown commands with exit 1', async () => {
+    const exit = exitSpy()
+    const stderr = vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    await expect(dispatch(makeOpts(vi.fn() as Executor), ['bogus'])).rejects.toThrow('exit:1')
+    expect(exit).toHaveBeenCalledWith(1)
+    expect(stderr).toHaveBeenCalled()
+  })
+
+  it('rejects malformed command names', async () => {
+    const exit = exitSpy()
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true)
+    await expect(dispatch(makeOpts(vi.fn() as Executor), ['Bad-Name'])).rejects.toThrow('exit:1')
+    expect(exit).toHaveBeenCalledWith(1)
+  })
+
+  it('prints usage on --help and exits 0', async () => {
+    const exit = exitSpy()
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    await expect(dispatch(makeOpts(vi.fn() as Executor), ['--help'])).rejects.toThrow('exit:0')
+    expect(exit).toHaveBeenCalledWith(0)
+    const out = stdout.mock.calls.map((c) => String(c[0])).join('')
+    for (const c of SHELL_COMMANDS) expect(out).toContain(c.name)
+  })
+
+  it('prints version on --version', async () => {
+    const exit = exitSpy()
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    await expect(dispatch(makeOpts(vi.fn() as Executor), ['--version'])).rejects.toThrow('exit:0')
+    const out = stdout.mock.calls.map((c) => String(c[0])).join('')
+    expect(out).toContain('caracal 0.0.0')
+  })
+
+  it('treats empty argv as help', async () => {
+    const exit = exitSpy()
+    vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    await expect(dispatch(makeOpts(vi.fn() as Executor), [])).rejects.toThrow('exit:0')
+    expect(exit).toHaveBeenCalledWith(0)
+  })
+})
