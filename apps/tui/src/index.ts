@@ -23,8 +23,29 @@ function loadConfig(): CliConfig | undefined {
   try { return parse(readFileSync(path, 'utf8')) as unknown as CliConfig } catch { return undefined }
 }
 
+function printHelp(): void {
+  process.stdout.write(
+    [
+      'Usage: caracal-tui [--help] [--version]',
+      '',
+      'Caracal Terminal UI — interactive admin console for the Caracal control plane.',
+      '',
+      'Options:',
+      '  --help, -h            Show this help',
+      '  --version, -v         Show version',
+      '',
+      'Inside the TUI use arrow keys / number shortcuts to navigate; press `?` for in-app help.',
+      '',
+    ].join('\n'),
+  )
+}
+
 function main(): void {
   const command = process.argv[2]
+  if (command === '--help' || command === '-h' || command === 'help') {
+    printHelp()
+    return
+  }
   if (command === '--version' || command === '-v' || command === 'version') {
     const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${process.env.CARACAL_DEV_SHA ?? 'unknown'})` : 'runtime'
     process.stdout.write(`caracal-tui ${CARACAL_TUI_VERSION} [${tag}]\n`)
