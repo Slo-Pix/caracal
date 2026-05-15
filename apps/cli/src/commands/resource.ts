@@ -3,6 +3,13 @@
 //
 // `caracal resource …` admin subcommands.
 
+import {
+  resourceList,
+  resourceGet,
+  resourceCreate,
+  resourcePatch,
+  resourceDelete,
+} from '@caracalai/cli-core'
 import type { CliConfig } from '../config.ts'
 import { printSuccess } from '../style.ts'
 import {
@@ -31,7 +38,7 @@ export async function resourceCommand(argv: string[], cfg?: CliConfig): Promise<
     switch (verb) {
       case 'list': {
         const zoneId = requireZone(ctx, flags)
-        const rows = await client.resources.list(zoneId)
+        const rows = await resourceList({ client, zoneId })
         if (json) return printJSON(rows)
         return printTable(rows, ['id', 'identifier', 'name', 'upstream_url', 'scopes', 'credential_provider_id'])
       }
@@ -39,7 +46,7 @@ export async function resourceCommand(argv: string[], cfg?: CliConfig): Promise<
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('resource get <id> [--zone …]')
-        return printJSON(await client.resources.get(zoneId, id))
+        return printJSON(await resourceGet({ client, zoneId, id }))
       }
       case 'create': {
         const zoneId = requireZone(ctx, flags)
@@ -48,33 +55,42 @@ export async function resourceCommand(argv: string[], cfg?: CliConfig): Promise<
         if (!identifier || !scopes || scopes.length === 0) {
           return usage('resource create --identifier <id> --scopes a,b [--name …] [--upstream-url …] [--prefix] [--provider …]')
         }
-        return printJSON(await client.resources.create(zoneId, {
-          identifier,
-          scopes,
-          name: flagString(flags, 'name'),
-          upstream_url: flagString(flags, 'upstream-url'),
-          prefix: flagBool(flags, 'prefix') || undefined,
-          credential_provider_id: flagString(flags, 'provider'),
+        return printJSON(await resourceCreate({
+          client,
+          zoneId,
+          input: {
+            identifier,
+            scopes,
+            name: flagString(flags, 'name'),
+            upstream_url: flagString(flags, 'upstream-url'),
+            prefix: flagBool(flags, 'prefix') || undefined,
+            credential_provider_id: flagString(flags, 'provider'),
+          },
         }))
       }
       case 'patch': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('resource patch <id> [--identifier …] [--scopes …] [--upstream-url …] [--name …] [--provider …] [--prefix=true|false]')
-        return printJSON(await client.resources.patch(zoneId, id, {
-          identifier: flagString(flags, 'identifier'),
-          name: flagString(flags, 'name'),
-          upstream_url: flagString(flags, 'upstream-url'),
-          prefix: flags['prefix'] === undefined ? undefined : flagBool(flags, 'prefix'),
-          scopes: flagList(flags, 'scopes'),
-          credential_provider_id: flagString(flags, 'provider'),
+        return printJSON(await resourcePatch({
+          client,
+          zoneId,
+          id,
+          input: {
+            identifier: flagString(flags, 'identifier'),
+            name: flagString(flags, 'name'),
+            upstream_url: flagString(flags, 'upstream-url'),
+            prefix: flags['prefix'] === undefined ? undefined : flagBool(flags, 'prefix'),
+            scopes: flagList(flags, 'scopes'),
+            credential_provider_id: flagString(flags, 'provider'),
+          },
         }))
       }
       case 'delete': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('resource delete <id> [--zone …]')
-        await client.resources.delete(zoneId, id)
+        await resourceDelete({ client, zoneId, id })
         printSuccess(`deleted ${id}`)
         return
       }
