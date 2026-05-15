@@ -13,7 +13,7 @@ import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
-import { assertRuntimeSafe, caracalMode, isRuntime } from '@caracalai/core'
+import { assertRuntimeSafe, caracalMode, isRuntime, SECRET_KEYS } from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
 import { resourcesRoutes } from './routes/resources.js'
@@ -27,6 +27,7 @@ import { stepUpChallengesRoutes } from './routes/step-up-challenges.js'
 import { policyTemplatesRoutes } from './routes/policy-templates.js'
 import { zoneEventsRoutes } from './routes/zone-events.js'
 import { localBootstrapRoutes } from './routes/local-bootstrap.js'
+import { buildPinoRedactPaths } from './log-redact.js'
 
 import './fastify-augmentation.js'
 
@@ -38,8 +39,12 @@ export interface AppDeps {
 }
 
 export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
+  const redactPaths = buildPinoRedactPaths()
   const app = Fastify({
-    logger: { level: cfg.logLevel },
+    logger: {
+      level: cfg.logLevel,
+      redact: { paths: redactPaths, censor: '***' },
+    },
     bodyLimit: cfg.bodyLimitBytes,
     requestTimeout: cfg.requestTimeoutMs,
     genReqId: (req) => {

@@ -19,6 +19,7 @@ import { verifyBearer } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
 import { ttlSweeperStats } from './jobs/ttl-sweeper.js'
 import { retentionCleanerStats } from './jobs/retention-cleaner.js'
+import { buildPinoRedactPaths } from './log-redact.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -29,7 +30,10 @@ declare module 'fastify' {
 
 export async function buildApp() {
   const app = Fastify({
-    logger: { transport: { target: 'pino/file', options: { destination: '/dev/stderr' } } },
+    logger: {
+      transport: { target: 'pino/file', options: { destination: '/dev/stderr' } },
+      redact: { paths: buildPinoRedactPaths(), censor: '***' },
+    },
     requestTimeout: cfg.requestTimeoutMs,
     trustProxy: cfg.trustProxy,
   })

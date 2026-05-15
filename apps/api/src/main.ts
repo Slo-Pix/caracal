@@ -13,15 +13,15 @@ import { runMigrations } from './migrate.js'
 import { ShutdownRegistry } from './lifecycle.js'
 import { OutboxDispatcher } from './outbox.js'
 import { seedBootstrapAdminToken } from './auth.js'
-import { assertRuntimeSafe } from '@caracalai/core'
+import { assertRuntimeSafe, createLogger } from '@caracalai/core'
 
 assertRuntimeSafe()
 
 const cfg = loadConfig()
 
+const bootstrapLog = createLogger('api-bootstrap', cfg.logLevel as 'debug' | 'info' | 'warn' | 'error' | 'fatal')
 const log = (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void => {
-  const line = meta ? `${msg} ${JSON.stringify(meta)}` : msg
-  process.stdout.write(`[${level}] ${line}\n`)
+  bootstrapLog[level](msg, meta)
 }
 
 process.on('unhandledRejection', (reason) => {
