@@ -73,10 +73,6 @@ Stack must be up and provisioned first. Then run from the repo root:
 pnpm caracal-tui
 ```
 
-The workspace shim sets `CARACAL_REPO_ROOT` so `CARACAL_ADMIN_TOKEN` is discovered from `infra/docker/.env` automatically — no manual export needed. To override, set `CARACAL_ADMIN_TOKEN` in your shell.
-
-TUI env vars match the CLI: `CARACAL_ADMIN_TOKEN`, `CARACAL_API_URL`, `CARACAL_COORDINATOR_URL`, `CARACAL_COORDINATOR_TOKEN`, `CARACAL_ZONE_ID`. Config discovery: `$CARACAL_CONFIG` → `caracal.toml` (cwd / `$PWD` / `$INIT_CWD`) → `$XDG_CONFIG_HOME/caracal/caracal.toml`. Keybindings live in the README.
-
 ## Tests
 
 ```bash
@@ -90,8 +86,7 @@ go test ./services/<name>/...                # single Go service
 
 ```bash
 scripts/testCi.sh                # full suite (ts + go + py + docs)
-scripts/testCi.sh --smoke        # post-merge smoke (pnpm -r build + go vet)
-scripts/testCi.sh --ts | --go | --py
+scripts/testCi.sh --ts | --go | --py | --smoke
 ```
 
 ## Submitting Changes
@@ -125,8 +120,10 @@ Run from the repo root:
 pnpm --dir apps/cli build:release                          # stamp runtime + build local images + bun compile (all targets)
 pnpm --dir apps/tui build:release                          # stamp runtime + bun compile (all targets)
 BIN="$(pwd)/apps/cli/dist/caracal-<os>-<arch>"             # absolute path; survives cd
+TUI="$(pwd)/apps/tui/dist/caracal-tui-<os>-<arch>"         # TUI binary; same OS/arch matrix
 "$BIN" --version                                           # → caracal dev-<sha> [runtime]
-(cd /tmp && "$BIN" up && "$BIN" status && "$BIN" down)
+"$TUI" --version                                           # → caracal-tui dev-<sha> [runtime]
+(cd /tmp && "$BIN" up && "$BIN" status && "$TUI" && "$BIN" down)
 ```
 
 The local `build:release` stamps the binary with `CARACAL_VERSION=dev-<sha>` and `CARACAL_REGISTRY=localhost/`, then runs `docker compose build` to produce `localhost/caracal-{svc}:dev-<sha>` for each service. The release-style binary resolves to those images — no GHCR pull, no auth, fully reproducible from your checkout. The TUI variant stamps `CARACAL_TUI_VERSION` / `CARACAL_TUI_MODE=runtime` and shares the same engine-installed runtime assets.
