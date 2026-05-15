@@ -5,7 +5,7 @@
 // Writes apps/cli/src/runtime/version.gen.ts with the dev-stamped CLI identity and prints the short SHA on stdout.
 
 import { execSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -29,16 +29,6 @@ function shortSha() {
 
 const sha = shortSha()
 const releaseVersion = process.env.CARACAL_RELEASE_VERSION
-const targetPath = resolve(cliRoot, 'src/runtime/version.gen.ts')
-
-if (!releaseVersion && existsSync(targetPath)) {
-  const existing = readFileSync(targetPath, 'utf8')
-  if (/CARACAL_MODE: 'dev' \| 'runtime' = 'runtime'/.test(existing)) {
-    process.stdout.write(`${sha} (skip: runtime stamp already in place)\n`)
-    process.exit(0)
-  }
-}
-
 const version = releaseVersion ?? `${baseVersion()}+dev.${sha}`
 const mode = releaseVersion ? 'runtime' : 'dev'
 const registry = releaseVersion ? 'ghcr.io/garudex-labs/' : 'localhost/'

@@ -5,7 +5,7 @@
 // Writes apps/tui/src/version.gen.ts with the dev-stamped TUI identity and prints the short SHA on stdout.
 
 import { execSync } from 'node:child_process'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -28,16 +28,6 @@ function shortSha() {
 }
 
 const releaseVersion = process.env.CARACAL_RELEASE_VERSION
-const targetPath = resolve(tuiRoot, 'src/version.gen.ts')
-
-if (!releaseVersion && existsSync(targetPath)) {
-  const existing = readFileSync(targetPath, 'utf8')
-  if (/CARACAL_TUI_MODE: 'dev' \| 'runtime' = 'runtime'/.test(existing)) {
-    process.stdout.write(`${shortSha()} (skip: runtime stamp already in place)\n`)
-    process.exit(0)
-  }
-}
-
 const version = releaseVersion ?? `${baseVersion()}+dev.${shortSha()}`
 const mode = releaseVersion ? 'runtime' : 'dev'
 
