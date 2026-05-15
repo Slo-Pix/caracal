@@ -21,7 +21,8 @@ import { printError } from './style.ts'
 import { CARACAL_MODE, CARACAL_VERSION } from './runtime/version.ts'
 import { CLI_COMMANDS } from '@caracalai/core/commands'
 import { buildRegistry, type Executor } from './registry.ts'
-import { dispatch } from './dispatcher.ts'
+import { dispatch, loadCliConfig, type DispatchOptions } from './dispatcher.ts'
+import { startRepl } from './repl.ts'
 
 const executors: Record<string, Executor> = {
   run: (argv, cfg) => {
@@ -53,17 +54,22 @@ const executors: Record<string, Executor> = {
 
 const registry = buildRegistry(CLI_COMMANDS, executors)
 
-await dispatch(
-  {
-    binary: 'caracal-cli',
-    version: CARACAL_VERSION,
-    mode: CARACAL_MODE,
-    registry,
-    loadConfig: true,
-    extras: [
-      '  --zone <id>              Zone selector (default: zone_id from caracal.toml or $CARACAL_ZONE_ID)',
-      '  --json                   Emit JSON instead of a table',
-    ],
-  },
-  process.argv.slice(2),
-)
+const dispatchOptions: DispatchOptions = {
+  binary: process.env.CARACAL_INVOKED_AS ?? 'caracal-cli',
+  version: CARACAL_VERSION,
+  mode: CARACAL_MODE,
+  registry,
+  loadConfig: true,
+  extras: [
+    '  --zone <id>              Zone selector (default: zone_id from caracal.toml or $CARACAL_ZONE_ID)',
+    '  --json                   Emit JSON instead of a table',
+  ],
+}
+
+const args = process.argv.slice(2)
+if (args.length === 0 && process.stdin.isTTY) {
+  const cfg = loadCliConfig(false)
+  await startRepl({ dispatchOptions, cfg })
+} else {
+  await dispatch(dispatchOptions, args)
+}

@@ -24,9 +24,10 @@ function loadConfig(): CliConfig | undefined {
 }
 
 function printHelp(): void {
+  const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
   process.stdout.write(
     [
-      'Usage: caracal-tui [--help] [--version]',
+      `Usage: ${bin} [--help] [--version]`,
       '',
       'Caracal Terminal UI — interactive admin console for the Caracal control plane.',
       '',
@@ -47,8 +48,9 @@ function main(): void {
     return
   }
   if (command === '--version' || command === '-v' || command === 'version') {
+    const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
     const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${process.env.CARACAL_DEV_SHA ?? 'unknown'})` : 'runtime'
-    process.stdout.write(`caracal-tui ${CARACAL_TUI_VERSION} [${tag}]\n`)
+    process.stdout.write(`${bin} ${CARACAL_TUI_VERSION} [${tag}]\n`)
     return
   }
   if (!process.stdin.isTTY) {

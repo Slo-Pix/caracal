@@ -45,12 +45,17 @@ function loadConfig(required: boolean): CliConfig | undefined {
   }
 }
 
+export function loadCliConfig(required: boolean): CliConfig | undefined {
+  return loadConfig(required)
+}
+
 export function printUsage(opts: DispatchOptions, out: NodeJS.WriteStream = process.stderr): void {
   const H = (s: string) => style.header(s)
   const L = (s: string) => style.label(s)
   const lines: string[] = [`${style.title('Usage:')} ${opts.binary} <command> [options]`, '']
   const groups = new Map<CommandGroup, typeof opts.registry.ordered>()
   for (const b of opts.registry.ordered) {
+    if (b.descriptor.hidden) continue
     const list = (groups.get(b.descriptor.group) ?? []) as Array<typeof b>
     list.push(b)
     groups.set(b.descriptor.group, list)
