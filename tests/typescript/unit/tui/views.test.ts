@@ -27,6 +27,42 @@ function fakeApp(): App {
   return app
 }
 
+describe('AuditTailView', () => {
+  it('keeps cursor at 0 when receiving navigation with no events', async () => {
+    const { AuditTailView } = await import('../../../../apps/tui/src/views/audit.ts')
+    const fakeClient = { audit: { tail: vi.fn(), byRequest: vi.fn() } } as unknown as Parameters<typeof AuditTailView>[0]
+    const view = new AuditTailView(fakeClient as never, 'zone-1')
+    const ctx = { app: fakeApp(), size: { rows: 10, cols: 80 }, status: '' }
+    await view.onKey('down', ctx)
+    await view.onKey('pgdn', ctx)
+    await view.onKey('up', ctx)
+    const rendered = view.render(ctx).join('\n')
+    expect(rendered).toContain('no events yet')
+    const cursor = (view as unknown as { cursor: number }).cursor
+    expect(cursor).toBe(0)
+  })
+
+  it('sanitizes API-sourced fields so injected escapes cannot reach the terminal', async () => {
+    const { AuditTailView } = await import('../../../../apps/tui/src/views/audit.ts')
+    const fakeClient = { audit: { tail: vi.fn(), byRequest: vi.fn() } } as unknown as Parameters<typeof AuditTailView>[0]
+    const view = new AuditTailView(fakeClient as never, 'zone-1')
+    ;(view as unknown as { events: unknown[] }).events = [{
+      occurred_at: '2025-01-01T00:00:00Z',
+      event_type: 'evil\u001b[2J',
+      decision: 'allow',
+      evaluation_status: 'ok',
+      request_id: 'req-\u001b]0;hijack\u0007',
+    }]
+    const ctx = { app: fakeApp(), size: { rows: 10, cols: 200 }, status: '' }
+    const lines = view.render(ctx).join('\n')
+    // Only the SGR escapes that the renderer itself emits (e.g. invert/fg) may
+    // appear; injected ESC bytes from event_type / request_id must be gone.
+    expect(lines).not.toContain('evil\u001b[2J')
+    expect(lines).not.toContain('\u001b]')
+    expect(lines).not.toContain('\u0007')
+  })
+})
+
 describe('ListView', () => {
   it('loads rows and renders header + cursor row', async () => {
     const app = fakeApp()

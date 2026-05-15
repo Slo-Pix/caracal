@@ -4,7 +4,7 @@
 // ANSI helpers and key parser unit tests.
 
 import { describe, it, expect } from 'vitest'
-import { visibleLength, pad, truncate } from '../../../../apps/tui/src/ansi.ts'
+import { visibleLength, pad, sanitizeAnsi, truncate } from '../../../../apps/tui/src/ansi.ts'
 import { parseKey } from '../../../../apps/tui/src/keys.ts'
 
 describe('ansi visibleLength', () => {
@@ -40,6 +40,22 @@ describe('ansi truncate', () => {
 
   it('passes through short strings unchanged', () => {
     expect(truncate('ab', 5)).toBe('ab')
+  })
+})
+
+describe('ansi sanitizeAnsi', () => {
+  it('strips ESC and other C0/C1 control bytes from untrusted strings', () => {
+    expect(sanitizeAnsi('hi\u001b[2Joops')).toBe('hi[2Joops')
+    expect(sanitizeAnsi('a\u0007b\u0008c\u007fd')).toBe('abcd')
+    expect(sanitizeAnsi('preserve tabs\tand\nnewlines')).toBe('preserve tabs\tand\nnewlines')
+  })
+
+  it('neutralizes a malicious title-set sequence sourced from API data', () => {
+    const evil = '\u001b]0;hijacked\u0007legit'
+    const out = sanitizeAnsi(evil)
+    expect(out.includes('\u001b')).toBe(false)
+    expect(out.includes('\u0007')).toBe(false)
+    expect(out).toContain('legit')
   })
 })
 

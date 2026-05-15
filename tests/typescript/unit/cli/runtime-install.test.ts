@@ -3,7 +3,7 @@
 //
 // Unit tests for the runtime asset installer.
 
-import { mkdtempSync, readFileSync, statSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -41,5 +41,16 @@ describe('runtime installer', () => {
     const second = installRuntimeAssets(paths)
     expect(second.created).toBe(false)
     expect(readFileSync(paths.envFile, 'utf8')).toBe(envBefore)
+  })
+
+  it('tightens permissions on a pre-existing world-readable env file', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
+    const paths = runtimePaths(home)
+    mkdirSync(paths.home, { recursive: true })
+    writeFileSync(paths.envFile, 'POSTGRES_PASSWORD=preexisting\n')
+    chmodSync(paths.envFile, 0o644)
+    expect(statSync(paths.envFile).mode & 0o777).toBe(0o644)
+    installRuntimeAssets(paths)
+    expect(statSync(paths.envFile).mode & 0o777).toBe(0o600)
   })
 })

@@ -106,7 +106,9 @@ describe('POST /v1/verify', () => {
       payload: { token: 'not-a-jwt' },
     })
     expect(res.statusCode).toBe(401)
-    expect(res.json()).toMatchObject({ valid: false })
+    const body = res.json()
+    expect(body).toEqual({ valid: false, error: 'token_invalid' })
+    expect(body).not.toHaveProperty('message')
   })
 })
 
