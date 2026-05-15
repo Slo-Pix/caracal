@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { discoverAdminToken } from '@caracalai/core'
+import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
 import { AdminClient, AdminApiError, type LocalBootstrapResult } from '@caracalai/admin'
 import { showHelp } from './shared.ts'
 import { style, printError, printInfo, printSuccess, printWarn } from '../style.ts'
@@ -93,7 +93,7 @@ function parseFlags(argv: string[]): InitOptions {
 
   const token = discoverAdminToken(adminToken)
   if (!token) {
-    printError('CARACAL_ADMIN_TOKEN not set; pass --admin-token, set the env var, or add it to infra/docker/.env')
+    printError(`CARACAL_ADMIN_TOKEN not set; pass --admin-token, set the env var, or run \`caracal up\` (writes ${runtimeEnvFile()})`)
     process.exit(1)
   }
   return { apiUrl, zoneUrl, configPath, adminToken: token, force }

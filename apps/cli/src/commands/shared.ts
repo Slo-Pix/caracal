@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs'
 import { AdminClient, AdminApiError } from '@caracalai/admin'
-import { discoverAdminToken } from '@caracalai/core'
+import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
 import {
   DEFAULT_API_URL,
   DEFAULT_COORDINATOR_URL,
@@ -22,7 +22,7 @@ export interface AdminContext {
 export function buildAdminClient(cfg?: CliConfig): AdminContext {
   const adminToken = discoverAdminToken()
   if (!adminToken) {
-    printError('CARACAL_ADMIN_TOKEN not set; export it or add it to infra/docker/.env')
+    printError(`CARACAL_ADMIN_TOKEN not set; export it or run \`caracal up\` (writes ${runtimeEnvFile()})`)
     process.exit(1)
   }
   const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)

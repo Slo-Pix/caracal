@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import { AdminClient } from '@caracalai/admin'
-import { discoverAdminToken } from '@caracalai/core'
+import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
 import {
   DEFAULT_API_URL,
   DEFAULT_COORDINATOR_URL,
@@ -36,7 +36,7 @@ function main(): void {
   }
   const adminToken = discoverAdminToken()
   if (!adminToken) {
-    process.stderr.write('caracal-tui: CARACAL_ADMIN_TOKEN not set; export it or add it to infra/docker/.env\n')
+    process.stderr.write(`caracal-tui: CARACAL_ADMIN_TOKEN not set; export it or run \`caracal up\` (writes ${runtimeEnvFile()})\n`)
     process.exit(1)
   }
   const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)

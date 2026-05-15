@@ -4,6 +4,7 @@
 // Helpers for reading dotenv files and discovering the Caracal admin token.
 
 import { existsSync, readFileSync } from 'node:fs';
+import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
 
 export function readEnvFile(path: string): Record<string, string> {
@@ -21,13 +22,29 @@ export function readEnvFile(path: string): Record<string, string> {
   return out;
 }
 
+/**
+ * Resolve the runtime home written to by `caracal up` in installed mode.
+ * Mirrors the layout in apps/cli/src/runtime/install.ts so consumers
+ * outside the CLI (SDK helpers, tests, scripts) reach the same file.
+ */
+export function runtimeEnvFile(): string {
+  if (process.env.CARACAL_HOME) return join(process.env.CARACAL_HOME, '.env');
+  if (platform() === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'caracal', '.env');
+  }
+  const xdg = process.env.XDG_DATA_HOME;
+  const base = xdg && xdg.length > 0 ? xdg : join(homedir(), '.local', 'share');
+  return join(base, 'caracal', '.env');
+}
+
 export function discoverAdminToken(explicit?: string): string | undefined {
   if (explicit) return explicit;
   if (process.env.CARACAL_ADMIN_TOKEN) return process.env.CARACAL_ADMIN_TOKEN;
   const candidates = [
     process.env.CARACAL_ENV_FILE,
-    join(process.cwd(), 'infra', 'docker', '.env'),
+    runtimeEnvFile(),
     join(process.cwd(), '.env'),
+    join(process.cwd(), 'infra', 'docker', '.env'),
   ].filter((p): p is string => Boolean(p));
   for (const path of candidates) {
     const env = readEnvFile(path);
