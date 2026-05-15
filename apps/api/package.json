@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "node bin/dev.mjs",
     "build": "tsc",
     "start": "node dist/main.js",
     "test": "vitest run --root ../.. tests/typescript/unit/api tests/typescript/security/api tests/typescript/property/api tests/typescript/contract/api tests/typescript/fuzz/api tests/typescript/integration/api"

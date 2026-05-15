@@ -3,8 +3,8 @@
 //
 // Schema migration runner: applies infra/postgres/migrations/*.up.sql idempotently on API startup.
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import type { DB } from './db.js'
 
 const MIGRATIONS_TABLE = 'schema_migrations'
@@ -12,13 +12,8 @@ const ADVISORY_LOCK_KEY = '4732518903281471'
 
 function discoverMigrationsDir(): string {
   if (process.env.CARACAL_MIGRATIONS_DIR) return process.env.CARACAL_MIGRATIONS_DIR
-  let dir = process.cwd()
-  for (let depth = 0; depth < 8; depth++) {
-    const candidate = join(dir, 'infra', 'postgres', 'migrations')
-    if (existsSync(candidate)) return candidate
-    const parent = dirname(dir)
-    if (parent === dir) break
-    dir = parent
+  if (process.env.CARACAL_REPO_ROOT) {
+    return join(process.env.CARACAL_REPO_ROOT, 'infra', 'postgres', 'migrations')
   }
   throw new Error('migrations directory not found; set CARACAL_MIGRATIONS_DIR')
 }
