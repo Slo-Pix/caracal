@@ -15,7 +15,7 @@ import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
-import { assertRuntimeSafe, caracalMode, isRuntime, SECRET_KEYS, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics } from '@caracalai/core'
+import { assertRuntimeSafe, isRuntime, SECRET_KEYS, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics } from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
 import { resourcesRoutes } from './routes/resources.js'
@@ -28,7 +28,6 @@ import { teamsRoutes } from './routes/teams.js'
 import { stepUpChallengesRoutes } from './routes/step-up-challenges.js'
 import { policyTemplatesRoutes } from './routes/policy-templates.js'
 import { zoneEventsRoutes } from './routes/zone-events.js'
-import { localBootstrapRoutes } from './routes/local-bootstrap.js'
 import { buildPinoRedactPaths } from './log-redact.js'
 
 import './fastify-augmentation.js'
@@ -151,14 +150,6 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   await app.register(stepUpChallengesRoutes, { prefix: '/v1' })
   await app.register(policyTemplatesRoutes, { prefix: '/v1' })
   await app.register(zoneEventsRoutes, { prefix: '/v1' })
-
-  if (cfg.localBootstrapEnabled) {
-    if (caracalMode() === 'runtime') {
-      throw new Error('CARACAL_LOCAL_BOOTSTRAP_ENABLED must not be set under CARACAL_MODE=runtime')
-    }
-    await app.register(localBootstrapRoutes, { prefix: '/v1' })
-    app.log.warn('local bootstrap endpoint enabled; loopback-only, dev mode only')
-  }
 
   app.get('/health', async () => ({ ok: true }))
   app.get('/metrics', async (_req, reply) => {

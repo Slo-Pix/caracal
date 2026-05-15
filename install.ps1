@@ -80,7 +80,8 @@ if (-not ($userPath -split ';' | Where-Object { $_ -ieq $InstallDir })) {
 
 Write-Host 'caracal-install: done. Next steps:'
 Write-Host '  caracal up         # start stack (Docker Desktop required)'
-Write-Host '  caracal init       # provision local zone'
+Write-Host '  caracal zone create --name <n>   # provision a zone'
+Write-Host '  caracal app create --name <n>    # provision an application'
 Write-Host '  caracal run -- cmd # smoke test ambient tokens'
 if ($Tui) {
     Write-Host '  caracal-tui        # launch the interactive TUI'

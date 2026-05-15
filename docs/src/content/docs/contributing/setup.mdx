@@ -87,13 +87,16 @@ caracal up
 
 This runs `docker compose up -d` using the compose file in `infra/docker/`. It starts seven services: API (3000), STS (8080), Gateway (8081), Coordinator (4000), Audit (9090), plus PostgreSQL and Redis.
 
-After the stack is up, run the bootstrap initialization:
+After the stack is up, provision a zone and application against the running control-plane API:
 
 ```sh
-caracal init
+caracal zone create --name dev
+caracal app create --zone <zone-id> --name dev-app
 ```
 
-`caracal init` calls the API's bootstrap endpoint, reads the admin token from `infra/docker/.env` via `CARACAL_REPO_ROOT` discovery, and creates the default zone. It writes `caracal.toml` with the zone ID, application credentials, and a default resource. Pass `--admin-token` or set `CARACAL_ADMIN_TOKEN` in your environment to override.
+`caracal app create` prints the client secret on creation — save it into `caracal.toml` along with the zone ID and STS URL. The CLI discovers `CARACAL_ADMIN_TOKEN` from `infra/docker/.env` via `CARACAL_REPO_ROOT`; pass `--admin-token` or export `CARACAL_ADMIN_TOKEN` to override.
+
+See [Configuration File](../cli-tui/config-file/) for the full `caracal.toml` schema.
 
 Verify the stack is healthy:
 

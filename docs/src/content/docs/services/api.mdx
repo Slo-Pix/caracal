@@ -43,8 +43,6 @@ Authorization: Bearer <admin-token>
 
 The token is SHA-256 hashed and looked up in the `admin_tokens` table. Comparison is timing-safe. Token scope (`global` or `zone`) is checked against the route's zone context.
 
-The bootstrap endpoint (`POST /v1/local/bootstrap`) is only available when `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true` is set, and is restricted to loopback connections.
-
 ---
 
 ## API routes
@@ -165,7 +163,6 @@ The API is fully stateless. All state is in PostgreSQL and Redis. Run any number
 | `DATABASE_URL` | — | PostgreSQL connection string |
 | `REDIS_URL` | — | Redis connection string |
 | `CARACAL_ADMIN_TOKEN` | — | Bootstrap admin token. Seeded into the database on first startup. |
-| `CARACAL_LOCAL_BOOTSTRAP_ENABLED` | `false` | Enables loopback-only bootstrap endpoint |
 | `DB_POOL_MAX` | `20` | PostgreSQL pool size |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Statement timeout |
 | `OUTBOX_POLL_MS` | `250` | Outbox dispatcher poll interval |

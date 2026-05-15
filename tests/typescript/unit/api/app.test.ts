@@ -17,7 +17,6 @@ function makeCfg(overrides: Partial<Config> = {}): Config {
     redisUrl: 'redis://x',
     logLevel: 'silent',
     bootstrapAdminToken: null,
-    localBootstrapEnabled: false,
     shutdownGraceMs: 1000,
     workerId: 'test',
     bodyLimitBytes: 1_048_576,

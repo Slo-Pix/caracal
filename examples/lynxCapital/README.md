@@ -65,11 +65,13 @@ curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.s
 # Bring up the OSS stack (coordinator, gateway, STS, postgres, redis, ...)
 caracal up
 
-# Provision a local zone + application. This writes
-# ~/.config/caracal/caracal.toml with zone_id / application_id /
+# Provision a zone + application. `caracal zone create` returns the zone id;
+# `caracal app create` returns the client secret. Author
+# ~/.config/caracal/caracal.toml with the returned zone_id / application_id /
 # app_client_secret. Lynx reads the file at startup and exchanges the
 # client_secret for a real STS access token.
-caracal init --force
+caracal zone create --name lynx
+caracal app  create --zone <id> --name lynx
 
 # Register every external provider as a Caracal resource so the gateway
 # knows where to forward calls. The mock REST aggregator hosts all 13

@@ -56,7 +56,7 @@ func AssertRuntimeSafe() {
 	if Mode() != "runtime" {
 		return
 	}
-	forbidden := []string{"INSECURE_STS", "INSECURE_HTTP", "CARACAL_LOCAL_BOOTSTRAP_ENABLED"}
+	forbidden := []string{"INSECURE_STS", "INSECURE_HTTP"}
 	var set []string
 	for _, k := range forbidden {
 		if v := strings.ToLower(os.Getenv(k)); v == "true" || v == "1" || v == "yes" {

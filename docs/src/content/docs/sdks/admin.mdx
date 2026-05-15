@@ -329,12 +329,3 @@ client.delegations.outbound(zoneId: string, sessionId: string): Promise<Delegati
 client.delegations.traverse(zoneId: string, id: string): Promise<TraverseNode[]>
 client.delegations.revoke(zoneId: string, id: string): Promise<{ revoked_edges: number; affected_sessions: number }>
 ```
-
----
-
-## Bootstrap
-
-```typescript
-// Initialize local stack (development only; requires CARACAL_LOCAL_BOOTSTRAP_ENABLED=true on the API)
-client.bootstrap(force?: boolean): Promise<LocalBootstrapResult>
-```

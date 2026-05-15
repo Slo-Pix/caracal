@@ -18,7 +18,7 @@ export function isRuntime(): boolean {
 
 export function assertRuntimeSafe(): void {
   if (caracalMode() !== 'runtime') return;
-  const forbidden = ['INSECURE_STS', 'INSECURE_HTTP', 'CARACAL_LOCAL_BOOTSTRAP_ENABLED'];
+  const forbidden = ['INSECURE_STS', 'INSECURE_HTTP'];
   const set = forbidden.filter((k) => {
     const v = (process.env[k] ?? '').toLowerCase();
     return v === 'true' || v === '1' || v === 'yes';

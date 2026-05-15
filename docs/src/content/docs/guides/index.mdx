@@ -29,5 +29,5 @@ Each guide covers one end-to-end workflow. Start from the guide that matches you
 ## Prerequisites shared across all guides
 
 - A running Caracal stack (`caracal up` or Docker Compose).
-- A zone with at least one registered application. Run `caracal init` on a fresh stack to create the local zone and write `caracal.toml`.
+- A zone with at least one registered application. On a fresh stack, run `caracal zone create --name <name>` then `caracal app create --zone <zone-id> --name <name>`, save the printed client secret, and author `caracal.toml` with `zone_url`, `zone_id`, `application_id`, and `app_client_secret`. See [Configuration File](../cli-tui/config-file/) for the full schema.
 - `CARACAL_ADMIN_TOKEN` set in your shell for CLI operations that mutate control-plane state.

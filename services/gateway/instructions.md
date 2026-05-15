@@ -34,5 +34,5 @@
 - Limits: MAX_REQUEST_BYTES.
 - SSRF: UPSTREAM_HOST_ALLOWLIST (CSV), ALLOW_PRIVATE_UPSTREAMS.
 - Replay: JTI_FAIL_OPEN (default false; rejected under CARACAL_MODE=runtime).
-- Mode: CARACAL_MODE (dev|runtime, default runtime); runtime forbids INSECURE_STS, INSECURE_HTTP, CARACAL_LOCAL_BOOTSTRAP_ENABLED via core/config.AssertRuntimeSafe.
+- Mode: CARACAL_MODE (dev|runtime, default runtime); runtime forbids INSECURE_STS, INSECURE_HTTP via core/config.AssertRuntimeSafe.
 - Misc: PORT (must equal 8081), LOG_LEVEL.

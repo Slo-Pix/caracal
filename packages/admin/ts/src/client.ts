@@ -22,7 +22,6 @@ import type {
   PolicyVersion,
   Provider,
   ProviderInput,
-  LocalBootstrapResult,
   Resource,
   ResourceInput,
   Session,
@@ -160,11 +159,6 @@ export class AdminClient {
       }
     }
     throw lastErr ?? new Error('admin_request_exhausted')
-  }
-
-  // Local bootstrap (development/self-hosted)
-  bootstrap(force = false): Promise<LocalBootstrapResult> {
-    return this.request<LocalBootstrapResult>('/v1/local/bootstrap', { method: 'POST', body: { force } })
   }
 
   // Zones

@@ -3,10 +3,8 @@
 //
 // Verb bodies for stack lifecycle: init (bootstrap + write toml), up, down, status, purge.
 
-import { mkdirSync, renameSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { rmSync, statSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { AdminClient, type LocalBootstrapResult } from '@caracalai/admin'
 import { runExec } from './run.js'
 
 export interface StackPaths {
@@ -104,82 +102,6 @@ export function stackStatus(opts: StackStatusOpts = {}): Promise<ProbeResult[]> 
   const probes = opts.probes ?? DEFAULT_SERVICE_PROBES
   const timeoutMs = opts.timeoutMs ?? 1500
   return Promise.all(probes.map((s) => probeOne(s, timeoutMs)))
-}
-
-export interface StackInitOpts {
-  apiUrl: string
-  adminToken: string
-  zoneUrl: string
-  configPath: string
-  force?: boolean
-}
-
-export type StackInitOutcome =
-  | { status: 'written'; configPath: string; data: LocalBootstrapResult }
-  | { status: 'exists'; configPath: string; data: LocalBootstrapResult }
-
-function renderToml(opts: {
-  zoneUrl: string
-  zoneId: string
-  applicationId: string
-  clientSecret: string
-  resource: string
-}): string {
-  return [
-    `zone_url = "${opts.zoneUrl}"`,
-    `zone_id = "${opts.zoneId}"`,
-    `application_id = "${opts.applicationId}"`,
-    `app_client_secret = "${opts.clientSecret}"`,
-    '',
-    '[[credentials]]',
-    'env = "RESOURCE_TOKEN"',
-    `resource = "${opts.resource}"`,
-    '',
-    '[mcp_governance]',
-    'mode = "block"',
-    '',
-  ].join('\n')
-}
-
-export async function stackInit(opts: StackInitOpts): Promise<StackInitOutcome> {
-  const client = new AdminClient({ apiUrl: opts.apiUrl, adminToken: opts.adminToken })
-  let data: LocalBootstrapResult
-  try {
-    data = await client.bootstrap(opts.force ?? false)
-  } catch (err) {
-    if (err && typeof err === 'object' && 'status' in err && (err as { status: number }).status === 404) {
-      throw new Error(
-        '`init` is only available in dev mode. Runtime deployments must provision zones via the admin API or UI.',
-      )
-    }
-    throw err
-  }
-
-  if (!data.app_client_secret) {
-    if (existsSync(opts.configPath)) {
-      return { status: 'exists', configPath: opts.configPath, data }
-    }
-    throw new Error(
-      'zone already provisioned but no local config exists; re-run with --force to rotate the client secret.',
-    )
-  }
-
-  const toml = renderToml({
-    zoneUrl: opts.zoneUrl,
-    zoneId: data.zone_id,
-    applicationId: data.application_id,
-    clientSecret: data.app_client_secret,
-    resource: data.resource,
-  })
-
-  mkdirSync(dirname(opts.configPath), { recursive: true })
-  // Atomic write: a half-written caracal.toml from a crash mid-write is worse
-  // than no file (the secret it would have held is unrecoverable from the
-  // server's perspective once /bootstrap returned it).
-  const tmp = `${opts.configPath}.tmp-${process.pid}-${Date.now()}`
-  writeFileSync(tmp, toml, { mode: 0o600 })
-  renameSync(tmp, opts.configPath)
-  return { status: 'written', configPath: opts.configPath, data }
 }
 
 // --- Purge primitives ---------------------------------------------------

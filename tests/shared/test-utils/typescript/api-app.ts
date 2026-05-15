@@ -61,7 +61,6 @@ export function apiAppDeps(opts: ApiDepsOptions = {}): ApiDeps {
     redisUrl: 'redis://localhost:6379',
     logLevel: 'silent',
     bootstrapAdminToken: null,
-    localBootstrapEnabled: false,
     shutdownTimeoutMs: 1000,
     workerId: 'test:0',
     bodyLimitBytes: 1_048_576,

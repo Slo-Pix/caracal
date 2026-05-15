@@ -23,7 +23,7 @@ The CLI resolves the config path in this order, stopping at the first match:
 | 5 | XDG config directory | `$XDG_CONFIG_HOME/caracal/caracal.toml` |
 | 6 | Home config directory | `~/.config/caracal/caracal.toml` |
 
-The file created by `caracal init` is written to the first writable path at priorities 2–3 unless `--config <path>` is passed explicitly.
+Author `caracal.toml` at the first writable path at priorities 2–3 (typically the project root) unless `CARACAL_CONFIG` points elsewhere.
 
 ---
 
@@ -114,7 +114,6 @@ These environment variables are read by the CLI. Most of them override what is i
 | `CARACAL_COORDINATOR_URL` | `http://localhost:4000` (dev) | `agent` and `delegation` commands |
 | `CARACAL_COORDINATOR_TOKEN` | — | `agent` and `delegation` commands |
 | `CARACAL_CONFIG` | Auto-resolved | Config file path |
-| `CARACAL_ZONE_URL` | `http://localhost:8080` (dev) | `caracal init` bootstrap only |
 | `CARACAL_REPO_ROOT` | Auto-searched | Root for `infra/docker/` stack commands |
 | `CARACAL_ENV_FILE` | Auto-resolved | `.env` path for docker-compose |
 

@@ -26,7 +26,7 @@ Most `caracal` commands communicate with the control-plane API. Set these enviro
 | `CARACAL_COORDINATOR_TOKEN` | — | JWT with scope `agent:lifecycle`. Required only for `agent` and `delegation` commands. |
 | `CARACAL_CONFIG` | Auto-resolved | Explicit path to `caracal.toml`. Overrides automatic discovery. |
 
-`CARACAL_ADMIN_TOKEN` is discovered in order: the `CARACAL_ADMIN_TOKEN` environment variable → the path in `CARACAL_ENV_FILE` (if set) → the runtime home `.env` (auto-written by `caracal up`: `~/.local/share/caracal/.env` on Linux, `~/Library/Application Support/caracal/.env` on macOS) → `infra/docker/.env` relative to `CARACAL_REPO_ROOT` (dev mode only). In the typical installed flow, `caracal up` writes the token and `caracal init` discovers it automatically — no manual export required. The `caracal init` command writes `caracal.toml` with the local stack credentials after bootstrapping.
+`CARACAL_ADMIN_TOKEN` is discovered in order: the `CARACAL_ADMIN_TOKEN` environment variable → the path in `CARACAL_ENV_FILE` (if set) → the runtime home `.env` (auto-written by `caracal up`: `~/.local/share/caracal/.env` on Linux, `~/Library/Application Support/caracal/.env` on macOS) → `infra/docker/.env` relative to `CARACAL_REPO_ROOT` (dev mode only). In the typical installed flow, `caracal up` writes the token and admin commands discover it automatically — no manual export required.
 
 In production (`NODE_ENV` is not `development`), `CARACAL_API_URL` and `CARACAL_COORDINATOR_URL` must be set explicitly. In development, localhost defaults are used.
 
@@ -48,7 +48,7 @@ These flags are accepted by all commands:
 
 | Section | Commands | Purpose |
 | --- | --- | --- |
-| [Stack](./stack/) | `up`, `down`, `status`, `init` | Start, stop, probe, and provision the local stack |
+| [Stack](./stack/) | `up`, `down`, `status` | Start, stop, and probe the local stack |
 | [Runtime](./runtime/) | `run`, `credential read` | Inject mandates into subprocesses and print tokens |
 | [Admin](./admin/) | `zone`, `app`, `resource`, `provider`, `policy`, `policy-set`, `grant`, `session` | Manage all control-plane entities |
 | [Observability](./observability/) | `audit tail`, `explain` | Tail the audit stream and inspect policy decisions |

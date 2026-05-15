@@ -159,7 +159,8 @@ printf 'caracal-install: done. Next steps:\n'
 printf '  installed caracal %s (mode: runtime)\n' "${tag}"
 printf '  hash -r            # refresh your shell command cache\n'
 printf '  caracal up         # start stack (Docker required)\n'
-printf '  caracal init       # provision local zone\n'
+printf '  caracal zone create --name <n>   # provision a zone\n'
+printf '  caracal app create --name <n>    # provision an application\n'
 printf '  caracal run -- env # smoke test ambient tokens\n'
 if [ "${WITH_TUI}" = "1" ]; then
     printf '  caracal-tui        # launch the interactive TUI\n'

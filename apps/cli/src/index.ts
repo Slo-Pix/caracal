@@ -9,7 +9,6 @@ import { readFileSync } from 'fs'
 import { resolveCliConfigPath } from '@caracalai/core/cli'
 import { runCommand } from './commands/run.ts'
 import { credentialReadCommand } from './commands/credential.ts'
-import { initCommand } from './commands/init.ts'
 import { upCommand, downCommand, statusCommand } from './commands/stack.ts'
 import { purgeCommand } from './commands/purge.ts'
 import { zoneCommand } from './commands/zone.ts'
@@ -37,7 +36,6 @@ function usage(out: NodeJS.WriteStream = process.stderr): void {
       `  up                       Build and start the local stack`,
       `  down [-v]                Stop the stack; ${L('-v')} also removes volumes`,
       `  status                   Probe /health on every service`,
-      `  init [--force]           Provision the local zone and write caracal.toml`,
       `  purge [targets...]       Centralized cleanup (stack, volumes, logs, config, runtime, secrets, cache, all)`,
       '',
       H('Runtime:'),
@@ -83,7 +81,7 @@ function loadConfig(required: boolean): CliConfig | undefined {
   const path = resolveCliConfigPath()
   if (!path) {
     if (!required) return undefined
-    printError('caracal.toml not found; run `caracal init` to provision the local zone.')
+    printError('caracal.toml not found; create a zone (`caracal zone create --name <n>`), an application (`caracal app create --name <n>`), then author caracal.toml with the returned ids and client secret.')
     process.exit(1)
   }
   try {
@@ -110,9 +108,7 @@ if (command === '--version' || command === '-v' || command === 'version') {
   process.exit(0)
 }
 
-if (command === 'init') {
-  await initCommand(rest)
-} else if (command === 'up') {
+if (command === 'up') {
   await upCommand(rest)
 } else if (command === 'down') {
   await downCommand(rest)

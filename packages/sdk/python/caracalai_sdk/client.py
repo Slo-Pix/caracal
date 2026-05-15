@@ -391,16 +391,19 @@ class Caracal:
 
     @classmethod
     def from_config(cls, path: str | os.PathLike[str] | None = None) -> Caracal:
-        """Build a Caracal client from a `caracal.toml` produced by
-        `caracal init`. The config supplies zone, application, STS URL,
-        client_secret, and resource bindings; tokens are exchanged on demand."""
+        """Build a Caracal client from a `caracal.toml` authored by the
+        operator after `caracal zone create` and `caracal app create`. The
+        config supplies zone, application, STS URL, client_secret, and
+        resource bindings; tokens are exchanged on demand."""
         import tomllib
         from pathlib import Path
 
         cfg_path = Path(path) if path is not None else _default_config_path()
         if not cfg_path.exists():
             raise RuntimeError(
-                f"Caracal config not found at {cfg_path}; run `caracal init` first."
+                f"Caracal config not found at {cfg_path}; provision a zone "
+                "and application with `caracal zone create` / `caracal app "
+                "create` and author caracal.toml with the returned ids."
             )
         cfg = tomllib.loads(cfg_path.read_text())
 

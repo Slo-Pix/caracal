@@ -16,4 +16,4 @@
 ## Direct-API bypass posture
 - A connector enforces Caracal only on traffic that reaches it. Any host port left open outside the connector (private LAN, sidecar bypass, raw provider key) is outside Caracal's trust boundary.
 - Production deployments must front the host with the connector or the gateway, and must firewall every other path.
-- The CLI `caracal init` scaffold prints this warning on every fresh project; do not remove it.
+- The CLI prints the gateway/connector enforcement warning whenever a fresh `caracal.toml` is created; do not remove it.

@@ -149,13 +149,16 @@ pnpm caracal status
 
 All services should show `healthy`. The `init` container shows `Exited (0)`.
 
-**6. Bootstrap (first run only):**
+**3. Provision a zone and application:**
 
-With `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true`, the API seeds initial zone and application data automatically on first startup. To trigger bootstrap explicitly:
+The stack starts with an empty database. Use the control-plane admin API (via the CLI) to create the initial zone, register an application, and capture its client secret:
 
 ```bash
-caracal stack bootstrap
+caracal zone create --name local
+caracal app create --zone <zone-id> --name local-app
 ```
+
+Save the printed client secret into `caracal.toml` alongside `zone_url`, `zone_id`, and `application_id`.
 
 ---
 
@@ -196,6 +199,5 @@ All bindings use `127.0.0.1` only. In production, services communicate over a pr
 - Supply secrets from a vault or secrets manager; do not use `.env` files.
 - Set `INSECURE_HTTP=false` and `INSECURE_STS=false`; provide `TLS_CERT_FILE` and `TLS_KEY_FILE` for the Gateway.
 - Set `CARACAL_ENV=production` on the Gateway.
-- Remove `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true` from the API env.
 - Set `STREAMS_HMAC_KEY` on all services that publish or consume from Redis streams.
 - Scale the Audit service to a single replica with leader election active (the service uses advisory locks to elect an export leader and a retention leader).

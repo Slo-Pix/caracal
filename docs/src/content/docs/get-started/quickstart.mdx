@@ -82,55 +82,57 @@ If a service is not healthy within two minutes, check its logs:
 docker logs caracal-sts-1 --tail 50
 ```
 
-## Step 4: Initialize a local zone
+## Step 4: Provision a zone and application
+
+The stack starts with an empty database. Create a zone, register an application, and capture the generated client secret. The admin token is read from the runtime `.env` automatically — no manual export is needed.
 
 ```sh
-caracal init
+caracal zone create --name local
+# → captures the new zone id, e.g. zone_abc123
+
+caracal app create --zone zone_abc123 --name local-app
+# → prints the application id and the client secret (shown only on creation)
 ```
 
-`caracal init` reads the admin token from the runtime `.env` automatically — no manual export is needed.
+Register a resource the application will exchange tokens for, and activate a policy that permits the exchange. See [Define Resources and Providers](../../guides/resources-providers/) and [Author a Rego Policy](../../guides/author-policy/) for the full schema.
 
-It calls the API's local bootstrap endpoint (`POST /v1/local/bootstrap`), which creates:
-
-- A **zone** with ID `zone1`
-- An **application** with ID `app1` and a generated client secret
-- A **resource** with identifier `resource://example`
-- A **policy** that allows all exchanges (local default)
-- A **policy set** with the policy active
-
-It then writes `caracal.toml` in the current directory:
+Author `caracal.toml` in your project directory with the values from the previous step:
 
 ```toml
 zone_url = "http://localhost:8080"
-zone_id  = "zone1"
+zone_id  = "zone_abc123"
 
-application_id     = "app1"
-app_client_secret  = "<generated secret>"
+application_id     = "app_def456"
+app_client_secret  = "<client secret from caracal app create>"
 
 [[credentials]]
 env      = "RESOURCE_TOKEN"
-resource = "resource://example"
+resource = "resource://my-api"
 
 [mcp_governance]
 mode = "block"
 ```
 
-The file is written with mode `0600` — it contains your application's client secret.
+Set the file mode to `0600` — it contains your application's client secret.
+
+```sh
+chmod 600 caracal.toml
+```
 
 ## Step 5: Verify the token exchange
 
-With the stack and `caracal.toml` in place, request a token for the example resource:
+With the stack and `caracal.toml` in place, request a token for the registered resource:
 
 ```sh
-caracal credential read resource://example
+caracal credential read resource://my-api
 ```
 
-If successful, a JWT is printed to stdout. This is a mandate — an ES256-signed token issued by the STS after the default local policy permitted the exchange.
+If successful, a JWT is printed to stdout. This is a mandate — an ES256-signed token issued by the STS after the active policy permitted the exchange.
 
 Decode it to inspect the claims:
 
 ```sh
-caracal credential read resource://example | cut -d. -f2 | base64 -d | jq .
+caracal credential read resource://my-api | cut -d. -f2 | base64 -d | jq .
 ```
 
 You should see claims including `zone_id`, `scope`, `target`, and an expiry (`exp`) 15 minutes from now.
@@ -148,7 +150,7 @@ This stops and removes containers but preserves the named volumes (`postgresData
 At this point you have:
 
 - A fully operational seven-service Caracal stack
-- A zone (`zone1`) with an application, resource, and active policy
+- A zone with a registered application, resource, and active policy
 - A `caracal.toml` that the CLI and SDKs can read for configuration
 
 Continue to [First Integration](./first-integration/) to wire an application to Caracal using the SDK.

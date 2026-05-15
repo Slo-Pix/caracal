@@ -144,11 +144,13 @@ Each archive contains a single executable (`caracal` or `caracal-tui`, with `.ex
 ### Start the stack
 
 ```bash
-caracal up        # start all services via Docker
-caracal init      # provision the local zone, writes caracal.toml
-caracal status    # probe all services
-caracal down      # stop; add -v to remove volumes
-caracal purge     # interactive cleanup (containers, volumes, config, runtime, caches)
+caracal up                            # start all services via Docker
+caracal zone create --name dev        # provision a zone (returns id)
+caracal app  create --name cli        # provision an application (returns client_secret)
+# write ~/.config/caracal/caracal.toml with zone_id, application_id, app_client_secret, zone_url
+caracal status                        # probe all services
+caracal down                          # stop; add -v to remove volumes
+caracal purge                         # interactive cleanup (containers, volumes, config, runtime, caches)
 ```
 
 > The installer pins the CLI to one release. `caracal up` pulls matching container images from `ghcr.io/garudex-labs/caracal-*:<tag>`. Override per invocation with `CARACAL_VERSION=vYYYY.MM.DD caracal up` to run an older or newer release stack from the same CLI.

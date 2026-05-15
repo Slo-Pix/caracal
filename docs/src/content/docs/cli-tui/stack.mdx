@@ -1,6 +1,6 @@
 ---
 title: Stack Commands
-description: caracal up, down, status, and init — start, stop, probe, and provision the local Caracal stack.
+description: caracal up, down, and status — start, stop, and probe the local Caracal stack.
 pageType: reference
 ---
 
@@ -72,49 +72,14 @@ until caracal status; do sleep 1; done
 
 ---
 
-## `caracal init`
+## Provisioning a zone and application
 
-Bootstrap the local zone and write `caracal.toml`.
-
-```bash
-caracal init
-caracal init --force    # rotate client secret if a zone already exists
-```
-
-Calls `POST /v1/local/bootstrap` on the control-plane API. This endpoint is only available when `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true` is set on the API service (enabled by default in the local compose stack).
-
-**Steps:**
-
-1. Calls the bootstrap endpoint.
-2. Receives `zone_id`, `application_id`, `app_client_secret`, and a default resource identifier.
-3. Writes `caracal.toml` to the resolved config path.
-
-If the zone is already provisioned and no `--force` flag is passed, `init` exits with an error rather than silently overwriting the existing secret. `--force` rotates the client secret and rewrites the config.
-
-**Flags:**
-
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--api-url <url>` | `http://localhost:3000` | Control-plane API base URL |
-| `--zone-url <url>` | `http://localhost:8080` | STS base URL written to `zone_url` in `caracal.toml` |
-| `--admin-token <token>` | From env discovery | Admin token; overrides `CARACAL_ADMIN_TOKEN` |
-| `--config <path>` | Auto-resolved | Explicit output path for `caracal.toml` |
-| `--force` | `false` | Rotate client secret even if a zone already exists |
-
-**Output:**
-
-```
-Wrote /home/user/myproject/caracal.toml
-Note: Caracal enforces policy only on traffic that reaches the gateway...
-```
-
-**Typical first-run workflow:**
+The stack starts with an empty database. Use the admin commands to create a zone, register an application, capture the client secret, and author `caracal.toml`:
 
 ```bash
-caracal up
-until caracal status; do sleep 1; done
-caracal init
-# caracal.toml is now written; caracal run is ready to use
+caracal zone create --name local
+caracal app create --zone <zone-id> --name local-app
+# client secret is printed once; save it into caracal.toml
 ```
 
-For config file details — including the full `caracal.toml` schema and discovery order — see [Configuration File](./config-file/).
+See the [Admin commands](./admin/) reference for full flags and the [Configuration File](./config-file/) page for the `caracal.toml` schema and discovery order.

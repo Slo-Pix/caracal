@@ -36,8 +36,12 @@ The base CalVer is centralized in `packages/engine/runtime/release.json` (consum
 git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
 pnpm install
 pnpm caracal up                                  # Starts the full stack
-pnpm caracal init                                # provision local zone, write caracal.toml
+pnpm caracal zone create --name dev              # provision your first zone (returns the id)
+pnpm caracal app create --zone <id> --name cli   # provision an application (returns the client secret)
+# author caracal.toml with zone_id, application_id, app_client_secret, zone_url
 ```
+
+Caracal ships no pre-seeded fixtures; the database starts empty in every mode. Operators (or your IaC) own zone/application/resource/policy provisioning through the regular `/v1/*` admin endpoints — the same path used in production.
 
 The first `caracal up` auto-generates `infra/docker/.env` and the secret files
 under `infra/secrets/files/` (both gitignored). Re-run `pnpm secrets:init`
@@ -51,7 +55,8 @@ Drop the `pnpm` prefix with `pnpm link --global` (undo with `pnpm unlink --globa
 pnpm caracal up                     # build + start the stack (dev rebuilds; runtime pulls images)
 pnpm caracal down [-v]              # stop (-v wipes volumes)
 pnpm caracal status                 # /health probe every service
-pnpm caracal init [--force]         # provision zone (--force rotates the secret)
+pnpm caracal zone create --name <n> # provision a zone (returns id)
+pnpm caracal app  create --name <n> # provision an application (returns client secret)
 pnpm caracal purge [targets...]     # cleanup: stack/volumes/logs/config/runtime/cache
 pnpm caracal run -- <cmd>           # run <cmd> with RESOURCE_TOKEN injected
 pnpm caracal credential read <res>  # resolve a credential
@@ -93,7 +98,7 @@ scripts/testCi.sh --smoke | --go | --py | --ts
 
 1. Branch off `main`. Keep commits focused.
 2. Add a changeset for any change to a published package: `pnpm changeset`.
-3. If you touched API / STS / CLI, smoke-test end-to-end: `pnpm caracal up && pnpm caracal init && pnpm caracal run -- printenv RESOURCE_TOKEN`.
+3. If you touched API / STS / CLI, smoke-test end-to-end: `pnpm caracal up && pnpm caracal zone create --name dev && pnpm caracal app create --zone <id> --name cli && pnpm caracal run -- printenv RESOURCE_TOKEN` (write `caracal.toml` between steps 3 and 4 with the returned ids/secret).
 4. `pnpm test` must pass.
 
 ## Building Binaries

@@ -136,7 +136,7 @@ Before an agent can get a mandate, these objects must exist in the control-plane
 Zone → Application → Resource → Policy → Policy Set → activate → Grant
 ```
 
-For local development, `caracal init` creates all of these automatically. For production, use the CLI admin commands or the `@caracalai/admin` SDK.
+Provision them using the CLI admin commands (`caracal zone create`, `caracal app create`, `caracal resource create`, `caracal policy create`, `caracal policy-set activate`, `caracal grant create`) or the `@caracalai/admin` SDK. The same flow applies in development and production.
 
 ---
 

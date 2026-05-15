@@ -66,7 +66,7 @@ The Gateway is the ingress point for all agent requests. On each inbound request
 
 The API is the admin control plane. It manages zones, applications, resources, credential providers, policies, policy sets, grants, invitations, and teams. All management operations go through the API. It also runs background workers for outbox publishing, session reaping, and DCR garbage collection.
 
-**Key endpoints (v1):** Zones, applications, resources, providers, policies, policy sets, grants, invitations, teams, step-up challenges, policy templates, zone events, and a loopback-only bootstrap route when `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true`.
+**Key endpoints (v1):** Zones, applications, resources, providers, policies, policy sets, grants, invitations, teams, step-up challenges, policy templates, and zone events.
 
 **Connections:** Postgres (read/write: all control-plane tables), Redis (outbox stream publishing).
 

@@ -33,7 +33,6 @@ export interface Config {
   redisUrl: string
   logLevel: string
   bootstrapAdminToken: string | null
-  localBootstrapEnabled: boolean
   shutdownGraceMs: number
   workerId: string
   bodyLimitBytes: number
@@ -112,7 +111,6 @@ export function loadConfig(): Config {
     redisUrl: buildRedisUrl(),
     logLevel: getenv('LOG_LEVEL', 'info'),
     bootstrapAdminToken: process.env.CARACAL_ADMIN_TOKEN ?? null,
-    localBootstrapEnabled: parseBool(process.env.CARACAL_LOCAL_BOOTSTRAP_ENABLED, false),
     shutdownGraceMs: parseIntEnv('SHUTDOWN_GRACE_MS', 15_000),
     workerId: deriveWorkerId(),
     bodyLimitBytes: parseIntEnv('API_BODY_LIMIT_BYTES', 1_048_576),

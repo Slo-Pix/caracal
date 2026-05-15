@@ -9,20 +9,16 @@ import {
   credentialRead,
   runExec,
   stackDown,
-  stackInit,
   stackStatus,
   stackUp,
 } from '@caracalai/engine'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import {
-  DEFAULT_API_URL,
-  DEFAULT_ZONE_URL,
   resolveCliConfigPath,
   resolveServiceUrl,
   type CliConfig,
 } from '@caracalai/core/cli'
-import { discoverAdminToken } from '@caracalai/core'
 import { ansi } from '../ansi.ts'
 import { explainError } from '../errors.ts'
 import type { Key } from '../keys.ts'
@@ -187,7 +183,6 @@ class StackMenuView implements View {
 
   constructor() {
     this.items = [
-      { key: 'i', label: 'init', build: () => stackInitForm() },
       { key: 'u', label: 'up', build: () => stackComposeStream('up', stackUp) },
       { key: 'd', label: 'down', build: () => stackComposeStream('down', stackDown) },
       { key: 's', label: 'status', build: () => stackStatusDetail() },
@@ -224,32 +219,6 @@ class StackMenuView implements View {
       ctx.app.push(built)
     }
   }
-}
-
-function stackInitForm(): View {
-  return new FormView({
-    title: 'stack init',
-    fields: [
-      { key: 'api_url', label: 'api_url', kind: 'text', default: process.env.CARACAL_API_URL ?? DEFAULT_API_URL },
-      { key: 'zone_url', label: 'zone_url', kind: 'text', default: process.env.CARACAL_ZONE_URL ?? DEFAULT_ZONE_URL },
-      { key: 'config_path', label: 'config_path', kind: 'text' },
-      { key: 'force', label: 'force', kind: 'bool', default: 'false' },
-    ],
-    onSubmit: async (v, app) => {
-      const adminToken = discoverAdminToken()
-      if (!adminToken) throw new Error('CARACAL_ADMIN_TOKEN not set')
-      const configPath = v.config_path || resolveCliConfigPath() || `${process.cwd()}/caracal.toml`
-      const result = await stackInit({
-        apiUrl: v.api_url ?? DEFAULT_API_URL,
-        adminToken,
-        zoneUrl: v.zone_url!,
-        configPath,
-        force: v.force === 'true',
-      })
-      app.pop()
-      app.push(new DetailView({ title: 'stack init', load: async () => result }))
-    },
-  })
 }
 
 type ComposeFn = (opts: {
@@ -381,7 +350,7 @@ export class MenuView implements View {
   private async promptZone(app: App): Promise<void> {
     try {
       const zones = await this.client.zones.list()
-      if (zones.length === 0) { app.setStatus('no zones found — run `caracal init`', 'error'); return }
+      if (zones.length === 0) { app.setStatus('no zones — open Zones (n) to create one, or run `caracal zone create --name <n>`', 'error'); return }
       app.push(new ZonePickerView(zones, (id, slug) => this.setZone(id, slug, app)))
     } catch (err) {
       app.setStatus(`zone list: ${explainError(err)}`, 'error')

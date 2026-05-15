@@ -603,41 +603,6 @@ Available template IDs: `role-based`, `attribute-based`, `delegation`, `baseline
 
 ---
 
-## Bootstrap — `/v1/local/bootstrap` (development only)
-
-Available only when `CARACAL_LOCAL_BOOTSTRAP_ENABLED=true` on the API.
-
-### `POST /v1/local/bootstrap`
-
-Creates zone, application, resource, policy, and policy set in one transaction. Idempotent: returns the existing bootstrap state if already created.
-
-**Request body:**
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `force` | boolean | Regenerate client secret and reseal signing key |
-
-**Response 201 (new) or 200 (existing):**
-
-```json
-{
-  "zone_id": "zone1",
-  "app_id": "app1",
-  "application_id": "app1",
-  "app_client_secret": "secret-value",
-  "resource": "resource://example",
-  "scope": "read",
-  "rotated": false,
-  "signing_key_resealed": false
-}
-```
-
-`app_client_secret` is only present in the initial creation response or when `force: true`.
-
-**Error 409:** `zone_not_local_bootstrap` — a non-bootstrap zone with this ID already exists.
-
----
-
 ## Health and readiness
 
 | Method | Path | Auth | Description |
