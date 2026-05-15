@@ -3,6 +3,19 @@
 //
 // `caracal policy …` and `caracal policy-set …` admin subcommands.
 
+import {
+  policyList,
+  policyGet,
+  policyCreate,
+  policyVersion,
+  policyDelete,
+  policySetList,
+  policySetGet,
+  policySetCreate,
+  policySetVersion,
+  policySetActivate,
+  policySetDelete,
+} from '@caracalai/cli-core'
 import type { CliConfig } from '../config.ts'
 import { printSuccess } from '../style.ts'
 import {
@@ -32,7 +45,7 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
     switch (verb) {
       case 'list': {
         const zoneId = requireZone(ctx, flags)
-        const rows = await client.policies.list(zoneId)
+        const rows = await policyList({ client, zoneId })
         if (json) return printJSON(rows)
         return printTable(rows, ['id', 'name', 'description', 'owner_type', 'created_by', 'created_at'])
       }
@@ -40,7 +53,7 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('policy get <id> [--zone …]')
-        return printJSON(await client.policies.get(zoneId, id))
+        return printJSON(await policyGet({ client, zoneId, id }))
       }
       case 'create': {
         const zoneId = requireZone(ctx, flags)
@@ -51,11 +64,15 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
           return usage('policy create --name <n> --file <path>|--content <rego> [--description …] [--owner-type …]')
         }
         const content = readContent(file ? `@${file}` : inline)
-        return printJSON(await client.policies.create(zoneId, {
-          name,
-          content,
-          description: flagString(flags, 'description'),
-          owner_type: flagString(flags, 'owner-type'),
+        return printJSON(await policyCreate({
+          client,
+          zoneId,
+          input: {
+            name,
+            content,
+            description: flagString(flags, 'description'),
+            owner_type: flagString(flags, 'owner-type'),
+          },
         }))
       }
       case 'version': {
@@ -67,13 +84,19 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
           return usage('policy version <id> --file <path>|--content <rego>')
         }
         const content = readContent(file ? `@${file}` : inline)
-        return printJSON(await client.policies.addVersion(zoneId, id, content, flagString(flags, 'schema-version')))
+        return printJSON(await policyVersion({
+          client,
+          zoneId,
+          id,
+          content,
+          schemaVersion: flagString(flags, 'schema-version'),
+        }))
       }
       case 'delete': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('policy delete <id> [--zone …]')
-        await client.policies.delete(zoneId, id)
+        await policyDelete({ client, zoneId, id })
         printSuccess(`archived ${id}`)
         return
       }
@@ -100,7 +123,7 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
     switch (verb) {
       case 'list': {
         const zoneId = requireZone(ctx, flags)
-        const rows = await client.policySets.list(zoneId)
+        const rows = await policySetList({ client, zoneId })
         if (json) return printJSON(rows)
         return printTable(rows, ['id', 'name', 'active_version_id', 'description', 'created_at'])
       }
@@ -108,13 +131,18 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('policy-set get <id> [--zone …]')
-        return printJSON(await client.policySets.get(zoneId, id))
+        return printJSON(await policySetGet({ client, zoneId, id }))
       }
       case 'create': {
         const zoneId = requireZone(ctx, flags)
         const name = flagString(flags, 'name')
         if (!name) return usage('policy-set create --name <n> [--description …]')
-        return printJSON(await client.policySets.create(zoneId, name, flagString(flags, 'description')))
+        return printJSON(await policySetCreate({
+          client,
+          zoneId,
+          name,
+          description: flagString(flags, 'description'),
+        }))
       }
       case 'version': {
         const zoneId = requireZone(ctx, flags)
@@ -123,8 +151,12 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
         if (!id || !versions || versions.length === 0) {
           return usage('policy-set version <id> --policy-versions vid1,vid2,…')
         }
-        const manifest = versions.map((policy_version_id) => ({ policy_version_id }))
-        return printJSON(await client.policySets.addVersion(zoneId, id, manifest))
+        return printJSON(await policySetVersion({
+          client,
+          zoneId,
+          id,
+          policyVersionIds: versions,
+        }))
       }
       case 'activate': {
         const zoneId = requireZone(ctx, flags)
@@ -133,13 +165,19 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
         if (!id || !versionId) {
           return usage('policy-set activate <id> --version <version-id> [--shadow <version-id>]')
         }
-        return printJSON(await client.policySets.activate(zoneId, id, versionId, flagString(flags, 'shadow')))
+        return printJSON(await policySetActivate({
+          client,
+          zoneId,
+          id,
+          versionId,
+          shadowVersionId: flagString(flags, 'shadow'),
+        }))
       }
       case 'delete': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('policy-set delete <id> [--zone …]')
-        await client.policySets.delete(zoneId, id)
+        await policySetDelete({ client, zoneId, id })
         printSuccess(`archived ${id}`)
         return
       }

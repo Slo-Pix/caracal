@@ -7,17 +7,72 @@ package logging
 
 import (
 	"os"
+	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/rs/zerolog"
 )
 
-// New returns a zerolog.Logger scoped to the named service.
+var (
+	hostnameOnce sync.Once
+	hostname     string
+	versionOnce  sync.Once
+	version      string
+)
+
+func host() string {
+	hostnameOnce.Do(func() {
+		h, err := os.Hostname()
+		if err != nil || h == "" {
+			h = "unknown"
+		}
+		hostname = h
+	})
+	return hostname
+}
+
+func ver() string {
+	versionOnce.Do(func() {
+		if v := os.Getenv("CARACAL_VERSION"); v != "" {
+			version = v
+			return
+		}
+		if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			version = info.Main.Version
+			return
+		}
+		version = "dev"
+	})
+	return version
+}
+
+func env() string {
+	if e := os.Getenv("CARACAL_ENV"); e != "" {
+		return e
+	}
+	if e := os.Getenv("APP_ENV"); e != "" {
+		return e
+	}
+	return "development"
+}
+
+// New returns a zerolog.Logger scoped to the named service with standard
+// process-level fields (service, hostname, pid, version, env) bound once.
 // Log level is read from the LOG_LEVEL environment variable (default: info).
 func New(service string) zerolog.Logger {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMs
+	zerolog.MessageFieldName = "msg"
+	zerolog.LevelFieldName = "level"
+	zerolog.TimestampFieldName = "time"
+	zerolog.ErrorStackMarshaler = nil
 	return zerolog.New(os.Stderr).Level(envLevel()).With().
 		Timestamp().
 		Str("service", service).
+		Str("hostname", host()).
+		Int("pid", os.Getpid()).
+		Str("version", ver()).
+		Str("env", env()).
 		Logger()
 }
 
@@ -37,3 +92,4 @@ func envLevel() zerolog.Level {
 	}
 	return zerolog.InfoLevel
 }
+

@@ -31,6 +31,8 @@ def _capture(fn) -> list[dict]:
     buf = io.StringIO()
     with redirect_stderr(buf):
         fn()
+        from caracalai_core.logging import flush_for_test
+        flush_for_test()
     lines = [l for l in buf.getvalue().strip().splitlines() if l]
     return [json.loads(l) for l in lines]
 
@@ -45,6 +47,27 @@ class LoggingTests(unittest.TestCase):
         self.assertEqual(out[-1]["service"], "api")
         self.assertEqual(out[-1]["msg"], "ready")
         self.assertEqual(out[-1]["port"], 3000)
+        self.assertIn("hostname", out[-1])
+        self.assertIn("pid", out[-1])
+        self.assertIn("version", out[-1])
+        self.assertIn("env", out[-1])
+        self.assertIn("time", out[-1])
+
+    def test_redacts_value_patterns(self):
+        out = _capture(lambda: create_logger("api", "info").info("seen", header="Bearer abcdefghijkl"))
+        self.assertEqual(out[-1]["header"], "Bearer ***")
+
+    def test_serializes_exceptions(self):
+        def go():
+            try:
+                raise ValueError("boom")
+            except ValueError as exc:
+                create_logger("api", "info").error("oops", err=exc)
+        out = _capture(go)
+        self.assertEqual(out[-1]["error"]["name"], "ValueError")
+        self.assertEqual(out[-1]["error"]["message"], "boom")
+        self.assertIn("stack", out[-1]["error"])
+
 
     def test_filters_below_level(self):
         def go():
