@@ -14,7 +14,7 @@ const cliRoot = resolve(here, '..')
 const repoRoot = resolve(cliRoot, '..', '..')
 
 function baseVersion() {
-  const raw = readFileSync(resolve(cliRoot, 'runtime/release.json'), 'utf8')
+  const raw = readFileSync(resolve(repoRoot, 'packages/engine/runtime/release.json'), 'utf8')
   return JSON.parse(raw).version
 }
 

@@ -13,10 +13,14 @@
 - Must implement views for: zones, applications, resources, providers, policies, policy-sets, grants, sessions, audit (live tail with decision filter and pause), and agents.
 - Must keep the audit view's polling cancellable: `dispose()` must clear timers when the view leaves the stack.
 - Must refuse to launch when stdin is not a TTY.
+- Must implement every verb supported by the CLI through a FormView, ConfirmView, or StreamView; must call `@caracalai/engine` for the verb body.
+- Must spawn child processes (run, stack) with stdio piped into a StreamView; must terminate children with SIGTERM then SIGKILL after 2 s on dispose.
+- Must mask credential and token fields by default; reveal only on explicit Ctrl-R.
 
 ## Forbidden
 - Must not import from `caracalEnterprise/`.
 - Must not write secrets, tokens, or refresh tokens to disk.
 - Must not depend on a Bun runtime at execution time.
 - Must not pull a heavyweight UI framework (React, Ink, blessed, etc.); the TUI is implemented with `node:tty`/`node:readline` plus ANSI escapes only.
-- Must not perform mutating admin operations from the TUI; mutation flows live in the CLI.
+- Must not pass user input to a shell; must not use spawn `shell:true`.
+- Must not render exception messages without scrubbing JWT and caracal token patterns.

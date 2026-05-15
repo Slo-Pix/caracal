@@ -8,11 +8,11 @@ import {
   buildAdminClient as buildAdminClientCore,
   readContent as readContentCore,
   type AdminContext,
-} from '@caracalai/cli-core'
+} from '@caracalai/engine'
 import type { CliConfig } from '../config.ts'
 import { style, printError } from '../style.ts'
 
-export type { AdminContext } from '@caracalai/cli-core'
+export type { AdminContext } from '@caracalai/engine'
 
 export function buildAdminClient(cfg?: CliConfig): AdminContext {
   try {
