@@ -16,6 +16,7 @@ import type { CliConfig } from '@caracalai/core/cli'
 export interface AdminContext {
   client: AdminClient
   zoneId: string | undefined
+  apiUrl: string
 }
 
 export function buildAdminClient(cfg?: CliConfig): AdminContext {
@@ -32,6 +33,7 @@ export function buildAdminClient(cfg?: CliConfig): AdminContext {
   return {
     client: new AdminClient({ apiUrl, coordinatorUrl, adminToken, coordinatorToken }),
     zoneId,
+    apiUrl,
   }
 }
 

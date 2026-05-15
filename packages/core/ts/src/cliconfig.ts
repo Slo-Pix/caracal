@@ -10,6 +10,7 @@ import { CaracalError } from './errors.js';
 
 export const DEFAULT_API_URL = 'http://localhost:3000';
 export const DEFAULT_COORDINATOR_URL = 'http://localhost:4000';
+export const DEFAULT_ZONE_URL = 'http://localhost:8080';
 
 export interface Credential {
   env: string;

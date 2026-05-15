@@ -17,11 +17,15 @@ async function waitForChallenge(zoneUrl: string, challengeId: string): Promise<b
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`${zoneUrl}/step-up/${challengeId}`)
+      if (res.status === 404 || res.status === 410) {
+        throw new Error(`step_up_challenge_expired (${res.status})`)
+      }
       if (res.ok) {
         const data = (await res.json()) as { satisfied: boolean }
         if (data.satisfied) return true
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('step_up_challenge_expired')) throw err
       // Ignore transient fetch failures while polling.
     }
     await new Promise((r) => setTimeout(r, STEP_UP_POLL_MS))

@@ -6,13 +6,11 @@
 import '@caracalai/engine/scrubCwdEnv'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
-import { AdminClient } from '@caracalai/admin'
-import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
 import {
-  DEFAULT_API_URL,
-  DEFAULT_COORDINATOR_URL,
+  buildAdminClient,
+} from '@caracalai/engine'
+import {
   resolveCliConfigPath,
-  resolveServiceUrl,
   type CliConfig,
 } from '@caracalai/core/cli'
 import { App } from './screen.ts'
@@ -35,22 +33,18 @@ function main(): void {
     process.stderr.write('caracal-tui: stdin is not a TTY — run from an interactive terminal.\n')
     process.exit(1)
   }
-  const adminToken = discoverAdminToken()
-  if (!adminToken) {
-    process.stderr.write(`caracal-tui: CARACAL_ADMIN_TOKEN not set; export it or run \`caracal up\` (writes ${runtimeEnvFile()})\n`)
+  const cfg = loadConfig()
+  let adminCtx: import('@caracalai/engine').AdminContext
+  try {
+    adminCtx = buildAdminClient(cfg)
+  } catch (err) {
+    process.stderr.write(`caracal-tui: ${err instanceof Error ? err.message : String(err)}\n`)
     process.exit(1)
   }
-  const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
-  const coordinatorUrl = resolveServiceUrl('CARACAL_COORDINATOR_URL', DEFAULT_COORDINATOR_URL)
-  const coordinatorToken = process.env.CARACAL_COORDINATOR_TOKEN
-  const cfg = loadConfig()
-  const zoneId = process.env.CARACAL_ZONE_ID ?? cfg?.zone_id
-
-  const client = new AdminClient({ apiUrl, coordinatorUrl, adminToken, coordinatorToken })
-  const menu = new MenuView(client, zoneId)
+  const menu = new MenuView(adminCtx.client, adminCtx.zoneId)
   const app = new App('Caracal TUI', () => {
     const zid = menu.currentZoneId()
-    return `${apiUrl}${zid ? `  zone:${zid}` : ''}`
+    return `${adminCtx.apiUrl}${zid ? `  zone:${zid}` : ''}`
   })
   void app.run(menu)
 }

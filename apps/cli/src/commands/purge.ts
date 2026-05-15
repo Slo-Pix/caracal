@@ -3,7 +3,7 @@
 //
 // `caracal purge`: centralized cleanup for selectable targets across dev and runtime installs.
 
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
@@ -244,7 +244,6 @@ const TARGETS: Target[] = [
       for (const group of ['apps', 'packages']) {
         const base = join(root, group)
         if (!existsSync(base)) continue
-        const { readdirSync, statSync } = await import('node:fs')
         for (const name of readdirSync(base)) {
           const child = join(base, name)
           try {

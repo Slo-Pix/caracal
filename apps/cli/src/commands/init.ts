@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
+import { DEFAULT_API_URL, DEFAULT_ZONE_URL } from '@caracalai/core/cli'
 import { AdminApiError } from '@caracalai/admin'
 import { stackInit } from '@caracalai/engine'
 import { showHelp } from './shared.ts'
@@ -19,9 +20,6 @@ interface InitOptions {
   zoneUrl: string
   force: boolean
 }
-
-const DEFAULT_API_URL = 'http://localhost:3000'
-const DEFAULT_ZONE_URL = 'http://localhost:8080'
 
 function defaultConfigPath(): string {
   for (const dir of [process.cwd(), process.env.PWD, process.env.INIT_CWD]) {

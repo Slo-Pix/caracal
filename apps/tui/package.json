@@ -16,13 +16,18 @@
     "node": ">=24"
   },
   "scripts": {
+    "stamp:dev": "node scripts/stampDev.mjs",
+    "stamp:release": "node scripts/stampRelease.mjs",
     "build:linux-x64": "bun build --compile --target=bun-linux-x64 src/index.ts --outfile dist/caracal-tui-linux-x64",
     "build:linux-arm64": "bun build --compile --target=bun-linux-arm64 src/index.ts --outfile dist/caracal-tui-linux-arm64",
     "build:darwin-x64": "bun build --compile --target=bun-darwin-x64 src/index.ts --outfile dist/caracal-tui-darwin-x64",
     "build:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 src/index.ts --outfile dist/caracal-tui-darwin-arm64",
     "build:windows-x64": "bun build --compile --target=bun-windows-x64 src/index.ts --outfile dist/caracal-tui-windows-x64.exe",
+    "prebuild": "node scripts/stampDev.mjs",
     "build": "bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:darwin-x64 && bun run build:darwin-arm64 && bun run build:windows-x64",
+    "build:release": "node scripts/stampRelease.mjs && bun run build",
     "dev": "node bin/caracal-tui.mjs",
+    "pretypecheck": "node scripts/stampDev.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root ../.. tests/typescript/unit/tui"
   },

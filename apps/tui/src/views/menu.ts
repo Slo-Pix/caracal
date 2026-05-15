@@ -17,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import {
   DEFAULT_API_URL,
+  DEFAULT_ZONE_URL,
   resolveCliConfigPath,
   resolveServiceUrl,
   type CliConfig,
@@ -43,6 +44,7 @@ import {
   type Ctx,
 } from './factory.ts'
 import { resolveStackPaths } from '@caracalai/engine'
+import { CARACAL_TUI_MODE } from '../version.gen.ts'
 import { StreamView } from './stream.ts'
 
 interface Entry {
@@ -229,7 +231,7 @@ function stackInitForm(): View {
     title: 'stack init',
     fields: [
       { key: 'api_url', label: 'api_url', kind: 'text', default: process.env.CARACAL_API_URL ?? DEFAULT_API_URL },
-      { key: 'zone_url', label: 'zone_url', kind: 'text', default: process.env.CARACAL_ZONE_URL ?? 'http://localhost:8080' },
+      { key: 'zone_url', label: 'zone_url', kind: 'text', default: process.env.CARACAL_ZONE_URL ?? DEFAULT_ZONE_URL },
       { key: 'config_path', label: 'config_path', kind: 'text' },
       { key: 'force', label: 'force', kind: 'bool', default: 'false' },
     ],
@@ -261,7 +263,7 @@ function stackComposeStream(label: 'up' | 'down', fn: ComposeFn): View {
   return new StreamView({
     title: `stack ${label}`,
     spawn: (onLine) => {
-      const paths = resolveStackPaths()
+      const paths = resolveStackPaths({ mode: CARACAL_TUI_MODE })
       return fn({
         paths,
         args: [],
@@ -283,7 +285,7 @@ function stackPurgeForm(): View {
       app.push(new StreamView({
         title: 'stack purge',
         spawn: (onLine) => {
-          const paths = resolveStackPaths()
+          const paths = resolveStackPaths({ mode: CARACAL_TUI_MODE })
           return composeRun({
             paths,
             args: ['down', '-v', '--remove-orphans'],
