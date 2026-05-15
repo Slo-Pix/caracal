@@ -39,9 +39,18 @@ function makeDb(opts: { token?: string; scope?: 'global' | 'zone'; zoneId?: stri
   return { query } as unknown as DB
 }
 
-async function buildPluginApp(db: ReturnType<typeof makeDb>) {
+async function buildPluginApp(
+  db: ReturnType<typeof makeDb>,
+  redis?: { incr: (k: string) => Promise<number>; expire: (k: string, s: number) => Promise<number>; set: (k: string, v: string, ...args: unknown[]) => Promise<'OK' | null> },
+  options: { authFailLimitPerMin?: number; lastUsedDebounceSec?: number } = {},
+) {
   const app = Fastify({ logger: false })
-  await app.register(adminAuthPlugin, { db })
+  await app.register(adminAuthPlugin, {
+    db,
+    redis: redis as never,
+    authFailLimitPerMin: options.authFailLimitPerMin,
+    lastUsedDebounceSec: options.lastUsedDebounceSec,
+  })
   app.get('/v1/zones', async (req) => ({ ok: true, actor: req.actor }))
   app.get('/v1/zones/:zoneId/things', async (req) => ({ ok: true, params: req.params }))
   return app
@@ -111,6 +120,78 @@ describe('adminAuthPlugin', () => {
       headers: { authorization: 'Bearer s' },
     })
     expect(res.statusCode).toBe(200)
+    await app.close()
+  })
+})
+
+describe('admin auth failed-attempt limiter', () => {
+  function fakeRedis(initialCount = 0) {
+    const counters = new Map<string, number>()
+    const sets = new Map<string, string>()
+    return {
+      counters,
+      sets,
+      incr: vi.fn(async (k: string) => {
+        const next = (counters.get(k) ?? initialCount) + 1
+        counters.set(k, next)
+        return next
+      }),
+      expire: vi.fn(async () => 1),
+      set: vi.fn(async (k: string, v: string, _ex: string, _sec: number, mode?: string) => {
+        if (mode === 'NX' && sets.has(k)) return null
+        sets.set(k, v)
+        return 'OK' as const
+      }),
+    }
+  }
+
+  it('returns 429 once failure count exceeds limit', async () => {
+    const redis = fakeRedis(2)
+    const app = await buildPluginApp(makeDb(), redis, { authFailLimitPerMin: 2 })
+    const res = await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer wrong' } })
+    expect(res.statusCode).toBe(429)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'rate_limited' })
+    await app.close()
+  })
+
+  it('returns 401 (not 429) when below limit', async () => {
+    const redis = fakeRedis(0)
+    const app = await buildPluginApp(makeDb(), redis, { authFailLimitPerMin: 5 })
+    const res = await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer wrong' } })
+    expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('does not count successful auth as a failure', async () => {
+    const redis = fakeRedis(0)
+    const app = await buildPluginApp(makeDb({ token: 's' }), redis, { authFailLimitPerMin: 1 })
+    const res = await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer s' } })
+    expect(res.statusCode).toBe(200)
+    expect(redis.incr).not.toHaveBeenCalled()
+    await app.close()
+  })
+})
+
+describe('admin auth touchLastUsed debounce', () => {
+  it('skips UPDATE when redis NX guard says recently touched', async () => {
+    const db = makeDb({ token: 's' })
+    const sets = new Map<string, string>()
+    const redis = {
+      incr: vi.fn(async () => 1),
+      expire: vi.fn(async () => 1),
+      set: vi.fn(async (k: string) => {
+        if (sets.has(k)) return null
+        sets.set(k, '1')
+        return 'OK' as const
+      }),
+    }
+    const app = await buildPluginApp(db, redis, { lastUsedDebounceSec: 60 })
+    await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer s' } })
+    await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer s' } })
+    await new Promise((r) => setImmediate(r))
+    const updates = (db.query as ReturnType<typeof vi.fn>).mock.calls
+      .filter((c) => typeof c[0] === 'string' && (c[0] as string).startsWith('UPDATE admin_tokens'))
+    expect(updates).toHaveLength(1)
     await app.close()
   })
 })

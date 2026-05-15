@@ -3,6 +3,7 @@
 //
 // `caracal grant …` admin subcommands.
 
+import { grantList, grantGet, grantCreate, grantRevoke } from '@caracalai/cli-core'
 import type { CliConfig } from '../config.ts'
 import { printSuccess } from '../style.ts'
 import {
@@ -31,7 +32,7 @@ export async function grantCommand(argv: string[], cfg?: CliConfig): Promise<voi
     switch (verb) {
       case 'list': {
         const zoneId = requireZone(ctx, flags)
-        const rows = await client.grants.list(zoneId)
+        const rows = await grantList({ client, zoneId })
         if (json) return printJSON(rows)
         return printTable(rows, ['id', 'application_id', 'user_id', 'resource_id', 'scopes', 'status', 'created_at'])
       }
@@ -39,7 +40,7 @@ export async function grantCommand(argv: string[], cfg?: CliConfig): Promise<voi
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('grant get <id> [--zone …]')
-        return printJSON(await client.grants.get(zoneId, id))
+        return printJSON(await grantGet({ client, zoneId, id }))
       }
       case 'create': {
         const zoneId = requireZone(ctx, flags)
@@ -50,14 +51,18 @@ export async function grantCommand(argv: string[], cfg?: CliConfig): Promise<voi
         if (!application_id || !user_id || !resource_id || !scopes || scopes.length === 0) {
           return usage('grant create --app <id> --user <id> --resource <id> --scopes a,b')
         }
-        return printJSON(await client.grants.create(zoneId, { application_id, user_id, resource_id, scopes }))
+        return printJSON(await grantCreate({
+          client,
+          zoneId,
+          input: { application_id, user_id, resource_id, scopes },
+        }))
       }
       case 'revoke':
       case 'delete': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('grant revoke <id> [--zone …]')
-        await client.grants.revoke(zoneId, id)
+        await grantRevoke({ client, zoneId, id })
         printSuccess(`revoked ${id}`)
         return
       }
