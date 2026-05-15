@@ -8,7 +8,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { discoverAdminToken, runtimeEnvFile } from '@caracalai/core'
 import { AdminApiError } from '@caracalai/admin'
-import { stackInit } from '@caracalai/cli-core'
+import { stackInit } from '@caracalai/engine'
 import { showHelp } from './shared.ts'
 import { style, printError, printInfo, printSuccess, printWarn } from '../style.ts'
 

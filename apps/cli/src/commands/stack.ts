@@ -3,48 +3,19 @@
 //
 // `caracal up | down | status`: docker-compose lifecycle and health probes for the OSS stack.
 
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import {
   DEFAULT_SERVICE_PROBES,
+  resolveStackPaths,
   stackDown,
   stackStatus,
   stackUp,
+  type StackMode,
   type StackPaths,
-} from '@caracalai/cli-core'
+} from '@caracalai/engine'
 import { CARACAL_MODE, CARACAL_REGISTRY, CARACAL_VERSION } from '../runtime/version.ts'
-import { installRuntimeAssets, runtimePaths, seedEnvFile } from '../runtime/install.ts'
 import { style, SYMBOL, printError, printInfo } from '../style.ts'
 
-function devPaths(repoRoot: string): StackPaths {
-  const composeFile = join(repoRoot, 'infra', 'docker', 'docker-compose.yml')
-  const envFile = process.env.CARACAL_ENV_FILE ?? join(repoRoot, 'infra', 'docker', '.env')
-  if (!existsSync(envFile)) {
-    printError(`env file not found at ${envFile}; copy infra/docker/.env.example to infra/docker/.env first.`)
-    process.exit(1)
-  }
-  const { seeded } = seedEnvFile(envFile)
-  if (seeded) {
-    printInfo(`seeded missing secrets in ${envFile}`)
-  }
-  return { composeFile, envFile, cwd: repoRoot, mode: 'dev' }
-}
-
-function runtimeStackPaths(): StackPaths {
-  const paths = runtimePaths()
-  const { created } = installRuntimeAssets(paths)
-  if (created) {
-    printInfo(`provisioned runtime assets at ${paths.home}`)
-  }
-  const envFile = process.env.CARACAL_ENV_FILE ?? paths.envFile
-  const { seeded } = seedEnvFile(envFile)
-  if (seeded) {
-    printInfo(`seeded missing secrets in ${envFile}`)
-  }
-  return { composeFile: paths.composeFile, envFile, cwd: paths.home, mode: 'runtime' }
-}
-
-function resolveMode(): 'dev' | 'runtime' {
+function resolveMode(): StackMode {
   const override = process.env.CARACAL_MODE
   if (override === 'dev' || override === 'runtime') return override
   if (override) {
@@ -55,18 +26,12 @@ function resolveMode(): 'dev' | 'runtime' {
 }
 
 export function resolvePaths(): StackPaths {
-  const mode = resolveMode()
-  if (mode === 'dev') {
-    const repoRoot = process.env.CARACAL_REPO_ROOT
-    if (!repoRoot) {
-      printError(
-        'CARACAL_MODE=dev requires CARACAL_REPO_ROOT; invoke via `pnpm caracal` from inside the repo.',
-      )
-      process.exit(1)
-    }
-    return devPaths(repoRoot)
+  try {
+    return resolveStackPaths({ mode: resolveMode(), onInfo: printInfo })
+  } catch (err) {
+    printError(err instanceof Error ? err.message : String(err))
+    process.exit(1)
   }
-  return runtimeStackPaths()
 }
 
 function printBanner(paths: StackPaths): void {

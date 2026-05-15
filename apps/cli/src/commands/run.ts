@@ -3,7 +3,7 @@
 //
 // `caracal run <cmd...>`: injects ambient 60-min tokens into child process env.
 
-import { runExec } from '@caracalai/cli-core'
+import { runExec } from '@caracalai/engine'
 import { OAuthClient, InteractionRequiredError } from '@caracalai/oauth'
 import type { CliConfig, Credential } from '../config.ts'
 import { printError, printWarn } from '../style.ts'
