@@ -3,9 +3,10 @@
 //
 // ANSI helpers and key parser unit tests.
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { visibleLength, pad, sanitizeAnsi, truncate } from '../../../../apps/tui/src/ansi.ts'
 import { parseKey } from '../../../../apps/tui/src/keys.ts'
+import { App, type View } from '../../../../apps/tui/src/screen.ts'
 
 describe('ansi visibleLength', () => {
   it('counts only printable characters, ignoring SGR escapes', () => {
@@ -86,5 +87,41 @@ describe('parseKey', () => {
   it('passes through plain characters', () => {
     expect(parseKey('q')).toBe('q')
     expect(parseKey('z')).toBe('z')
+  })
+})
+
+describe('App key dispatch', () => {
+  function makeView(isTextEntry: boolean): { view: View; seen: string[] } {
+    const seen: string[] = []
+    return {
+      seen,
+      view: {
+        title: 't',
+        isTextEntry,
+        hints: () => [],
+        render: () => [],
+        onKey: (key: string) => { seen.push(key) },
+      } as View,
+    }
+  }
+
+  it('routes q to exit when current view is not text-entry', async () => {
+    const app = new App('', '')
+    const exit = vi.spyOn(app, 'exit').mockImplementation(async () => {})
+    const { view, seen } = makeView(false)
+    ;(app as unknown as { stack: View[] }).stack = [view]
+    await (app as unknown as { dispatchKey(k: string): Promise<void> }).dispatchKey('q')
+    expect(exit).toHaveBeenCalled()
+    expect(seen).toEqual([])
+  })
+
+  it('forwards q to the view when isTextEntry is true', async () => {
+    const app = new App('', '')
+    const exit = vi.spyOn(app, 'exit').mockImplementation(async () => {})
+    const { view, seen } = makeView(true)
+    ;(app as unknown as { stack: View[] }).stack = [view]
+    await (app as unknown as { dispatchKey(k: string): Promise<void> }).dispatchKey('q')
+    expect(exit).not.toHaveBeenCalled()
+    expect(seen).toEqual(['q'])
   })
 })
