@@ -14,11 +14,18 @@ export interface Column<T> {
   value: (row: T) => string
 }
 
+export interface ListAction<T> {
+  key: string
+  label: string
+  build: (row: T | undefined, app: App) => View | Promise<View>
+}
+
 export interface ListOptions<T> {
   title: string
   columns: Column<T>[]
   load: () => Promise<T[]>
   onEnter?: (app: App, row: T) => void | Promise<void>
+  actions?: ListAction<T>[]
 }
 
 export class ListView<T> implements View {
@@ -26,34 +33,40 @@ export class ListView<T> implements View {
   private readonly columns: Column<T>[]
   private readonly loader: () => Promise<T[]>
   private readonly enter?: (app: App, row: T) => void | Promise<void>
+  private readonly actions: ListAction<T>[]
   private rows: T[] = []
   private cursor = 0
   private offset = 0
   private loading = true
   private error: string | undefined
   private aborted = false
+  private app: App | undefined
 
   constructor(opts: ListOptions<T>) {
     this.title = opts.title
     this.columns = opts.columns
     this.loader = opts.load
     this.enter = opts.onEnter
+    this.actions = opts.actions ?? []
   }
 
   selected(): T | undefined { return this.rows[this.cursor] }
 
   hints(): string[] {
-    return ['↑/↓:move', 'enter:open', 'r:reload', 'h:back']
+    const base = ['↑/↓:move', 'enter:open', 'r:reload', 'h:back']
+    for (const a of this.actions) base.push(`${a.key}:${a.label}`)
+    return base
   }
 
-  async init(app: App): Promise<void> { await this.reload(app) }
+  async init(app: App): Promise<void> { this.app = app; await this.reload() }
 
   dispose(): void { this.aborted = true }
 
-  async reload(app: App): Promise<void> {
+  async reload(): Promise<void> {
+    const app = this.app
     this.loading = true
     this.error = undefined
-    app.invalidate()
+    app?.invalidate()
     try {
       const rows = await this.loader()
       if (this.aborted) return
@@ -65,7 +78,7 @@ export class ListView<T> implements View {
     } finally {
       if (!this.aborted) {
         this.loading = false
-        app.invalidate()
+        app?.invalidate()
       }
     }
   }
@@ -106,13 +119,19 @@ export class ListView<T> implements View {
 
   async onKey(key: Key, ctx: ViewContext): Promise<void> {
     const last = Math.max(0, this.rows.length - 1)
+    const action = this.actions.find((a) => a.key === key)
+    if (action) {
+      const view = await action.build(this.selected(), ctx.app)
+      ctx.app.push(view)
+      return
+    }
     if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); return }
     if (key === 'down' || key === 'j') { this.cursor = Math.min(last, this.cursor + 1); return }
     if (key === 'pgup') { this.cursor = Math.max(0, this.cursor - 10); return }
     if (key === 'pgdn') { this.cursor = Math.min(last, this.cursor + 10); return }
     if (key === 'home' || key === 'g') { this.cursor = 0; return }
     if (key === 'end' || key === 'G') { this.cursor = last; return }
-    if (key === 'r') return this.reload(ctx.app)
+    if (key === 'r') return this.reload()
     if (key === 'left' || key === 'h' || key === 'esc') { ctx.app.pop(); return }
     if (key === 'enter') {
       const row = this.selected()
