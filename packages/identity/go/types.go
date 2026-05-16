@@ -16,6 +16,7 @@ type Config struct {
 	Audience             string
 	ZoneID               string
 	RequiredScopes       []string
+	RequiredUse          string
 	RequireAgent         bool
 	RequireDelegation    bool
 	RequireChainContains []string
@@ -35,6 +36,8 @@ type Claims struct {
 	ZoneID           string
 	ClientID         string
 	Sid              string
+	Use              string
+	JTI              string
 	Scope            string
 	AgentSessionID   string
 	DelegationEdgeID string

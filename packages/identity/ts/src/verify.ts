@@ -8,6 +8,8 @@ import { CaracalError, hasScope } from '@caracalai/core'
 import { getKeySet } from './jwks.js'
 import { DEFAULT_MAX_HOP_COUNT, type ChainHop, type Claims, type JwtConfig } from './types.js'
 
+const REQUIRED_CLAIMS = ['exp', 'iat', 'jti', 'sub', 'client_id', 'sid', 'use']
+
 export class TokenInvalidError extends CaracalError {
   constructor(message = 'Token validation failed', cause?: unknown) {
     super('invalid_token', message, cause !== undefined ? { cause } : {})
@@ -63,20 +65,54 @@ export class HopCountExceededError extends CaracalError {
   }
 }
 
+function requiredString(payload: Record<string, unknown>, name: string): string {
+  const value = payload[name]
+  if (typeof value !== 'string' || value === '') {
+    throw new TokenInvalidError(`Token claim ${name} is required`)
+  }
+  return value
+}
+
+function optionalString(payload: Record<string, unknown>, name: string): string | undefined {
+  const value = payload[name]
+  if (value === undefined || value === null || value === '') return undefined
+  if (typeof value !== 'string') throw new TokenInvalidError(`Token claim ${name} must be a string`)
+  return value
+}
+
+function optionalInteger(payload: Record<string, unknown>, name: string): number | undefined {
+  const value = payload[name]
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new TokenInvalidError(`Token claim ${name} must be a non-negative integer`)
+  }
+  return value
+}
+
+function readStringList(raw: unknown, name: string): string[] | undefined {
+  if (raw === undefined || raw === null) return undefined
+  if (!Array.isArray(raw)) throw new TokenInvalidError(`Token claim ${name} must be a string array`)
+  const out: string[] = []
+  for (const value of raw) {
+    if (typeof value !== 'string' || value === '') throw new TokenInvalidError(`Token claim ${name} must be a string array`)
+    out.push(value)
+  }
+  return out
+}
+
 function readChain(raw: unknown): ChainHop[] | undefined {
-  if (!Array.isArray(raw)) return undefined
+  if (raw === undefined || raw === null) return undefined
+  if (!Array.isArray(raw)) throw new TokenInvalidError('Token claim delegation_chain must be an array')
   const out: ChainHop[] = []
   for (const item of raw) {
-    if (item && typeof item === 'object') {
-      const r = item as Record<string, unknown>
-      const applicationId = typeof r['application_id'] === 'string' ? r['application_id'] : ''
-      if (!applicationId) continue
-      out.push({
-        applicationId,
-        agentSessionId: typeof r['agent_session_id'] === 'string' ? r['agent_session_id'] : undefined,
-        delegationEdgeId: typeof r['delegation_edge_id'] === 'string' ? r['delegation_edge_id'] : undefined,
-      })
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new TokenInvalidError('Token claim delegation_chain must contain objects')
     }
+    const r = item as Record<string, unknown>
+    const applicationId = requiredString(r, 'application_id')
+    const agentSessionId = optionalString(r, 'agent_session_id')
+    const delegationEdgeId = optionalString(r, 'delegation_edge_id')
+    out.push({ applicationId, agentSessionId, delegationEdgeId })
   }
   return out.length === 0 ? undefined : out
 }
@@ -89,36 +125,39 @@ export async function verify(token: string, config: JwtConfig): Promise<Claims> 
       issuer: config.issuer,
       audience: config.audience,
       algorithms: ['ES256'],
+      requiredClaims: REQUIRED_CLAIMS,
     }))
   } catch (err) {
     throw new TokenInvalidError('Token validation failed', err)
   }
 
+  const jti = requiredString(payload, 'jti')
+  const sub = requiredString(payload, 'sub')
+  const clientId = requiredString(payload, 'client_id')
+  const sid = requiredString(payload, 'sid')
+  const use = requiredString(payload, 'use')
   const scope = (payload['scope'] as string | undefined) ?? ''
-  const zoneId = payload['zone_id']
-  if (typeof zoneId !== 'string' || zoneId === '' || (config.zoneId && zoneId !== config.zoneId)) {
+  if (typeof scope !== 'string') throw new TokenInvalidError('Token claim scope must be a string')
+  const rawZoneId = payload['zone_id']
+  if (typeof rawZoneId !== 'string' || rawZoneId === '' || (config.zoneId && rawZoneId !== config.zoneId)) {
     throw new ZoneInvalidError()
   }
+  const zoneId = rawZoneId
+  if (config.requiredUse && use !== config.requiredUse) throw new TokenInvalidError('Token use validation failed')
   for (const required of config.requiredScopes ?? []) {
     if (!hasScope(scope, required)) {
       throw new ScopeInsufficientError(required)
     }
   }
 
-  const sid = typeof payload['sid'] === 'string' ? (payload['sid'] as string) : ''
-  const clientId = typeof payload['client_id'] === 'string' ? (payload['client_id'] as string) : ''
-  const agentSessionId = typeof payload['agent_session_id'] === 'string' ? (payload['agent_session_id'] as string) : undefined
-  const delegationEdgeId = typeof payload['delegation_edge_id'] === 'string' ? (payload['delegation_edge_id'] as string) : undefined
-  const sourceSessionId = typeof payload['source_session_id'] === 'string' ? (payload['source_session_id'] as string) : undefined
-  const targetSessionId = typeof payload['target_session_id'] === 'string' ? (payload['target_session_id'] as string) : undefined
-  const delegationPath = Array.isArray(payload['delegation_path'])
-    ? (payload['delegation_path'] as unknown[]).filter((v) => typeof v === 'string') as string[]
-    : undefined
+  const agentSessionId = optionalString(payload, 'agent_session_id')
+  const delegationEdgeId = optionalString(payload, 'delegation_edge_id')
+  const sourceSessionId = optionalString(payload, 'source_session_id')
+  const targetSessionId = optionalString(payload, 'target_session_id')
+  const delegationPath = readStringList(payload['delegation_path'], 'delegation_path')
   const delegationChain = readChain(payload['delegation_chain'])
-  const graphEpoch = typeof payload['delegation_graph_epoch'] === 'number'
-    ? payload['delegation_graph_epoch'] as number
-    : undefined
-  const hopCount = typeof payload['hop_count'] === 'number' ? payload['hop_count'] as number : undefined
+  const graphEpoch = optionalInteger(payload, 'delegation_graph_epoch')
+  const hopCount = optionalInteger(payload, 'hop_count')
 
   if (config.requireAgent && !agentSessionId) {
     throw new AgentIdentityRequiredError()
@@ -138,10 +177,12 @@ export async function verify(token: string, config: JwtConfig): Promise<Claims> 
   }
 
   return {
-    sub: typeof payload.sub === 'string' ? payload.sub : '',
+    sub,
     zoneId,
     clientId,
     sid,
+    use,
+    jti,
     scope,
     agentSessionId,
     delegationEdgeId,

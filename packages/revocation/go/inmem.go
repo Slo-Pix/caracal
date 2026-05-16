@@ -41,11 +41,12 @@ func (s *InMemoryStore) IsRevoked(sid string) bool {
 }
 
 // MarkRevoked records sid as revoked for ttl, falling back to the default TTL when zero.
-func (s *InMemoryStore) MarkRevoked(sid string, ttl time.Duration) {
+func (s *InMemoryStore) MarkRevoked(sid string, ttl time.Duration) error {
 	if ttl <= 0 {
 		ttl = s.defTTL
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.entries[sid] = time.Now().Add(ttl)
+	return nil
 }
