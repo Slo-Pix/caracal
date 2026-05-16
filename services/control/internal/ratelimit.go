@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Per-subject token-bucket limiter for the control invoke endpoint.
+// Per-subject token-bucket limiter for the control invoke endpoint with idle-bucket eviction.
 
 package internal
 
@@ -20,6 +20,8 @@ type RateLimiter struct {
 	buckets  map[string]*bucket
 	capacity float64
 	window   time.Duration
+	idle     time.Duration
+	maxKeys  int
 }
 
 func NewRateLimiter(capacity int, window time.Duration) *RateLimiter {
@@ -27,6 +29,8 @@ func NewRateLimiter(capacity int, window time.Duration) *RateLimiter {
 		buckets:  map[string]*bucket{},
 		capacity: float64(capacity),
 		window:   window,
+		idle:     10 * window,
+		maxKeys:  10_000,
 	}
 }
 
@@ -37,8 +41,12 @@ func (r *RateLimiter) Allow(subject string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	now := time.Now()
+	r.evict(now)
 	b, ok := r.buckets[subject]
 	if !ok {
+		if len(r.buckets) >= r.maxKeys {
+			return false
+		}
 		b = &bucket{tokens: r.capacity - 1, last: now}
 		r.buckets[subject] = b
 		return true
@@ -52,6 +60,14 @@ func (r *RateLimiter) Allow(subject string) bool {
 	}
 	b.tokens--
 	return true
+}
+
+func (r *RateLimiter) evict(now time.Time) {
+	for k, b := range r.buckets {
+		if now.Sub(b.last) > r.idle {
+			delete(r.buckets, k)
+		}
+	}
 }
 
 func minF(a, b float64) float64 {

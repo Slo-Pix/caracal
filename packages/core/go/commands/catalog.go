@@ -14,7 +14,6 @@ const (
 	GroupAdmin         Group = "admin"
 	GroupObservability Group = "observability"
 	GroupMultiagent    Group = "multiagent"
-	GroupControl       Group = "control"
 )
 
 type Descriptor struct {
@@ -47,7 +46,6 @@ var CLI = []Descriptor{
 	{Name: "agent", Group: GroupMultiagent, Summary: "list|get|tree|suspend|resume|terminate", Subcommands: []string{"list", "get", "tree", "children", "suspend", "resume", "terminate"}, RequiresZone: true},
 	{Name: "delegation", Group: GroupMultiagent, Summary: "inbound|outbound|traverse|revoke", Subcommands: []string{"inbound", "outbound", "traverse", "revoke"}, RequiresZone: true},
 
-	{Name: "control", Group: GroupControl, Summary: "token|revoke", Subcommands: []string{"token", "revoke"}},
 	{Name: "completion", Group: GroupShell, Summary: "Emit shell completion script (bash|zsh|fish|powershell)", Subcommands: []string{"bash", "zsh", "fish", "powershell"}, Hidden: true},
 }
 
