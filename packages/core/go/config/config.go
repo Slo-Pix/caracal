@@ -25,6 +25,7 @@ type Base struct {
 // Load reads Base from environment variables, collecting all missing required values
 // into a single error rather than panicking on the first miss.
 func Load() Base {
+	ResolveFileSecrets("DATABASE_URL", "REDIS_URL")
 	missing := MissingRequired("PORT", "DATABASE_URL", "REDIS_URL")
 	if len(missing) > 0 {
 		panic("required env vars missing: " + strings.Join(missing, ", "))
@@ -35,6 +36,32 @@ func Load() Base {
 		RedisURL:    os.Getenv("REDIS_URL"),
 		LogLevel:    Getenv("LOG_LEVEL", "info"),
 		Mode:        Mode(),
+	}
+}
+
+// ResolveFileSecrets reads `${KEY}_FILE` for each key and, when set, loads the
+// file contents into the env var KEY. The `_FILE` var is unset afterwards.
+// Existing values for KEY are preserved.
+func ResolveFileSecrets(keys ...string) {
+	for _, key := range keys {
+		if os.Getenv(key) != "" {
+			continue
+		}
+		fileVar := key + "_FILE"
+		path := os.Getenv(fileVar)
+		if path == "" {
+			continue
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			panic(fmt.Sprintf("read secret file %s=%s: %v", fileVar, path, err))
+		}
+		v := strings.TrimRight(string(raw), " \t\r\n")
+		if v == "" {
+			panic(fmt.Sprintf("secret file empty: %s=%s", fileVar, path))
+		}
+		_ = os.Setenv(key, v)
+		_ = os.Unsetenv(fileVar)
 	}
 }
 

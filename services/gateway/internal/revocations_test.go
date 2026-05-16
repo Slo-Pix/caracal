@@ -41,10 +41,10 @@ func TestRevocationStoreMarkAndExpire(t *testing.T) {
 	}
 }
 
-func TestRevocationStoreNilSafe(t *testing.T) {
-	var store *revocationStore
-	if store.IsRevoked("sid") {
-		t.Fatalf("nil store must report not revoked")
+func TestRevocationStoreEmptySessionNotRevoked(t *testing.T) {
+	store := newRevocationStore(zerolog.New(io.Discard))
+	if store.IsRevoked("") {
+		t.Fatalf("empty session id must report not revoked")
 	}
 }
 
