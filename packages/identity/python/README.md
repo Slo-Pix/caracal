@@ -10,6 +10,12 @@ Part of [Caracal](https://github.com/Garudex-Labs/caracal) — a security-first 
 pip install caracalai-identity
 ```
 
+## Production contract
+
+Verified tokens must include `exp`, `iat`, `jti`, `sub`, `sid`, `client_id`, `zone_id`, and `use`. Configure expected issuer, audience, zone, required scopes, and required token use at the resource boundary.
+
+Verification failures are authentication failures. Do not continue with anonymous identity state or partially trusted claims.
+
 ## Links
 
 - Source: https://github.com/Garudex-Labs/caracal
