@@ -20,7 +20,7 @@ const LIST_MAX_LIMIT = 500
 
 const SpawnBody = z.object({
   application_id: z.string().min(1),
-  session_sid: z.string().min(1).optional(),
+  subject_session_id: z.string().min(1).optional(),
   parent_id: z.string().nullable().default(null),
   kind: z.enum(['service', 'instance', 'ephemeral']).optional(),
   capabilities: z.array(z.string()).default([]),
@@ -45,9 +45,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/zones/:zoneId/agents', async (req, reply) => {
     const { zoneId } = req.params as { zoneId: string }
     const body = SpawnBody.parse(req.body)
-    const sessionSid = body.session_sid ?? req.caracalAuth?.sessionId
-    if (!sessionSid) {
-      return reply.code(400).send({ error: 'session_sid_required' })
+    const subjectSessionId = body.subject_session_id ?? req.caracalAuth?.sessionId
+    if (!subjectSessionId) {
+      return reply.code(400).send({ error: 'subject_session_id_required' })
     }
     if (!ownsApplication(req, body.application_id)
       && !requireScope(req, `coordinator.spawn_for:${body.application_id}`)) {
@@ -64,13 +64,13 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       )
       if (idempotencyKey) {
         const { rows: existing } = await client.query(
-          `SELECT id, zone_id, application_id, parent_id, session_sid, status, depth, spawned_at
+          `SELECT id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at
            FROM agent_sessions
-           WHERE zone_id = $1 AND application_id = $2 AND session_sid = $3
+           WHERE zone_id = $1 AND application_id = $2 AND subject_session_id = $3
              AND COALESCE(parent_id, '') = COALESCE($4, '')
              AND status IN ('active','suspended')
            LIMIT 1`,
-          [zoneId, body.application_id, sessionSid, body.parent_id],
+          [zoneId, body.application_id, subjectSessionId, body.parent_id],
         )
         if (existing[0]) {
           await client.query('ROLLBACK')
@@ -88,7 +88,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
               SELECT 1 FROM sessions
               WHERE id = $3 AND zone_id = $1 AND status = 'active' AND expires_at > now()
             ) AS session_exists`,
-        [zoneId, body.application_id, sessionSid],
+        [zoneId, body.application_id, subjectSessionId],
       )
       if (!refs[0]?.application_exists) {
         await client.query('ROLLBACK')
@@ -99,7 +99,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(404).send({
           error: 'session_not_found',
           detail:
-            'session_sid must reference an STS sessions.id; for business correlation use metadata',
+            'subject_session_id must reference an STS sessions.id; for business correlation use metadata',
         })
       }
       const { rows: cnt } = await client.query(
@@ -148,10 +148,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const { rows } = await client.query(
         `INSERT INTO agent_sessions
-         (id, zone_id, application_id, parent_id, session_sid, depth, capabilities, max_children, ttl_seconds, metadata_json)
+         (id, zone_id, application_id, parent_id, subject_session_id, depth, capabilities, max_children, ttl_seconds, metadata_json)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-         RETURNING id, zone_id, application_id, parent_id, session_sid, status, depth, spawned_at`,
-        [id, zoneId, body.application_id, body.parent_id, sessionSid,
+         RETURNING id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at`,
+        [id, zoneId, body.application_id, body.parent_id, subjectSessionId,
           depth, body.capabilities, MAX_CHILDREN, body.ttl_seconds, body.metadata],
       )
       if (body.parent_id) {
@@ -167,7 +167,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       await enqueue(client, Topics.AgentsLifecycle, `spawn:${id}`, {
         event: 'spawn',
         zone_id: zoneId,
-        session_id: id,
+        agent_session_id: id,
         parent_id: body.parent_id,
         application_id: body.application_id,
       })
@@ -200,19 +200,19 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       cursorClause = `AND id < $3`
     }
     const { rows } = await fastify.db.query(
-      `SELECT id, zone_id, application_id, parent_id, session_sid, status, depth, spawned_at, terminated_at
+      `SELECT id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at, terminated_at
        FROM agent_sessions WHERE zone_id = $1 ${cursorClause}
        ORDER BY id DESC LIMIT $2`,
       params,
     )
-    const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null
+    const nextCursor = rows.length === limit ? rows[rows.length - 1].agent_session_id : null
     return { items: rows, next_cursor: nextCursor }
   })
 
   fastify.get('/zones/:zoneId/agents/:id', async (req, reply) => {
     const { zoneId, id } = req.params as { zoneId: string; id: string }
     const { rows } = await fastify.db.query(
-      `SELECT id, zone_id, application_id, parent_id, session_sid, status, depth, spawned_at, terminated_at
+      `SELECT id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at, terminated_at
        FROM agent_sessions WHERE id = $1 AND zone_id = $2`,
       [id, zoneId],
     )
@@ -223,7 +223,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/zones/:zoneId/agents/:id/children', async (req) => {
     const { zoneId, id } = req.params as { zoneId: string; id: string }
     const { rows } = await fastify.db.query(
-      `SELECT s.id, s.zone_id, s.application_id, s.parent_id, s.session_sid, s.status, s.depth, s.spawned_at
+      `SELECT s.id AS agent_session_id, s.zone_id, s.application_id, s.parent_id, s.subject_session_id, s.status, s.depth, s.spawned_at
        FROM agent_sessions s
        JOIN agent_topology t ON t.child_id = s.id
        WHERE t.parent_id = $1 AND s.zone_id = $2
@@ -274,7 +274,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       await enqueueMany(client, changed.map((row): OutboxItem => ({
         topic: Topics.AgentsLifecycle,
         dedupeKey: `suspend:${row.id}`,
-        payload: { event: 'suspend', zone_id: zoneId, session_id: row.id, parent_id: row.parent_id },
+        payload: { event: 'suspend', zone_id: zoneId, agent_session_id: row.id, parent_id: row.parent_id },
       })))
       await client.query('COMMIT')
       return { suspended: changed.length }
@@ -327,7 +327,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       await enqueueMany(client, changed.map((row): OutboxItem => ({
         topic: Topics.AgentsLifecycle,
         dedupeKey: `resume:${row.id}`,
-        payload: { event: 'resume', zone_id: zoneId, session_id: row.id, parent_id: row.parent_id },
+        payload: { event: 'resume', zone_id: zoneId, agent_session_id: row.id, parent_id: row.parent_id },
       })))
       await client.query('COMMIT')
       return { resumed: changed.length }
@@ -383,7 +383,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
 
 interface TerminatedRow {
   id: string
-  session_sid: string
+  subject_session_id: string
   parent_id: string | null
 }
 
@@ -396,11 +396,11 @@ export async function terminateSubtree(
   if (rootIds.length === 0) return 0
   const { rows } = await client.query<TerminatedRow>(
     `WITH RECURSIVE tree AS (
-       SELECT id, session_sid, parent_id
+      SELECT id, subject_session_id, parent_id
        FROM agent_sessions
        WHERE id = ANY($1::text[]) AND zone_id = $2 AND status IN ('active','suspended')
        UNION ALL
-       SELECT s.id, s.session_sid, s.parent_id
+      SELECT s.id, s.subject_session_id, s.parent_id
        FROM agent_sessions s
        JOIN tree t ON s.parent_id = t.id
        WHERE s.zone_id = $2 AND s.status IN ('active','suspended')
@@ -409,7 +409,7 @@ export async function terminateSubtree(
        UPDATE agent_sessions
        SET status = 'terminated', terminated_at = now(), updated_at = now()
        WHERE id IN (SELECT id FROM tree) AND zone_id = $2
-       RETURNING id, session_sid, parent_id
+      RETURNING id, subject_session_id, parent_id
      ),
      parent_decrements AS (
        SELECT parent_id, COUNT(*)::int AS dec
@@ -425,7 +425,7 @@ export async function terminateSubtree(
        WHERE s.id = p.parent_id AND s.zone_id = $2
        RETURNING s.id
      )
-     SELECT id, session_sid, parent_id FROM terminated`,
+    SELECT id, subject_session_id, parent_id FROM terminated`,
     [rootIds, zoneId],
   )
   if (rows.length === 0) return 0
@@ -435,7 +435,7 @@ export async function terminateSubtree(
       topic: Topics.AgentsLifecycle,
       dedupeKey: `terminate:${row.id}`,
       payload: {
-        event: 'terminate', zone_id: zoneId, session_id: row.id,
+        event: 'terminate', zone_id: zoneId, agent_session_id: row.id,
         parent_id: row.parent_id, reason,
       },
     })

@@ -48,7 +48,7 @@ export async function agentCommand(argv: string[], cfg?: CliConfig): Promise<voi
         const zoneId = requireZone(ctx, flags)
         const rows = await client.agents.list(zoneId)
         if (json) return printJSON(rows)
-        return printTable(rows, ['id', 'application_id', 'parent_id', 'status', 'depth', 'spawned_at', 'terminated_at'])
+        return printTable(rows, ['agent_session_id', 'application_id', 'parent_id', 'status', 'depth', 'spawned_at', 'terminated_at'])
       }
       case 'get': {
         const zoneId = requireZone(ctx, flags)
@@ -63,7 +63,7 @@ export async function agentCommand(argv: string[], cfg?: CliConfig): Promise<voi
         if (!id) return usage('agent tree <id> [--zone …]')
         const rows = await client.agents.children(zoneId, id)
         if (json) return printJSON(rows)
-        return printTable(rows, ['id', 'application_id', 'parent_id', 'status', 'depth', 'spawned_at'])
+        return printTable(rows, ['agent_session_id', 'application_id', 'parent_id', 'status', 'depth', 'spawned_at'])
       }
       case 'suspend': {
         const zoneId = requireZone(ctx, flags)

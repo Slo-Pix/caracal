@@ -31,14 +31,13 @@ interface SplitConfig {
   sealed: { ciphertext: Buffer; nonce: Buffer } | null
 }
 
-function splitConfig(input: Record<string, unknown> | undefined, kind: string | undefined): SplitConfig {
+function splitConfig(input: Record<string, unknown> | undefined): SplitConfig {
   const publicConfig: Record<string, unknown> = {}
   const secretConfig: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(input ?? {})) {
     if (SECRET_KEY_PATTERN.test(key)) secretConfig[key] = value
     else publicConfig[key] = value
   }
-  if (kind) publicConfig.kind = kind
   const secretKeys = Object.keys(secretConfig).sort()
   if (secretKeys.length === 0) {
     return { publicConfig, secretKeys, sealed: null }
@@ -75,7 +74,7 @@ function projectProvider(row: ProviderRow) {
   return { ...row, config_json: scrubConfigJSON(row.config_json) }
 }
 
-const RETURNING = `id, zone_id, name, identifier, config_json->>'kind' AS kind,
+const RETURNING = `id, zone_id, name, identifier, provider_kind AS kind,
                   owner_type, client_id, config_json, secret_config_keys, created_at, updated_at`
 
 export const providersRoutes: FastifyPluginAsync = async (fastify) => {
@@ -118,11 +117,11 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     }
     const body = ProviderBody.parse(req.body)
     const id = uuidv7()
-    const split = splitConfig(body.config_json, body.kind)
+    const split = splitConfig(body.config_json)
     const { rows } = await fastify.db.query<ProviderRow>(
-      `INSERT INTO providers (id, zone_id, name, identifier, owner_type, client_id,
+      `INSERT INTO providers (id, zone_id, name, identifier, owner_type, client_id, provider_kind,
                               config_json, secret_config_ct, secret_config_nonce, secret_config_keys)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11)
        RETURNING ${RETURNING}`,
       [
         id,
@@ -131,6 +130,7 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
         body.identifier,
         body.owner_type ?? 'customer',
         body.client_id ?? null,
+        body.kind ?? null,
         JSON.stringify(split.publicConfig),
         split.sealed?.ciphertext ?? null,
         split.sealed?.nonce ?? null,
@@ -145,13 +145,14 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     if (!params) return
     const body = ProviderBody.partial().parse(req.body)
 
-    const split = body.config_json !== undefined || body.kind !== undefined
-      ? splitConfig(body.config_json, body.kind)
+    const split = body.config_json !== undefined
+      ? splitConfig(body.config_json)
       : null
 
     const update = buildPatchUpdate([params.id, params.zoneId], [
       patchColumn('name', body.name),
       patchColumn('identifier', body.identifier),
+      patchColumn('provider_kind', body.kind),
       patchColumn('owner_type', body.owner_type),
       patchColumn('client_id', body.client_id),
       patchExpression(

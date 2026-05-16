@@ -106,7 +106,7 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
          (id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
           resource_id, scopes, constraints_json, expires_at)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-         RETURNING id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
+         RETURNING id AS delegation_edge_id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
                    resource_id, scopes, constraints_json, status, expires_at, edge_version, revoked_at, created_at`,
         [
           edgeId,
@@ -222,9 +222,9 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
       }
       const targetIds = [...new Set(revoked.map((row) => row.target_session_id))]
       const { rows: targets } = await client.query<{
-        id: string; session_sid: string; parent_id: string | null
+        id: string; subject_session_id: string; parent_id: string | null
       }>(
-        `SELECT id, session_sid, parent_id FROM agent_sessions
+        `SELECT id, subject_session_id, parent_id FROM agent_sessions
          WHERE id = ANY($1::text[]) AND zone_id = $2
            AND status IN ('active','suspended')`,
         [targetIds, zoneId],
@@ -237,21 +237,21 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
         affected_edges: revoked.length, epoch,
       })
       const sessionItems: OutboxItem[] = []
-      const seenSids = new Set<string>()
+      const seenSubjectSessionIds = new Set<string>()
       for (const row of targets) {
-        if (seenSids.has(row.session_sid)) continue
-        seenSids.add(row.session_sid)
+        if (seenSubjectSessionIds.has(row.subject_session_id)) continue
+        seenSubjectSessionIds.add(row.subject_session_id)
         sessionItems.push({
           topic: Topics.SessionsRevoke,
-          dedupeKey: `delegation:${id}:sid:${row.session_sid}`,
-          payload: { zone_id: zoneId, session_id: row.session_sid, reason: 'delegation_revoked' },
+          dedupeKey: `delegation:${id}:subject:${row.subject_session_id}`,
+          payload: { zone_id: zoneId, session_id: row.subject_session_id, reason: 'delegation_revoked' },
         })
       }
       await enqueueMany(client, sessionItems)
       await client.query('COMMIT')
       return {
         revoked_edges: revoked.length,
-        affected_sessions: seenSids.size,
+        affected_sessions: seenSubjectSessionIds.size,
         terminated_agents: terminated,
       }
     } catch (err) {
