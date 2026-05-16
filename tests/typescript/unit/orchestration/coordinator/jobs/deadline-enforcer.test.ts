@@ -3,16 +3,9 @@
 //
 // Deadline enforcer unit tests covering retry-aware transitions.
 
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { runDeadlineSweep } from '../../../../../../apps/coordinator/src/jobs/deadline-enforcer.js'
-
-beforeAll(() => {
-  process.env.ISSUER_URL ??= 'http://issuer.test'
-  process.env.STS_URL ??= 'http://sts.test'
-  process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
-  process.env.DATABASE_URL ??= 'postgres://x'
-  process.env.REDIS_URL ??= 'redis://x'
-})
 
 function clientWith(rows: unknown[], acquired = true) {
   return {

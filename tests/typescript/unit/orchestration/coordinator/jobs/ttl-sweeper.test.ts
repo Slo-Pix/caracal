@@ -3,16 +3,9 @@
 //
 // TTL sweeper unit tests covering leader election and cascade termination.
 
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { runTTLSweep } from '../../../../../../apps/coordinator/src/jobs/ttl-sweeper.js'
-
-beforeAll(() => {
-  process.env.ISSUER_URL ??= 'http://issuer.test'
-  process.env.STS_URL ??= 'http://sts.test'
-  process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
-  process.env.DATABASE_URL ??= 'postgres://x'
-  process.env.REDIS_URL ??= 'redis://x'
-})
 
 interface Step {
   match?: RegExp

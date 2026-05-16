@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi } from 'vitest'
 import Fastify from 'fastify'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { delegationsRoutes } from '../../../../../../apps/coordinator/src/routes/delegations.js'
 
 function buildApp() {

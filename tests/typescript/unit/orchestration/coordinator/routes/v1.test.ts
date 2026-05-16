@@ -3,17 +3,10 @@
 //
 // V1 façade route tests covering begin, end, exchange dispatch and verify shape.
 
-import { describe, it, expect, vi, beforeAll } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import Fastify from 'fastify'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { v1Routes } from '../../../../../../apps/coordinator/src/routes/v1.js'
-
-beforeAll(() => {
-  process.env.ISSUER_URL ??= 'http://issuer.test'
-  process.env.STS_URL ??= 'http://sts.test'
-  process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
-  process.env.DATABASE_URL ??= 'postgres://x'
-  process.env.REDIS_URL ??= 'redis://x'
-})
 
 function buildApp() {
   const app = Fastify({ logger: false })

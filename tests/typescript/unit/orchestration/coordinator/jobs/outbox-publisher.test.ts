@@ -4,14 +4,7 @@
 // Outbox publisher unit tests covering Redis stream delivery and retry state.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-process.env.ISSUER_URL ??= 'http://issuer.test'
-process.env.STS_URL ??= 'http://sts.test'
-process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
-process.env.DATABASE_URL ??= 'postgres://x'
-process.env.REDIS_URL ??= 'redis://x'
-process.env.STREAMS_MAXLEN ??= '12345'
-process.env.CARACAL_MODE ??= 'dev'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 
 const { publishBatch, startOutboxPublisher } = await import('../../../../../../apps/coordinator/src/jobs/outbox-publisher.js')
 

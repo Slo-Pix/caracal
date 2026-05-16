@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "test": "CARACAL_MODE=dev DATABASE_URL=postgres://test REDIS_URL=redis://test STS_URL=http://sts ISSUER_URL=http://sts AGENT_COORDINATOR_SCOPE=agent:lifecycle vitest run --root ../.. tests/typescript/unit/orchestration/coordinator"
+    "test": "vitest run --root ../.. tests/typescript/unit/orchestration/coordinator"
   },
   "dependencies": {
     "@caracalai/admin": "workspace:*",

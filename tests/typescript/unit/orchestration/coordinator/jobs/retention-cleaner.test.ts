@@ -3,19 +3,9 @@
 //
 // Retention cleaner unit tests covering lock gating and terminal row pruning.
 
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { runRetentionCleanup } from '../../../../../../apps/coordinator/src/jobs/retention-cleaner.js'
-
-beforeAll(() => {
-  process.env.ISSUER_URL ??= 'http://issuer.test'
-  process.env.STS_URL ??= 'http://sts.test'
-  process.env.AGENT_COORDINATOR_SCOPE ??= 'coordinator.use'
-  process.env.DATABASE_URL ??= 'postgres://x'
-  process.env.REDIS_URL ??= 'redis://x'
-  process.env.DELEGATION_RETENTION_DAYS ??= '90'
-  process.env.OUTBOX_RETENTION_DAYS ??= '7'
-  process.env.RETENTION_CLEANUP_BATCH_SIZE ??= '500'
-})
 
 function clientWithRows(rows: Array<{ rowCount?: number; rows?: unknown[] }>) {
   return {
