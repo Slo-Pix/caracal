@@ -32,7 +32,7 @@ export class InMemoryRevocationStore implements RevocationStore {
   markRevoked(sid: string, ttlMs?: number): void {
     if (this.entries.size >= this.maxEntries) {
       this.reapExpired()
-      if (this.entries.size >= this.maxEntries) this.evictOldest()
+      if (this.entries.size >= this.maxEntries) throw new Error('Revocation store capacity exceeded')
     }
     this.entries.set(sid, { expiresAt: Date.now() + (ttlMs ?? this.defaultTtlMs) })
   }
@@ -48,8 +48,4 @@ export class InMemoryRevocationStore implements RevocationStore {
     }
   }
 
-  private evictOldest(): void {
-    const it = this.entries.keys().next()
-    if (!it.done) this.entries.delete(it.value)
-  }
 }

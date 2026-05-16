@@ -10,5 +10,5 @@ import "time"
 // Store reports whether a session id has been revoked and accepts new revocations.
 type Store interface {
 	IsRevoked(sid string) bool
-	MarkRevoked(sid string, ttl time.Duration)
+	MarkRevoked(sid string, ttl time.Duration) error
 }

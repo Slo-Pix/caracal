@@ -5,5 +5,5 @@
 
 export interface RevocationStore {
   isRevoked: (sid: string) => boolean | Promise<boolean>
-  markRevoked: (sid: string, ttlMs?: number) => void
+  markRevoked: (sid: string, ttlMs?: number) => void | Promise<void>
 }

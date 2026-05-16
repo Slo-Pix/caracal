@@ -71,7 +71,11 @@ async def authenticate(
     except TokenInvalidError:
         return AuthResult(None, AuthError("invalid_token", "Token validation failed"))
 
-    if claims.sid and revocations.is_revoked(claims.sid):
+    if revocations is None:
+        return AuthResult(None, AuthError("invalid_token", "Revocation store required"))
+    if not claims.sid:
+        return AuthResult(None, AuthError("invalid_token", "Token validation failed"))
+    if revocations.is_revoked(claims.sid):
         return AuthResult(None, AuthError("session_revoked", "Session revoked"))
 
     return AuthResult(claims, None)
