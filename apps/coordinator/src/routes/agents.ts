@@ -9,6 +9,7 @@ import { v7 as uuidv7 } from 'uuid'
 import type { PoolClient } from 'pg'
 import { enqueue, enqueueMany, Topics, type OutboxItem, type Queryable } from '../outbox.js'
 import { ownsApplication, requireScope } from '../auth.js'
+import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 
 export const MAX_DEPTH = 10
 const MAX_CHILDREN = 10
@@ -43,7 +44,9 @@ export function spawnLockKey(zoneId: string): string {
 
 export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/zones/:zoneId/agents', async (req, reply) => {
-    const { zoneId } = req.params as { zoneId: string }
+    const params = parseParams(ZoneParams, req, reply)
+    if (!params) return
+    const { zoneId } = params
     const body = SpawnBody.parse(req.body)
     const subjectSessionId = body.subject_session_id ?? req.caracalAuth?.sessionId
     if (!subjectSessionId) {
@@ -182,7 +185,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get('/zones/:zoneId/agents', async (req, reply) => {
-    const { zoneId } = req.params as { zoneId: string }
+    const params = parseParams(ZoneParams, req, reply)
+    if (!params) return
+    const { zoneId } = params
     const query = ListQuery.safeParse(req.query)
     if (!query.success) return reply.code(400).send({ error: 'invalid_query' })
     const { limit, cursor } = query.data
@@ -193,24 +198,26 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       )
       if (!probe[0]) return reply.code(400).send({ error: 'invalid_cursor' })
     }
-    const params: unknown[] = [zoneId, limit]
+    const queryParams: unknown[] = [zoneId, limit]
     let cursorClause = ''
     if (cursor) {
-      params.push(cursor)
+      queryParams.push(cursor)
       cursorClause = `AND id < $3`
     }
     const { rows } = await fastify.db.query(
       `SELECT id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at, terminated_at
        FROM agent_sessions WHERE zone_id = $1 ${cursorClause}
        ORDER BY id DESC LIMIT $2`,
-      params,
+      queryParams,
     )
     const nextCursor = rows.length === limit ? rows[rows.length - 1].agent_session_id : null
     return { items: rows, next_cursor: nextCursor }
   })
 
   fastify.get('/zones/:zoneId/agents/:id', async (req, reply) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const { rows } = await fastify.db.query(
       `SELECT id AS agent_session_id, zone_id, application_id, parent_id, subject_session_id, status, depth, spawned_at, terminated_at
        FROM agent_sessions WHERE id = $1 AND zone_id = $2`,
@@ -220,8 +227,10 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     return rows[0]
   })
 
-  fastify.get('/zones/:zoneId/agents/:id/children', async (req) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+  fastify.get('/zones/:zoneId/agents/:id/children', async (req, reply) => {
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const { rows } = await fastify.db.query(
       `SELECT s.id AS agent_session_id, s.zone_id, s.application_id, s.parent_id, s.subject_session_id, s.status, s.depth, s.spawned_at
        FROM agent_sessions s
@@ -234,7 +243,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.patch('/zones/:zoneId/agents/:id/suspend', async (req, reply) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
@@ -287,7 +298,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.patch('/zones/:zoneId/agents/:id/resume', async (req, reply) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
@@ -340,7 +353,9 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.delete('/zones/:zoneId/agents/:id', async (req, reply) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const query = TerminateQuery.safeParse(req.query)
     if (!query.success) return reply.code(400).send({ error: 'invalid_query' })
     const client = await fastify.db.connect()

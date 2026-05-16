@@ -11,6 +11,7 @@ import { scopesAllowed } from '@caracalai/core'
 import { enqueue, enqueueMany, Topics, type OutboxItem, type Queryable } from '../outbox.js'
 import { ownsApplication, requireScope } from '../auth.js'
 import { MAX_DEPTH, terminateSubtree } from './agents.js'
+import { ZoneIdParams, ZoneParams, ZoneSessionParams, parseParams } from './params.js'
 
 const LIST_DEFAULT_LIMIT = 100
 const LIST_MAX_LIMIT = 500
@@ -35,7 +36,9 @@ const ListQuery = z.object({
 
 export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/zones/:zoneId/delegations', async (req, reply) => {
-    const { zoneId } = req.params as { zoneId: string }
+    const params = parseParams(ZoneParams, req, reply)
+    if (!params) return
+    const { zoneId } = params
     const body = DelegationBody.parse(req.body)
     const constraints = normalizedConstraints(body.constraints_json, body.constraints, body.ttl_seconds)
     const expiresAt = body.expires_at
@@ -141,17 +144,23 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get('/zones/:zoneId/delegations/inbound/:sessionId', async (req, reply) => {
-    const { zoneId, sessionId } = req.params as { zoneId: string; sessionId: string }
+    const params = parseParams(ZoneSessionParams, req, reply)
+    if (!params) return
+    const { zoneId, sessionId } = params
     return listEdges(fastify.db, reply, zoneId, 'target_session_id', sessionId, req.query)
   })
 
   fastify.get('/zones/:zoneId/delegations/outbound/:sessionId', async (req, reply) => {
-    const { zoneId, sessionId } = req.params as { zoneId: string; sessionId: string }
+    const params = parseParams(ZoneSessionParams, req, reply)
+    if (!params) return
+    const { zoneId, sessionId } = params
     return listEdges(fastify.db, reply, zoneId, 'source_session_id', sessionId, req.query)
   })
 
-  fastify.get('/zones/:zoneId/delegations/:id/traverse', async (req) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+  fastify.get('/zones/:zoneId/delegations/:id/traverse', async (req, reply) => {
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const { rows } = await fastify.db.query(
       `WITH RECURSIVE graph AS (
          SELECT id, source_session_id, target_session_id, 1 AS depth, ARRAY[id] AS visited
@@ -174,7 +183,9 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.patch('/zones/:zoneId/delegations/:id/revoke', async (req, reply) => {
-    const { zoneId, id } = req.params as { zoneId: string; id: string }
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const { zoneId, id } = params
     const client = await fastify.db.connect()
     try {
       await client.query('BEGIN')
