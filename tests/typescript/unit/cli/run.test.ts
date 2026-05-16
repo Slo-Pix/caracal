@@ -105,4 +105,35 @@ describe('runCommand', () => {
     expect(stdout).toContain('optional credential skipped resource=resource://optional reason=optional denied')
     expect(spawnMock).toHaveBeenCalledTimes(1)
   })
+
+  it('fails when optional credential policy requires success', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ error_description: 'optional denied' }),
+    }))
+
+    await expect(runCommand(['node', 'tool.js'], {
+      ...cfg,
+      credentials: [],
+      optional_credentials: [{ env: 'OPTIONAL_TOKEN', resource: 'resource://optional', on_failure: 'error' }],
+    })).rejects.toThrow('exit:1')
+
+    expect(stderr).toContain('"resource":"resource://optional"')
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects dangerous credential environment names before token exchange', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(runCommand(['node', 'tool.js'], {
+      ...cfg,
+      credentials: [{ env: 'NODE_OPTIONS', resource: 'resource://api' }],
+    })).rejects.toThrow('exit:1')
+
+    expect(stderr).toContain('blocked_credential_env:NODE_OPTIONS')
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(spawnMock).not.toHaveBeenCalled()
+  })
 })

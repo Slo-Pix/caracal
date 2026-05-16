@@ -16,6 +16,8 @@ describe('runDCRGC', () => {
     expect(count).toBe(7)
     expect(db.query.mock.calls[0][0]).toContain("registration_method = 'dcr'")
     expect(db.query.mock.calls[0][0]).toContain('archived_at IS NULL')
+    expect(db.query.mock.calls[0][0]).toContain('LIMIT $1')
+    expect(db.query.mock.calls[0][1]).toEqual([500])
   })
 
   it('returns zero when the database does not provide rowCount', async () => {
