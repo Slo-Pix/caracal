@@ -3,6 +3,7 @@
 //
 // RFC 8693 token exchange client with pluggable token cache and 401-retry.
 
+import { createHash } from 'node:crypto'
 import { InMemoryTokenCache, type TokenCache } from './cache.js'
 import { InteractionRequiredError } from './types.js'
 import type { ExchangeOptions, TokenExchangeResponse } from './types.js'
@@ -80,12 +81,12 @@ export class OAuthClient {
   private cacheSubject(subjectToken: string, opts: ExchangeOptions): string {
     return [
       this.identityKey,
-      subjectToken,
-      opts.actorToken ?? '',
+      hashSecret(subjectToken),
+      hashSecret(opts.actorToken),
       opts.sessionId ?? '',
       opts.agentSessionId ?? '',
       opts.delegationEdgeId ?? '',
-      opts.clientAssertion ?? '',
+      hashSecret(opts.clientAssertion),
     ].join('::')
   }
 
@@ -199,4 +200,9 @@ function isJsonResponse(res: Response): boolean {
   if (contentType === null || contentType === undefined) return true
   const mediaType = contentType.toLowerCase().split(';', 1)[0]
   return mediaType === 'application/json' || mediaType.endsWith('+json')
+}
+
+function hashSecret(value: string | undefined): string {
+  if (!value) return ''
+  return createHash('sha256').update(value).digest('hex')
 }

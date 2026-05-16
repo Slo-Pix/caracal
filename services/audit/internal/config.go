@@ -25,6 +25,7 @@ type Config struct {
 }
 
 func loadConfig() Config {
+	config.ResolveFileSecrets("AUDIT_HMAC_KEY")
 	hexKey := config.Getenv("AUDIT_HMAC_KEY", "")
 	var key []byte
 	base := config.Load()

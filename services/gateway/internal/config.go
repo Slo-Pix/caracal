@@ -51,6 +51,7 @@ type Config struct {
 // loadConfig reads configuration from environment variables.
 // It panics on missing required values or unsafe defaults.
 func loadConfig() Config {
+	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY")
 	cfg := Config{
 		Mode:                  config.Mode(),
 		Port:                  config.Getenv("PORT", defaultPort),
