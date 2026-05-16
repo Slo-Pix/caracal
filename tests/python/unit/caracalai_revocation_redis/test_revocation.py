@@ -8,18 +8,19 @@ from __future__ import annotations
 import hmac
 import unittest
 from hashlib import sha256
-from typing import Any
 
 from caracalai_revocation_redis import RedisRevocationConsumer, RedisRevocationStore
 from caracalai_revocation_redis.revocation import REVOCATION_STREAM, STREAM_SIG_FIELD
 from redis.exceptions import ConnectionError as RedisConnectionError
+
+StreamRows = list[tuple[str, list[tuple[str, dict[str, str]]]]]
 
 
 class FakeRedis:
     def __init__(self) -> None:
         self.values: dict[str, str] = {}
         self.acked: list[str] = []
-        self.stream: list[Any] | None = None
+        self.stream: StreamRows | None = None
         self.fail_get = False
 
     def get(self, key: str) -> str | None:
@@ -30,10 +31,10 @@ class FakeRedis:
     def set(self, key: str, value: str, px: int) -> None:
         self.values[key] = value
 
-    def xgroup_create(self, *_args: Any, **_kwargs: Any) -> None:
+    def xgroup_create(self, *_args: object, **_kwargs: object) -> None:
         return None
 
-    def xreadgroup(self, *_args: Any, **_kwargs: Any) -> list[Any] | None:
+    def xreadgroup(self, *_args: object, **_kwargs: object) -> StreamRows | None:
         return self.stream
 
     def xack(self, _stream: str, _group: str, message_id: str) -> None:

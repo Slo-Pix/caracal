@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
-from typing import Any
 
 import jwt
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -18,11 +17,11 @@ def mint_es256_token(
     audience: str = "resource://api",
     zone_id: str | None = "zone1",
     scopes: tuple[str, ...] = ("read",),
-    claims: dict[str, Any] | None = None,
-) -> tuple[str, dict[str, Any]]:
+    claims: dict[str, object] | None = None,
+) -> tuple[str, dict[str, object]]:
     key = ec.generate_private_key(ec.SECP256R1())
     now = datetime.now(timezone.utc)
-    payload: dict[str, Any] = {
+    payload: dict[str, object] = {
         "iss": issuer,
         "aud": audience,
         "sub": "user1",

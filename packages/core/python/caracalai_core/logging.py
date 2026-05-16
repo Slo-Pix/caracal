@@ -1,7 +1,9 @@
-# Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
-# Caracal, a product of Garudex Labs
-#
-# Centralized structured logging with secret-key redaction for Caracal Python services and SDKs.
+"""
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+Centralized structured logging redacts sensitive fields for Caracal Python services and SDKs.
+"""
 
 from __future__ import annotations
 
@@ -222,23 +224,18 @@ class _DynamicStderrHandler(logging.Handler):
             msg = self.format(record)
             stream = sys.stderr
             stream.write(msg + "\n")
-            try:
-                stream.flush()
-            except Exception:
-                pass
+            stream.flush()
         except Exception:  # noqa: BLE001
             self.handleError(record)
 
 
 def _shutdown_listener() -> None:
     global _listener, _listener_started
-    if _listener is not None:
-        try:
-            _listener.stop()
-        except Exception:
-            pass
-        _listener = None
+    listener = _listener
+    _listener = None
     _listener_started = False
+    if listener is not None:
+        listener.stop()
 
 
 def flush_for_test() -> None:
@@ -371,4 +368,3 @@ def create_logger(service: str, level: str | int | None = None) -> DevLogger:
     if level is None:
         level = os.environ.get("CARACAL_LOG_LEVEL") or os.environ.get("LOG_LEVEL") or "info"
     return DevLogger(service, level)
-

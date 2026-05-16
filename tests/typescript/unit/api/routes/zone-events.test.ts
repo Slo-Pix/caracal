@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Zone event route unit tests for audit and session read models.
+// Zone event route tests cover audit and session read models.
 
 import { describe, it, expect } from 'vitest'
 import { zoneEventsRoutes } from '../../../../../apps/api/src/routes/zone-events.js'
@@ -47,6 +47,17 @@ describe('GET /v1/zones/:zoneId/audit', () => {
       ['z1', 'req-9', 'deny', 50],
     )
   })
+
+  it('rejects malformed cursor values', async () => {
+    const { app, db } = buildRouteApp(zoneEventsRoutes)
+
+    await app.ready()
+    const res = await app.inject({ method: 'GET', url: '/v1/zones/z1/audit?cursor=not-json' })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toEqual({ error: 'invalid_cursor' })
+    expect(db.query).not.toHaveBeenCalled()
+  })
 })
 
 describe('GET /v1/zones/:zoneId/audit/by-request/:requestId', () => {
@@ -87,5 +98,16 @@ describe('GET /v1/zones/:zoneId/sessions', () => {
     expect(body.rows[0].id).toBe('session-1')
     expect(body.next_cursor).toBeNull()
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining('zone_id = $1'), ['z1', 100])
+  })
+
+  it('rejects malformed cursor values', async () => {
+    const { app, db } = buildRouteApp(zoneEventsRoutes)
+
+    await app.ready()
+    const res = await app.inject({ method: 'GET', url: '/v1/zones/z1/sessions?cursor=not-json' })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toEqual({ error: 'invalid_cursor' })
+    expect(db.query).not.toHaveBeenCalled()
   })
 })
