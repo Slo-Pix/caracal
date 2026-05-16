@@ -20,13 +20,12 @@ describe('InMemoryRevocationStore', () => {
     }
   })
 
-  it('bounds capacity by evicting the oldest entry', () => {
+  it('fails closed when capacity is exhausted', () => {
     const store = new InMemoryRevocationStore({ maxEntries: 2 })
     store.markRevoked('sid-1')
     store.markRevoked('sid-2')
-    store.markRevoked('sid-3')
-    expect(store.isRevoked('sid-1')).toBe(false)
+    expect(() => store.markRevoked('sid-3')).toThrow('capacity exceeded')
+    expect(store.isRevoked('sid-1')).toBe(true)
     expect(store.isRevoked('sid-2')).toBe(true)
-    expect(store.isRevoked('sid-3')).toBe(true)
   })
 })

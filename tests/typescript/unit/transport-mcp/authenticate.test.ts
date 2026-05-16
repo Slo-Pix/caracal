@@ -38,6 +38,8 @@ async function mintToken(
     zone_id: 'zone-1',
     client_id: 'app-1',
     sid: 'sid-1',
+    use: 'per_call',
+    jti: 'jti-1',
     scope: scopes,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 300,

@@ -46,6 +46,8 @@ async function mintToken(
     zone_id: 'zone-1',
     client_id: 'app-1',
     sid: 'sid-1',
+    use: 'per_call',
+    jti: 'jti-1',
     scope: scopes,
     iat: now,
     exp: now + 300,
@@ -108,6 +110,23 @@ describe('verify', () => {
     await expect(verify(token, { issuer, audience: 'resource://api' })).rejects.toBeInstanceOf(ZoneInvalidError)
   })
 
+  it('throws TokenInvalidError when exp is absent', async () => {
+    const { token, issuer } = await mintToken({ exp: undefined })
+    await expect(verify(token, { issuer, audience: 'resource://api' })).rejects.toBeInstanceOf(TokenInvalidError)
+  })
+
+  it('throws TokenInvalidError when sid is absent', async () => {
+    const { token, issuer } = await mintToken({ sid: undefined })
+    await expect(verify(token, { issuer, audience: 'resource://api' })).rejects.toBeInstanceOf(TokenInvalidError)
+  })
+
+  it('throws TokenInvalidError when required use does not match', async () => {
+    const { token, issuer } = await mintToken({ use: 'ambient' })
+    await expect(
+      verify(token, { issuer, audience: 'resource://api', requiredUse: 'per_call' }),
+    ).rejects.toBeInstanceOf(TokenInvalidError)
+  })
+
   it('throws ZoneInvalidError when zone_id does not match config', async () => {
     const { token, issuer } = await mintToken()
     await expect(
@@ -150,7 +169,7 @@ describe('verify', () => {
     ).rejects.toMatchObject({ name: 'ChainMismatchError', missingApplicationId: 'app-parent' })
   })
 
-  it('rejects compact delegation chain keys', async () => {
+  it('rejects malformed delegation chain keys', async () => {
     const { token, issuer } = await mintToken({
       delegation_chain: [{ app: 'app-child', session: 's1', edge: 'e1' }],
     })
@@ -160,7 +179,18 @@ describe('verify', () => {
         audience: 'resource://api',
         requireChainContains: ['app-child'],
       }),
-    ).rejects.toMatchObject({ name: 'ChainMismatchError', missingApplicationId: 'app-child' })
+    ).rejects.toBeInstanceOf(TokenInvalidError)
+  })
+
+  it('rejects malformed agent claim types', async () => {
+    const { token, issuer } = await mintToken({ agent_session_id: ['agent-1'] })
+    await expect(
+      verify(token, {
+        issuer,
+        audience: 'resource://api',
+        requireAgent: true,
+      }),
+    ).rejects.toBeInstanceOf(TokenInvalidError)
   })
 
   it('ignores legacy graph_epoch claim', async () => {
@@ -173,21 +203,21 @@ describe('verify', () => {
 describe('verifyChainContains', () => {
   it('matches by clientId', () => {
     expect(verifyChainContains(
-      { sub: '', zoneId: '', clientId: 'app-1', sid: '', scope: '' },
+      { sub: '', zoneId: '', clientId: 'app-1', sid: '', use: 'per_call', jti: 'jti-1', scope: '' },
       'app-1',
     )).toBe(true)
   })
 
   it('matches by delegation chain hop', () => {
     expect(verifyChainContains(
-      { sub: '', zoneId: '', clientId: 'other', sid: '', scope: '', delegationChain: [{ applicationId: 'app-parent' }] },
+      { sub: '', zoneId: '', clientId: 'other', sid: '', use: 'per_call', jti: 'jti-1', scope: '', delegationChain: [{ applicationId: 'app-parent' }] },
       'app-parent',
     )).toBe(true)
   })
 
   it('returns false when the application is absent', () => {
     expect(verifyChainContains(
-      { sub: '', zoneId: '', clientId: 'app-1', sid: '', scope: '', delegationChain: [{ applicationId: 'app-parent' }] },
+      { sub: '', zoneId: '', clientId: 'app-1', sid: '', use: 'per_call', jti: 'jti-1', scope: '', delegationChain: [{ applicationId: 'app-parent' }] },
       'app-unknown',
     )).toBe(false)
   })
