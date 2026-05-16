@@ -35,7 +35,7 @@ type Consumer struct {
 	redis        *redis.Client
 	log          zerolog.Logger
 	consumerName string
-	hmacKey      []byte
+	auditHMACKey []byte
 	maxDeliv     int64
 	claimIdle    time.Duration
 
@@ -53,7 +53,7 @@ func newConsumer(db *PGWriter, r *redis.Client, log zerolog.Logger, cfg Config) 
 		redis:        r,
 		log:          log,
 		consumerName: cfg.ConsumerName,
-		hmacKey:      cfg.HMACKey,
+		auditHMACKey: cfg.AuditHMACKey,
 		maxDeliv:     cfg.MaxDeliveries,
 		claimIdle:    time.Duration(cfg.ClaimIdleSecs) * time.Second,
 	}
@@ -293,7 +293,7 @@ func (c *Consumer) toDLQ(ctx context.Context, msg redis.XMessage, reason string)
 }
 
 func (c *Consumer) verifyHMAC(raw, sig string) bool {
-	if len(c.hmacKey) == 0 {
+	if len(c.auditHMACKey) == 0 {
 		return true
 	}
 	if sig == "" {
@@ -303,7 +303,7 @@ func (c *Consumer) verifyHMAC(raw, sig string) bool {
 	if err != nil {
 		return false
 	}
-	mac := hmac.New(sha256.New, c.hmacKey)
+	mac := hmac.New(sha256.New, c.auditHMACKey)
 	mac.Write([]byte(raw))
 	return hmac.Equal(want, mac.Sum(nil))
 }

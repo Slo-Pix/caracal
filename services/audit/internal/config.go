@@ -16,7 +16,7 @@ type Config struct {
 	S3Endpoint         string
 	S3Bucket           string
 	S3Region           string
-	HMACKey            []byte
+	AuditHMACKey       []byte
 	RetentionDays      int
 	ConsumerName       string
 	MaxDeliveries      int64
@@ -49,7 +49,7 @@ func loadConfig() Config {
 		S3Endpoint:         config.Getenv("AUDIT_EXPORT_S3_ENDPOINT", ""),
 		S3Bucket:           config.Getenv("AUDIT_EXPORT_S3_BUCKET", ""),
 		S3Region:           config.Getenv("AUDIT_EXPORT_S3_REGION", "us-east-1"),
-		HMACKey:            key,
+		AuditHMACKey:       key,
 		RetentionDays:      retention,
 		ConsumerName:       config.Getenv("HOSTNAME", "audit-worker-0"),
 		MaxDeliveries:      maxDeliv,

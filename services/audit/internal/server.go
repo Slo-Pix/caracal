@@ -60,7 +60,7 @@ func New(ctx context.Context) (*Server, error) {
 	}
 	r := redis.NewClient(opts)
 
-	pg := &PGWriter{db: db, hmacKey: cfg.HMACKey}
+	pg := &PGWriter{db: db, auditHMACKey: cfg.AuditHMACKey}
 	exportLead := newLeader(pg, exporterLockKey, log)
 	retentLead := newLeader(pg, retentionLockKey, log)
 
@@ -72,7 +72,7 @@ func New(ctx context.Context) (*Server, error) {
 		cfg:          cfg,
 		consumer:     newConsumer(pg, r, log, cfg),
 		exporter:     exp,
-		sweeper:      newTamperSweeper(pg, cfg.HMACKey, time.Duration(cfg.RetentionDays)*24*time.Hour, time.Duration(cfg.TamperRollingHours)*time.Hour, log),
+		sweeper:      newTamperSweeper(pg, cfg.AuditHMACKey, time.Duration(cfg.RetentionDays)*24*time.Hour, time.Duration(cfg.TamperRollingHours)*time.Hour, log),
 		retention:    newRetention(pg, retentLead, cfg.RetentionDays, log),
 		exporterLead: exportLead,
 		retentLead:   retentLead,
@@ -88,7 +88,7 @@ func New(ctx context.Context) (*Server, error) {
 			s.exportErrors.Add(1)
 		}
 	}
-	if len(cfg.HMACKey) == 0 {
+	if len(cfg.AuditHMACKey) == 0 {
 		log.Warn().Msg("AUDIT_HMAC_KEY not set: chain HMAC disabled and producer signatures not verified")
 	}
 	return s, nil

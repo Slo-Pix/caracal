@@ -24,9 +24,9 @@ import (
 var ErrConflictMismatch = errors.New("audit: duplicate event with mismatched content hash")
 
 type PGWriter struct {
-	db       *pgxpool.Pool
-	hmacKey  []byte
-	onInsert func()
+	db           *pgxpool.Pool
+	auditHMACKey []byte
+	onInsert     func()
 }
 
 // InsertResult reports the chain coordinates assigned to a successful insert.
@@ -302,10 +302,10 @@ func (w *PGWriter) Ping(ctx context.Context) error {
 }
 
 func (w *PGWriter) computeHMAC(contentSHA, prevSHA string) string {
-	if len(w.hmacKey) == 0 {
+	if len(w.auditHMACKey) == 0 {
 		return ""
 	}
-	mac := hmac.New(sha256.New, w.hmacKey)
+	mac := hmac.New(sha256.New, w.auditHMACKey)
 	mac.Write([]byte(contentSHA))
 	mac.Write([]byte{'|'})
 	mac.Write([]byte(prevSHA))
