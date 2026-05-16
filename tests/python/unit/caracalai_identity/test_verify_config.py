@@ -37,6 +37,10 @@ def _mint_no_kid_token() -> tuple[str, dict]:
         "iss": "https://sts.example.com",
         "aud": "resource://api",
         "sub": "user1",
+        "client_id": "app1",
+        "sid": "sid1",
+        "use": "per_call",
+        "jti": "jti1",
         "zone_id": "zone1",
         "scope": "read",
         "iat": now,
@@ -121,7 +125,7 @@ class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_compact_chain_keys(self) -> None:
         chain = [{"app": "app-child", "session": "s2", "edge": "e2"}]
-        with self.assertRaises(ChainMismatchError):
+        with self.assertRaises(TokenInvalidError):
             await self._verify(
                 {"delegation_chain": chain},
                 require_chain_contains=["app-child"],
@@ -136,6 +140,22 @@ class VerifyConfigTests(unittest.IsolatedAsyncioTestCase):
         cfg = JwtConfig(issuer="https://sts.example.com", audience="resource://api")
         with self.assertRaises(TokenInvalidError):
             await verify_config("not.a.jwt", cfg)
+
+    async def test_raises_for_missing_expiration(self) -> None:
+        with self.assertRaises(TokenInvalidError):
+            await self._verify({"exp": None})
+
+    async def test_raises_for_missing_session_id(self) -> None:
+        with self.assertRaises(TokenInvalidError):
+            await self._verify({"sid": ""})
+
+    async def test_raises_for_wrong_token_use(self) -> None:
+        with self.assertRaises(TokenInvalidError):
+            await self._verify({"use": "ambient"}, required_use="per_call")
+
+    async def test_raises_for_malformed_agent_claim(self) -> None:
+        with self.assertRaises(TokenInvalidError):
+            await self._verify({"agent_session_id": ["agent-1"]}, require_agent=True)
 
     async def test_raises_hop_count_exceeded(self) -> None:
         with self.assertRaises(HopCountExceededError):
@@ -177,6 +197,8 @@ class VerifyChainContainsTests(unittest.TestCase):
             zone_id="z",
             client_id=client_id,
             sid="s",
+            use="per_call",
+            jti="j",
             scope="read",
             delegation_chain=chain or [],
         )

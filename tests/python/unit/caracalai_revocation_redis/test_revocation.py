@@ -21,6 +21,7 @@ class FakeRedis:
         self.values: dict[str, str] = {}
         self.acked: list[str] = []
         self.stream: StreamRows | None = None
+        self.pending: list[tuple[str, dict[str, str]]] = []
         self.fail_get = False
 
     def get(self, key: str) -> str | None:
@@ -36,6 +37,11 @@ class FakeRedis:
 
     def xreadgroup(self, *_args: object, **_kwargs: object) -> StreamRows | None:
         return self.stream
+
+    def xautoclaim(self, *_args: object, **_kwargs: object) -> tuple[str, list[tuple[str, dict[str, str]]]]:
+        pending = self.pending
+        self.pending = []
+        return ("0-0", pending)
 
     def xack(self, _stream: str, _group: str, message_id: str) -> None:
         self.acked.append(message_id)
@@ -105,6 +111,20 @@ class RedisRevocationConsumerTests(unittest.TestCase):
         self.assertEqual(consumer.poll_once(), 1)
         self.assertFalse(store.is_revoked("sid-2"))
         self.assertEqual(redis.acked, ["1-1"])
+
+    def test_replays_pending_messages_before_new_entries(self) -> None:
+        redis = FakeRedis()
+        store = RedisRevocationStore(redis)
+        key = bytes([7]) * 32
+        values = {"zone_id": "zone1", "session_id": "sid-pending"}
+        sig = sign_stream(key, REVOCATION_STREAM, values)
+        redis.pending = [("0-1", {"zone_id": "zone1", "session_id": "sid-pending", STREAM_SIG_FIELD: sig})]
+
+        consumer = RedisRevocationConsumer(redis, store, "resource-1", stream_hmac_key=key, require_signature=True)
+
+        self.assertEqual(consumer.poll_once(), 1)
+        self.assertTrue(store.is_revoked("sid-pending"))
+        self.assertEqual(redis.acked, ["0-1"])
 
 
 def sign_stream(key: bytes, stream: str, values: dict[str, str]) -> str:
