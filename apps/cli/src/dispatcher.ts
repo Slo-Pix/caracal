@@ -29,7 +29,7 @@ export interface DispatchOptions {
   readonly loadConfig?: boolean
 }
 
-export class LoadConfigError extends Error {
+class LoadConfigError extends Error {
   readonly userMessage: string
   constructor(userMessage: string) {
     super(userMessage)

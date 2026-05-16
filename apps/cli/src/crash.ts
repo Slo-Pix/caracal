@@ -3,4 +3,4 @@
 //
 // Re-export of the shared crash handler so CLI hosts (cli.ts, repl.ts) keep a stable import path.
 
-export { installCrashHandlers, disposeCrashHandlers } from '@caracalai/core/crash'
+export { installCrashHandlers } from '@caracalai/core/crash'

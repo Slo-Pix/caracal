@@ -8,7 +8,7 @@ import type { CliConfig } from './config.ts'
 
 export type Executor = (argv: string[], cfg?: CliConfig) => Promise<void> | void
 
-export interface CommandBinding {
+interface CommandBinding {
   readonly descriptor: CommandDescriptor
   readonly run: Executor
 }
