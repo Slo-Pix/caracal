@@ -34,7 +34,38 @@ export interface CoordinatorDeps {
   redis: RedisClient
 }
 
+interface RuntimeStats {
+  invocations: Record<string, number>
+  outbox: Record<string, number>
+  expiresAt: number
+}
+
+const RUNTIME_STATS_TTL_MS = 15_000
+
 export async function buildApp({ cfg, db, redis }: CoordinatorDeps) {
+  let runtimeStats: RuntimeStats | null = null
+  let runtimeStatsRefresh: Promise<RuntimeStats> | null = null
+  const loadRuntimeStats = async (): Promise<RuntimeStats> => {
+    const now = Date.now()
+    if (runtimeStats && runtimeStats.expiresAt > now) return runtimeStats
+    if (runtimeStatsRefresh) return runtimeStatsRefresh
+    runtimeStatsRefresh = (async () => {
+      const { rows: invocations } = await db.query<{ status: string; n: string }>(
+        `SELECT status, COUNT(*) AS n FROM agent_invocations GROUP BY status`,
+      )
+      const { rows: outbox } = await db.query<{ status: string; n: string }>(
+        `SELECT status, COUNT(*) AS n FROM caracal_outbox WHERE producer = 'coordinator' GROUP BY status`,
+      )
+      runtimeStats = {
+        invocations: Object.fromEntries(invocations.map((row) => [row.status, Number(row.n)])),
+        outbox: Object.fromEntries(outbox.map((row) => [row.status, Number(row.n)])),
+        expiresAt: Date.now() + RUNTIME_STATS_TTL_MS,
+      }
+      return runtimeStats
+    })().finally(() => { runtimeStatsRefresh = null })
+    return runtimeStatsRefresh
+  }
+
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL || 'info',
@@ -106,22 +137,17 @@ export async function buildApp({ cfg, db, redis }: CoordinatorDeps) {
     }
   })
   app.get('/metrics', async (_req, reply) => {
-    const { rows: invocations } = await app.db.query(
-      `SELECT status, COUNT(*) AS n FROM agent_invocations GROUP BY status`,
-    )
-    const { rows: outbox } = await app.db.query(
-      `SELECT status, COUNT(*) AS n FROM caracal_outbox WHERE producer = 'coordinator' GROUP BY status`,
-    )
+    const stats = await loadRuntimeStats()
     const lines: string[] = []
     lines.push('# HELP caracal_invocations_total Coordinator invocations by status')
     lines.push('# TYPE caracal_invocations_total counter')
-    for (const row of invocations as Array<{ status: string; n: string }>) {
-      lines.push(`caracal_invocations_total{status="${row.status}"} ${Number(row.n)}`)
+    for (const [status, n] of Object.entries(stats.invocations)) {
+      lines.push(`caracal_invocations_total{status="${status}"} ${n}`)
     }
     lines.push('# HELP caracal_outbox_total Coordinator outbox rows by status')
     lines.push('# TYPE caracal_outbox_total gauge')
-    for (const row of outbox as Array<{ status: string; n: string }>) {
-      lines.push(`caracal_outbox_total{status="${row.status}"} ${Number(row.n)}`)
+    for (const [status, n] of Object.entries(stats.outbox)) {
+      lines.push(`caracal_outbox_total{status="${status}"} ${n}`)
     }
     lines.push('# HELP caracal_ttl_sweeper_runs_total Ttl sweeper iterations')
     lines.push('# TYPE caracal_ttl_sweeper_runs_total counter')
@@ -133,15 +159,10 @@ export async function buildApp({ cfg, db, redis }: CoordinatorDeps) {
     return lines.join('\n') + '\n' + renderObservabilityMetrics()
   })
   app.get('/stats', async () => {
-    const { rows: invocations } = await app.db.query(
-      `SELECT status, COUNT(*) AS n FROM agent_invocations GROUP BY status`,
-    )
-    const { rows: outbox } = await app.db.query(
-      `SELECT status, COUNT(*) AS n FROM caracal_outbox WHERE producer = 'coordinator' GROUP BY status`,
-    )
+    const stats = await loadRuntimeStats()
     return {
-      invocations: Object.fromEntries(invocations.map((row: { status: string; n: string }) => [row.status, Number(row.n)])),
-      outbox: Object.fromEntries(outbox.map((row: { status: string; n: string }) => [row.status, Number(row.n)])),
+      invocations: stats.invocations,
+      outbox: stats.outbox,
       ttl_sweeper: { ...ttlSweeperStats },
       retention_cleaner: { ...retentionCleanerStats },
       log: devLogMetrics(),
