@@ -23,6 +23,24 @@ import (
 	corests "github.com/garudex-labs/caracal/core/sts"
 )
 
+type allowVerifier struct{}
+
+func (allowVerifier) Verify(context.Context, string, string) error {
+	return nil
+}
+
+type allowTracker struct{}
+
+func (allowTracker) Check(context.Context, string, time.Time, string, string, string, string, string) bool {
+	return true
+}
+
+type allowRevocations struct{}
+
+func (allowRevocations) IsRevoked(string) bool {
+	return false
+}
+
 // makeJWT builds an unsigned-but-shaped token whose exp is offset seconds in the future.
 func makeJWT(t *testing.T, offset time.Duration) string {
 	t.Helper()
@@ -35,8 +53,8 @@ func makeJWT(t *testing.T, offset time.Duration) string {
 }
 
 type stsResponseFixture struct {
-	AccessToken string                       `json:"access_token"`
-	ExpiresIn   int                          `json:"expires_in"`
+	AccessToken string                               `json:"access_token"`
+	ExpiresIn   int                                  `json:"expires_in"`
 	Upstreams   map[string]corests.UpstreamDirective `json:"upstreams"`
 }
 
@@ -60,7 +78,7 @@ func newFakeSTS(t *testing.T, upstream string, calls *int32) *httptest.Server {
 func newProxyForTest(_ *testing.T, sts *httptest.Server, allowPrivate bool) *proxy {
 	stsClient := newSTSClient(sts.URL, 2*time.Second)
 	guard := newUpstreamGuard(nil, allowPrivate)
-	return newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), nil, nil, &GatewayMetrics{})
+	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{})
 }
 
 // testBindings returns a bindingStore preloaded with the resource identifiers used
@@ -380,7 +398,7 @@ func TestProxyBodySizeLimitEnforced(t *testing.T) {
 
 	stsClient := newSTSClient(sts.URL, 2*time.Second)
 	guard := newUpstreamGuard(nil, true)
-	p := newProxy(stsClient, nil, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), nil, nil, &GatewayMetrics{})
+	p := newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{})
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{

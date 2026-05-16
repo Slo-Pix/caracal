@@ -33,18 +33,39 @@ const maxBearerBytes = 4096
 // proxy implements the gateway's reverse-proxy handler.
 type proxy struct {
 	sts         *stsClient
-	jwks        *jwksCache
+	jwks        tokenVerifier
 	guard       *upstreamGuard
 	client      *http.Client
 	log         zerolog.Logger
 	maxBytes    int64
 	bindings    *bindingStore
-	tracker     *jtiTracker
-	revocations *revocationStore
+	tracker     replayTracker
+	revocations revocationChecker
 	metrics     *GatewayMetrics
 }
 
-func newProxy(sts *stsClient, jwks *jwksCache, guard *upstreamGuard, log zerolog.Logger, maxBytes int64, upstreamTimeout time.Duration, bindings *bindingStore, tracker *jtiTracker, revocations *revocationStore, metrics *GatewayMetrics) *proxy {
+type tokenVerifier interface {
+	Verify(ctx context.Context, zoneID, token string) error
+}
+
+type replayTracker interface {
+	Check(ctx context.Context, jti string, exp time.Time, use, requestID, resource, clientID, subjectFP string) bool
+}
+
+type revocationChecker interface {
+	IsRevoked(sid string) bool
+}
+
+func newProxy(sts *stsClient, jwks tokenVerifier, guard *upstreamGuard, log zerolog.Logger, maxBytes int64, upstreamTimeout time.Duration, bindings *bindingStore, tracker replayTracker, revocations revocationChecker, metrics *GatewayMetrics) *proxy {
+	if jwks == nil {
+		panic("proxy requires jwks verifier")
+	}
+	if tracker == nil {
+		panic("proxy requires jti tracker")
+	}
+	if revocations == nil {
+		panic("proxy requires revocation checker")
+	}
 	transport := &http.Transport{
 		DialContext:           guard.SafeDialContext(5*time.Second, 30*time.Second),
 		MaxIdleConns:          200,
@@ -343,7 +364,7 @@ func joinURLPath(upstreamPath, requestPath string) string {
 // consults revocations: if the session id bound to the token is revoked mid-stream the
 // upstream body is closed and the response is truncated so leaked tokens cannot
 // keep streaming indefinitely after revocation.
-func copyResponse(w http.ResponseWriter, resp *http.Response, revocations *revocationStore, sid string) {
+func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revocationChecker, sid string) {
 	// X-Caracal-Identity is the gateway-side mirror of the Caracal JWT for
 	// provider-native auth modes. Echoing it back to clients would surface a
 	// short-TTL but still usable bearer; strip it before fan-out.
@@ -372,7 +393,7 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations *revoc
 // stream if the session has been revoked while data is in flight. Returns true when
 // the stream was truncated due to revocation so the caller can emit the
 // X-Caracal-Revoked trailer.
-func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations *revocationStore, sid string) bool {
+func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations revocationChecker, sid string) bool {
 	buf := make([]byte, 4*1024)
 	for {
 		if revocations.IsRevoked(sid) {

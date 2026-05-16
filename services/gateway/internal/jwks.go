@@ -64,12 +64,8 @@ func newJWKSCache(stsURL string, timeout time.Duration, log zerolog.Logger) *jwk
 
 // Verify parses an ES256 JWS, looks up the public key for (zoneID, kid), and
 // validates the signature. It does not enforce claim semantics — only that the
-// token is signed by the zone whose binding the gateway resolved. A nil cache
-// is a no-op so tests that fabricate unsigned tokens can drive the proxy.
+// token is signed by the zone whose binding the gateway resolved.
 func (c *jwksCache) Verify(ctx context.Context, zoneID, token string) error {
-	if c == nil {
-		return nil
-	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return fmt.Errorf("malformed jws")

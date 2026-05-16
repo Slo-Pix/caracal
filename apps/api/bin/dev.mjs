@@ -2,8 +2,8 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// API dev launcher: stamps CARACAL_REPO_ROOT so the dev env-file fallback
-// resolves, then execs tsx watch on src/main.ts.
+// API dev launcher: stamps CARACAL_REPO_ROOT for explicit dev env-file loading,
+// then execs tsx watch on src/main.ts.
 
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'

@@ -30,7 +30,7 @@ Checks whether the token's `jti` claim has been seen. Tokens with `"use": "ambie
 
 ### 5. Session revocation check
 
-Extracts the `sid` claim (or `agent_session_id` as fallback) and checks the in-memory revocation store. Returns `401 InvalidToken` if the session is revoked.
+Extracts the `sid` claim and checks the in-memory revocation store. Returns `401 InvalidToken` if the session is revoked.
 
 ---
 
