@@ -8,11 +8,11 @@ All five core Caracal services store durable state in a single Postgres database
 
 ## Migrations
 
-Migrations are at `infra/postgres/migrations/` and numbered `0001` through `0019`. The API service runs all pending migrations on startup using `runMigrations()`. Migration execution is idempotent — re-running the API against an up-to-date schema is safe.
+Migrations are at `infra/postgres/migrations/` and numbered `0001` through `0021`. The API service runs all pending migrations on startup using `runMigrations()`. Migration execution is idempotent — re-running the API against an up-to-date schema is safe.
 
 Migrations run in sequence. Do not skip or reorder them. To apply migrations in a context without running the full API, use the API container with a flag or invoke the migration runner directly from the codebase.
 
-Current migration range: `0001_init` → `0019_providers_provider_kind`.
+Current migration range: `0001_init` → `0021_rls_zones_failclosed`.
 
 ---
 

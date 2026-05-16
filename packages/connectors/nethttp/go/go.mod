@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Go module definition for the net/http MCP middleware adaptor.
+// Go module definition for the net/http MCP middleware adapter.
 
 module github.com/garudex-labs/caracal/mcp-nethttp
 
