@@ -89,14 +89,20 @@ async function shouldTouchLastUsed(
 async function recordAuthFailure(
   redis: RedisClient | null,
   ip: string,
+  bearerPrefix: string,
   limitPerMin: number,
 ): Promise<boolean> {
   if (!redis || limitPerMin <= 0) return false
   const minute = Math.floor(Date.now() / 60_000)
-  const key = `api:admin_auth_fail:${ip}:${minute}`
+  const key = `api:admin_auth_fail:${ip}:${bearerPrefix}:${minute}`
   const count = await redis.incr(key)
   if (count === 1) await redis.expire(key, 90)
   return count > limitPerMin
+}
+
+function failurePrefix(bearer: string | null): string {
+  if (!bearer) return 'anon'
+  return sha256(bearer).toString('hex').slice(0, 16)
 }
 
 interface SeedOptions {
@@ -140,7 +146,7 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
 
     const bearer = extractBearer(req)
     if (!bearer) {
-      if (await recordAuthFailure(redis, req.ip, failLimit)) {
+      if (await recordAuthFailure(redis, req.ip, failurePrefix(null), failLimit)) {
         return reply.code(429).send({ error: 'rate_limited' })
       }
       return reply.code(401).send({ error: 'invalid_admin_token' })
@@ -148,7 +154,7 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
 
     const actor = await lookupAdminToken(opts.db, bearer)
     if (!actor) {
-      if (await recordAuthFailure(redis, req.ip, failLimit)) {
+      if (await recordAuthFailure(redis, req.ip, failurePrefix(bearer), failLimit)) {
         return reply.code(429).send({ error: 'rate_limited' })
       }
       return reply.code(401).send({ error: 'invalid_admin_token' })

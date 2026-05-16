@@ -206,7 +206,7 @@ Uses the same environment variables as the CLI. `CARACAL_COORDINATOR_TOKEN` is o
 - Docker Engine 24+ with Compose v2 (or Docker Desktop 4.x)
 - Git 2.x
 - Go 1.26+ (only when changing Go services or shared Go packages)
-- Python 3.11+ (only when changing the Python MCP package)
+- Python 3.14+ (only when changing Python packages)
 - Bun (only when building distributable CLI/TUI binaries)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.

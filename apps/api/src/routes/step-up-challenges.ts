@@ -4,8 +4,13 @@
 // Step-up challenge metadata endpoints: inspection and external satisfaction.
 
 import type { FastifyPluginAsync } from 'fastify'
+import { z } from 'zod'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
+
+const SatisfyBody = z.object({
+  approver_subject_id: z.string().min(1).max(256),
+})
 
 export const stepUpChallengesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/zones/:zoneId/step-up-challenges', async (req, reply) => {
@@ -19,7 +24,7 @@ export const stepUpChallengesRoutes: FastifyPluginAsync = async (fastify) => {
     )
     const { rows } = await fastify.db.query(
       `SELECT id, zone_id, session_id, challenge_type, metadata_json,
-              created_at, expires_at, satisfied_at
+              created_at, expires_at, satisfied_at, approver_subject_id
        FROM step_up_challenges WHERE ${keyset.conds.join(' AND ')}
        ORDER BY created_at DESC, id DESC LIMIT ${keyset.limitPlaceholder}`,
       keyset.values,
@@ -33,7 +38,7 @@ export const stepUpChallengesRoutes: FastifyPluginAsync = async (fastify) => {
     if (!params) return
     const { rows } = await fastify.db.query(
       `SELECT id, zone_id, session_id, challenge_type, metadata_json,
-              created_at, expires_at, satisfied_at
+              created_at, expires_at, satisfied_at, approver_subject_id
        FROM step_up_challenges WHERE id = $1 AND zone_id = $2`,
       [params.id, params.zoneId],
     )
@@ -44,14 +49,24 @@ export const stepUpChallengesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/zones/:zoneId/step-up-challenges/:id/satisfy', async (req, reply) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
+    const parsed = SatisfyBody.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_request' })
+    const approverId = parsed.data.approver_subject_id
+
     const { rows } = await fastify.db.query(
-      `UPDATE step_up_challenges
-       SET satisfied_at = now()
-       WHERE id = $1 AND zone_id = $2 AND satisfied_at IS NULL AND expires_at > now()
-       RETURNING id, satisfied_at`,
-      [params.id, params.zoneId],
+      `UPDATE step_up_challenges c
+       SET satisfied_at = now(), approver_subject_id = $3
+       FROM sessions s
+       WHERE c.id = $1 AND c.zone_id = $2
+         AND c.satisfied_at IS NULL AND c.expires_at > now()
+         AND c.session_id = s.id
+         AND (s.subject_id IS NULL OR s.subject_id <> $3)
+       RETURNING c.id, c.satisfied_at, c.approver_subject_id`,
+      [params.id, params.zoneId, approverId],
     )
-    if (!rows[0]) return reply.code(404).send({ error: 'challenge_not_found_or_expired' })
+    if (!rows[0]) {
+      return reply.code(409).send({ error: 'challenge_not_satisfiable' })
+    }
     return rows[0]
   })
 }

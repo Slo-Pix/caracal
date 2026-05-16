@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { loadEnvFile } from 'node:process'
-import { getenv, mustGetenv, intEnv, boolEnv } from '@caracalai/core'
+import { getenv, mustGetenv, intEnv, boolEnv, resolveFileSecrets } from '@caracalai/core'
 
 function loadEnvChain(): void {
   const seen = new Set<string>()
@@ -25,6 +25,14 @@ function loadEnvChain(): void {
 }
 
 loadEnvChain()
+resolveFileSecrets([
+  'DATABASE_URL',
+  'REDIS_URL',
+  'CARACAL_ADMIN_TOKEN',
+  'ZONE_KEK',
+  'STREAMS_HMAC_KEY',
+  'AUDIT_HMAC_KEY',
+])
 
 export interface Config {
   port: number

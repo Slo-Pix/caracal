@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
+import { zoneExists } from '../zone-guard.js'
 
 const InviteBody = z.object({
   email: z.string().email(),
@@ -41,6 +42,9 @@ export const invitationsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!params) return
     const parsed = InviteBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_invitation' })
+    if (!(await zoneExists(fastify.db, params.zoneId))) {
+      return reply.code(404).send({ error: 'zone_not_found' })
+    }
     const body = parsed.data
     const id = uuidv7()
     const expiresAt =
