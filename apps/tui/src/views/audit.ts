@@ -4,7 +4,7 @@
 // Live audit tail view: polls the audit endpoint and streams new events.
 
 import type { AdminClient, AuditEvent, AuditQuery } from '@caracalai/admin'
-import { ansi, pad, sanitizeAnsi, truncate } from '../ansi.ts'
+import { ansi, pad, sanitizeAnsi, truncate, ui } from '../ansi.ts'
 import { explainError } from '../errors.ts'
 import type { Key } from '../keys.ts'
 import type { App, View, ViewContext } from '../screen.ts'
@@ -119,13 +119,13 @@ export class AuditTailView implements View {
   render(ctx: ViewContext): string[] {
     const lines: string[] = []
     if (this.events.length === 0) {
-      lines.push(ansi.dim + ' (no events yet — waiting for activity)' + ansi.reset)
+      lines.push(ui.muted(' no events yet — waiting for activity'))
       return lines
     }
     const widths = [22, 28, 8, 12, 24]
     const header = ['occurred_at', 'event_type', 'decision', 'status', 'request_id']
       .map((h, i) => pad(h, widths[i]!)).join('  ')
-    lines.push(ansi.bold + ' ' + header + ansi.reset)
+    lines.push(ui.muted(' ' + ansi.bold + header + ansi.reset))
     const visible = ctx.size.rows - 1
     if (this.cursor < this.offset) this.offset = this.cursor
     if (this.cursor >= this.offset + visible) this.offset = this.cursor - visible + 1
@@ -139,7 +139,8 @@ export class AuditTailView implements View {
         sanitizeAnsi(ev.request_id ?? '-'),
       ]
       const text = cells.map((c, idx) => pad(truncate(c, widths[idx]!), widths[idx]!)).join('  ')
-      lines.push(i === this.cursor ? ansi.invert + ' ' + text + ' ' + ansi.reset : ' ' + text + ' ')
+      const row = ' ' + text + ' '
+      lines.push(i === this.cursor ? ui.selected(row) : row)
     }
     return lines
   }

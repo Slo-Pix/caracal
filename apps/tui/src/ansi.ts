@@ -20,6 +20,21 @@ export const ansi = {
   clearLine: `${ESC}2K`,
 }
 
+export const ui = {
+  accent: (s: string): string => ansi.fg(201) + s + ansi.reset,
+  accentSoft: (s: string): string => ansi.fg(141) + s + ansi.reset,
+  success: (s: string): string => ansi.fg(76) + s + ansi.reset,
+  warn: (s: string): string => ansi.fg(214) + s + ansi.reset,
+  error: (s: string): string => ansi.fg(196) + s + ansi.reset,
+  info: (s: string): string => ansi.fg(44) + s + ansi.reset,
+  muted: (s: string): string => ansi.fg(244) + s + ansi.reset,
+  title: (s: string): string => ansi.bold + s + ansi.reset,
+  selected: (s: string): string => ansi.bg(55) + ansi.fg(255) + s + ansi.reset,
+  key: (s: string): string => ansi.bg(55) + ansi.fg(255) + ` ${s} ` + ansi.reset,
+  border: (s: string): string => ansi.fg(238) + s + ansi.reset,
+  input: (s: string): string => ansi.fg(225) + s + ansi.reset,
+}
+
 const ANSI_PATTERN = /\u001b\[[0-9;?]*[A-Za-z]/g
 // C0 (excluding TAB/LF) and DEL plus C1 control bytes; ESC drives every
 // terminal escape sequence so stripping it neuters the entire family.
@@ -59,6 +74,27 @@ export function truncate(s: string, width: number): string {
     i++
   }
   return out + '…'
+}
+
+export function frame(title: string, body: readonly string[], cols: number): string[] {
+  const width = Math.max(20, cols)
+  const inner = Math.max(1, width - 4)
+  const safeTitle = title.length > 0 ? ` ${title} ` : ''
+  const topFill = Math.max(0, inner - visibleLength(safeTitle))
+  const top = ui.border('+-') + ui.accent(truncate(safeTitle, inner)) + ui.border('-'.repeat(topFill) + '-+')
+  const bottom = ui.border('+' + '-'.repeat(width - 2) + '+')
+  const lines = [top]
+  for (const raw of body) {
+    lines.push(ui.border('| ') + pad(truncate(raw, inner), inner) + ui.border(' |'))
+  }
+  lines.push(bottom)
+  return lines
+}
+
+export function hintText(hint: string): string {
+  const idx = hint.indexOf(':')
+  if (idx <= 0) return ui.muted(hint)
+  return ui.key(hint.slice(0, idx)) + ui.muted(hint.slice(idx))
 }
 
 export interface Size {

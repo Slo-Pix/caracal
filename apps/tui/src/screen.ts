@@ -3,7 +3,7 @@
 //
 // Screen and App: alt-buffer rendering, key dispatch, and view stack management.
 
-import { ansi, pad, size, truncate, visibleLength, type Size } from './ansi.ts'
+import { ansi, frame, hintText, pad, size, truncate, ui, visibleLength, type Size } from './ansi.ts'
 import { parseKey, type Key } from './keys.ts'
 
 export interface ViewContext {
@@ -124,14 +124,17 @@ export class App {
       const sz = size()
       const view = this.current()
       const lines: string[] = []
+      const bodyHeight = Math.max(1, sz.rows - 6)
+      const bodyWidth = Math.max(20, sz.cols - 4)
+      const body = view.render({ app: this, size: { rows: bodyHeight, cols: bodyWidth }, status: this.status })
       lines.push(this.bannerLine(sz))
       lines.push(this.titleLine(sz))
-      const bodyHeight = Math.max(1, sz.rows - 4)
-      const body = view.render({ app: this, size: { rows: bodyHeight, cols: sz.cols }, status: this.status })
+      const bodyLines: string[] = []
       for (let i = 0; i < bodyHeight; i++) {
         const raw = body[i] ?? ''
-        lines.push(pad(truncate(raw, sz.cols), sz.cols))
+        bodyLines.push(raw)
       }
+      lines.push(...frame(view.title, bodyLines, sz.cols))
       lines.push(this.statusLine(sz))
       lines.push(this.hintsLine(view, sz))
       process.stdout.write(ansi.home + lines.join('\r\n'))
@@ -141,27 +144,28 @@ export class App {
   }
 
   private bannerLine(sz: Size): string {
-    const left = ` ${this.bannerLeft} `
-    const right = ` ${this.bannerRight} `
+    const bg = ansi.bg(55)
+    const left = ` ${ansi.bold}${this.bannerLeft}${ansi.reset}${bg} `
+    const right = ` ${ansi.fg(225)}${this.bannerRight}${ansi.reset}${bg} `
     const middle = Math.max(0, sz.cols - visibleLength(left) - visibleLength(right))
-    return ansi.invert + left + ' '.repeat(middle) + right + ansi.reset
+    return bg + left + ' '.repeat(middle) + right + ansi.reset
   }
 
   private titleLine(sz: Size): string {
-    const crumbs = this.stack.map((v) => v.title).join(' › ')
-    return ansi.bold + pad(truncate(' ' + crumbs, sz.cols), sz.cols) + ansi.reset
+    const crumbs = this.stack.map((v, i) => i === this.stack.length - 1 ? ui.accent(v.title) : ui.muted(v.title)).join(ui.muted(' / '))
+    return pad(truncate(' ' + crumbs, sz.cols), sz.cols)
   }
 
   private statusLine(sz: Size): string {
-    if (!this.status) return pad('', sz.cols)
-    const color = this.statusKind === 'error' ? ansi.fg(196) : ansi.fg(244)
-    return color + pad(truncate(' ' + this.status, sz.cols), sz.cols) + ansi.reset
+    if (!this.status) return pad(ui.muted(' ready'), sz.cols)
+    const color = this.statusKind === 'error' ? ui.error : ui.info
+    return color(pad(truncate(' ' + this.status, sz.cols), sz.cols))
   }
 
   private hintsLine(view: View, sz: Size): string {
     const hints = view.hints().concat(['q:quit'])
-    const text = ' ' + hints.join('  ')
-    return ansi.invert + pad(truncate(text, sz.cols), sz.cols) + ansi.reset
+    const text = ' ' + hints.map(hintText).join('  ')
+    return pad(truncate(text, sz.cols), sz.cols)
   }
 
   private async dispatchKey(key: Key): Promise<void> {

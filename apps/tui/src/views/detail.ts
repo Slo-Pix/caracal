@@ -3,7 +3,7 @@
 //
 // JSON detail view: pretty-printed scrollable inspection of a single record.
 
-import { ansi } from '../ansi.ts'
+import { ui } from '../ansi.ts'
 import { explainError } from '../errors.ts'
 import type { Key } from '../keys.ts'
 import type { App, View, ViewContext } from '../screen.ts'
@@ -71,8 +71,8 @@ export class DetailView implements View {
   }
 
   render(ctx: ViewContext): string[] {
-    if (this.loading) return [ansi.dim + ' loading…' + ansi.reset]
-    if (this.error) return [ansi.fg(196) + ' error: ' + this.error + ansi.reset]
+    if (this.loading) return [ui.muted(' loading...')]
+    if (this.error) return [ui.error(' error: ') + this.error]
     const lines: string[] = []
     for (let i = this.offset; i < Math.min(this.body.length, this.offset + ctx.size.rows); i++) {
       lines.push(' ' + this.body[i])
@@ -111,7 +111,10 @@ function renderJson(
     const masked = mask(value, path)
     if (typeof masked === 'string') return JSON.stringify(masked)
   }
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (value === null) return ui.muted('null')
+  if (typeof value === 'string') return ui.input(JSON.stringify(value))
+  if (typeof value === 'number' || typeof value === 'boolean') return ui.info(JSON.stringify(value))
+  if (typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) {
     if (value.length === 0) return '[]'
     const inner = value
@@ -122,7 +125,7 @@ function renderJson(
   const entries = Object.entries(value as Record<string, unknown>)
   if (entries.length === 0) return '{}'
   const inner = entries
-    .map(([k, v]) => pad + '  ' + JSON.stringify(k) + ': ' + renderJson(v, [...path, k], mask, revealed, indent + 2))
+    .map(([k, v]) => pad + '  ' + ui.accent(JSON.stringify(k)) + ': ' + renderJson(v, [...path, k], mask, revealed, indent + 2))
     .join(',\n')
   return '{\n' + inner + '\n' + pad + '}'
 }
