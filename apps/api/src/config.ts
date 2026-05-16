@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { loadEnvFile } from 'node:process'
-import { getenv, mustGetenv } from '@caracalai/core'
+import { getenv, mustGetenv, intEnv, boolEnv } from '@caracalai/core'
 
 function loadEnvChain(): void {
   const seen = new Set<string>()
@@ -77,28 +77,6 @@ function buildRedisUrl(): string {
   return `redis://:${password}@${host}:${port}`
 }
 
-function parseBool(value: string | undefined, fallback: boolean): boolean {
-  if (value === undefined || value === '') return fallback
-  return value === '1' || value.toLowerCase() === 'true'
-}
-
-function parseIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const parsed = parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer`)
-  }
-  return parsed
-}
-
-function parseNonNegIntEnv(name: string, fallback: number): number {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const parsed = parseInt(raw, 10)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
-}
-
 function deriveWorkerId(): string {
   return process.env.WORKER_ID
     ?? `${process.env.HOSTNAME ?? 'api'}:${process.pid}`
@@ -106,35 +84,35 @@ function deriveWorkerId(): string {
 
 export function loadConfig(): Config {
   return {
-    port: parseIntEnv('PORT', 3000),
+    port: intEnv('PORT', 3000, 1),
     host: getenv('HOST', '127.0.0.1'),
     databaseUrl: buildDatabaseUrl(),
     redisUrl: buildRedisUrl(),
     logLevel: getenv('LOG_LEVEL', 'info'),
     bootstrapAdminToken: process.env.CARACAL_ADMIN_TOKEN ?? null,
-    shutdownGraceMs: parseIntEnv('SHUTDOWN_GRACE_MS', 15_000),
+    shutdownGraceMs: intEnv('SHUTDOWN_GRACE_MS', 15_000, 1),
     workerId: deriveWorkerId(),
-    bodyLimitBytes: parseIntEnv('API_BODY_LIMIT_BYTES', 1_048_576),
-    requestTimeoutMs: parseIntEnv('REQUEST_TIMEOUT_MS', 30_000),
+    bodyLimitBytes: intEnv('API_BODY_LIMIT_BYTES', 1_048_576, 1),
+    requestTimeoutMs: intEnv('REQUEST_TIMEOUT_MS', 30_000, 1),
     db: {
-      poolMax: parseIntEnv('DB_POOL_MAX', 20),
-      statementTimeoutMs: parseIntEnv('DB_STATEMENT_TIMEOUT_MS', 15_000),
-      idleInTxTimeoutMs: parseIntEnv('DB_IDLE_IN_TX_TIMEOUT_MS', 30_000),
-      connectionTimeoutMs: parseIntEnv('DB_CONNECTION_TIMEOUT_MS', 5_000),
-      idleTimeoutMs: parseIntEnv('DB_IDLE_TIMEOUT_MS', 30_000),
+      poolMax: intEnv('DB_POOL_MAX', 20, 1),
+      statementTimeoutMs: intEnv('DB_STATEMENT_TIMEOUT_MS', 15_000, 1),
+      idleInTxTimeoutMs: intEnv('DB_IDLE_IN_TX_TIMEOUT_MS', 30_000, 1),
+      connectionTimeoutMs: intEnv('DB_CONNECTION_TIMEOUT_MS', 5_000, 1),
+      idleTimeoutMs: intEnv('DB_IDLE_TIMEOUT_MS', 30_000, 1),
     },
     outbox: {
-      pollIntervalMs: parseIntEnv('OUTBOX_POLL_MS', 250),
-      batchSize: parseIntEnv('OUTBOX_BATCH_SIZE', 32),
-      lockDurationSec: parseIntEnv('OUTBOX_LOCK_SEC', 30),
-      maxAttempts: parseIntEnv('OUTBOX_MAX_ATTEMPTS', 100),
-      streamMaxLen: parseIntEnv('OUTBOX_STREAM_MAXLEN', 100_000),
+      pollIntervalMs: intEnv('OUTBOX_POLL_MS', 250, 1),
+      batchSize: intEnv('OUTBOX_BATCH_SIZE', 32, 1),
+      lockDurationSec: intEnv('OUTBOX_LOCK_SEC', 30, 1),
+      maxAttempts: intEnv('OUTBOX_MAX_ATTEMPTS', 100, 1),
+      streamMaxLen: intEnv('OUTBOX_STREAM_MAXLEN', 100_000, 1),
     },
-    readyRateLimitPerMin: parseNonNegIntEnv('READY_RATE_LIMIT_PER_MIN', 120),
-    v1RateLimitPerMin: parseNonNegIntEnv('API_V1_RATE_LIMIT_PER_MIN', 600),
-    adminAuthFailLimitPerMin: parseNonNegIntEnv('ADMIN_AUTH_FAIL_LIMIT_PER_MIN', 60),
-    lastUsedDebounceSec: parseNonNegIntEnv('ADMIN_TOKEN_LAST_USED_DEBOUNCE_SEC', 60),
-    trustProxy: parseBool(process.env.TRUST_PROXY, false),
-    enableDocs: parseBool(process.env.API_ENABLE_DOCS, true),
+    readyRateLimitPerMin: intEnv('READY_RATE_LIMIT_PER_MIN', 120, 0),
+    v1RateLimitPerMin: intEnv('API_V1_RATE_LIMIT_PER_MIN', 600, 0),
+    adminAuthFailLimitPerMin: intEnv('ADMIN_AUTH_FAIL_LIMIT_PER_MIN', 60, 0),
+    lastUsedDebounceSec: intEnv('ADMIN_TOKEN_LAST_USED_DEBOUNCE_SEC', 60, 0),
+    trustProxy: boolEnv('TRUST_PROXY', false),
+    enableDocs: boolEnv('API_ENABLE_DOCS', true),
   }
 }

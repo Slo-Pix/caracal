@@ -3,36 +3,13 @@
 //
 // Coordinator configuration loaded strictly from environment.
 
-import { getenv, mustGetenv } from '@caracalai/core'
+import { getenv, mustGetenv, intEnv, boolEnv } from '@caracalai/core'
 
 /**
  * Coordinator JWT audience. The STS issues ambient tokens with `aud=[ISSUER_URL]`
  * (see services/sts/internal/jwt.go issueToken). Verification must use the same
  * value; there is no second source of truth.
  */
-
-function intEnv(key: string, fallback: number, min = 1): number {
-  const raw = process.env[key]
-  if (raw === undefined || raw === '') return fallback
-  const n = parseInt(raw, 10)
-  if (!Number.isFinite(n) || n < min) {
-    throw new Error(`Invalid integer env var ${key}: ${raw}`)
-  }
-  return n
-}
-
-function boolEnv(key: string, fallback: boolean): boolean {
-  const raw = process.env[key]
-  if (raw === undefined || raw === '') return fallback
-  switch (raw.toLowerCase()) {
-    case '1': case 'true': case 'yes': case 'on':
-      return true
-    case '0': case 'false': case 'no': case 'off':
-      return false
-    default:
-      throw new Error(`Invalid boolean env var ${key}: ${raw}`)
-  }
-}
 
 function buildCfg() {
   const issuerUrl = mustGetenv('ISSUER_URL')
