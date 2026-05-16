@@ -108,7 +108,7 @@ describe('ListView', () => {
     expect(lines[0]).toContain('error: boom')
   })
 
-  it('back key pops the app', async () => {
+  it('esc back key pops the app', async () => {
     const app = fakeApp()
     const view = new ListView<{ id: string }>({
       title: 'x',
@@ -116,7 +116,7 @@ describe('ListView', () => {
       load: async () => [],
     })
     await view.init(app)
-    await view.onKey('h', { app, size: { rows: 10, cols: 40 }, status: '' })
+    await view.onKey('esc', { app, size: { rows: 10, cols: 40 }, status: '' })
     expect(app.pop).toHaveBeenCalled()
   })
 

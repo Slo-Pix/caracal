@@ -7,13 +7,16 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   agentsView,
   applicationsView,
+  delegationsView,
   grantsView,
   policiesView,
   policySetsView,
   providersView,
   resourcesView,
+  sessionsView,
   zonesView,
 } from '../../../../apps/tui/src/views/factory.ts'
+import { DetailView } from '../../../../apps/tui/src/views/detail.ts'
 import { ConfirmView, FormView } from '../../../../apps/tui/src/views/form.ts'
 import { ListView } from '../../../../apps/tui/src/views/list.ts'
 import type { App } from '../../../../apps/tui/src/screen.ts'
@@ -97,6 +100,9 @@ function makeClient() {
       terminate: vi.fn(async () => undefined),
     },
     delegations: {
+      inbound: vi.fn(async () => []),
+      outbound: vi.fn(async () => []),
+      traverse: vi.fn(async () => []),
       revoke: vi.fn(async () => ({ revoked_edges: 0, affected_sessions: 0 })),
     },
     audit: { list: vi.fn(async () => []), byRequest: vi.fn(async () => ({})) },
@@ -156,15 +162,31 @@ describe('applications actions', () => {
     expect(keys).toEqual(['name', 'registration_method', 'credential_type', 'client_secret', 'traits', 'consent'])
   })
 
-  it('D opens ConfirmView and calls applications.dcr', async () => {
+  it('D opens DCR FormView with CLI-equivalent fields and calls applications.dcr', async () => {
     const { client, ctx } = newCtx()
     const list = applicationsView(ctx as unknown as Parameters<typeof applicationsView>[0]) as ListView<unknown>
     setRows(list, [{ id: 'a1', name: 'app', registration_method: 'managed', credential_type: 'token', traits: [] }])
     const app = fakeApp()
-    const pushed = await pressKey(list, 'D', app) as ConfirmView
-    expect(pushed).toBeInstanceOf(ConfirmView)
-    await pushed.onKey('y', { app, size: { rows: 20, cols: 80 }, status: '' })
-    expect(client.applications.dcr).toHaveBeenCalled()
+    const pushed = await pressKey(list, 'D', app) as FormView
+    expect(pushed).toBeInstanceOf(FormView)
+    const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
+    expect(keys).toEqual(['name', 'credential_type', 'client_secret', 'traits', 'expires_in'])
+    ;(pushed as unknown as { values: Record<string, string> }).values = {
+      name: 'app',
+      credential_type: 'password',
+      client_secret: 'secret',
+      traits: 'a,b',
+      expires_in: '60',
+    }
+    ;(pushed as unknown as { focus: number }).focus = 5
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    expect(client.applications.dcr).toHaveBeenCalledWith('z1', {
+      name: 'app',
+      credential_type: 'password',
+      client_secret: 'secret',
+      traits: ['a', 'b'],
+      expires_in: 60,
+    })
   })
 })
 
@@ -250,5 +272,74 @@ describe('agents actions', () => {
     setRows(list, [{ id: 'ag1', application_id: 'a', parent_id: null, status: 'active', depth: 0, spawned_at: 'now' }])
     const pushed = await pressKey(list, 'T', fakeApp()) as { title: string }
     expect(pushed.title).toContain('agent-tree')
+  })
+})
+
+describe('sessions actions', () => {
+  it('f opens filters matching CLI session flags', async () => {
+    const { client, ctx } = newCtx()
+    const list = sessionsView(ctx as unknown as Parameters<typeof sessionsView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'f', app) as FormView
+    expect(form).toBeInstanceOf(FormView)
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      status: 'active',
+      subject_id: 'user-1',
+      limit: '25',
+    }
+    ;(form as unknown as { focus: number }).focus = 3
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    expect(client.sessions.list).toHaveBeenCalledWith('z1', {
+      status: 'active',
+      subject_id: 'user-1',
+      limit: 25,
+    })
+  })
+})
+
+describe('delegations actions', () => {
+  it('opens inbound workflow and loads coordinator delegations', async () => {
+    const { client, ctx } = newCtx()
+    const menu = delegationsView(ctx as unknown as Parameters<typeof delegationsView>[0])
+    const app = fakeApp()
+    await menu.onKey('i', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const form = pushed[pushed.length - 1] as FormView
+    expect(form).toBeInstanceOf(FormView)
+    ;(form as unknown as { values: Record<string, string> }).values = { session_id: 's1' }
+    ;(form as unknown as { focus: number }).focus = 1
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const list = pushed[pushed.length - 1] as ListView<unknown>
+    await list.init(app)
+    expect(client.delegations.inbound).toHaveBeenCalledWith('z1', 's1')
+  })
+
+  it('opens traverse workflow and loads chain nodes', async () => {
+    const { client, ctx } = newCtx()
+    const menu = delegationsView(ctx as unknown as Parameters<typeof delegationsView>[0])
+    const app = fakeApp()
+    await menu.onKey('t', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const form = pushed[pushed.length - 1] as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = { edge_id: 'e1' }
+    ;(form as unknown as { focus: number }).focus = 1
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const list = pushed[pushed.length - 1] as ListView<unknown>
+    await list.init(app)
+    expect(client.delegations.traverse).toHaveBeenCalledWith('z1', 'e1')
+  })
+
+  it('opens revoke workflow and shows revoke result detail', async () => {
+    const { client, ctx } = newCtx()
+    const menu = delegationsView(ctx as unknown as Parameters<typeof delegationsView>[0])
+    const app = fakeApp()
+    await menu.onKey('r', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const form = pushed[pushed.length - 1] as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = { edge_id: 'e1' }
+    ;(form as unknown as { focus: number }).focus = 1
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    expect(client.delegations.revoke).toHaveBeenCalledWith('z1', 'e1')
+    expect(pushed[pushed.length - 1]).toBeInstanceOf(DetailView)
   })
 })

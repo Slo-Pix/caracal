@@ -20,11 +20,11 @@ describe('explainError', () => {
     expect(explainError(new AdminApiError(404, 'not_found', {}))).toMatch(/not found/)
   })
 
-  it('hints stack-not-running on fetch failure', () => {
-    expect(explainError(new TypeError('fetch failed'))).toMatch(/is the stack running.*caracal up/)
+  it('hints local-services-not-running on fetch failure', () => {
+    expect(explainError(new TypeError('fetch failed'))).toMatch(/local services running.*caracal up/)
   })
 
-  it('hints stack-not-running on ECONNREFUSED', () => {
+  it('hints local-services-not-running on ECONNREFUSED', () => {
     expect(explainError(new Error('connect ECONNREFUSED 127.0.0.1:3000'))).toMatch(/caracal up/)
   })
 
