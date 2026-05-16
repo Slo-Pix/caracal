@@ -3,7 +3,7 @@
 //
 // Translate raw Error messages from fetch / SDK into actionable hints for the user.
 
-import { scrubTokens as coreScrub } from '@caracalai/engine'
+import { scrubTokens as coreScrub } from '@caracalai/core/crash'
 
 interface AdminApiErrorLike {
   name: string

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Shared helpers for engine verbs: AdminClient bootstrap, file content reads, token scrubbing.
+// Shared helpers for engine verbs: AdminClient bootstrap and file content reads.
 
 import { readFileSync } from 'node:fs'
 import { AdminClient } from '@caracalai/admin'
@@ -45,17 +45,4 @@ export function readContent(value: string | undefined): string {
     return readFileSync(value.slice(1), 'utf8')
   }
   return value
-}
-
-const TOKEN_PATTERNS: readonly RegExp[] = [
-  /eyJ[A-Za-z0-9._-]+/g,
-  /caracal_at_[A-Za-z0-9._-]+/g,
-  /caracal_rt_[A-Za-z0-9._-]+/g,
-  /Bearer [^\s]+/g,
-]
-
-export function scrubTokens(s: string): string {
-  let out = s
-  for (const re of TOKEN_PATTERNS) out = out.replace(re, '***')
-  return out
 }

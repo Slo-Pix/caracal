@@ -9,7 +9,7 @@ import pino from 'pino'
 import type { Pool } from 'pg'
 import type { Redis as RedisClient } from 'ioredis'
 import { ZodError } from 'zod'
-import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics } from '@caracalai/core'
+import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics, buildPinoRedactPaths } from '@caracalai/core'
 import { agentsRoutes } from './routes/agents.js'
 import { agentServicesRoutes } from './routes/agent-services.js'
 import { delegationsRoutes } from './routes/delegations.js'
@@ -22,7 +22,6 @@ import { verifyBearer } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
 import { ttlSweeperStats } from './jobs/ttl-sweeper.js'
 import { retentionCleanerStats } from './jobs/retention-cleaner.js'
-import { buildPinoRedactPaths } from './log-redact.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
