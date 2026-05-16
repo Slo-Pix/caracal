@@ -70,10 +70,10 @@ func TestConfigValidateRejectsInvalidPort(t *testing.T) {
 	}
 }
 
-func TestConfigValidateAcceptsNonStandardPort(t *testing.T) {
+func TestConfigValidateRejectsNonStandardPort(t *testing.T) {
 	c := Config{Mode: "dev", Port: "9090", STSURL: "https://sts", MaxRequestBytes: 1, RedisURL: "redis://redis", StreamsHMACKey: "k"}
-	if err := c.validate(); err != nil {
-		t.Errorf("any valid port should be accepted, got %v", err)
+	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "8081") {
+		t.Errorf("nonstandard port should fail, got %v", err)
 	}
 }
 
