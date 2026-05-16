@@ -5,13 +5,72 @@
 
 name: caracal
 
+x-logging: &defaultLogging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-security: &defaultSecurity
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+x-appService: &appService
+  restart: unless-stopped
+  init: true
+  stop_grace_period: 20s
+  logging: *defaultLogging
+  <<: *defaultSecurity
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  networks:
+    - caracalData
+
+networks:
+  caracalData:
+    driver: bridge
+    name: caracalData
+
 secrets:
   postgresPassword:
     file: ./secrets/postgresPassword
+  redisPassword:
+    file: ./secrets/redisPassword
+  caracalAdminToken:
+    file: ./secrets/caracalAdminToken
+  zoneKek:
+    file: ./secrets/zoneKek
+  auditHmacKey:
+    file: ./secrets/auditHmacKey
+  streamsHmacKey:
+    file: ./secrets/streamsHmacKey
+  databaseUrl:
+    file: ./secrets/databaseUrl
+  redisUrl:
+    file: ./secrets/redisUrl
 
 services:
   postgres:
-    image: postgres:18-alpine
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-postgres:v${CARACAL_VERSION}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    logging: *defaultLogging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - FOWNER
+      - SETGID
+      - SETUID
+    networks:
+      - caracalData
     secrets:
       - source: postgresPassword
         target: postgresPassword
@@ -23,16 +82,31 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgresData:/var/lib/postgresql
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /var/run/postgresql:size=16m,mode=0755
+    shm_size: "256m"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h /var/run/postgresql"]
       interval: 5s
       timeout: 3s
       retries: 20
+      start_period: 15s
 
   redis:
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-redis:v${CARACAL_VERSION}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 20s
+    logging: *defaultLogging
+    <<: *defaultSecurity
+    networks:
+      - caracalData
+    secrets:
+      - source: redisPassword
+        target: redisPassword
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD_FILE: /run/secrets/redisPassword
       REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-512mb}
     ports:
       - "127.0.0.1:6379:6379"
@@ -43,31 +117,76 @@ services:
         tmpfs:
           mode: 1023
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning PING | grep -q PONG && test -f /run/caracal/provisioned"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redisPassword) redis-cli --no-auth-warning PING | grep -q PONG && test -f /run/caracal/provisioned"]
       interval: 5s
       timeout: 3s
       retries: 20
       start_period: 10s
 
+  dbMigrate:
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-postgres:v${CARACAL_VERSION}
+    restart: "no"
+    init: true
+    logging: *defaultLogging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    networks:
+      - caracalData
+    depends_on:
+      postgres:
+        condition: service_healthy
+    secrets:
+      - source: postgresPassword
+        target: postgresPassword
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD_FILE: /run/secrets/postgresPassword
+      PGDATABASE: ${POSTGRES_DB}
+      PGSSLMODE: disable
+    entrypoint: ["/bin/sh", "/usr/local/bin/caracal-migrate"]
+
   sts:
+    <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-sts:v${CARACAL_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: databaseUrl
+        target: databaseUrl
+      - source: redisUrl
+        target: redisUrl
+      - source: zoneKek
+        target: zoneKek
+      - source: auditHmacKey
+        target: auditHmacKey
+      - source: streamsHmacKey
+        target: streamsHmacKey
     environment:
       CARACAL_MODE: runtime
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      ZONE_KEK: ${ZONE_KEK}
-      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY}
-      STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
+      DATABASE_URL_FILE: /run/secrets/databaseUrl
+      REDIS_URL_FILE: /run/secrets/redisUrl
+      ZONE_KEK_FILE: /run/secrets/zoneKek
+      AUDIT_HMAC_KEY_FILE: /run/secrets/auditHmacKey
+      STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
       ZONE_KEK_PROVIDER: local
-      ISSUER_URL: http://localhost:8080
+      ISSUER_URL: ${CARACAL_STS_ISSUER_URL:-http://localhost:8080}
       PORT: 8080
     ports:
       - "127.0.0.1:8080:8080"
+    volumes:
+      - stsReplay:/var/lib/caracal
     healthcheck:
       test: ["CMD", "/healthcheck"]
       interval: 5s
@@ -76,18 +195,32 @@ services:
       start_period: 15s
 
   api:
+    <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-api:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: databaseUrl
+        target: databaseUrl
+      - source: redisUrl
+        target: redisUrl
+      - source: zoneKek
+        target: zoneKek
+      - source: streamsHmacKey
+        target: streamsHmacKey
+      - source: caracalAdminToken
+        target: caracalAdminToken
     environment:
       CARACAL_MODE: runtime
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DATABASE_URL_FILE: /run/secrets/databaseUrl
+      REDIS_URL_FILE: /run/secrets/redisUrl
       STS_URL: http://sts:8080
-      ZONE_KEK: ${ZONE_KEK}
-      STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
-      CARACAL_ADMIN_TOKEN: ${CARACAL_ADMIN_TOKEN}
+      ZONE_KEK_FILE: /run/secrets/zoneKek
+      STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
+      CARACAL_ADMIN_TOKEN_FILE: /run/secrets/caracalAdminToken
       PORT: 3000
       HOST: 0.0.0.0
     ports:
@@ -100,18 +233,28 @@ services:
       start_period: 20s
 
   gateway:
+    <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-gateway:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
       api:
         condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: databaseUrl
+        target: databaseUrl
+      - source: redisUrl
+        target: redisUrl
+      - source: streamsHmacKey
+        target: streamsHmacKey
     environment:
       CARACAL_MODE: runtime
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DATABASE_URL_FILE: /run/secrets/databaseUrl
+      REDIS_URL_FILE: /run/secrets/redisUrl
       STS_URL: http://sts:8080
-      STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
+      STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
       PORT: 8081
     ports:
       - "127.0.0.1:8081:8081"
@@ -123,19 +266,30 @@ services:
       start_period: 15s
 
   audit:
+    <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-audit:v${CARACAL_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: databaseUrl
+        target: databaseUrl
+      - source: redisUrl
+        target: redisUrl
+      - source: auditHmacKey
+        target: auditHmacKey
     environment:
       CARACAL_MODE: runtime
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
-      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY}
+      DATABASE_URL_FILE: /run/secrets/databaseUrl
+      REDIS_URL_FILE: /run/secrets/redisUrl
+      AUDIT_HMAC_KEY_FILE: /run/secrets/auditHmacKey
       AUDIT_EXPORT_S3_ENDPOINT: ${AUDIT_EXPORT_S3_ENDPOINT:-}
       AUDIT_EXPORT_S3_BUCKET: ${AUDIT_EXPORT_S3_BUCKET:-}
+      AUDIT_EXPORT_S3_REGION: ${AUDIT_EXPORT_S3_REGION:-us-east-1}
       PORT: "9090"
     ports:
       - "127.0.0.1:9090:9090"
@@ -147,24 +301,34 @@ services:
       start_period: 15s
 
   coordinator:
+    <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-coordinator:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: databaseUrl
+        target: databaseUrl
+      - source: redisUrl
+        target: redisUrl
+      - source: streamsHmacKey
+        target: streamsHmacKey
     environment:
       CARACAL_MODE: runtime
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DATABASE_URL_FILE: /run/secrets/databaseUrl
+      REDIS_URL_FILE: /run/secrets/redisUrl
       STS_URL: http://sts:8080
-      ISSUER_URL: http://localhost:8080
-      STREAMS_HMAC_KEY: ${STREAMS_HMAC_KEY}
+      ISSUER_URL: ${CARACAL_STS_ISSUER_URL:-http://localhost:8080}
+      STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
       AGENT_COORDINATOR_SCOPE: agent:lifecycle
       PORT: 4000
       HOST: 0.0.0.0
     ports:
       - "127.0.0.1:4000:4000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/ready || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4000/ready >/dev/null || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -173,3 +337,4 @@ services:
 volumes:
   postgresData:
   redisData:
+  stsReplay:

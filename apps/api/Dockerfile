@@ -46,11 +46,9 @@ ENV NODE_ENV=production \
     NODE_OPTIONS=--enable-source-maps \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     PORT=3000 \
-    HEALTH_PATH=/ready \
-    CARACAL_MIGRATIONS_DIR=/caracal/migrations
+    HEALTH_PATH=/ready
 WORKDIR /app
 COPY --from=builder --chown=nonroot:nonroot /out ./
-COPY --chown=nonroot:nonroot infra/postgres/migrations /caracal/migrations
 COPY --from=health-builder /healthcheck-bin /healthcheck
 USER nonroot
 EXPOSE 3000

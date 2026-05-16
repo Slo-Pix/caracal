@@ -172,8 +172,11 @@ services:
     networks:
       - caracalData
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD_FILE: /run/secrets/redisPassword
       REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-512mb}
+    secrets:
+      - source: redisPassword
+        target: redisPassword
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -183,7 +186,7 @@ services:
         tmpfs:
           mode: 1023
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning PING | grep -q PONG && test -f /run/caracal/provisioned"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redisPassword) redis-cli --no-auth-warning PING | grep -q PONG && test -f /run/caracal/provisioned"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -225,9 +228,6 @@ services:
       PGPASSWORD_FILE: /run/secrets/postgresPassword
       PGDATABASE: ${POSTGRES_DB}
       PGSSLMODE: disable
-    volumes:
-      - ../postgres/migrations:/migrations:ro
-      - ../postgres/scripts/migrate.sh:/usr/local/bin/caracal-migrate:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/caracal-migrate"]
 
   sts:
