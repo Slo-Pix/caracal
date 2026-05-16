@@ -148,7 +148,7 @@ export class OutboxDispatcher {
   }
 
   private async dispatch(row: OutboxRow): Promise<void> {
-    const signed: OutboxPayload = { ...row.payload_json }
+    const signed: OutboxPayload = { outbox_id: row.id, ...row.payload_json }
     if (this.streamHmacKey) {
       signed[STREAM_SIG_FIELD] = signStream(this.streamHmacKey, row.stream_name, signed)
     }

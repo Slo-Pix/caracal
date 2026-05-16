@@ -37,6 +37,7 @@ declare module 'fastify' {
 
 const BEARER_PREFIX = 'Bearer '
 const MAX_ADMIN_BEARER_BYTES = 4096
+const INVALID_ZONE_ID = '\u0000invalid-zone'
 
 function bytesEqual(a: Buffer, b: Buffer): boolean {
   return a.length === b.length && timingSafeEqual(a, b)
@@ -55,7 +56,7 @@ function zoneFromUrl(url: string): string | null {
   try {
     return decodeURIComponent(match[1])
   } catch {
-    return null
+    return INVALID_ZONE_ID
   }
 }
 
