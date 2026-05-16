@@ -13,20 +13,10 @@ import {
   resolveCliConfigPath,
   type CliConfig,
 } from '@caracalai/core/cli'
+import { installCrashHandlers } from '@caracalai/core/crash'
 import { App } from './screen.ts'
 import { CARACAL_TUI_MODE, CARACAL_TUI_VERSION } from './version.gen.ts'
 import { MenuView } from './views/menu.ts'
-
-function installCrashHandlers(): void {
-  process.on('uncaughtException', (err) => {
-    process.stderr.write(`caracal-tui: ${err instanceof Error ? err.message : String(err)}\n`)
-    process.exit(1)
-  })
-  process.on('unhandledRejection', (reason) => {
-    process.stderr.write(`caracal-tui: ${reason instanceof Error ? reason.message : String(reason)}\n`)
-    process.exit(1)
-  })
-}
 
 function loadConfig(): CliConfig | undefined {
   const path = resolveCliConfigPath()
@@ -53,7 +43,7 @@ function printHelp(): void {
 }
 
 function main(): void {
-  installCrashHandlers()
+  installCrashHandlers('caracal-tui', { exitOnError: false })
   const command = process.argv[2]
   if (command === '--help' || command === '-h' || command === 'help') {
     printHelp()
@@ -62,7 +52,16 @@ function main(): void {
   if (command === '--version' || command === '-v' || command === 'version') {
     const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
     const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${process.env.CARACAL_DEV_SHA ?? 'unknown'})` : 'runtime'
-    process.stdout.write(`${bin} ${CARACAL_TUI_VERSION} [${tag}]\n`)
+    if (process.argv.includes('--json')) {
+      process.stdout.write(JSON.stringify({
+        binary: bin,
+        version: CARACAL_TUI_VERSION,
+        mode: CARACAL_TUI_MODE,
+        sha: process.env.CARACAL_DEV_SHA ?? null,
+      }) + '\n')
+    } else {
+      process.stdout.write(`${bin} ${CARACAL_TUI_VERSION} [${tag}]\n`)
+    }
     return
   }
   if (!process.stdin.isTTY) {
