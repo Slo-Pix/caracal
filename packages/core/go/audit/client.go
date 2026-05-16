@@ -50,15 +50,15 @@ type MetricsHook struct {
 
 // ClientConfig configures a reusable audit Client.
 type ClientConfig struct {
-	Stream     string
-	HMACKey    []byte
-	ReplayDir  string
-	BufferCap  int
-	FlushBatch int
-	FlushTTL   time.Duration
-	Logger     zerolog.Logger
-	Metrics    MetricsHook
-	Production bool
+	Stream       string
+	AuditHMACKey []byte
+	ReplayDir    string
+	BufferCap    int
+	FlushBatch   int
+	FlushTTL     time.Duration
+	Logger       zerolog.Logger
+	Metrics      MetricsHook
+	Production   bool
 }
 
 // Client buffers audit events, signs and emits them to a Redis stream, and
@@ -109,11 +109,11 @@ func NewClient(s Streamer, cfg ClientConfig) (*Client, error) {
 	if cfg.ReplayDir == "" {
 		return nil, errors.New("audit: ReplayDir is required")
 	}
-	if cfg.Production && len(cfg.HMACKey) == 0 {
-		return nil, errors.New("audit: HMACKey is required in production")
+	if cfg.Production && len(cfg.AuditHMACKey) == 0 {
+		return nil, errors.New("audit: AuditHMACKey is required in production")
 	}
-	if len(cfg.HMACKey) > 0 && len(cfg.HMACKey) < 32 {
-		return nil, errors.New("audit: HMACKey must be at least 32 bytes")
+	if len(cfg.AuditHMACKey) > 0 && len(cfg.AuditHMACKey) < 32 {
+		return nil, errors.New("audit: AuditHMACKey must be at least 32 bytes")
 	}
 	if cfg.Stream == "" {
 		cfg.Stream = DefaultStream
@@ -220,10 +220,10 @@ func (c *Client) ReplayPending(ctx context.Context) {
 }
 
 func (c *Client) sign(data []byte) string {
-	if len(c.cfg.HMACKey) == 0 {
+	if len(c.cfg.AuditHMACKey) == 0 {
 		return ""
 	}
-	mac := hmac.New(sha256.New, c.cfg.HMACKey)
+	mac := hmac.New(sha256.New, c.cfg.AuditHMACKey)
 	mac.Write(data)
 	return hex.EncodeToString(mac.Sum(nil))
 }

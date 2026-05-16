@@ -63,7 +63,7 @@ class AuditClient:
         *,
         streamer: AuditStreamer,
         replay_dir: str | os.PathLike[str],
-        hmac_key: bytes | None = None,
+        audit_hmac_key: bytes | None = None,
         logger: DevLogger | None = None,
         buffer_cap: int = 10_000,
         flush_batch: int = 1_000,
@@ -77,13 +77,13 @@ class AuditClient:
     ) -> None:
         if streamer is None:
             raise ValueError("audit: streamer is required")
-        if production and not hmac_key:
-            raise ValueError("audit: hmac_key is required in production")
-        if hmac_key and len(hmac_key) < 32:
-            raise ValueError("audit: hmac_key must be at least 32 bytes")
+        if production and not audit_hmac_key:
+            raise ValueError("audit: audit_hmac_key is required in production")
+        if audit_hmac_key and len(audit_hmac_key) < 32:
+            raise ValueError("audit: audit_hmac_key must be at least 32 bytes")
         self._streamer = streamer
         self._replay_dir = Path(replay_dir)
-        self._hmac_key = hmac_key
+        self._audit_hmac_key = audit_hmac_key
         self._logger = logger or create_logger("audit", "warn")
         self._buffer_cap = buffer_cap
         self._flush_batch = flush_batch
@@ -187,9 +187,9 @@ class AuditClient:
             self._persist_batch(failed)
 
     def _sign(self, data: str) -> str | None:
-        if not self._hmac_key:
+        if not self._audit_hmac_key:
             return None
-        return hmac.new(self._hmac_key, data.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.new(self._audit_hmac_key, data.encode("utf-8"), hashlib.sha256).hexdigest()
 
     def _xadd(self, ev: AuditEvent) -> None:
         data = json.dumps(ev.to_wire(), separators=(",", ":"), sort_keys=True)

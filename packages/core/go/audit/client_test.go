@@ -52,13 +52,13 @@ func newTestClient(t *testing.T, key []byte, prod bool) (*Client, *fakeStreamer,
 	dir := t.TempDir()
 	s := &fakeStreamer{}
 	c, err := NewClient(s, ClientConfig{
-		HMACKey:    key,
-		ReplayDir:  dir,
-		Logger:     zerolog.New(os.Stderr).Level(zerolog.Disabled),
-		FlushTTL:   5 * time.Millisecond,
-		FlushBatch: 4,
-		BufferCap:  16,
-		Production: prod,
+		AuditHMACKey: key,
+		ReplayDir:    dir,
+		Logger:       zerolog.New(os.Stderr).Level(zerolog.Disabled),
+		FlushTTL:     5 * time.Millisecond,
+		FlushBatch:   4,
+		BufferCap:    16,
+		Production:   prod,
 	})
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
@@ -74,19 +74,19 @@ func TestNewClientRequiresHMACInProduction(t *testing.T) {
 		Production: true,
 	})
 	if err == nil {
-		t.Fatal("expected error without HMACKey in production")
+		t.Fatal("expected error without AuditHMACKey in production")
 	}
 }
 
 func TestNewClientRejectsShortHMAC(t *testing.T) {
 	dir := t.TempDir()
 	_, err := NewClient(&fakeStreamer{}, ClientConfig{
-		HMACKey:   []byte("short"),
-		ReplayDir: dir,
-		Logger:    zerolog.Nop(),
+		AuditHMACKey: []byte("short"),
+		ReplayDir:    dir,
+		Logger:       zerolog.Nop(),
 	})
 	if err == nil {
-		t.Fatal("expected error for short HMACKey")
+		t.Fatal("expected error for short AuditHMACKey")
 	}
 }
 
@@ -139,13 +139,13 @@ func TestEmitDropsWhenFull(t *testing.T) {
 	dir := t.TempDir()
 	var dropped atomic.Uint64
 	c, err := NewClient(&fakeStreamer{}, ClientConfig{
-		HMACKey:    make([]byte, 32),
-		ReplayDir:  dir,
-		Logger:     zerolog.Nop(),
-		FlushTTL:   time.Hour,
-		FlushBatch: 1000,
-		BufferCap:  2,
-		Metrics:    MetricsHook{OnDropped: func(n uint64) { dropped.Store(n) }},
+		AuditHMACKey: make([]byte, 32),
+		ReplayDir:    dir,
+		Logger:       zerolog.Nop(),
+		FlushTTL:     time.Hour,
+		FlushBatch:   1000,
+		BufferCap:    2,
+		Metrics:      MetricsHook{OnDropped: func(n uint64) { dropped.Store(n) }},
 	})
 	if err != nil {
 		t.Fatal(err)

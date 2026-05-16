@@ -37,7 +37,7 @@ func TestLoadConfigAllowsUnsignedDevAudit(t *testing.T) {
 	t.Setenv("AUDIT_HMAC_KEY", "")
 
 	cfg := loadConfig()
-	if len(cfg.HMACKey) != 0 {
+	if len(cfg.AuditHMACKey) != 0 {
 		t.Fatal("dev config must allow unsigned audit mode")
 	}
 }

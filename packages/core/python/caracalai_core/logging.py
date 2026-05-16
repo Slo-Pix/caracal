@@ -39,6 +39,7 @@ SECRET_KEYS: tuple[str, ...] = (
     "client_secret",
     "private_key",
     "signing_key",
+    "audit_hmac_key",
     "hmac_key",
     "encryption_key",
     "session",
