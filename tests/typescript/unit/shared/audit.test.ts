@@ -12,7 +12,7 @@ import { AuditClient, type AuditEvent, type AuditStreamer, createLogger } from '
 class FakeStreamer implements AuditStreamer {
   calls: string[][] = []
   failNext = 0
-  async xadd(stream: string, ...args: string[]): Promise<unknown> {
+  async xadd(stream: string, ...args: string[]): Promise<string> {
     if (this.failNext > 0) {
       this.failNext--
       throw new Error('redis down')

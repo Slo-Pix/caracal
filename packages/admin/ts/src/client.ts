@@ -4,6 +4,7 @@
 // AdminClient: typed wrapper over the Caracal admin API and agent coordinator.
 
 import { AdminApiError } from './errors.js'
+import type { JsonValue } from '@caracalai/core'
 import type {
   AgentSession,
   Application,
@@ -131,11 +132,11 @@ export class AdminClient {
             continue
           }
           const text = await res.text()
-          let parsed: unknown = text
+          let parsed: JsonValue = text
           let code = res.statusText || 'request_failed'
           try {
             parsed = text ? JSON.parse(text) : {}
-            if (parsed && typeof parsed === 'object' && 'error' in parsed && typeof (parsed as { error: unknown }).error === 'string') {
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'error' in parsed && typeof parsed.error === 'string') {
               code = (parsed as { error: string }).error
             }
           } catch { /* keep raw text */ }
