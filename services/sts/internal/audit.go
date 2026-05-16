@@ -40,13 +40,13 @@ const (
 // cannot reach Redis (sink error or shutdown with backlog) are persisted to disk and
 // replayed on next startup so audit loss requires both Redis and disk failure.
 type AuditBuffer struct {
-	ch        chan AuditEvent
-	redis     *RedisClient
-	log       zerolog.Logger
-	dropped   atomic.Uint64
-	hmacKey   []byte
-	replayDir string
-	metrics   *STSMetrics
+	ch           chan AuditEvent
+	redis        *RedisClient
+	log          zerolog.Logger
+	dropped      atomic.Uint64
+	auditHMACKey []byte
+	replayDir    string
+	metrics      *STSMetrics
 }
 
 func newAuditBuffer(redis *RedisClient, log zerolog.Logger, production bool, replayDir string, metrics *STSMetrics) (*AuditBuffer, error) {
@@ -71,12 +71,12 @@ func newAuditBuffer(redis *RedisClient, log zerolog.Logger, production bool, rep
 		return nil, fmt.Errorf("audit replay dir: %w", err)
 	}
 	return &AuditBuffer{
-		ch:        make(chan AuditEvent, auditBufCap),
-		redis:     redis,
-		log:       log,
-		hmacKey:   key,
-		replayDir: replayDir,
-		metrics:   metrics,
+		ch:           make(chan AuditEvent, auditBufCap),
+		redis:        redis,
+		log:          log,
+		auditHMACKey: key,
+		replayDir:    replayDir,
+		metrics:      metrics,
 	}, nil
 }
 
@@ -127,10 +127,10 @@ func (a *AuditBuffer) Ready() error {
 }
 
 func (a *AuditBuffer) sign(data []byte) string {
-	if len(a.hmacKey) == 0 {
+	if len(a.auditHMACKey) == 0 {
 		return ""
 	}
-	mac := hmac.New(sha256.New, a.hmacKey)
+	mac := hmac.New(sha256.New, a.auditHMACKey)
 	mac.Write(data)
 	return hex.EncodeToString(mac.Sum(nil))
 }

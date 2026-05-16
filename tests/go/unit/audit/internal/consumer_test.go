@@ -51,7 +51,7 @@ func TestVerifyHMACUnsignedAccepts(t *testing.T) {
 
 func TestVerifyHMACMatch(t *testing.T) {
 	key := []byte("0123456789abcdef0123456789abcdef")
-	c := &Consumer{log: zerolog.Nop(), hmacKey: key}
+	c := &Consumer{log: zerolog.Nop(), auditHMACKey: key}
 	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte("payload"))
 	sig := hex.EncodeToString(mac.Sum(nil))
@@ -61,7 +61,7 @@ func TestVerifyHMACMatch(t *testing.T) {
 }
 
 func TestVerifyHMACMismatch(t *testing.T) {
-	c := &Consumer{log: zerolog.Nop(), hmacKey: []byte("k")}
+	c := &Consumer{log: zerolog.Nop(), auditHMACKey: []byte("k")}
 	if c.verifyHMAC("payload", "deadbeef") {
 		t.Error("mismatched sig must not verify")
 	}

@@ -51,16 +51,16 @@ class AuditClientTests(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_requires_hmac_in_production(self):
-        with self.assertRaisesRegex(ValueError, "hmac_key is required"):
+        with self.assertRaisesRegex(ValueError, "audit_hmac_key is required"):
             AuditClient(streamer=FakeStreamer(), replay_dir=self.replay_dir, logger=self.logger, production=True)
 
-    def test_rejects_short_hmac_key(self):
+    def test_rejects_short_audit_hmac_key(self):
         with self.assertRaisesRegex(ValueError, "at least 32 bytes"):
-            AuditClient(streamer=FakeStreamer(), replay_dir=self.replay_dir, logger=self.logger, hmac_key=b"short")
+            AuditClient(streamer=FakeStreamer(), replay_dir=self.replay_dir, logger=self.logger, audit_hmac_key=b"short")
 
     def test_signs_events_when_key_present(self):
         s = FakeStreamer()
-        c = AuditClient(streamer=s, replay_dir=self.replay_dir, logger=self.logger, hmac_key=b"k" * 32, flush_ttl_ms=10)
+        c = AuditClient(streamer=s, replay_dir=self.replay_dir, logger=self.logger, audit_hmac_key=b"k" * 32, flush_ttl_ms=10)
         c.start()
         c.emit(_event())
         time.sleep(0.05)

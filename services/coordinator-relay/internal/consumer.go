@@ -27,11 +27,11 @@ const (
 )
 
 type Consumer struct {
-	redis      *redis.Client
-	log        zerolog.Logger
-	hmacKey    []byte
-	requireSig bool
-	dedupeTTL  time.Duration
+	redis         *redis.Client
+	log           zerolog.Logger
+	streamHMACKey []byte
+	requireSig    bool
+	dedupeTTL     time.Duration
 }
 
 func New(_ context.Context) (*Consumer, error) {
@@ -44,14 +44,14 @@ func New(_ context.Context) (*Consumer, error) {
 	log := zerolog.New(os.Stderr).With().Timestamp().Logger()
 
 	base := config.Load()
-	hmacKey, err := sharedcrypto.DecodeStreamKey(config.Getenv("STREAMS_HMAC_KEY", ""))
+	streamHMACKey, err := sharedcrypto.DecodeStreamKey(config.Getenv("STREAMS_HMAC_KEY", ""))
 	if err != nil {
 		return nil, err
 	}
-	if base.IsRuntime() && len(hmacKey) == 0 {
+	if base.IsRuntime() && len(streamHMACKey) == 0 {
 		return nil, errors.New("STREAMS_HMAC_KEY is required when CARACAL_MODE=runtime")
 	}
-	if len(hmacKey) == 0 {
+	if len(streamHMACKey) == 0 {
 		log.Warn().Msg("STREAMS_HMAC_KEY not set; lifecycle events will not be origin-verified")
 	}
 	dedupeSec := 3600
@@ -63,7 +63,7 @@ func New(_ context.Context) (*Consumer, error) {
 		dedupeSec = n
 	}
 	return &Consumer{
-		redis: r, log: log, hmacKey: hmacKey,
+		redis: r, log: log, streamHMACKey: streamHMACKey,
 		requireSig: base.IsRuntime(),
 		dedupeTTL:  time.Duration(dedupeSec) * time.Second,
 	}, nil
@@ -120,10 +120,10 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 func (c *Consumer) verify(values map[string]any) bool {
-	if !c.requireSig && len(c.hmacKey) == 0 {
+	if !c.requireSig && len(c.streamHMACKey) == 0 {
 		return true
 	}
-	return sharedcrypto.VerifyStream(c.hmacKey, lifecycleStream, values)
+	return sharedcrypto.VerifyStream(c.streamHMACKey, lifecycleStream, values)
 }
 
 func (c *Consumer) duplicate(ctx context.Context, values map[string]any) bool {

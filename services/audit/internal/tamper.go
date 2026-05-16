@@ -19,7 +19,7 @@ import (
 
 type TamperSweeper struct {
 	db            *PGWriter
-	hmacKey       []byte
+	auditHMACKey  []byte
 	log           zerolog.Logger
 	retention     time.Duration
 	rolling       time.Duration
@@ -31,8 +31,8 @@ type TamperSweeper struct {
 	lastFullUnix  atomic.Int64
 }
 
-func newTamperSweeper(db *PGWriter, key []byte, retention, rolling time.Duration, log zerolog.Logger) *TamperSweeper {
-	return &TamperSweeper{db: db, hmacKey: key, log: log, retention: retention, rolling: rolling}
+func newTamperSweeper(db *PGWriter, auditHMACKey []byte, retention, rolling time.Duration, log zerolog.Logger) *TamperSweeper {
+	return &TamperSweeper{db: db, auditHMACKey: auditHMACKey, log: log, retention: retention, rolling: rolling}
 }
 
 // Run performs a startup sweep covering the full retention window so an attacker
@@ -84,8 +84,8 @@ func (s *TamperSweeper) sweep(ctx context.Context, lookback time.Duration, full 
 					Msg("tamper: chain break (prev hash mismatch)")
 			}
 		}
-		if len(s.hmacKey) > 0 {
-			mac := hmac.New(sha256.New, s.hmacKey)
+		if len(s.auditHMACKey) > 0 {
+			mac := hmac.New(sha256.New, s.auditHMACKey)
 			mac.Write([]byte(r.ContentSHA256))
 			mac.Write([]byte{'|'})
 			mac.Write([]byte(r.PrevContentSHA256))
