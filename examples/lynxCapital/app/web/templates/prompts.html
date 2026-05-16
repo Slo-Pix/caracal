@@ -107,21 +107,46 @@
 
 <script>
 function _card(p) {
-  const tags = (p.tags || []).map(t => `<span class="prompt-tag">${t}</span>`).join('');
   const el = document.createElement('div');
   el.className = 'prompt-card';
   el.dataset.prompt = p.text;
-  el.innerHTML = `
-    <div class="prompt-card-top">
-      <span class="prompt-icon">${p.icon || '•'}</span>
-      <span class="prompt-text">${p.text}</span>
-    </div>
-    <div class="prompt-reason">${p.reason}</div>
-    <div class="prompt-footer">
-      <div class="prompt-tags">${tags}</div>
-      <button class="copy-btn">Copy</button>
-    </div>`;
-  el.querySelector('.copy-btn').addEventListener('click', e => {
+
+  const top = document.createElement('div');
+  top.className = 'prompt-card-top';
+  const icon = document.createElement('span');
+  icon.className = 'prompt-icon';
+  icon.textContent = p.icon || '•';
+  const text = document.createElement('span');
+  text.className = 'prompt-text';
+  text.textContent = p.text;
+  top.appendChild(icon);
+  top.appendChild(text);
+
+  const reason = document.createElement('div');
+  reason.className = 'prompt-reason';
+  reason.textContent = p.reason;
+
+  const footer = document.createElement('div');
+  footer.className = 'prompt-footer';
+  const tags = document.createElement('div');
+  tags.className = 'prompt-tags';
+  for (const t of p.tags || []) {
+    const tag = document.createElement('span');
+    tag.className = 'prompt-tag';
+    tag.textContent = t;
+    tags.appendChild(tag);
+  }
+  const copy = document.createElement('button');
+  copy.className = 'copy-btn';
+  copy.textContent = 'Copy';
+  footer.appendChild(tags);
+  footer.appendChild(copy);
+
+  el.appendChild(top);
+  el.appendChild(reason);
+  el.appendChild(footer);
+
+  copy.addEventListener('click', e => {
     e.stopPropagation();
     navigator.clipboard.writeText(p.text).then(() => {
       const btn = e.currentTarget;
@@ -138,7 +163,7 @@ async function loadPrompts() {
   const d = await r.json();
   for (const outcome of ['single', 'multi', 'full']) {
     const container = document.getElementById(`cards-${outcome}`);
-    container.innerHTML = '';
+    container.replaceChildren();
     (d[outcome] || []).forEach(p => container.appendChild(_card(p)));
   }
 }

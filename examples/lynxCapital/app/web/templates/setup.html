@@ -78,18 +78,29 @@ docker compose -f _mock/docker-compose.yml up -d --build</pre>
   validateBtn.addEventListener('click', async () => {
     validateBtn.disabled = true;
     validateBtn.textContent = 'Checking...';
-    validateOut.innerHTML = '';
+    validateOut.replaceChildren();
     startDemoBtn.style.display = 'none';
     try {
       const r = await fetch('/api/setup/validate');
       const data = await r.json();
-      validateOut.innerHTML = data.steps.map(s => `
-        <div class="rs">
-          <div class="badge ${s.ok ? 'badge-ok' : 'badge-fail'}">${s.ok ? '✓' : '✗'}</div>
-          <span>${s.label}</span>
-        </div>
-        ${s.detail ? `<div class="rd">${s.detail}</div>` : ''}
-      `).join('');
+      for (const s of data.steps) {
+        const row = document.createElement('div');
+        row.className = 'rs';
+        const badge = document.createElement('div');
+        badge.className = `badge ${s.ok ? 'badge-ok' : 'badge-fail'}`;
+        badge.textContent = s.ok ? '✓' : '✗';
+        const label = document.createElement('span');
+        label.textContent = s.label;
+        row.appendChild(badge);
+        row.appendChild(label);
+        validateOut.appendChild(row);
+        if (s.detail) {
+          const detail = document.createElement('div');
+          detail.className = 'rd';
+          detail.textContent = s.detail;
+          validateOut.appendChild(detail);
+        }
+      }
       if (data.ok) startDemoBtn.style.display = 'inline-block';
     } catch (e) {
       validateOut.textContent = 'Validation failed: ' + e.message;

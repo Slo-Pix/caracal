@@ -81,7 +81,7 @@ mock service boundary is not a switch; it is the boundary.
 - The mock layer must be scalable: adding a new provider, region,
   case, or scenario response requires only a new file under
   `_mock/<id>.mock/` and a registry entry, never edits to agent code.
-- Backend and UI: Python 3.11+ with FastAPI, uvicorn, Jinja2,
+- Backend and UI: Python 3.14+ with FastAPI, uvicorn, Jinja2,
   sse-starlette, LangChain, LangGraph, DeepAgents.
 - No `npm`, no `node_modules`, no Vite, no React, no bundler.
 
