@@ -11,7 +11,7 @@ import {
   controlKeyRotate,
 } from '@caracalai/engine'
 import type { CliConfig } from '../config.ts'
-import { printSuccess } from '../style.ts'
+import { printError, printSuccess } from '../style.ts'
 import {
   buildAdminClient,
   fail,
@@ -27,6 +27,10 @@ import {
 } from './shared.ts'
 
 export async function controlCommand(argv: string[], cfg?: CliConfig): Promise<void> {
+  if (process.env.CARACAL_CONTROL_ENABLED !== 'true') {
+    printError('control API commands require CARACAL_CONTROL_ENABLED=true')
+    process.exit(1)
+  }
   const [verb, sub, ...rest] = argv
   const ctx = buildAdminClient(cfg)
   const { client } = ctx
