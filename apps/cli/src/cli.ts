@@ -16,6 +16,7 @@ import { policyCommand, policySetCommand } from './commands/policy.ts'
 import { sessionCommand } from './commands/session.ts'
 import { auditCommand, explainCommand } from './commands/audit.ts'
 import { agentCommand, delegationCommand } from './commands/agent.ts'
+import { controlCommand } from './commands/control.ts'
 import { completionCommand } from './commands/completion.ts'
 import { checkMcpGovernance } from './mcp.ts'
 import { printError } from './style.ts'
@@ -50,6 +51,7 @@ const executors: Record<string, Executor> = {
   explain: (argv, cfg) => explainCommand([...argv], cfg),
   agent: (argv, cfg) => agentCommand([...argv], cfg),
   delegation: (argv, cfg) => delegationCommand([...argv], cfg),
+  control: (argv, cfg) => controlCommand([...argv], cfg),
   completion: (argv) => completionCommand([...argv]),
 }
 
