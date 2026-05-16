@@ -6,10 +6,10 @@
 | Tool                | Version |
 | ------------------- | ------- |
 | Node.js             | 24+     |
-| pnpm                | 10+     |
+| pnpm                | 11.1.1  |
 | Docker + Compose v2 | 24+     |
 | Go                  | 1.26+   |
-| Python              | 3.11+   |
+| Python              | 3.14+   |
 | Bun                 | latest  |
 
 - `<os>` ∈ `linux` · `darwin` · `windows`
@@ -161,7 +161,7 @@ scripts/release.sh --dry-run     # preview without tagging
 Pushing the tag triggers `.github/workflows/release.yml`, which produces:
 
 - 10 archives (5 CLI + 5 TUI), `SHA256SUMS`, SLSA provenance
-- 5 multi-arch GHCR images with provenance + SBOM, tagged `v<calver>` and `vYYYY.MM`
+- 6 multi-arch GHCR images with provenance + SBOM, tagged `v<calver>` and `vYYYY.MM`
 - A GitHub Release with archives, `SHA256SUMS`, `install.sh`, `install.ps1`
 
 ### Post-release validation

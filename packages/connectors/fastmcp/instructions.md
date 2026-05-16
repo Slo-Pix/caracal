@@ -1,7 +1,7 @@
 # connectors/fastmcp
 
 ## Scope
-- Covers the per-language FastMCP adaptors for Caracal MCP authentication.
+- Covers the per-language FastMCP adapters for Caracal MCP authentication.
 
 ## Required
 - Each language subdirectory must adapt the `transport-mcp` core onto the FastMCP middleware shape.

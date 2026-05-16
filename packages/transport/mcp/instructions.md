@@ -7,4 +7,4 @@
 - Each language subdirectory must own one transport-neutral MCP authentication package.
 
 ## Forbidden
-- Must not host any framework-specific transport adaptor or storage backend.
+- Must not host any framework-specific transport adapter or storage backend.

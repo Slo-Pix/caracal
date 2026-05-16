@@ -1,7 +1,7 @@
 # connectors/express
 
 ## Scope
-- Covers the per-language Express adaptors for Caracal MCP authentication.
+- Covers the per-language Express adapters for Caracal MCP authentication.
 
 ## Required
 - Each language subdirectory must adapt the `transport-mcp` core onto Express middleware.

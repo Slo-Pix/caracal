@@ -17,4 +17,4 @@
 - Must not duplicate logic already owned by a sibling package.
 - Must not import across the `caracal/` and `caracalEnterprise/` product boundary.
 - Must not introduce a top-level `shared/` or `ts-shared/` directory; the foundation lives under `core/`.
-- Must not reintroduce the legacy `framework-adaptor/`, `runtime-adaptor/`, or `state-backend/` directories; all adapters live under `connectors/`.
+- Must not reintroduce legacy framework, runtime, or state backend directories; all adapters live under `connectors/`.
