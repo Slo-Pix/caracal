@@ -67,7 +67,7 @@ async def enter(
     stack: AsyncExitStack,
     role: str,
     *,
-    session_sid: str,
+    run_id: str,
     region: str | None = None,
     scope: str | None = None,
     kind: AgentKind = AgentKind.INSTANCE,
@@ -83,7 +83,7 @@ async def enter(
     inheriting the parent's authority verbatim."""
     if _caracal is None:
         return None
-    meta: dict[str, Any] = {"role": role, "run_id": session_sid}
+    meta: dict[str, Any] = {"role": role, "run_id": run_id}
     if region:
         meta["region"] = region
     if scope:

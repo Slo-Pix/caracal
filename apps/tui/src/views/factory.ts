@@ -774,18 +774,18 @@ export function agentsView(ctx: Ctx): View {
       { header: 'status', width: 10, value: (r) => r.status },
       { header: 'depth', width: 6, value: (r) => String(r.depth) },
       { header: 'spawned_at', width: 24, value: (r) => r.spawned_at },
-      { header: 'id', value: (r) => r.id },
+      { header: 'id', value: (r) => r.agent_session_id },
     ],
     load: () => ctx.client.agents.list(ctx.zoneId),
-    onEnter: (app, row) => open(app, detail(`agent / ${row.id}`, () => ctx.client.agents.get(ctx.zoneId, row.id))),
+    onEnter: (app, row) => open(app, detail(`agent / ${row.agent_session_id}`, () => ctx.client.agents.get(ctx.zoneId, row.agent_session_id))),
     actions: [
       {
         key: 's', label: 'suspend', build: (row) => {
           if (!row) throw new Error('no row selected')
           return new ConfirmView({
-            message: `suspend agent ${row.id}?`,
+            message: `suspend agent ${row.agent_session_id}?`,
             onConfirm: async (app) => {
-              await ctx.client.agents.suspend(ctx.zoneId, row.id)
+              await ctx.client.agents.suspend(ctx.zoneId, row.agent_session_id)
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -795,9 +795,9 @@ export function agentsView(ctx: Ctx): View {
         key: 'r', label: 'resume', build: (row) => {
           if (!row) throw new Error('no row selected')
           return new ConfirmView({
-            message: `resume agent ${row.id}?`,
+            message: `resume agent ${row.agent_session_id}?`,
             onConfirm: async (app) => {
-              await ctx.client.agents.resume(ctx.zoneId, row.id)
+              await ctx.client.agents.resume(ctx.zoneId, row.agent_session_id)
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -807,9 +807,9 @@ export function agentsView(ctx: Ctx): View {
         key: 't', label: 'terminate', build: (row) => {
           if (!row) throw new Error('no row selected')
           return new ConfirmView({
-            message: `terminate agent ${row.id}?`,
+            message: `terminate agent ${row.agent_session_id}?`,
             onConfirm: async (app) => {
-              await ctx.client.agents.terminate(ctx.zoneId, row.id)
+              await ctx.client.agents.terminate(ctx.zoneId, row.agent_session_id)
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -818,7 +818,7 @@ export function agentsView(ctx: Ctx): View {
       {
         key: 'T', label: 'tree', build: (row) => {
           if (!row) throw new Error('no row selected')
-          return detail(`agent-tree / ${row.id}`, () => ctx.client.agents.children(ctx.zoneId, row.id))
+          return detail(`agent-tree / ${row.agent_session_id}`, () => ctx.client.agents.children(ctx.zoneId, row.agent_session_id))
         },
       },
     ],

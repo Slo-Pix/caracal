@@ -454,7 +454,7 @@ async def _run_regional_orchestrator(run_id, runner, parent, memory_store, plans
     async with AsyncExitStack() as caracal_stack:
         await caracal_module.enter(
             caracal_stack, "regional-orchestrator",
-            session_sid=run_id, region=region, scope=f"region:{region}",
+            run_id=run_id, region=region, scope=f"region:{region}",
             ttl_seconds=900,
         )
 
@@ -737,7 +737,7 @@ async def _run_workflow_orchestrator(run_id, runner, parent, memory_store, plans
     async with AsyncExitStack() as caracal_stack:
         await caracal_module.enter(
             caracal_stack, "workflow-orchestrator",
-            session_sid=run_id, scope=f"workflow:{workflow_id}",
+            run_id=run_id, scope=f"workflow:{workflow_id}",
             ttl_seconds=900, extra={"workflow": workflow_id},
         )
 
@@ -881,7 +881,7 @@ async def run_swarm(run_id: str, prompt: str) -> None:
     async with AsyncExitStack() as caracal_stack:
         await caracal_module.enter(
             caracal_stack, "finance-control",
-            session_sid=run_id, scope="global",
+            run_id=run_id, scope="global",
         )
 
         runner = create_runner(run_id)
