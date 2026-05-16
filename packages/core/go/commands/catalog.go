@@ -46,7 +46,7 @@ var CLI = []Descriptor{
 	{Name: "agent", Group: GroupMultiagent, Summary: "Manage agent sessions", Subcommands: []string{"list", "get", "tree", "children", "suspend", "resume", "terminate"}, RequiresZone: true},
 	{Name: "delegation", Group: GroupMultiagent, Summary: "Manage delegation edges", Subcommands: []string{"inbound", "outbound", "traverse", "revoke"}, RequiresZone: true},
 
-	{Name: "control", Group: GroupAdmin, Summary: "Manage control API credentials", Subcommands: []string{"key", "rotate", "revoke"}, RequiresZone: true},
+	{Name: "control", Group: GroupAdmin, Summary: "Manage control API credentials", Subcommands: []string{"key", "rotate", "revoke"}, RequiresZone: true, Hidden: true},
 
 	{Name: "completion", Group: GroupShell, Summary: "Generate shell completions", Subcommands: []string{"bash", "zsh", "fish", "powershell"}, Hidden: true},
 }

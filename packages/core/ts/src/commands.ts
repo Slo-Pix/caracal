@@ -207,7 +207,7 @@ export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
 
   {
     name: 'control', group: 'admin', summary: 'Manage control API credentials',
-    subcommands: ['key', 'rotate', 'revoke'], requiresZone: true,
+    subcommands: ['key', 'rotate', 'revoke'], requiresZone: true, hidden: true,
     flags: {
       key: [{ name: '--name', summary: 'Credential display name' }],
       rotate: [{ name: '--client-secret', summary: 'New client secret' }],

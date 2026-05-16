@@ -81,6 +81,8 @@ describe('audit explain entry', () => {
   })
 
   it('opens control key get and loads the selected key', async () => {
+    const originalControlEnabled = process.env.CARACAL_CONTROL_ENABLED
+    process.env.CARACAL_CONTROL_ENABLED = 'true'
     const get = vi.fn(async () => ({
       id: 'app-1',
       name: 'control',
@@ -92,20 +94,25 @@ describe('audit explain entry', () => {
       zones: { get: vi.fn(async () => ({})) },
       applications: { get },
     } as unknown as AdminClient
-    const menu = new MenuView(client, 'z1')
-    const app = fakeApp()
-    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-    const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-    await control.onKey('g', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const form = pushed[pushed.length - 1] as FormView
-    ;(form as unknown as { values: Record<string, string> }).values = { id: 'app-1' }
-    ;(form as unknown as { focus: number }).focus = 1
-    await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const detail = pushed[pushed.length - 1] as DetailView
-    expect(detail).toBeInstanceOf(DetailView)
-    await detail.init(app)
-    expect(get).toHaveBeenCalledWith('z1', 'app-1')
+    try {
+      const menu = new MenuView(client, 'z1')
+      const app = fakeApp()
+      await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+      const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+      const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
+      await control.onKey('g', { app, size: { rows: 25, cols: 80 }, status: '' })
+      const form = pushed[pushed.length - 1] as FormView
+      ;(form as unknown as { values: Record<string, string> }).values = { id: 'app-1' }
+      ;(form as unknown as { focus: number }).focus = 1
+      await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
+      const detail = pushed[pushed.length - 1] as DetailView
+      expect(detail).toBeInstanceOf(DetailView)
+      await detail.init(app)
+      expect(get).toHaveBeenCalledWith('z1', 'app-1')
+    } finally {
+      if (originalControlEnabled === undefined) delete process.env.CARACAL_CONTROL_ENABLED
+      else process.env.CARACAL_CONTROL_ENABLED = originalControlEnabled
+    }
   })
 
 })
