@@ -6,6 +6,7 @@
 import type { Pool } from 'pg'
 import type { Redis } from 'ioredis'
 import { STREAM_SIG_FIELD, isRuntime, loadStreamsHmacKey, signStream } from '@caracalai/core'
+import { type JobHandle, type JobLogger, makeIntervalJob } from './job.js'
 import { cfg } from '../config.js'
 
 const streamHmacKey = loadStreamsHmacKey()
@@ -21,10 +22,6 @@ interface OutboxRow {
   attempts: number
 }
 
-export interface JobLogger {
-  error: (obj: object, msg?: string) => void
-}
-
 export interface OutboxPublisherOptions {
   intervalMs?: number
   batchSize?: number
@@ -32,45 +29,20 @@ export interface OutboxPublisherOptions {
   log?: JobLogger
 }
 
-export interface OutboxPublisherHandle {
-  stop: () => Promise<void>
-}
-
 export function startOutboxPublisher(
   db: Pool,
   redis: Redis,
   options: OutboxPublisherOptions = {},
-): OutboxPublisherHandle {
+): JobHandle {
   const intervalMs = options.intervalMs ?? cfg.outboxIntervalMs
   const batchSize = options.batchSize ?? cfg.outboxBatchSize
   const maxAttempts = options.maxAttempts ?? cfg.outboxMaxAttempts
   const log = options.log
-
-  let running = false
-  let stopped = false
-  let pending: Promise<void> = Promise.resolve()
-
-  const tick = (): void => {
-    if (stopped || running) return
-    running = true
-    pending = publishBatch(db, redis, batchSize, maxAttempts, log)
-      .catch((err) => {
-        log?.error({ err }, 'outbox_batch_publish_failed')
-      })
-      .finally(() => {
-        running = false
-      })
-  }
-
-  const timer = setInterval(tick, intervalMs)
-
-  return {
-    stop: async () => {
-      stopped = true
-      clearInterval(timer)
-      await pending
-    },
-  }
+  return makeIntervalJob(
+    () => publishBatch(db, redis, batchSize, maxAttempts, log),
+    intervalMs,
+    (err) => log?.error({ err }, 'outbox_batch_publish_failed'),
+  )
 }
 
 export async function publishBatch(

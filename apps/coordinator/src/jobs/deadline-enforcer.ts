@@ -7,7 +7,7 @@
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
 import { enqueueMany, Topics, type OutboxItem } from '../outbox.js'
-import type { JobLogger } from './outbox-publisher.js'
+import { type JobHandle, type JobLogger, makeIntervalJob } from './job.js'
 
 const SWEEP_LOCK = 'coordinator:invocation_deadline'
 
@@ -73,38 +73,14 @@ export async function runDeadlineSweep(db: Pool): Promise<number> {
   }
 }
 
-export interface DeadlineEnforcerHandle {
-  stop: () => Promise<void>
-}
-
 export function startDeadlineEnforcer(
   db: Pool,
   options: { intervalMs?: number; log?: JobLogger } = {},
-): DeadlineEnforcerHandle {
+): JobHandle {
   const intervalMs = options.intervalMs ?? cfg.deadlineSweepIntervalMs
-  const log = options.log
-  let running = false
-  let stopped = false
-  let pending: Promise<unknown> = Promise.resolve()
-
-  const tick = (): void => {
-    if (stopped || running) return
-    running = true
-    pending = runDeadlineSweep(db)
-      .catch((err) => {
-        log?.error({ err }, 'deadline_sweep_failed')
-      })
-      .finally(() => {
-        running = false
-      })
-  }
-
-  const timer = setInterval(tick, intervalMs)
-  return {
-    stop: async () => {
-      stopped = true
-      clearInterval(timer)
-      await pending
-    },
-  }
+  return makeIntervalJob(
+    () => runDeadlineSweep(db),
+    intervalMs,
+    (err) => options.log?.error({ err }, 'deadline_sweep_failed'),
+  )
 }

@@ -6,7 +6,7 @@
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
 import { spawnLockKey, terminateSubtree } from '../routes/agents.js'
-import type { JobLogger } from './outbox-publisher.js'
+import { type JobHandle, type JobLogger, makeIntervalJob } from './job.js'
 
 const SWEEP_LOCK = 'coordinator:ttl_sweep'
 
@@ -63,43 +63,22 @@ export async function runTTLSweep(db: Pool): Promise<number> {
   }
 }
 
-export interface TTLSweeperHandle {
-  stop: () => Promise<void>
-}
-
 export function startTTLSweeper(
   db: Pool,
   options: { intervalMs?: number; log?: JobLogger } = {},
-): TTLSweeperHandle {
+): JobHandle {
   const intervalMs = options.intervalMs ?? cfg.ttlSweepIntervalMs
-  const log = options.log
-  let running = false
-  let stopped = false
-  let pending: Promise<unknown> = Promise.resolve()
-
-  const tick = (): void => {
-    if (stopped || running) return
-    running = true
-    ttlSweeperStats.runs += 1
-    pending = runTTLSweep(db)
-      .then((terminated) => {
+  return makeIntervalJob(
+    () => {
+      ttlSweeperStats.runs += 1
+      return runTTLSweep(db).then((terminated) => {
         ttlSweeperStats.terminated += terminated
       })
-      .catch((err) => {
-        ttlSweeperStats.failures += 1
-        log?.error({ err }, 'ttl_sweep_failed')
-      })
-      .finally(() => {
-        running = false
-      })
-  }
-
-  const timer = setInterval(tick, intervalMs)
-  return {
-    stop: async () => {
-      stopped = true
-      clearInterval(timer)
-      await pending
     },
-  }
+    intervalMs,
+    (err) => {
+      ttlSweeperStats.failures += 1
+      options.log?.error({ err }, 'ttl_sweep_failed')
+    },
+  )
 }

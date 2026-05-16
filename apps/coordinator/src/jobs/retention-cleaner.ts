@@ -5,7 +5,7 @@
 
 import type { Pool } from 'pg'
 import { cfg } from '../config.js'
-import type { JobLogger } from './outbox-publisher.js'
+import { type JobHandle, type JobLogger, makeIntervalJob } from './job.js'
 
 const CLEANUP_LOCK = 'coordinator:retention_cleanup'
 
@@ -93,45 +93,24 @@ export async function runRetentionCleanup(db: Pool): Promise<RetentionCleanupRes
   }
 }
 
-export interface RetentionCleanerHandle {
-  stop: () => Promise<void>
-}
-
 export function startRetentionCleaner(
   db: Pool,
   options: { intervalMs?: number; log?: JobLogger } = {},
-): RetentionCleanerHandle {
+): JobHandle {
   const intervalMs = options.intervalMs ?? cfg.retentionCleanupIntervalMs
-  const log = options.log
-  let running = false
-  let stopped = false
-  let pending: Promise<unknown> = Promise.resolve()
-
-  const tick = (): void => {
-    if (stopped || running) return
-    running = true
-    retentionCleanerStats.runs += 1
-    pending = runRetentionCleanup(db)
-      .then((result) => {
+  return makeIntervalJob(
+    () => {
+      retentionCleanerStats.runs += 1
+      return runRetentionCleanup(db).then((result) => {
         retentionCleanerStats.expired_edges += result.expiredEdges
         retentionCleanerStats.deleted_edges += result.deletedEdges
         retentionCleanerStats.deleted_outbox += result.deletedOutbox
       })
-      .catch((err) => {
-        retentionCleanerStats.failures += 1
-        log?.error({ err }, 'retention_cleanup_failed')
-      })
-      .finally(() => {
-        running = false
-      })
-  }
-
-  const timer = setInterval(tick, intervalMs)
-  return {
-    stop: async () => {
-      stopped = true
-      clearInterval(timer)
-      await pending
     },
-  }
+    intervalMs,
+    (err) => {
+      retentionCleanerStats.failures += 1
+      options.log?.error({ err }, 'retention_cleanup_failed')
+    },
+  )
 }
