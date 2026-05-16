@@ -41,3 +41,16 @@ func TestLoadConfigAllowsUnsignedDevAudit(t *testing.T) {
 		t.Fatal("dev config must allow unsigned audit mode")
 	}
 }
+
+func TestLoadConfigRejectsNonStandardPort(t *testing.T) {
+	t.Setenv("PORT", "8080")
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("REDIS_URL", "redis://example")
+	t.Setenv("CARACAL_MODE", "dev")
+	t.Setenv("AUDIT_HMAC_KEY", "")
+
+	_, err := loadConfig()
+	if err == nil || !strings.Contains(err.Error(), "9090") {
+		t.Fatalf("nonstandard audit port must fail, got %v", err)
+	}
+}

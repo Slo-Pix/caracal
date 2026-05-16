@@ -264,6 +264,28 @@ func (s *stubDB) UpdateApplicationSecretHash(_ context.Context, _, _, _ string) 
 	return nil
 }
 
+func TestValidateTokenSessionBindsClientID(t *testing.T) {
+	subjectID := "user-1"
+	srv := &Server{db: &stubDB{session: &Session{
+		ID:        "sess-1",
+		ZoneID:    "zone1",
+		Status:    "active",
+		SubjectID: &subjectID,
+		ExpiresAt: time.Now().Add(time.Minute),
+	}}}
+	claims := map[string]any{
+		"sid":       "sess-1",
+		"sub":       subjectID,
+		"client_id": "app1",
+	}
+	if sid, err := srv.validateTokenSession(context.Background(), "zone1", "app1", "", claims); err != nil || sid != "sess-1" {
+		t.Fatalf("matching client_id must pass, sid=%q err=%#v", sid, err)
+	}
+	if _, err := srv.validateTokenSession(context.Background(), "zone1", "app2", "", claims); err == nil || err.Description != "session client mismatch" {
+		t.Fatalf("wrong client_id must fail, got %#v", err)
+	}
+}
+
 // TestExchangePartialDeny verifies that partial OPA evaluation status causes HTTP 403.
 // This is the hard invariant: a partial result must never produce a token.
 func TestExchangePartialDeny(t *testing.T) {
