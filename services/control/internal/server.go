@@ -23,6 +23,7 @@ type Server struct {
 	disp   *Dispatcher
 	audit  EventSink
 	rate   *RateLimiter
+	replay *ReplayCache
 	stopCh chan struct{}
 }
 
@@ -47,6 +48,7 @@ func New(ctx context.Context, log zerolog.Logger) (*Server, error) {
 		disp:   NewDispatcher(),
 		audit:  sink,
 		rate:   NewRateLimiter(60, time.Minute),
+		replay: NewReplayCache(time.Hour),
 		stopCh: make(chan struct{}),
 	}
 	srv.routes()
@@ -56,7 +58,7 @@ func New(ctx context.Context, log zerolog.Logger) (*Server, error) {
 func (s *Server) routes() {
 	s.mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	s.mux.HandleFunc("/ready", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	s.mux.Handle("/v1/control/invoke", InvokeHandler(s.auth, s.disp, s.audit, s.rate, s.log))
+	s.mux.Handle("/v1/control/invoke", InvokeHandler(s.auth, s.disp, s.audit, s.rate, s.replay, s.log))
 }
 
 func (s *Server) Run(ctx context.Context) error {

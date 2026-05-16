@@ -1,12 +1,14 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// /v1/control/invoke handler: parses JSON, authenticates the bearer, rate-limits, dispatches, and audits.
+// /v1/control/invoke handler: parses JSON, authenticates the bearer, blocks JTI replay, rate-limits, dispatches, and audits every outcome.
 
 package internal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -17,8 +19,11 @@ import (
 
 const maxBodyBytes = 64 * 1024
 
-func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *RateLimiter, log zerolog.Logger) http.Handler {
+func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *RateLimiter, replay *ReplayCache, log zerolog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqID := newRequestID()
+		w.Header().Set("X-Request-Id", reqID)
+
 		if r.Method != http.MethodPost {
 			writeJSON(w, http.StatusMethodNotAllowed, Response{Error: "method not allowed"})
 			return
@@ -28,16 +33,28 @@ func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *
 
 		claims, err := auth.Verify(ctx, r.Header.Get("Authorization"))
 		if err != nil {
+			sink.Emit(AuditEvent{At: time.Now().UTC(), Subject: "anonymous", Decision: "deny", Reason: "auth: " + err.Error(), RequestID: reqID})
 			writeJSON(w, http.StatusUnauthorized, Response{Error: "unauthorized"})
 			return
 		}
+		exp := time.Time{}
+		if claims.ExpiresAt != nil {
+			exp = claims.ExpiresAt.Time
+		}
+		if !replay.Mark(claims.ID, exp) {
+			sink.Emit(AuditEvent{At: time.Now().UTC(), Subject: claims.Subject, JTI: claims.ID, Decision: "deny", Reason: "replay", RequestID: reqID})
+			writeJSON(w, http.StatusUnauthorized, Response{Error: "token replay"})
+			return
+		}
 		if !rate.Allow(claims.Subject) {
+			sink.Emit(AuditEvent{At: time.Now().UTC(), Subject: claims.Subject, JTI: claims.ID, Decision: "deny", Reason: "rate limited", RequestID: reqID})
 			writeJSON(w, http.StatusTooManyRequests, Response{Error: "rate limited"})
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		var req Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			sink.Emit(AuditEvent{At: time.Now().UTC(), Subject: claims.Subject, JTI: claims.ID, Decision: "deny", Reason: "invalid json", RequestID: reqID})
 			writeJSON(w, http.StatusBadRequest, Response{Error: "invalid json"})
 			return
 		}
@@ -49,8 +66,7 @@ func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *
 			Command:   req.Command,
 			Sub:       req.Subcommand,
 			Decision:  "allow",
-			Reason:    "",
-			RequestID: r.Header.Get("X-Request-Id"),
+			RequestID: reqID,
 		}
 		if err != nil {
 			event.Decision = "deny"
@@ -76,4 +92,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+func newRequestID() string {
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }
