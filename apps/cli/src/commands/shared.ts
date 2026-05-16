@@ -11,6 +11,7 @@ import {
 } from '@caracalai/engine'
 import type { CliConfig } from '../config.ts'
 import { style, printError } from '../style.ts'
+import { isReplExit } from '../repl.ts'
 
 export type { AdminContext } from '@caracalai/engine'
 
@@ -18,6 +19,7 @@ export function buildAdminClient(cfg?: CliConfig): AdminContext {
   try {
     return buildAdminClientCore(cfg)
   } catch (err) {
+    if (isReplExit(err)) throw err
     printError(err instanceof Error ? err.message : String(err))
     process.exit(1)
   }
@@ -27,6 +29,7 @@ export function readContent(value: string | undefined): string {
   try {
     return readContentCore(value)
   } catch (err) {
+    if (isReplExit(err)) throw err
     printError(err instanceof Error ? err.message : String(err))
     process.exit(1)
   }
@@ -113,6 +116,7 @@ export function unknownVerb(group: string, verb: string | undefined, help: () =>
 }
 
 export function fail(err: unknown): never {
+  if (isReplExit(err)) throw err
   if (err instanceof AdminApiError) {
     printError(`${err.code} (HTTP ${err.status})`)
     if (err.body && typeof err.body === 'object') {

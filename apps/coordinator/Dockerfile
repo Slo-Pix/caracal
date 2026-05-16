@@ -22,6 +22,7 @@ COPY packages/sdk/go/ packages/sdk/go/
 COPY services/sts/ services/sts/
 COPY services/audit/ services/audit/
 COPY services/gateway/ services/gateway/
+COPY services/control/ services/control/
 COPY apps/coordinator/relay/ apps/coordinator/relay/
 COPY tests/go/ tests/go/
 WORKDIR /build/apps/coordinator/relay
