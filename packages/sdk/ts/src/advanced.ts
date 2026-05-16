@@ -5,7 +5,7 @@
  * Advanced surface: low-level primitives, codec, ambient context plumbing,
  * and the raw coordinator client. Most integrators only need the default
  * "@caracalai/sdk" entrypoint; reach for these when building a transport
- * adapter or a framework shim.
+ * adapter or framework integration.
  */
 
 export * from "./envelope.js";

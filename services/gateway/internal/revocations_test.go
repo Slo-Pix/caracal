@@ -96,7 +96,7 @@ func TestProcessRevocationMessageDeadLettersPoisonMessage(t *testing.T) {
 	}
 }
 
-func TestJWTSIDPrefersSidClaim(t *testing.T) {
+func TestJWTSIDReadsSidClaim(t *testing.T) {
 	payload := `{"sid":"sess-123","agent_session_id":"agent-xyz"}`
 	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
 	if got := jwtSID(tok); got != "sess-123" {
@@ -104,11 +104,11 @@ func TestJWTSIDPrefersSidClaim(t *testing.T) {
 	}
 }
 
-func TestJWTSIDFallsBackToAgentSession(t *testing.T) {
+func TestJWTSIDRequiresSidClaim(t *testing.T) {
 	payload := `{"agent_session_id":"agent-xyz"}`
 	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
-	if got := jwtSID(tok); got != "agent-xyz" {
-		t.Fatalf("want agent-xyz, got %q", got)
+	if got := jwtSID(tok); got != "" {
+		t.Fatalf("want empty sid, got %q", got)
 	}
 }
 

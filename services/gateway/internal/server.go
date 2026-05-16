@@ -200,8 +200,8 @@ func requestIDMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// requestIDFromContext returns the request ID stored by requestIDMiddleware, or a fresh UUID
-// as a defensive fallback when middleware did not run (e.g. direct handler tests).
+// requestIDFromContext returns the request ID stored by requestIDMiddleware, or
+// creates a fresh UUID when direct handler tests invoke handlers without middleware.
 func requestIDFromContext(ctx context.Context) string {
 	if v, ok := ctx.Value(requestIDKey{}).(string); ok && v != "" {
 		return v

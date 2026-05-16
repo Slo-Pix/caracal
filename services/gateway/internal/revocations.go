@@ -233,14 +233,10 @@ func jwtSID(token string) string {
 		return ""
 	}
 	var claims struct {
-		Sid            string `json:"sid"`
-		AgentSessionID string `json:"agent_session_id"`
+		Sid string `json:"sid"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return ""
 	}
-	if claims.Sid != "" {
-		return claims.Sid
-	}
-	return claims.AgentSessionID
+	return claims.Sid
 }
