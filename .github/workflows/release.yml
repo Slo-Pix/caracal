@@ -328,6 +328,10 @@ jobs:
             context: .
             dockerfile: apps/coordinator/Dockerfile
             build_args: ""
+          - name: postgres
+            context: infra/postgres
+            dockerfile: infra/postgres/Dockerfile
+            build_args: ""
           - name: redis
             context: infra/redis
             dockerfile: infra/redis/Dockerfile
@@ -355,7 +359,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/caracal-${{ matrix.name }}
           tags: |
             type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'push' }}
-            type=match,pattern=v(\d+\.\d+)\.\d+(\.\d+)?,group=1,prefix=v
             type=raw,value=dispatch-${{ github.run_id }},enable=${{ github.event_name != 'push' }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6

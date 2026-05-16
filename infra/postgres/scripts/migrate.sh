@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Idempotent migration applier for /migrations/*.up.sql; honors the same
-# schema_migrations table the API uses, so re-runs and concurrent API boots are safe.
+# Idempotent migration applier for /migrations/*.up.sql; records applied
+# versions in schema_migrations and serializes concurrent runners.
 
 set -eu
 
@@ -26,7 +26,15 @@ migrations_dir="${MIGRATIONS_DIR:-/migrations}"
 lock_key="${MIGRATION_ADVISORY_LOCK_KEY:-4732518903281471}"
 
 case "${lock_key}" in
-    *[!0-9-]*|'')
+    -*)
+        lock_digits="${lock_key#-}"
+        ;;
+    *)
+        lock_digits="${lock_key}"
+        ;;
+esac
+case "${lock_digits}" in
+    ''|*[!0-9]*)
         echo "migrate: MIGRATION_ADVISORY_LOCK_KEY must be a signed integer" >&2
         exit 1
         ;;
