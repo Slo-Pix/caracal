@@ -1,14 +1,22 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// In-memory JTI replay cache for the control invoke endpoint: rejects a token id that has already been seen within its lifetime.
+// JTI replay cache: rejects a token id seen within its lifetime. In-memory implementation for single-replica deployments; Redis-backed implementation for multi-replica deployments.
 
 package internal
 
 import (
+	"context"
 	"sync"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
+
+// Replay is the contract every control replica shares to block repeated JTIs within a token's lifetime.
+type Replay interface {
+	Mark(jti string, exp time.Time) bool
+}
 
 type ReplayCache struct {
 	mu      sync.Mutex
@@ -50,4 +58,39 @@ func (c *ReplayCache) evict(now time.Time) {
 			delete(c.seen, k)
 		}
 	}
+}
+
+// RedisReplay shares JTI state across replicas via Redis SET NX EX.
+type RedisReplay struct {
+	client    *redis.Client
+	keyPrefix string
+	maxTTL    time.Duration
+}
+
+func NewRedisReplay(client *redis.Client, maxTTL time.Duration) *RedisReplay {
+	return &RedisReplay{client: client, keyPrefix: "caracal:control:jti:", maxTTL: maxTTL}
+}
+
+func (r *RedisReplay) Mark(jti string, exp time.Time) bool {
+	if jti == "" {
+		return true
+	}
+	now := time.Now()
+	ttl := r.maxTTL
+	if !exp.IsZero() {
+		if d := exp.Sub(now); d > 0 && d < ttl {
+			ttl = d
+		}
+	}
+	if ttl <= 0 {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	ok, err := r.client.SetNX(ctx, r.keyPrefix+jti, "1", ttl).Result()
+	if err != nil {
+		// Fail closed: if Redis is unreachable we cannot prove non-replay.
+		return false
+	}
+	return ok
 }

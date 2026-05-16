@@ -19,7 +19,7 @@ import (
 
 const maxBodyBytes = 64 * 1024
 
-func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *RateLimiter, replay *ReplayCache, log zerolog.Logger) http.Handler {
+func InvokeHandler(auth *Authenticator, disp *Dispatcher, sink EventSink, rate *RateLimiter, replay Replay, log zerolog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reqID := newRequestID()
 		w.Header().Set("X-Request-Id", reqID)
