@@ -55,6 +55,9 @@ htmlcov/
 *.out
 coverage.out
 
+# Generated infra binaries
+infra/healthcheck/healthcheck
+
 # Terraform / OpenTofu
 .terraform/
 *.tfstate
