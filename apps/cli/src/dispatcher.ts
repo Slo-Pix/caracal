@@ -12,12 +12,12 @@ import type { CommandRegistry } from './registry.ts'
 import type { CliConfig } from './config.ts'
 
 const GROUP_TITLES: Record<CommandGroup, string> = {
-  shell: 'Shell:',
-  stack: 'Stack:',
-  runtime: 'Runtime:',
-  admin: 'Admin:',
-  observability: 'Observability:',
-  multiagent: 'Multi-agent (requires CARACAL_COORDINATOR_TOKEN):',
+  shell: 'Shell',
+  stack: 'Stack',
+  runtime: 'Runtime',
+  admin: 'Admin',
+  observability: 'Observability',
+  multiagent: 'Multi-agent',
 }
 
 export interface DispatchOptions {
@@ -29,19 +29,26 @@ export interface DispatchOptions {
   readonly loadConfig?: boolean
 }
 
+export class LoadConfigError extends Error {
+  readonly userMessage: string
+  constructor(userMessage: string) {
+    super(userMessage)
+    this.name = 'LoadConfigError'
+    this.userMessage = userMessage
+  }
+}
+
 function loadConfig(required: boolean): CliConfig | undefined {
   const path = resolveCliConfigPath()
   if (!path) {
     if (!required) return undefined
-    printError('caracal.toml not found; create a zone (`caracal-cli zone create --name <n>`), an application (`caracal-cli app create --name <n>`), then author caracal.toml with the returned ids and client secret.')
-    process.exit(1)
+    throw new LoadConfigError('caracal.toml not found; create a zone (`caracal-cli zone create --name <n>`), an application (`caracal-cli app create --name <n>`), then author caracal.toml with the returned ids and client secret.')
   }
   try {
     return parse(readFileSync(path, 'utf8')) as unknown as CliConfig
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err)
-    printError(`failed to parse ${path}: ${reason}`)
-    process.exit(1)
+    throw new LoadConfigError(`failed to parse ${path}: ${reason}`)
   }
 }
 
@@ -51,8 +58,12 @@ export function loadCliConfig(required: boolean): CliConfig | undefined {
 
 export function printUsage(opts: DispatchOptions, out: NodeJS.WriteStream = process.stderr): void {
   const H = (s: string) => style.header(s)
-  const L = (s: string) => style.label(s)
-  const lines: string[] = [`${style.title('Usage:')} ${opts.binary} <command> [options]`, '']
+  const lines: string[] = [
+    `${style.title('Usage:')} ${opts.binary} <command> [options]`,
+    '',
+    `Caracal ${opts.mode === 'dev' ? 'development' : 'runtime'} command surface.`,
+    '',
+  ]
   const groups = new Map<CommandGroup, typeof opts.registry.ordered>()
   for (const b of opts.registry.ordered) {
     if (b.descriptor.hidden) continue
@@ -64,20 +75,24 @@ export function printUsage(opts: DispatchOptions, out: NodeJS.WriteStream = proc
     const items = groups.get(group)
     if (!items || items.length === 0) continue
     lines.push(H(GROUP_TITLES[group]))
-    for (const b of items) lines.push(`  ${b.descriptor.name.padEnd(24)} ${b.descriptor.summary}`)
+    if (group === 'multiagent') lines.push('  Requires CARACAL_COORDINATOR_TOKEN.')
+    for (const b of items) {
+      lines.push(`  ${b.descriptor.name.padEnd(14)} ${b.descriptor.summary}`)
+      if (b.descriptor.subcommands?.length) {
+        lines.push(`    ${style.label('subcommands:')} ${b.descriptor.subcommands.join(', ')}`)
+      }
+    }
     lines.push('')
   }
   if (opts.extras && opts.extras.length > 0) {
+    lines.push(H('Command options'))
     for (const line of opts.extras) lines.push(line)
     lines.push('')
   }
   lines.push(
-    H('Common flags:'),
-    '  --help, -h               Show this help',
-    '  --version, -v            Show version',
-    '',
-    H('Environment:'),
-    `  ${L('NO_COLOR / FORCE_COLOR')}   Disable / force terminal colors`,
+    H('Global options'),
+    '  -h, --help      Show help',
+    '  -v, --version   Show version',
     '',
   )
   out.write(lines.join('\n'))
@@ -94,7 +109,16 @@ export async function dispatch(opts: DispatchOptions, rawArgs: readonly string[]
   }
   if (command === '--version' || command === '-v' || command === 'version') {
     const tag = opts.mode === 'dev' ? `dev (sha ${process.env.CARACAL_DEV_SHA ?? 'unknown'})` : 'runtime'
-    process.stdout.write(`${opts.binary} ${opts.version} [${tag}]\n`)
+    if (rest.includes('--json')) {
+      process.stdout.write(JSON.stringify({
+        binary: opts.binary,
+        version: opts.version,
+        mode: opts.mode,
+        sha: process.env.CARACAL_DEV_SHA ?? null,
+      }) + '\n')
+    } else {
+      process.stdout.write(`${opts.binary} ${opts.version} [${tag}]\n`)
+    }
     process.exit(0)
   }
   if (!COMMAND_NAME_PATTERN.test(command) || !opts.registry.byName.has(command)) {
@@ -104,6 +128,17 @@ export async function dispatch(opts: DispatchOptions, rawArgs: readonly string[]
   }
 
   const binding = opts.registry.byName.get(command)!
-  const cfg = opts.loadConfig ? loadConfig(binding.descriptor.requiresConfig ?? false) : undefined
+  let cfg: CliConfig | undefined
+  if (opts.loadConfig) {
+    try {
+      cfg = loadConfig(binding.descriptor.requiresConfig ?? false)
+    } catch (err) {
+      if (err instanceof LoadConfigError) {
+        printError(err.userMessage)
+        process.exit(1)
+      }
+      throw err
+    }
+  }
   await binding.run(rest, cfg)
 }

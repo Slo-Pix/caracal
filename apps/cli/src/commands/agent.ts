@@ -6,6 +6,7 @@
 import { ensureCoordinatorToken } from '@caracalai/engine'
 import type { CliConfig } from '../config.ts'
 import { printError, printSuccess } from '../style.ts'
+import { isReplExit } from '../repl.ts'
 import {
   buildAdminClient,
   fail,
@@ -23,6 +24,7 @@ function checkCoordinator(): void {
   try {
     ensureCoordinatorToken()
   } catch (err) {
+    if (isReplExit(err)) throw err
     printError(err instanceof Error ? err.message : String(err))
     process.exit(1)
   }
@@ -154,6 +156,7 @@ function agentHelp(): never {
       '  list                    List agent sessions in a zone',
       '  get <id>                Fetch an agent session by ID as JSON',
       '  tree <id>               List direct child sessions of an agent',
+      '  children <id>           Alias for tree',
       '  suspend <id>            Pause an active agent session',
       '  resume <id>             Resume a suspended agent session',
       '  terminate <id>          Permanently end an agent session',
