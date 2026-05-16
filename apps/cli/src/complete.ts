@@ -7,7 +7,7 @@ import type { CommandRegistry } from './registry.ts'
 import type { CommandDescriptor } from '@caracalai/core/commands'
 import type { CliConfig } from './config.ts'
 
-export type SuggestKind = 'command' | 'subcommand' | 'builtin' | 'flag'
+type SuggestKind = 'command' | 'subcommand' | 'builtin' | 'flag'
 
 export interface Suggestion {
   readonly value: string

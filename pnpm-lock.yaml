@@ -11,6 +11,9 @@ importers:
 
   .:
     devDependencies:
+      '@caracalai/admin':
+        specifier: workspace:*
+        version: link:packages/admin/ts
       '@changesets/cli':
         specifier: ^2.27.10
         version: 2.31.0(@types/node@24.12.4)
@@ -96,9 +99,6 @@ importers:
       '@caracalai/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      '@caracalai/oauth':
-        specifier: workspace:*
-        version: link:../../packages/oauth/ts
       smol-toml:
         specifier: ^1.3.1
         version: 1.6.1
