@@ -10,6 +10,7 @@ use (
 	./packages/sdk/go
 	./packages/transport/mcp/go
 	./services/audit
+	./services/control
 	./services/gateway
 	./services/sts
 	./tests/go

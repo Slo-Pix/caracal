@@ -10,6 +10,7 @@
 - Must support the admin commands wrapping the `/v1/*` API via `@caracalai/admin`: `zone`, `app`, `resource`, `provider`, `policy`, `policy-set`, `grant`, `session`.
 - Must support the observability commands: `audit tail` (with `--since`, `--until`, `--decision`, `--request-id`, `--event-type`, `--limit`) and `explain <request_id>` (audit row plus determining policies plus diagnostics).
 - Must support the multi-agent commands wrapping the agent coordinator API: `agent <list|get|tree|suspend|resume|terminate>` and `delegation <inbound|outbound|traverse|revoke>`.
+- Must support the agent control commands: `control token` mints an STS token with `scope=control:invoke` for external agents and workflows; `control revoke --jti <id>` revokes a previously issued control token.
 - Must require `CARACAL_ADMIN_TOKEN` for all admin and observability commands; must require `CARACAL_COORDINATOR_TOKEN` (JWT with `agent:lifecycle` scope) for agent and delegation commands; must surface a clear error when missing.
 - Must select stack mode from the baked `CARACAL_MODE` constant in `src/runtime/version.gen.ts` (set to `dev` by `scripts/stampDev.mjs` for repo-workspace runs and `runtime` by `scripts/stampRelease.mjs` for release binaries); the only override is an explicit `CARACAL_MODE` env var.
 - Must print a mode banner on `up` and `status`: `mode: dev (sha <shortSha>)` or `mode: runtime (v<calver>)`.
