@@ -118,6 +118,9 @@ func (c Config) validate() error {
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("PORT must be a valid TCP port (1-65535)")
 	}
+	if c.Port != defaultPort {
+		return fmt.Errorf("PORT must be %s for gateway", defaultPort)
+	}
 	if c.MaxRequestBytes <= 0 {
 		return fmt.Errorf("MAX_REQUEST_BYTES must be positive")
 	}

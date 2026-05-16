@@ -12,6 +12,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/garudex-labs/caracal/core/config"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
@@ -45,12 +46,16 @@ func New(ctx context.Context, log zerolog.Logger) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	disp := NewDispatcher()
+	if config.Mode() == "runtime" && !disp.HasUpstreams() {
+		return nil, errors.New("control upstreams not configured")
+	}
 	srv := &Server{
 		addr:   addr,
 		mux:    http.NewServeMux(),
 		log:    log,
 		auth:   auth,
-		disp:   NewDispatcher(),
+		disp:   disp,
 		audit:  sink,
 		rate:   NewRateLimiter(60, time.Minute),
 		replay: replay,
@@ -63,6 +68,9 @@ func New(ctx context.Context, log zerolog.Logger) (*Server, error) {
 func buildReplay(log zerolog.Logger) (Replay, error) {
 	url := os.Getenv("CONTROL_REDIS_URL")
 	if url == "" {
+		if config.Mode() == "runtime" {
+			return nil, errors.New("CONTROL_REDIS_URL is required when CARACAL_MODE=runtime")
+		}
 		log.Info().Msg("replay cache: in-memory (single replica)")
 		return NewReplayCache(time.Hour), nil
 	}
@@ -81,6 +89,10 @@ func (s *Server) routes() {
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if !s.disp.HasUpstreams() {
+		http.Error(w, "control upstreams unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if err := s.replay.Ping(ctx); err != nil {
