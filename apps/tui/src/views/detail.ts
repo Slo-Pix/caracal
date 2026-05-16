@@ -34,7 +34,7 @@ export class DetailView implements View {
   }
 
   hints(): string[] {
-    const base = ['↑/↓:scroll', 'r:reload', 'h:back']
+    const base = ['↑/↓:scroll', 'r:reload', 'esc:back']
     if (this.mask) base.push(this.revealed ? 'ctrl-r:mask' : 'ctrl-r:reveal')
     return base
   }
@@ -95,7 +95,7 @@ export class DetailView implements View {
       ctx.app.invalidate()
       return
     }
-    if (key === 'left' || key === 'h' || key === 'esc') ctx.app.pop()
+    if (key === 'left' || key === 'esc') ctx.app.pop()
   }
 }
 

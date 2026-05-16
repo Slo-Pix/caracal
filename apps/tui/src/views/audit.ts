@@ -3,7 +3,7 @@
 //
 // Live audit tail view: polls the audit endpoint and streams new events.
 
-import type { AdminClient, AuditEvent } from '@caracalai/admin'
+import type { AdminClient, AuditEvent, AuditQuery } from '@caracalai/admin'
 import { ansi, pad, sanitizeAnsi, truncate } from '../ansi.ts'
 import { explainError } from '../errors.ts'
 import type { Key } from '../keys.ts'
@@ -20,26 +20,30 @@ export class AuditTailView implements View {
   private events: AuditEvent[] = []
   private cursor = 0
   private offset = 0
-  private decision: 'all' | 'allow' | 'deny' | 'partial' = 'all'
+  private decision: 'all' | 'allow' | 'deny' | 'partial'
   private paused = false
   private timer: NodeJS.Timeout | undefined
   private lastSince: string | undefined
   private app: App | undefined
   private aborted = false
 
-  constructor(client: AdminClient, zoneId: string) {
+  private readonly filters: AuditQuery
+  constructor(client: AdminClient, zoneId: string, filters: AuditQuery = {}) {
     this.client = client
     this.zoneId = zoneId
+    this.filters = filters
+    this.decision = filters.decision ?? 'all'
   }
 
   hints(): string[] {
     return [
       `filter:${this.decision}`,
+      this.filterLabel(),
       this.paused ? 'p:resume' : 'p:pause',
       'd:cycle-decision',
       'enter:explain',
       'r:reload',
-      'h:back',
+      'esc:back',
     ]
   }
 
@@ -64,7 +68,8 @@ export class AuditTailView implements View {
   private async fetchInitial(): Promise<void> {
     try {
       const rows = await this.client.audit.list(this.zoneId, {
-        limit: 100,
+        ...this.filters,
+        limit: this.filters.limit ?? 100,
         decision: this.decision === 'all' ? undefined : this.decision,
       })
       if (this.aborted) return
@@ -90,8 +95,9 @@ export class AuditTailView implements View {
     if (this.paused) { this.scheduleNext(); return }
     try {
       const rows = await this.client.audit.list(this.zoneId, {
+        ...this.filters,
         since: this.lastSince,
-        limit: 200,
+        limit: this.filters.limit ?? 200,
         decision: this.decision === 'all' ? undefined : this.decision,
       })
       if (this.aborted) return
@@ -162,8 +168,22 @@ export class AuditTailView implements View {
       }
       return
     }
-    if (key === 'left' || key === 'h' || key === 'esc') { ctx.app.pop() }
+    if (key === 'left' || key === 'esc') { ctx.app.pop() }
   }
+
+  private filterLabel(): string {
+    return compact([
+      this.filters.since ? `since:${this.filters.since}` : undefined,
+      this.filters.until ? `until:${this.filters.until}` : undefined,
+      this.filters.request_id ? `request:${this.filters.request_id}` : undefined,
+      this.filters.event_type ? `event:${this.filters.event_type}` : undefined,
+      this.filters.limit ? `limit:${this.filters.limit}` : undefined,
+    ]) || 'filters:none'
+  }
+}
+
+function compact(parts: readonly (string | undefined)[]): string {
+  return parts.filter((part): part is string => Boolean(part)).join(' ')
 }
 
 function colorDecision(d: string | null | undefined): string {

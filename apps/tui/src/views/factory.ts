@@ -8,6 +8,7 @@ import type {
   AgentSession,
   Application,
   ApplicationInput,
+  AuditQuery,
   Grant,
   Policy,
   PolicySet,
@@ -16,6 +17,9 @@ import type {
   Resource,
   ResourceInput,
   Session,
+  SessionQuery,
+  DelegationEdge,
+  TraverseNode,
   Zone,
   ZoneInput,
 } from '@caracalai/admin'
@@ -50,6 +54,13 @@ function bool(v: string | undefined): boolean | undefined {
 function readFileOrInline(filePath: string, inline: string): string {
   if (filePath && filePath.length > 0) return readFileSync(filePath, 'utf8')
   return inline
+}
+
+function int(v: string | undefined): number | undefined {
+  if (v === undefined || v.trim() === '') return undefined
+  const n = Number.parseInt(v, 10)
+  if (!Number.isFinite(n) || n < 1) throw new Error('limit must be a positive integer')
+  return n
 }
 
 async function popAndReload(app: App, list: ListView<unknown>): Promise<void> {
@@ -217,11 +228,23 @@ export function applicationsView(ctx: Ctx): View {
       },
       {
         key: 'D', label: 'dcr', build: (row) => {
-          if (!row) throw new Error('no row selected')
-          return new ConfirmView({
-            message: `dynamic-register ${row.name}?`,
-            onConfirm: async (app) => {
-              await ctx.client.applications.dcr(ctx.zoneId, { name: row.name })
+          return new FormView({
+            title: 'dynamic client registration',
+            fields: [
+              { key: 'name', label: 'name', kind: 'text', required: true, default: row?.name ?? '' },
+              { key: 'credential_type', label: 'credential_type', kind: 'select', options: ['token', 'password', 'public-key', 'url', 'public'], default: row?.credential_type ?? 'token' },
+              { key: 'client_secret', label: 'client_secret', kind: 'secret' },
+              { key: 'traits', label: 'traits (csv)', kind: 'list', default: (row?.traits ?? []).join(',') },
+              { key: 'expires_in', label: 'expires_in', kind: 'text', validate: (v) => v && !Number.isFinite(Number.parseInt(v, 10)) ? 'expires_in must be an integer' : undefined },
+            ],
+            onSubmit: async (v, app) => {
+              await ctx.client.applications.dcr(ctx.zoneId, {
+                name: v.name!,
+                credential_type: (v.credential_type as ApplicationInput['credential_type']) || undefined,
+                client_secret: v.client_secret || undefined,
+                traits: v.traits ? splitList(v.traits) : undefined,
+                expires_in: int(v.expires_in),
+              })
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -584,6 +607,7 @@ export function grantsView(ctx: Ctx): View {
 }
 
 export function sessionsView(ctx: Ctx): View {
+  const filters: SessionQuery = {}
   const list: ListView<Session> = new ListView<Session>({
     title: 'sessions',
     columns: [
@@ -593,15 +617,21 @@ export function sessionsView(ctx: Ctx): View {
       { header: 'expires_at', width: 24, value: (r) => r.expires_at },
       { header: 'id', value: (r) => r.id },
     ],
-    load: () => ctx.client.sessions.list(ctx.zoneId),
+    load: () => ctx.client.sessions.list(ctx.zoneId, filters),
     actions: [
       {
-        key: 'k', label: 'revoke-delegation', build: (row) => {
-          if (!row) throw new Error('no row selected')
-          return new ConfirmView({
-            message: `revoke delegation edge ${row.id}?`,
-            onConfirm: async (app) => {
-              await ctx.client.delegations.revoke(ctx.zoneId, row.id)
+        key: 'f', label: 'filter', build: () => {
+          return new FormView({
+            title: 'filter sessions',
+            fields: [
+              { key: 'status', label: 'status', kind: 'select', options: ['', 'active', 'revoked', 'expired'], default: filters.status ?? '' },
+              { key: 'subject_id', label: 'subject', kind: 'text', default: filters.subject_id ?? '' },
+              { key: 'limit', label: 'limit', kind: 'text', default: filters.limit === undefined ? '' : String(filters.limit), validate: (v) => v ? (Number.isFinite(Number.parseInt(v, 10)) ? undefined : 'limit must be an integer') : undefined },
+            ],
+            onSubmit: async (v, app) => {
+              filters.status = (v.status as SessionQuery['status']) || undefined
+              filters.subject_id = v.subject_id || undefined
+              filters.limit = int(v.limit)
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -613,11 +643,98 @@ export function sessionsView(ctx: Ctx): View {
 }
 
 export function delegationsView(ctx: Ctx): View {
-  const list: ListView<{ id: string }> = new ListView<{ id: string }>({
-    title: 'delegations',
-    columns: [{ header: 'id', value: (r) => r.id }],
-    load: async () => [],
+  return new DelegationMenuView(ctx)
+}
+
+class DelegationMenuView implements View {
+  readonly title = 'delegations'
+  private cursor = 0
+  private readonly items = [
+    { key: 'i', label: 'inbound', build: () => this.edgeForm('inbound') },
+    { key: 'o', label: 'outbound', build: () => this.edgeForm('outbound') },
+    { key: 't', label: 'traverse', build: () => this.traverseForm() },
+    { key: 'r', label: 'revoke', build: () => this.revokeForm() },
+  ]
+
+  private readonly ctx: Ctx
+  constructor(ctx: Ctx) { this.ctx = ctx }
+
+  hints(): string[] { return ['↑/↓:select', 'enter:open', 'esc:back'] }
+
+  render(): string[] {
+    const lines = ['', ' Delegations', '']
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i]!
+      lines.push(`${i === this.cursor ? '> ' : '  '}[${item.key}] ${item.label}`)
+    }
+    return lines
+  }
+
+  async onKey(key: string, ctx: { app: App }): Promise<void> {
+    if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); return }
+    if (key === 'down' || key === 'j') { this.cursor = Math.min(this.items.length - 1, this.cursor + 1); return }
+    if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
+    const direct = this.items.findIndex((item) => item.key === key)
+    if (direct >= 0) { ctx.app.push(this.items[direct]!.build()); return }
+    if (key === 'enter') ctx.app.push(this.items[this.cursor]!.build())
+  }
+
+  private edgeForm(kind: 'inbound' | 'outbound'): View {
+    return new FormView({
+      title: `delegation ${kind}`,
+      fields: [{ key: 'session_id', label: 'session_id', kind: 'text', required: true }],
+      onSubmit: async (v, app) => {
+        app.pop()
+        app.push(delegationEdgesView(this.ctx, kind, v.session_id!))
+      },
+    })
+  }
+
+  private traverseForm(): View {
+    return new FormView({
+      title: 'delegation traverse',
+      fields: [{ key: 'edge_id', label: 'edge_id', kind: 'text', required: true }],
+      onSubmit: async (v, app) => {
+        app.pop()
+        app.push(delegationTraverseView(this.ctx, v.edge_id!))
+      },
+    })
+  }
+
+  private revokeForm(): View {
+    return new FormView({
+      title: 'delegation revoke',
+      fields: [{ key: 'edge_id', label: 'edge_id', kind: 'text', required: true }],
+      onSubmit: async (v, app) => {
+        const result = await this.ctx.client.delegations.revoke(this.ctx.zoneId, v.edge_id!)
+        app.pop()
+        app.push(detail(`delegation / ${v.edge_id}`, async () => result))
+      },
+    })
+  }
+}
+
+function delegationEdgesView(ctx: Ctx, kind: 'inbound' | 'outbound', sessionId: string): ListView<DelegationEdge> {
+  const list: ListView<DelegationEdge> = new ListView<DelegationEdge>({
+    title: `delegations / ${kind}`,
+    columns: [
+      { header: 'source', width: 36, value: (r) => r.source_session_id },
+      { header: 'target', width: 36, value: (r) => r.target_session_id },
+      { header: 'resource', width: 24, value: (r) => r.resource_id ?? '-' },
+      { header: 'status', width: 10, value: (r) => r.status },
+      { header: 'id', value: (r) => r.id },
+    ],
+    load: () => kind === 'inbound'
+      ? ctx.client.delegations.inbound(ctx.zoneId, sessionId)
+      : ctx.client.delegations.outbound(ctx.zoneId, sessionId),
+    onEnter: (app, row) => open(app, detail(`delegation / ${row.id}`, async () => row)),
     actions: [
+      {
+        key: 't', label: 'traverse', build: (row) => {
+          if (!row) throw new Error('no row selected')
+          return delegationTraverseView(ctx, row.id)
+        },
+      },
       {
         key: 'k', label: 'revoke', build: (row) => {
           if (!row) throw new Error('no row selected')
@@ -633,6 +750,20 @@ export function delegationsView(ctx: Ctx): View {
     ],
   })
   return list
+}
+
+function delegationTraverseView(ctx: Ctx, id: string): ListView<TraverseNode> {
+  return new ListView<TraverseNode>({
+    title: `delegation traverse / ${id}`,
+    columns: [
+      { header: 'depth', width: 6, value: (r) => String(r.depth) },
+      { header: 'source', width: 36, value: (r) => r.source_session_id },
+      { header: 'target', width: 36, value: (r) => r.target_session_id },
+      { header: 'id', value: (r) => r.id },
+    ],
+    load: () => ctx.client.delegations.traverse(ctx.zoneId, id),
+    onEnter: (app, row) => open(app, detail(`delegation-node / ${row.id}`, async () => row)),
+  })
 }
 
 export function agentsView(ctx: Ctx): View {
@@ -697,7 +828,29 @@ export function agentsView(ctx: Ctx): View {
 }
 
 export function auditView(ctx: Ctx): View {
-  return new AuditTailView(ctx.client, ctx.zoneId)
+  const filters: AuditQuery = {}
+  return new FormView({
+    title: 'audit filters',
+    submitLabel: 'tail',
+    fields: [
+      { key: 'decision', label: 'decision', kind: 'select', options: ['', 'allow', 'deny', 'partial'] },
+      { key: 'since', label: 'since', kind: 'text' },
+      { key: 'until', label: 'until', kind: 'text' },
+      { key: 'request_id', label: 'request_id', kind: 'text' },
+      { key: 'event_type', label: 'event_type', kind: 'text' },
+      { key: 'limit', label: 'limit', kind: 'text', default: '100', validate: (v) => v ? (Number.isFinite(Number.parseInt(v, 10)) ? undefined : 'limit must be an integer') : undefined },
+    ],
+    onSubmit: async (v, app) => {
+      filters.decision = (v.decision as AuditQuery['decision']) || undefined
+      filters.since = v.since || undefined
+      filters.until = v.until || undefined
+      filters.request_id = v.request_id || undefined
+      filters.event_type = v.event_type || undefined
+      filters.limit = int(v.limit)
+      app.pop()
+      app.push(new AuditTailView(ctx.client, ctx.zoneId, filters))
+    },
+  })
 }
 
 export type { ZoneInput }

@@ -53,7 +53,7 @@ export class ListView<T> implements View {
   selected(): T | undefined { return this.rows[this.cursor] }
 
   hints(): string[] {
-    const base = ['↑/↓:move', 'enter:open', 'r:reload', 'h:back']
+    const base = ['↑/↓:move', 'enter:open', 'r:reload', 'esc:back']
     for (const a of this.actions) base.push(`${a.key}:${a.label}`)
     return base
   }
@@ -132,7 +132,7 @@ export class ListView<T> implements View {
     if (key === 'home' || key === 'g') { this.cursor = 0; return }
     if (key === 'end' || key === 'G') { this.cursor = last; return }
     if (key === 'r') return this.reload()
-    if (key === 'left' || key === 'h' || key === 'esc') { ctx.app.pop(); return }
+    if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
     if (key === 'enter') {
       const row = this.selected()
       if (row && this.enter) await this.enter(ctx.app, row)
