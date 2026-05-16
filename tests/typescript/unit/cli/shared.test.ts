@@ -4,7 +4,9 @@
 // CLI shared helpers: argv parser, flag coercions, zone resolution.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { AdminApiError } from '@caracalai/admin'
 import {
+  fail,
   parseArgs,
   flagString,
   flagBool,
@@ -83,5 +85,22 @@ describe('requireZone', () => {
   it('exits when no zone is available', () => {
     expect(() => requireZone({ client: {} as never, zoneId: undefined }, {})).toThrow(/__exit:1/)
     expect(stderr).toHaveBeenCalled()
+  })
+})
+
+describe('fail', () => {
+  const exit = vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new Error(`__exit:${c ?? 0}`) }) as never)
+  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+
+  afterEach(() => { exit.mockClear(); stderr.mockClear() })
+
+  it('scrubs tokens from admin error bodies', () => {
+    expect(() => fail(new AdminApiError(500, 'boom', {
+      message: 'failed with Bearer abc.def.ghi',
+    }))).toThrow(/__exit:1/)
+
+    const text = stderr.mock.calls.map(([chunk]) => String(chunk)).join('')
+    expect(text).not.toContain('abc.def.ghi')
+    expect(text).toContain('***')
   })
 })

@@ -4,7 +4,7 @@
 // scrubTokens regex coverage tests.
 
 import { describe, it, expect } from 'vitest'
-import { scrubTokens } from '../../../../apps/tui/src/errors.ts'
+import { maskSecretField, scrubTokens } from '../../../../apps/tui/src/errors.ts'
 
 describe('scrubTokens', () => {
   it('strips JWT-shaped tokens', () => {
@@ -31,5 +31,11 @@ describe('scrubTokens', () => {
     const out = scrubTokens('Authorization: secret123 trailing')
     expect(out).not.toMatch(/secret123/)
     expect(out).toContain('Authorization: ***')
+  })
+
+  it('masks common secret detail fields', () => {
+    expect(maskSecretField('secret-value', ['client_secret'])).toBe('••••')
+    expect(maskSecretField('secret-value', ['nested', 'clientSecret'])).toBe('••••')
+    expect(maskSecretField('visible', ['name'])).toBeUndefined()
   })
 })
