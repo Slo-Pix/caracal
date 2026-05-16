@@ -21,25 +21,43 @@ describe('GET /v1/zones/:zoneId/step-up-challenges/:id', () => {
 })
 
 describe('POST /v1/zones/:zoneId/step-up-challenges/:id/satisfy', () => {
-  it('does not satisfy expired, completed, or cross-zone challenges', async () => {
+  it('rejects request without approver_subject_id', async () => {
+    const { app } = buildRouteApp(stepUpChallengesRoutes)
+    await app.ready()
+    const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/step-up-challenges/challenge-1/satisfy' })
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_request' })
+  })
+
+  it('returns 409 when challenge is expired, completed, cross-zone, or approver matches requester', async () => {
     const { app, db } = buildRouteApp(stepUpChallengesRoutes)
     db.query.mockResolvedValueOnce({ rows: [] })
 
     await app.ready()
-    const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/step-up-challenges/challenge-1/satisfy' })
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/step-up-challenges/challenge-1/satisfy',
+      payload: { approver_subject_id: 'approver-a' },
+    })
 
-    expect(res.statusCode).toBe(404)
-    expect(JSON.parse(res.body)).toMatchObject({ error: 'challenge_not_found_or_expired' })
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'challenge_not_satisfiable' })
   })
 
-  it('satisfies an active unsatisfied challenge', async () => {
+  it('satisfies an active unsatisfied challenge with a distinct approver', async () => {
     const { app, db } = buildRouteApp(stepUpChallengesRoutes)
-    db.query.mockResolvedValueOnce({ rows: [{ id: 'challenge-1', satisfied_at: '2026-05-05T00:00:00.000Z' }] })
+    db.query.mockResolvedValueOnce({
+      rows: [{ id: 'challenge-1', satisfied_at: '2026-05-05T00:00:00.000Z', approver_subject_id: 'approver-a' }],
+    })
 
     await app.ready()
-    const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/step-up-challenges/challenge-1/satisfy' })
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/step-up-challenges/challenge-1/satisfy',
+      payload: { approver_subject_id: 'approver-a' },
+    })
 
     expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body)).toMatchObject({ id: 'challenge-1' })
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'challenge-1', approver_subject_id: 'approver-a' })
   })
 })

@@ -15,7 +15,7 @@ import {
 } from '@caracalai/core/cli'
 import { installCrashHandlers } from '@caracalai/core/crash'
 import { App } from './screen.ts'
-import { CARACAL_TUI_MODE, CARACAL_TUI_VERSION } from './version.gen.ts'
+import { CARACAL_TUI_MODE, CARACAL_TUI_SHA, CARACAL_TUI_VERSION } from './version.gen.ts'
 import { MenuView } from './views/menu.ts'
 
 function loadConfig(): CliConfig | undefined {
@@ -51,13 +51,13 @@ function main(): void {
   }
   if (command === '--version' || command === '-v' || command === 'version') {
     const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
-    const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${process.env.CARACAL_DEV_SHA ?? 'unknown'})` : 'runtime'
+    const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${CARACAL_TUI_SHA})` : 'runtime'
     if (process.argv.includes('--json')) {
       process.stdout.write(JSON.stringify({
         binary: bin,
         version: CARACAL_TUI_VERSION,
         mode: CARACAL_TUI_MODE,
-        sha: process.env.CARACAL_DEV_SHA ?? null,
+        sha: CARACAL_TUI_SHA,
       }) + '\n')
     } else {
       process.stdout.write(`${bin} ${CARACAL_TUI_VERSION} [${tag}]\n`)

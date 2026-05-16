@@ -23,6 +23,7 @@ type Config struct {
 }
 
 func loadConfig() Config {
+	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "ZONE_KEK", "AUDIT_HMAC_KEY", "STREAMS_HMAC_KEY")
 	if missing := config.MissingRequired("PORT", "DATABASE_URL", "REDIS_URL", "ISSUER_URL"); len(missing) > 0 {
 		panic("required env vars missing: " + strings.Join(missing, ", "))
 	}
