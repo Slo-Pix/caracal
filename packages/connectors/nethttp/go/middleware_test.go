@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/garudex-labs/caracal/identity"
+	"github.com/garudex-labs/caracal/revocation"
 	transportmcp "github.com/garudex-labs/caracal/transport-mcp"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -55,6 +56,7 @@ func TestMiddlewareAcceptsValidScopedToken(t *testing.T) {
 		Audience:       "resource://api",
 		ZoneID:         "zone1",
 		RequiredScopes: []string{"write"},
+		Revocations:    revocation.NewInMemoryStore(time.Hour),
 	})(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		called = true
 		response.WriteHeader(http.StatusNoContent)
@@ -85,7 +87,13 @@ func TestMiddlewareRejectsMissingRequiredScope(t *testing.T) {
 		"zone_id": "zone1",
 		"scope":   "read",
 	})
-	handler := Middleware(Options{Issuer: issuer, Audience: "resource://api", ZoneID: "zone1", RequiredScopes: []string{"write"}})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+	handler := Middleware(Options{
+		Issuer:         issuer,
+		Audience:       "resource://api",
+		ZoneID:         "zone1",
+		RequiredScopes: []string{"write"},
+		Revocations:    revocation.NewInMemoryStore(time.Hour),
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		t.Fatal("next handler must not be called")
 	}))
 	recorder := httptest.NewRecorder()
@@ -166,6 +174,8 @@ func jwksServer(t *testing.T, publicKey *ecdsa.PublicKey, calls *int64) string {
 			"kty": "EC",
 			"crv": "P-256",
 			"kid": "kid1",
+			"use": "sig",
+			"alg": "ES256",
 			"x":   b64URLUint(publicKey.X),
 			"y":   b64URLUint(publicKey.Y),
 		}}})
@@ -177,10 +187,15 @@ func jwksServer(t *testing.T, publicKey *ecdsa.PublicKey, calls *int64) string {
 func signedToken(t *testing.T, privateKey *ecdsa.PrivateKey, issuer, audience string, claims map[string]any) string {
 	t.Helper()
 	mapClaims := jwt.MapClaims{
-		"iss": issuer,
-		"aud": audience,
-		"exp": time.Now().Add(time.Hour).Unix(),
-		"iat": time.Now().Unix(),
+		"iss":       issuer,
+		"aud":       audience,
+		"exp":       time.Now().Add(time.Hour).Unix(),
+		"iat":       time.Now().Unix(),
+		"jti":       "jti1",
+		"sub":       "user1",
+		"sid":       "sid1",
+		"client_id": "app1",
+		"use":       "per_call",
 	}
 	for key, value := range claims {
 		mapClaims[key] = value
