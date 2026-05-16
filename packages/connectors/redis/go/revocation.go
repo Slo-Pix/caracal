@@ -122,6 +122,7 @@ func (s *Store) key(sid string) string {
 type StreamClient interface {
 	KeyClient
 	XAck(ctx context.Context, stream, group string, ids ...string) *redis.IntCmd
+	XAutoClaim(ctx context.Context, a *redis.XAutoClaimArgs) *redis.XAutoClaimCmd
 	XGroupCreateMkStream(ctx context.Context, stream, group, start string) *redis.StatusCmd
 	XReadGroup(ctx context.Context, a *redis.XReadGroupArgs) *redis.XStreamSliceCmd
 }
@@ -135,6 +136,7 @@ type Consumer struct {
 	consumer         string
 	batchSize        int64
 	block            time.Duration
+	pendingIdle      time.Duration
 	streamHMACKey    []byte
 	requireSignature bool
 }
@@ -162,6 +164,11 @@ func WithBlock(block time.Duration) ConsumerOption {
 	return func(c *Consumer) { c.block = block }
 }
 
+// WithPendingIdle sets the minimum idle time before pending messages are reclaimed.
+func WithPendingIdle(idle time.Duration) ConsumerOption {
+	return func(c *Consumer) { c.pendingIdle = idle }
+}
+
 // WithStreamHMAC configures revocation stream origin verification.
 func WithStreamHMAC(key []byte, require bool) ConsumerOption {
 	return func(c *Consumer) {
@@ -173,12 +180,13 @@ func WithStreamHMAC(key []byte, require bool) ConsumerOption {
 // NewConsumer returns a Redis stream consumer that populates store.
 func NewConsumer(redis StreamClient, store *Store, consumer string, opts ...ConsumerOption) (*Consumer, error) {
 	c := &Consumer{
-		redis:     redis,
-		store:     store,
-		stream:    RevocationStream,
-		group:     "resource-revocation",
-		consumer:  consumer,
-		batchSize: 50,
+		redis:       redis,
+		store:       store,
+		stream:      RevocationStream,
+		group:       "resource-revocation",
+		consumer:    consumer,
+		batchSize:   50,
+		pendingIdle: 30 * time.Second,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -191,6 +199,9 @@ func NewConsumer(redis StreamClient, store *Store, consumer string, opts ...Cons
 	}
 	if c.batchSize <= 0 {
 		c.batchSize = 50
+	}
+	if c.pendingIdle <= 0 {
+		c.pendingIdle = 30 * time.Second
 	}
 	if c.requireSignature && len(c.streamHMACKey) == 0 {
 		return nil, fmt.Errorf("stream hmac key is required when signatures are required")
@@ -209,6 +220,10 @@ func (c *Consumer) EnsureGroup(ctx context.Context) error {
 
 // PollOnce reads and applies one batch of revocation messages.
 func (c *Consumer) PollOnce(ctx context.Context) (int, error) {
+	handled, err := c.replayPending(ctx)
+	if err != nil {
+		return 0, err
+	}
 	streams, err := c.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    c.group,
 		Consumer: c.consumer,
@@ -218,11 +233,10 @@ func (c *Consumer) PollOnce(ctx context.Context) (int, error) {
 	}).Result()
 	if err != nil {
 		if err == redis.Nil {
-			return 0, nil
+			return handled, nil
 		}
-		return 0, err
+		return handled, err
 	}
-	handled := 0
 	for _, stream := range streams {
 		for _, msg := range stream.Messages {
 			if err := c.processMessage(ctx, msg); err != nil {
@@ -232,6 +246,40 @@ func (c *Consumer) PollOnce(ctx context.Context) (int, error) {
 		}
 	}
 	return handled, nil
+}
+
+func (c *Consumer) replayPending(ctx context.Context) (int, error) {
+	start := "0-0"
+	handled := 0
+	for {
+		msgs, next, err := c.redis.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   c.stream,
+			Group:    c.group,
+			Consumer: c.consumer,
+			MinIdle:  c.pendingIdle,
+			Start:    start,
+			Count:    c.batchSize,
+		}).Result()
+		if err != nil {
+			if err == redis.Nil {
+				return handled, nil
+			}
+			return handled, err
+		}
+		if len(msgs) == 0 {
+			return handled, nil
+		}
+		for _, msg := range msgs {
+			if err := c.processMessage(ctx, msg); err != nil {
+				return handled, err
+			}
+			handled++
+		}
+		if next == "" || next == "0-0" {
+			return handled, nil
+		}
+		start = next
+	}
 }
 
 func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) error {

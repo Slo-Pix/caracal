@@ -29,6 +29,7 @@ StreamBatch = list[tuple[object, list[StreamMessage]]]
 
 class RedisStreamClient(RedisClient, Protocol):
     def xgroup_create(self, *args: object, **kwargs: object) -> object: ...
+    def xautoclaim(self, *args: object, **kwargs: object) -> object: ...
     def xreadgroup(self, *args: object, **kwargs: object) -> StreamBatch | None: ...
     def xack(self, stream: str, group: str, message_id: str) -> object: ...
 
@@ -75,6 +76,7 @@ class RedisRevocationConsumer:
         group: str = "resource-revocation",
         batch_size: int = 50,
         block_ms: int = 0,
+        pending_idle_ms: int = 30_000,
         stream_hmac_key: bytes | None = None,
         require_signature: bool | None = None,
     ) -> None:
@@ -85,6 +87,7 @@ class RedisRevocationConsumer:
         self._group = group
         self._batch_size = batch_size
         self._block_ms = block_ms
+        self._pending_idle_ms = pending_idle_ms
         self._stream_hmac_key = stream_hmac_key
         self._require_signature = bool(stream_hmac_key) if require_signature is None else require_signature
         if self._require_signature and not self._stream_hmac_key:
@@ -98,6 +101,7 @@ class RedisRevocationConsumer:
                 raise
 
     def poll_once(self) -> int:
+        handled = self._replay_pending()
         rows = self._redis.xreadgroup(
             self._group,
             self._consumer,
@@ -105,12 +109,31 @@ class RedisRevocationConsumer:
             count=self._batch_size,
             block=self._block_ms,
         )
-        handled = 0
         for _, messages in rows or []:
             for message_id, values in messages:
                 self._process_message(_to_text(message_id), _normalize_values(values))
                 handled += 1
         return handled
+
+    def _replay_pending(self) -> int:
+        handled = 0
+        start = "0-0"
+        while True:
+            raw = self._redis.xautoclaim(
+                self._stream,
+                self._group,
+                self._consumer,
+                self._pending_idle_ms,
+                start,
+                count=self._batch_size,
+            )
+            next_id, messages = _normalize_autoclaim(raw)
+            for message_id, values in messages:
+                self._process_message(_to_text(message_id), _normalize_values(values))
+                handled += 1
+            if not messages or next_id in {"", "0-0"}:
+                return handled
+            start = next_id
 
     def _process_message(self, message_id: str, values: dict[str, str]) -> None:
         if not self._verify(values):
@@ -138,6 +161,20 @@ def _normalize_values(values: StreamValues) -> dict[str, str]:
     for i in range(0, len(values), 2):
         out[_to_text(values[i])] = _to_text(values[i + 1]) if i + 1 < len(values) else ""
     return out
+
+
+def _normalize_autoclaim(raw: object) -> tuple[str, list[StreamMessage]]:
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)) or len(raw) < 2:
+        return "0-0", []
+    next_id = _to_text(raw[0])
+    messages = raw[1]
+    if not isinstance(messages, Sequence) or isinstance(messages, (str, bytes)):
+        return next_id, []
+    out: list[StreamMessage] = []
+    for item in messages:
+        if isinstance(item, Sequence) and not isinstance(item, (str, bytes)) and len(item) >= 2:
+            out.append((item[0], item[1]))
+    return next_id, out
 
 
 def _to_text(value: object) -> str:

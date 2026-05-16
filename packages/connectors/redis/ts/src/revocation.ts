@@ -15,10 +15,12 @@ export interface RedisRevocationClient {
   set: (key: string, value: string, mode: 'PX', ttlMs: number) => Promise<unknown>
   xgroup?: (...args: string[]) => Promise<unknown>
   xreadgroup?: (...args: (string | number)[]) => Promise<RedisStreamResult | null>
+  xautoclaim?: (...args: (string | number)[]) => Promise<RedisAutoClaimResult>
   xack?: (stream: string, group: string, id: string) => Promise<unknown>
 }
 
 export type RedisStreamResult = Array<[string, Array<[string, string[]]>]>
+export type RedisAutoClaimResult = [string, Array<[string, string[]]>]
 
 export interface RedisRevocationStoreOptions {
   keyPrefix?: string
@@ -63,6 +65,7 @@ export interface RedisRevocationConsumerOptions {
   consumer: string
   batchSize?: number
   blockMs?: number
+  pendingIdleMs?: number
   streamHmacKey?: Buffer
   requireSignature?: boolean
 }
@@ -72,6 +75,7 @@ export class RedisRevocationConsumer {
   private readonly group: string
   private readonly batchSize: number
   private readonly blockMs: number
+  private readonly pendingIdleMs: number
   private readonly streamHmacKey: Buffer | undefined
   private readonly requireSignature: boolean
 
@@ -84,6 +88,7 @@ export class RedisRevocationConsumer {
     this.group = opts.group ?? 'resource-revocation'
     this.batchSize = opts.batchSize ?? 50
     this.blockMs = opts.blockMs ?? 0
+    this.pendingIdleMs = opts.pendingIdleMs ?? 30_000
     this.streamHmacKey = opts.streamHmacKey
     this.requireSignature = opts.requireSignature ?? Boolean(opts.streamHmacKey)
     if (this.requireSignature && !this.streamHmacKey) {
@@ -102,6 +107,8 @@ export class RedisRevocationConsumer {
 
   async pollOnce(): Promise<number> {
     if (!this.redis.xreadgroup) throw new Error('redis client does not support xreadgroup')
+    if (!this.redis.xautoclaim) throw new Error('redis client does not support xautoclaim')
+    let handled = await this.replayPending()
     const rows = await this.redis.xreadgroup(
       'GROUP',
       this.group,
@@ -114,7 +121,6 @@ export class RedisRevocationConsumer {
       this.stream,
       '>',
     )
-    let handled = 0
     for (const [, messages] of rows ?? []) {
       for (const [id, fields] of messages) {
         await this.processMessage(id, fields)
@@ -122,6 +128,29 @@ export class RedisRevocationConsumer {
       }
     }
     return handled
+  }
+
+  private async replayPending(): Promise<number> {
+    if (!this.redis.xautoclaim) throw new Error('redis client does not support xautoclaim')
+    let handled = 0
+    let start = '0-0'
+    for (;;) {
+      const [next, messages] = await this.redis.xautoclaim(
+        this.stream,
+        this.group,
+        this.opts.consumer,
+        this.pendingIdleMs,
+        start,
+        'COUNT',
+        this.batchSize,
+      )
+      for (const [id, fields] of messages) {
+        await this.processMessage(id, fields)
+        handled++
+      }
+      if (messages.length === 0 || next === '' || next === '0-0') return handled
+      start = next
+    }
   }
 
   private async processMessage(id: string, fields: string[]): Promise<void> {
