@@ -3,7 +3,7 @@
 //
 // Runtime command registry: binds canonical command descriptors to their executor functions inside a single Caracal binary.
 
-import type { CommandDescriptor } from '@caracalai/core/commands'
+import type { CommandDescriptor } from '@caracalai/engine/commands'
 import type { CliConfig } from './config.ts'
 
 export type Executor = (argv: string[], cfg?: CliConfig) => Promise<void> | void

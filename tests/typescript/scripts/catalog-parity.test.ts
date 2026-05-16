@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { CLI_COMMANDS } from '../../../packages/core/ts/src/commands.ts'
+import { CLI_COMMANDS } from '../../../packages/engine/src/commands.ts'
 
 interface GoEntry { name: string; subs: string[]; hidden: boolean }
 

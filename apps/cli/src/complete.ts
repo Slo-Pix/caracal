@@ -4,7 +4,7 @@
 // CLI autocomplete engine: token-aware, context-filtered suggestions over the registry for the interactive REPL.
 
 import type { CommandRegistry } from './registry.ts'
-import type { CommandDescriptor } from '@caracalai/core/commands'
+import type { CommandDescriptor } from '@caracalai/engine/commands'
 import type { CliConfig } from './config.ts'
 
 type SuggestKind = 'command' | 'subcommand' | 'builtin' | 'flag'

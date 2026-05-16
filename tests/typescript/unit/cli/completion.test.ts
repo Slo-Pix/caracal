@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { completionCommand } from '../../../../apps/cli/src/commands/completion.ts'
-import { CLI_COMMANDS, SHELL_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+import { CLI_COMMANDS, SHELL_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 function capture(): { out: () => string; restore: () => void } {
   const chunks: string[] = []

@@ -8,7 +8,7 @@ import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { createInterface } from 'node:readline'
 import { join } from 'node:path'
-import { resolveCliConfigPath } from '@caracalai/core/cli'
+import { resolveCliConfigPath } from '@caracalai/engine/cli'
 import {
   caracalBinaries as caracalBinariesCore,
   composeRun,

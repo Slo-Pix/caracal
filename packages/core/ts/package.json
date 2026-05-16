@@ -22,18 +22,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./cli": {
-      "import": "./dist/cliconfig.js",
-      "types": "./dist/cliconfig.d.ts"
-    },
-    "./commands": {
-      "import": "./dist/commands.js",
-      "types": "./dist/commands.d.ts"
-    },
-    "./crash": {
-      "import": "./dist/crash.js",
-      "types": "./dist/crash.d.ts"
     }
   },
   "files": [
@@ -44,11 +32,13 @@
     "access": "public"
   },
   "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --root ../../.. tests/typescript/unit/shared",
-    "prepublishOnly": "tsc"
+    "prepublishOnly": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

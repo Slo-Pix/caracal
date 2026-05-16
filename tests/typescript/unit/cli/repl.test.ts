@@ -7,7 +7,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { PassThrough } from 'node:stream'
 import { startRepl } from '../../../../apps/cli/src/repl.ts'
 import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
-import { CLI_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+import { CLI_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 import type { DispatchOptions } from '../../../../apps/cli/src/dispatcher.ts'
 
 function makeOptions(run: Executor): DispatchOptions {

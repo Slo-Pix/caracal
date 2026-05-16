@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { CaracalError } from './errors.js';
+import { CaracalError } from '@caracalai/core';
 
 export const DEFAULT_API_URL = 'http://localhost:3000';
 export const DEFAULT_COORDINATOR_URL = 'http://localhost:4000';

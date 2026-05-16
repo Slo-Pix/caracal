@@ -4,7 +4,7 @@
 // CLI flag parsing, table/JSON printers, and exit-code handling for admin subcommands.
 
 import { AdminApiError } from '@caracalai/admin'
-import { scrubTokens } from '@caracalai/core/crash'
+import { scrubTokens } from '@caracalai/engine/crash'
 import {
   buildAdminClient as buildAdminClientCore,
   readContent as readContentCore,

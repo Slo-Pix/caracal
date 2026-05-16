@@ -4,7 +4,7 @@
 // Interactive command shell for `caracal cli` (no args): controlled REPL with allowlisted dispatch, history, and on-demand inline + dropdown autocomplete.
 
 import { createInterface, emitKeypressEvents, type Interface } from 'node:readline'
-import { COMMAND_NAME_PATTERN } from '@caracalai/core/commands'
+import { COMMAND_NAME_PATTERN } from '@caracalai/engine/commands'
 import { discoverAdminToken } from '@caracalai/core'
 import { style, printError, colorOn, SYMBOL } from './style.ts'
 import type { CommandRegistry } from './registry.ts'

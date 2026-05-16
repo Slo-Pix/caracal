@@ -4,7 +4,7 @@
 // `caracal credential read <resource>`: prints a one-shot 15-min token to stdout.
 
 import { credentialRead } from '@caracalai/engine'
-import { scrubTokens } from '@caracalai/core/crash'
+import { scrubTokens } from '@caracalai/engine/crash'
 import type { CliConfig } from '../config.ts'
 import { printError } from '../style.ts'
 

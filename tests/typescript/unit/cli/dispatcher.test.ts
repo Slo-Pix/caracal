@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { dispatch } from '../../../../apps/cli/src/dispatcher.ts'
 import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
-import { CLI_COMMANDS, SHELL_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+import { CLI_COMMANDS, SHELL_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 function makeOpts(run: Executor) {
   const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, run]))

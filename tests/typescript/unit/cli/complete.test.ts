@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { complete, tokenize } from '../../../../apps/cli/src/complete.ts'
 import { buildRegistry } from '../../../../apps/cli/src/registry.ts'
-import { CLI_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+import { CLI_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 const registry = buildRegistry(CLI_COMMANDS, Object.fromEntries(CLI_COMMANDS.map((c) => [c.name, () => undefined])))
 const ctx = { cfg: undefined, hasZone: false, builtins: [{ value: 'help', summary: 'Show help' }, { value: 'exit', summary: 'Quit' }], limit: 8 }

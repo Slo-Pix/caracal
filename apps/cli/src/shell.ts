@@ -11,7 +11,7 @@ import { upCommand, downCommand, statusCommand } from './commands/stack.ts'
 import { purgeCommand } from './commands/purge.ts'
 import { cliDispatch, tuiDispatch } from './commands/dispatch.ts'
 import { CARACAL_MODE, CARACAL_SHA, CARACAL_VERSION } from './runtime/version.gen.ts'
-import { SHELL_COMMANDS } from '@caracalai/core/commands'
+import { SHELL_COMMANDS } from '@caracalai/engine/commands'
 import { buildRegistry, type Executor } from './registry.ts'
 import { dispatch } from './dispatcher.ts'
 

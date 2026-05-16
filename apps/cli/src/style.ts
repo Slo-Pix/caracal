@@ -3,7 +3,7 @@
 //
 // Central terminal style system: semantic colors, symbols, and writers shared across every Caracal CLI command.
 
-import { scrubTokens } from '@caracalai/core/crash'
+import { scrubTokens } from '@caracalai/engine/crash'
 
 const RESET = '\x1b[0m'
 

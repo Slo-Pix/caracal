@@ -12,8 +12,8 @@ import {
 import {
   resolveCliConfigPath,
   type CliConfig,
-} from '@caracalai/core/cli'
-import { installCrashHandlers } from '@caracalai/core/crash'
+} from '@caracalai/engine/cli'
+import { installCrashHandlers } from '@caracalai/engine/crash'
 import { App } from './screen.ts'
 import { CARACAL_TUI_MODE, CARACAL_TUI_SHA, CARACAL_TUI_VERSION } from './version.gen.ts'
 import { MenuView } from './views/menu.ts'

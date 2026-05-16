@@ -18,6 +18,18 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./cli": {
+      "import": "./dist/cliconfig.js",
+      "types": "./dist/cliconfig.d.ts"
+    },
+    "./commands": {
+      "import": "./dist/commands.js",
+      "types": "./dist/commands.d.ts"
+    },
+    "./crash": {
+      "import": "./dist/crash.js",
+      "types": "./dist/crash.d.ts"
+    },
     "./scrubCwdEnv": {
       "import": "./dist/scrubCwdEnv.js",
       "types": "./dist/scrubCwdEnv.d.ts"

@@ -3,10 +3,10 @@
 //
 // Shared dispatcher kernel: builds usage text and routes argv through a CommandRegistry with whitelist enforcement, used by both the shell and the CLI binaries.
 
-import { COMMAND_NAME_PATTERN, type CommandGroup } from '@caracalai/core/commands'
+import { COMMAND_NAME_PATTERN, type CommandGroup } from '@caracalai/engine/commands'
 import { parse } from 'smol-toml'
 import { readFileSync } from 'node:fs'
-import { resolveCliConfigPath } from '@caracalai/core/cli'
+import { resolveCliConfigPath } from '@caracalai/engine/cli'
 import { style, printError } from './style.ts'
 import type { CommandRegistry } from './registry.ts'
 import type { CliConfig } from './config.ts'

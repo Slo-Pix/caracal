@@ -4,7 +4,7 @@
 // Verb body for `caracal credential read <resource>` — exchange a one-shot 15-min token.
 
 import { OAuthClient } from '@caracalai/oauth'
-import type { CliConfig } from '@caracalai/core/cli'
+import type { CliConfig } from './cliconfig.js'
 
 export interface CredentialReadOpts {
   cfg: CliConfig

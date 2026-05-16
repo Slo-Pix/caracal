@@ -10,8 +10,8 @@ import {
   DEFAULT_API_URL,
   DEFAULT_COORDINATOR_URL,
   resolveServiceUrl,
-} from '@caracalai/core/cli'
-import type { CliConfig } from '@caracalai/core/cli'
+} from './cliconfig.js'
+import type { CliConfig } from './cliconfig.js'
 
 export interface AdminContext {
   client: AdminClient

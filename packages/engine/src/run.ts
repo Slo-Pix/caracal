@@ -5,9 +5,9 @@
 
 import { spawn, type ChildProcess, type StdioOptions } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import { scrubTokens } from '@caracalai/core/crash'
+import { scrubTokens } from './crash.js'
 import { InteractionRequiredError, OAuthClient } from '@caracalai/oauth'
-import type { CliConfig, Credential } from '@caracalai/core/cli'
+import type { CliConfig, Credential } from './cliconfig.js'
 
 const SIGNAL_EXIT_MAP: Record<string, number> = {
   SIGINT: 2,

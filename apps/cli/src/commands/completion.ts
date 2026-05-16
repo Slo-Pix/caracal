@@ -3,7 +3,7 @@
 //
 // `caracal-cli completion <shell> [caracal|caracal-cli]`: emit shell completion bound to the canonical command catalog so suggestions never drift from the dispatchable surface.
 
-import { CLI_COMMANDS, SHELL_COMMANDS, type CommandDescriptor } from '@caracalai/core/commands'
+import { CLI_COMMANDS, SHELL_COMMANDS, type CommandDescriptor } from '@caracalai/engine/commands'
 import { printError } from '../style.ts'
 
 type Shell = 'bash' | 'zsh' | 'fish' | 'powershell'

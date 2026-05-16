@@ -3,7 +3,7 @@
 //
 // CLI shared helpers: argv parser, flag coercions, zone resolution.
 
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { AdminApiError } from '@caracalai/admin'
 import {
   fail,
@@ -68,10 +68,15 @@ describe('flag coercions', () => {
 })
 
 describe('requireZone', () => {
-  const exit = vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new Error(`__exit:${c ?? 0}`) }) as never)
-  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  let exit: ReturnType<typeof vi.spyOn>
+  let stderr: ReturnType<typeof vi.spyOn>
 
-  afterEach(() => { exit.mockClear(); stderr.mockClear() })
+  beforeEach(() => {
+    exit = vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new Error(`__exit:${c ?? 0}`) }) as never)
+    stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(() => { exit.mockRestore(); stderr.mockRestore() })
 
   it('prefers --zone flag', () => {
     expect(requireZone({ client: {} as never, zoneId: 'cfg-zone' }, { zone: 'flag-zone' })).toBe('flag-zone')
@@ -89,10 +94,15 @@ describe('requireZone', () => {
 })
 
 describe('fail', () => {
-  const exit = vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new Error(`__exit:${c ?? 0}`) }) as never)
-  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  let exit: ReturnType<typeof vi.spyOn>
+  let stderr: ReturnType<typeof vi.spyOn>
 
-  afterEach(() => { exit.mockClear(); stderr.mockClear() })
+  beforeEach(() => {
+    exit = vi.spyOn(process, 'exit').mockImplementation(((c?: number) => { throw new Error(`__exit:${c ?? 0}`) }) as never)
+    stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(() => { exit.mockRestore(); stderr.mockRestore() })
 
   it('scrubs tokens from admin error bodies', () => {
     expect(() => fail(new AdminApiError(500, 'boom', {

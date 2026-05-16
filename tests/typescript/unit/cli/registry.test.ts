@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
-import { SHELL_COMMANDS, CLI_COMMANDS } from '../../../../packages/core/ts/src/commands.ts'
+import { SHELL_COMMANDS, CLI_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 const noop: Executor = () => undefined
 

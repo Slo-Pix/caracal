@@ -21,7 +21,7 @@ import {
   resolveCliConfigPath,
   resolveServiceUrl,
   type CliConfig,
-} from '@caracalai/core/cli'
+} from '@caracalai/engine/cli'
 import { pad, truncate, ui } from '../ansi.ts'
 import { explainError, maskSecretField } from '../errors.ts'
 import type { Key } from '../keys.ts'
