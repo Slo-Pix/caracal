@@ -5,7 +5,7 @@
 // Writes apps/cli/src/runtime/version.gen.ts with the runtime CLI identity; CI sets CARACAL_RELEASE_VERSION for GHCR builds, otherwise stamps a developer-local release pointing at localhost dev images.
 
 import { execSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -49,5 +49,7 @@ export const CARACAL_REGISTRY = '${registry}'
 export const CARACAL_SHA = '${sha}'
 `
 
-writeFileSync(resolve(cliRoot, 'src/runtime/version.gen.ts'), body, 'utf8')
+const versionFile = resolve(cliRoot, 'src/runtime/version.gen.ts')
+mkdirSync(dirname(versionFile), { recursive: true })
+writeFileSync(versionFile, body, 'utf8')
 process.stdout.write(`stamped runtime version ${version} registry ${registry}\n`)
