@@ -17,6 +17,7 @@ const FORBIDDEN_BUILTINS = [
   'rand.intn',
   'time.now_ns',
 ] as const
+const REGEX_META = /[\\^$.*+?()[\]{}|]/g
 
 interface Stripped {
   source: string
@@ -100,7 +101,7 @@ export function parseRego(content: string): RegoCheck {
   }
 
   for (const builtin of FORBIDDEN_BUILTINS) {
-    const escaped = builtin.replace(/\./g, '\\.')
+    const escaped = builtin.replace(REGEX_META, '\\$&')
     if (new RegExp(`(?:^|[^A-Za-z0-9_.])${escaped}\\s*\\(`).test(source)) {
       return { packageName: null, rules: new Set(), error: `forbidden_builtin:${builtin}` }
     }

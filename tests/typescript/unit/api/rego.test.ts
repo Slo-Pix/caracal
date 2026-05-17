@@ -35,6 +35,11 @@ describe('parseRego', () => {
     const out = parseRego('package p\n# closing }\nresult := true')
     expect(out.error).toBeNull()
   })
+
+  it('rejects forbidden built-ins', () => {
+    expect(parseRego('package p\nresult := http.send({})').error).toBe('forbidden_builtin:http.send')
+    expect(parseRego('package p\nresult := data.http.send').error).toBeNull()
+  })
 })
 
 describe('validatePolicySource', () => {
