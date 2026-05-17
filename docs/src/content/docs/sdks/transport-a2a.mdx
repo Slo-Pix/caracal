@@ -120,6 +120,7 @@ Backoff formula per attempt: `min(retryBaseMs × 2^attempt, 5000) / 2 + random(b
 `a2aCall` throws on unrecoverable errors:
 
 - `Error('A2A call failed: {status}')` — target agent returned a non-2xx status after all retries.
+- `Error('A2A response invalid: ...')` — target response is not an object, omits `result`, or echoes a different `requestId`.
 - `InteractionRequiredError` — STS token exchange requires step-up; contains `challengeId`. Callers must satisfy the challenge and retry.
 - `AbortError` — request timed out.
 - Network fetch errors propagate unchanged.
@@ -181,4 +182,4 @@ async function callWithStepUp(subjectToken: string) {
 
 ## Relationship to the main SDK
 
-The main TypeScript SDK (`@caracalai/sdk`) uses `a2aCall` internally when you call `caracal.transport('a2a')` or use `delegate()` with an A2A target. Use `@caracalai/transport-a2a` directly only when building custom tooling or when you need fine-grained control over the call parameters (custom `requestId`, explicit `scopes`, or `metadata`).
+The main TypeScript SDK (`@caracalai/sdk`) manages local agent context and standard outbound HTTP integration. A2A calls are a protocol-level transport concern, so use `@caracalai/transport-a2a` directly when building an agent endpoint or custom agent-to-agent call path that needs explicit `requestId`, scopes, retry policy, and metadata control.

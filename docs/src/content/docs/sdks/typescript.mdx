@@ -131,15 +131,17 @@ Returns a `fetch`-compatible function that reads the current `CaracalContext` fr
 If `gatewayUrl` and `resources` are configured, URLs matching a known resource prefix are rewritten to route through the Gateway.
 
 ```typescript
-transport(): typeof fetch
+transport(opts?: { allowRoot?: boolean }): typeof fetch
 ```
+
+Calls made without a bound `CaracalContext` fail by default. Pass `{ allowRoot: true }` only when the call intentionally uses the application subject token.
 
 ### `headers()`
 
 Returns the current envelope as a plain `Record<string, string>`. Use this to inject context headers manually into non-`fetch` calls:
 
 ```typescript
-headers(): Record<string, string>
+headers(opts?: { allowRoot?: boolean }): Record<string, string>
 ```
 
 ### `bindFromHeaders(headers, fn)`
@@ -149,7 +151,8 @@ Reads the Caracal envelope from inbound HTTP headers and binds the resulting con
 ```typescript
 bindFromHeaders<T>(
   headers: Record<string, string | string[] | undefined> | HeaderGetter,
-  fn: () => Promise<T>
+  fn: () => Promise<T>,
+  opts?: { allowRoot?: boolean }
 ): Promise<T>
 ```
 
@@ -158,7 +161,7 @@ bindFromHeaders<T>(
 Returns an Express/Connect-compatible request handler that calls `bindFromHeaders` on every request:
 
 ```typescript
-middleware(): (req: IncomingMessage, res: ServerResponse, next: () => void) => void
+middleware(opts?: { allowRoot?: boolean }): (req: IncomingMessage, res: ServerResponse, next: () => void) => void
 ```
 
 ## Lifecycle hooks

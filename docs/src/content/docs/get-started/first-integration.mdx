@@ -86,21 +86,20 @@ await caracal.spawn(async () => {
 
 ### Express middleware
 
-To protect an incoming HTTP server rather than an outgoing agent, use the Express connector:
+To bind inbound Caracal context in an Express app, use the SDK middleware:
 
 ```sh
-npm install @caracalai/sdk @caracalai/mcp-express
+npm install @caracalai/sdk
 ```
 
 ```typescript
 import express from "express";
 import { Caracal } from "@caracalai/sdk";
-import { caracalMiddleware } from "@caracalai/mcp-express";
 
 const app = express();
 const caracal = Caracal.fromEnv();
 
-app.use(caracalMiddleware(caracal));
+app.use(caracal.middleware());
 
 app.post("/tool", (req, res) => {
   const ctx = caracal.current();
@@ -109,7 +108,7 @@ app.post("/tool", (req, res) => {
 });
 ```
 
-The middleware extracts the agent's mandate from the `Authorization` header and W3C baggage, verifies it, and binds the `CaracalContext` to the request.
+The middleware extracts the agent's mandate from the `Authorization` header and W3C baggage, then binds the `CaracalContext` to the request. Use the MCP Express connector only when you are protecting an MCP server and need JWT verification plus scope checks at the transport boundary.
 
 ## Python
 

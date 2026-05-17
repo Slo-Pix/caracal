@@ -153,14 +153,18 @@ err = client.Spawn(ctx, func(ctx context.Context) error {
 Bind context from inbound HTTP request headers:
 
 ```go
-func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request) context.Context
+func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request, opts ...RootOptions) (context.Context, error)
 ```
 
 Use this in your HTTP handlers to propagate the calling agent's identity:
 
 ```go
 func myHandler(w http.ResponseWriter, r *http.Request) {
-    ctx := client.BindFromRequest(r.Context(), r)
+    ctx, err := client.BindFromRequest(r.Context(), r)
+    if err != nil {
+        http.Error(w, "missing bearer token", http.StatusUnauthorized)
+        return
+    }
     cc, ok := sdk.Current(ctx)
     if ok {
         log.Printf("inbound agent: %s", cc.AgentSessionID)

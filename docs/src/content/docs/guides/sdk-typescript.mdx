@@ -146,7 +146,6 @@ const app = express();
 
 app.use(async (req, res, next) => {
   await caracal.bindFromHeaders(req.headers, async () => {
-    // caracal.current() is populated from the inbound envelope
     next();
   });
 });

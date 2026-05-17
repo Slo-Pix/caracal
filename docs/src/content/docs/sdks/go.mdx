@@ -153,17 +153,17 @@ Returns an `*http.Client` that reads the `CaracalContext` from the request's con
 Pass `nil` to wrap `http.DefaultClient`, or pass a custom `*http.Client`:
 
 ```go
-func (c *Caracal) Transport(base *http.Client) *http.Client
+func (c *Caracal) Transport(base *http.Client, opts ...RootOptions) *http.Client
 ```
 
-The returned client injects headers by reading the context on each `Do` call — the request must have a context bound via `http.NewRequestWithContext`.
+The returned client injects headers by reading the context on each `Do` call — the request must have a context bound via `http.NewRequestWithContext`. Pass `sdk.RootOptions{AllowRoot: true}` only when the call intentionally uses the application subject token.
 
 ### `BindFromRequest(ctx, r)`
 
 Reads the Caracal envelope from `r`'s headers and returns a child context with the envelope bound. Use in HTTP handlers to propagate inbound agent identity:
 
 ```go
-func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request) context.Context
+func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request, opts ...RootOptions) (context.Context, error)
 ```
 
 ### `Middleware(next)`
@@ -171,7 +171,7 @@ func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request) context.
 Returns an `http.Handler` that calls `BindFromRequest` on every request before calling `next`:
 
 ```go
-func (c *Caracal) Middleware(next http.Handler) http.Handler
+func (c *Caracal) Middleware(next http.Handler, opts ...RootOptions) http.Handler
 ```
 
 ## Lifecycle hooks
