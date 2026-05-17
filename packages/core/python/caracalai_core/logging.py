@@ -198,7 +198,6 @@ class _JsonFormatter(logging.Formatter):
 _QUEUE_MAXSIZE = int(os.environ.get("CARACAL_LOG_QUEUE_SIZE", "16384"))
 _log_queue: "queue.Queue[logging.LogRecord]" = queue.Queue(maxsize=_QUEUE_MAXSIZE)
 _listener: logging.handlers.QueueListener | None = None
-_listener_started = False
 _dropped = 0
 _emitted = 0
 _sampled = 0
@@ -206,14 +205,13 @@ _debug_counter = 0
 
 
 def _ensure_listener() -> None:
-    global _listener, _listener_started
-    if _listener_started:
+    global _listener
+    if _listener is not None:
         return
     handler = _DynamicStderrHandler()
     handler.setFormatter(_JsonFormatter())
     _listener = logging.handlers.QueueListener(_log_queue, handler, respect_handler_level=True)
     _listener.start()
-    _listener_started = True
     atexit.register(_shutdown_listener)
 
 
@@ -231,10 +229,9 @@ class _DynamicStderrHandler(logging.Handler):
 
 
 def _shutdown_listener() -> None:
-    global _listener, _listener_started
+    global _listener
     listener = _listener
     _listener = None
-    _listener_started = False
     if listener is not None:
         listener.stop()
 

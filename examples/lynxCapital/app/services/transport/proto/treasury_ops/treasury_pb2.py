@@ -7,7 +7,6 @@
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
 _runtime_version.ValidateProtobufRuntimeVersion(
     _runtime_version.Domain.PUBLIC,
@@ -18,11 +17,6 @@ _runtime_version.ValidateProtobufRuntimeVersion(
     'treasury.proto'
 )
 # @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0etreasury.proto\x12\rlynx.treasury\"%\n\x13\x43\x61shPositionRequest\x12\x0e\n\x06region\x18\x01 \x01(\t\"l\n\x14\x43\x61shPositionResponse\x12\x0e\n\x06region\x18\x01 \x01(\t\x12\x10\n\x08\x63\x61sh_usd\x18\x02 \x01(\x01\x12\x11\n\toperating\x18\x03 \x01(\x01\x12\x10\n\x08reserves\x18\x04 \x01(\x01\x12\r\n\x05\x61s_of\x18\x05 \x01(\t\"7\n\x0f\x46orecastRequest\x12\x0e\n\x06region\x18\x01 \x01(\t\x12\x14\n\x0chorizon_days\x18\x02 \x01(\x05\"v\n\x10\x46orecastResponse\x12\x14\n\x0chorizon_days\x18\x01 \x01(\x05\x12\x13\n\x0boutflow_usd\x18\x02 \x01(\x01\x12\x12\n\ninflow_usd\x18\x03 \x01(\x01\x12\x0b\n\x03net\x18\x04 \x01(\x01\x12\x16\n\x0eshortfall_risk\x18\x05 \x01(\t\"b\n\x0e\x46xHedgeRequest\x12\x15\n\rfrom_currency\x18\x01 \x01(\t\x12\x13\n\x0bto_currency\x18\x02 \x01(\t\x12\x10\n\x08notional\x18\x03 \x01(\x01\x12\x12\n\ntenor_days\x18\x04 \x01(\x05\"\xaa\x01\n\x0f\x46xHedgeResponse\x12\x10\n\x08hedge_id\x18\x01 \x01(\t\x12\x15\n\rfrom_currency\x18\x02 \x01(\t\x12\x13\n\x0bto_currency\x18\x03 \x01(\t\x12\x10\n\x08notional\x18\x04 \x01(\x01\x12\x14\n\x0c\x66orward_rate\x18\x05 \x01(\x01\x12\x12\n\ntenor_days\x18\x06 \x01(\x05\x12\x0e\n\x06status\x18\x07 \x01(\t\x12\r\n\x05\x65rror\x18\x08 \x01(\t\"x\n\x0fTransferRequest\x12\x13\n\x0b\x66rom_region\x18\x01 \x01(\t\x12\x11\n\tto_region\x18\x02 \x01(\t\x12\x12\n\namount_usd\x18\x03 \x01(\x01\x12\x10\n\x08\x63urrency\x18\x04 \x01(\t\x12\x17\n\x0fidempotency_key\x18\x05 \x01(\t\"\x87\x01\n\x10TransferResponse\x12\x13\n\x0btransfer_id\x18\x01 \x01(\t\x12\x13\n\x0b\x66rom_region\x18\x02 \x01(\t\x12\x11\n\tto_region\x18\x03 \x01(\t\x12\x12\n\namount_usd\x18\x04 \x01(\x01\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x12\n\nvalue_date\x18\x06 \x01(\t2\xe0\x02\n\x0bTreasuryOps\x12Z\n\x0fGetCashPosition\x12\".lynx.treasury.CashPositionRequest\x1a#.lynx.treasury.CashPositionResponse\x12T\n\x11\x46orecastLiquidity\x12\x1e.lynx.treasury.ForecastRequest\x1a\x1f.lynx.treasury.ForecastResponse\x12M\n\x0cPlaceFxHedge\x12\x1d.lynx.treasury.FxHedgeRequest\x1a\x1e.lynx.treasury.FxHedgeResponse\x12P\n\rTransferFunds\x12\x1e.lynx.treasury.TransferRequest\x1a\x1f.lynx.treasury.TransferResponseb\x06proto3')
 

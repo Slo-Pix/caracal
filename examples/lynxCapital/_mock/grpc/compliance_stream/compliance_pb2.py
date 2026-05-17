@@ -7,7 +7,6 @@
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
-from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
 _runtime_version.ValidateProtobufRuntimeVersion(
     _runtime_version.Domain.PUBLIC,
@@ -18,11 +17,6 @@ _runtime_version.ValidateProtobufRuntimeVersion(
     'compliance.proto'
 )
 # @@protoc_insertion_point(imports)
-
-_sym_db = _symbol_database.Default()
-
-
-
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10\x63ompliance.proto\x12\x0flynx.compliance\".\n\rStreamRequest\x12\x0e\n\x06\x63ursor\x18\x01 \x01(\t\x12\r\n\x05lists\x18\x02 \x03(\t\"\x83\x01\n\x0eWatchlistDelta\x12\x0e\n\x06\x63ursor\x18\x01 \x01(\t\x12\x11\n\tlist_name\x18\x02 \x01(\t\x12\x0e\n\x06\x61\x63tion\x18\x03 \x01(\t\x12\x11\n\tentity_id\x18\x04 \x01(\t\x12\x0f\n\x07\x63ountry\x18\x05 \x01(\t\x12\x0e\n\x06reason\x18\x06 \x01(\t\x12\n\n\x02ts\x18\x07 \x01(\t2l\n\x0e\x43omplianceFeed\x12Z\n\x15StreamWatchlistDeltas\x12\x1e.lynx.compliance.StreamRequest\x1a\x1f.lynx.compliance.WatchlistDelta0\x01\x62\x06proto3')
 
