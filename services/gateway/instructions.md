@@ -1,38 +1,27 @@
-# gateway
+# services/gateway
 
 ## Scope
-- Covers the MCP reverse proxy service under caracal/services/gateway/ only.
+- Covers the Go MCP reverse proxy service under `services/gateway/`.
+
+## Architecture Design
+- The gateway exchanges inbound credentials with STS, loads resource bindings from PostgreSQL, tracks replay/revocation state through Redis, and proxies safe upstream requests.
+- It listens on port 8081 and uses `net/http` directly.
+- Upstream safety checks are enforced both before request dispatch and at dial time.
 
 ## Required
-- Must use Go 1.26 with net/http only; no external HTTP framework.
-- Must listen on port 8081 only; loadConfig must reject any other PORT.
-- Must perform a fresh STS exchange on every proxied request.
-- Must use github.com/garudex-labs/caracal/packages/core/go/* for config, errors, and logging.
-- Must require STS_URL; under CARACAL_MODE=runtime STS_URL must use https unless the target host is internal (single-label / loopback).
-- Must run plaintext when TLS_CERT_FILE/TLS_KEY_FILE are unset, and TLS when both are set; rejects partial config.
-- Must require DATABASE_URL and load resource→client_id bindings from gateway_resource_bindings.
-- Must reload bindings periodically so newly registered resources are reachable without restart.
-- Must validate every STS-supplied upstream through upstreamGuard; the upstream Transport must use guard.SafeDialContext to re-validate at connect time.
-- Must strip RFC 7230 hop-by-hop headers and X-Caracal-* routing headers before forwarding upstream.
-- Must replace the inbound Authorization header with the STS-issued bearer token.
-- Must enforce MaxRequestBytes via http.MaxBytesReader.
-- Must flush after every chunk so SSE/streaming responses are not buffered.
-- Must propagate X-Request-Id end to end (generate UUIDv4 if missing/invalid).
-- Must shut down via http.Server.Shutdown bounded by shutdownGrace.
+- Must use Go 1.26, `net/http`, and `packages/core/go`.
+- Must require STS, database, Redis, and stream HMAC configuration needed by runtime mode.
+- Must perform a fresh STS exchange for every proxied request.
+- Must strip hop-by-hop and `X-Caracal-*` routing headers before forwarding.
+- Must replace inbound Authorization with the STS-issued bearer token.
+- Must enforce request size limits, timeouts, replay checks, and safe upstream dialing.
 
 ## Forbidden
-- Must not import from caracalEnterprise/.
-- Must not cache STS tokens or upstream responses at any layer.
-- Must not log plaintext bearer tokens; use tokenFingerprint for correlation.
-- Must not retry STS exchanges or upstream calls (fail-closed).
-- Must not forward to private/loopback/link-local/CGNAT/metadata IPs unless ALLOW_PRIVATE_UPSTREAMS=true.
+- Must not cache STS tokens or upstream responses.
+- Must not retry STS exchanges or upstream calls after failure.
+- Must not log plaintext bearer tokens.
+- Must not forward to private, loopback, link-local, CGNAT, or metadata IPs unless explicitly allowed.
 
-## Environment Variables
-- Required: STS_URL, DATABASE_URL, REDIS_URL, STREAMS_HMAC_KEY.
-- TLS: TLS_CERT_FILE, TLS_KEY_FILE (both or neither).
-- Timeouts: STS_TIMEOUT, UPSTREAM_TIMEOUT, READ_HEADER_TIMEOUT, READ_TIMEOUT, WRITE_TIMEOUT, IDLE_TIMEOUT.
-- Limits: MAX_REQUEST_BYTES.
-- SSRF: UPSTREAM_HOST_ALLOWLIST (CSV), ALLOW_PRIVATE_UPSTREAMS.
-- Replay: JTI_FAIL_OPEN (default false; rejected under CARACAL_MODE=runtime).
-- Mode: CARACAL_MODE (dev|runtime, default runtime); runtime forbids INSECURE_STS, INSECURE_HTTP via core/config.AssertRuntimeSafe.
-- Misc: PORT (must equal 8081), LOG_LEVEL.
+## Validation
+- Validate with `go test ./services/gateway/...` when gateway code changes.
+

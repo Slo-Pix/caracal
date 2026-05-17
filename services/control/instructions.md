@@ -1,10 +1,27 @@
-- Covers only the Go control service under `caracal/services/control/`.
-- `cmd/control/main.go` must refuse to start unless `CARACAL_CONTROL_ENABLED=true`.
-- `internal/handler.go` must expose only `POST /v1/control/invoke` plus `/health` and `/ready`.
-- Every accepted request must validate `command` and `subcommand` against `github.com/garudex-labs/caracal/packages/core/go/commands` before any upstream call.
-- Every accepted and rejected request must produce one audit event of type `control.invoke` on `caracal.audit.events`.
-- Bearer tokens must be ES256 JWTs verified against the STS JWKS and must carry the `control:invoke` scope.
-- Must not shell out, fork, or exec any process.
-- Must not accept commands not present in the canonical catalog.
-- Must not expose multiple endpoints or admin routes beyond those listed above.
-- Must not bind to a port already used by another OSS service in `infra/docker/docker-compose.yml`.
+# services/control
+
+## Scope
+- Covers the Go control invocation service under `services/control/`.
+
+## Architecture Design
+- `cmd/control/main.go` is the startup boundary and requires explicit enablement.
+- `internal/handler.go` exposes control invocation plus health and readiness endpoints.
+- The command catalog in `packages/core/go/commands` is the canonical allowlist for accepted commands.
+
+## Required
+- Must use Go 1.26 and `packages/core/go` plus `packages/identity/go` for shared behavior.
+- Must refuse startup unless `CARACAL_CONTROL_ENABLED=true`.
+- Must expose only `POST /v1/control/invoke`, `/health`, and `/ready`.
+- Must validate command and subcommand before any upstream call.
+- Must audit every accepted and rejected request to `caracal.audit.events`.
+- Must require ES256 bearer JWTs with the `control:invoke` scope.
+
+## Forbidden
+- Must not shell out, fork, exec, or run local commands.
+- Must not accept commands absent from the canonical catalog.
+- Must not add admin endpoints or extra control routes.
+- Must not bind to a host port already used by another OSS service.
+
+## Validation
+- Validate with `go test ./services/control/...` when control service code changes.
+

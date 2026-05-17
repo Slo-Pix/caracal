@@ -1,14 +1,25 @@
 # services
 
 ## Scope
-- Covers only Go microservices under this directory.
+- Covers independently deployed Go services under `services/`.
+
+## Architecture Design
+- `sts/`, `gateway/`, `audit/`, `control/`, and `coordinator-relay/` are separate Go modules listed in `go.work`.
+- Shared Go behavior belongs in `packages/core/go` or another package module, never in a service sibling.
+- Service images are built by shared Go-service Docker packaging under `infra/docker/`.
 
 ## Required
-- Must contain only Go services, each with its own `go.mod`.
-- Must use `go.work` at the `caracal/` root for inter-module resolution.
-- Must name directories by service identity (e.g. `sts`, `gateway`, `audit`).
+- Must keep every service self-contained with `go.mod`, `cmd/<service>/`, `internal/`, and its own `instructions.md`.
+- Must keep public ports aligned with Compose.
+- Must use `packages/core/go` for shared config, crypto, logging, errors, audit, metrics, and command catalog primitives.
+- Must fail closed on missing required runtime configuration.
 
 ## Forbidden
-- Must not contain TypeScript apps or packages.
-- Must not contain infra configuration (Docker, SQL, Redis config).
-- Must not place shared library code here; shared Go code belongs in `packages/core/go/`.
+- Must not place TypeScript apps, SDK packages, or infrastructure config in this directory.
+- Must not import from sibling service internals.
+- Must not share business logic by copying code across services.
+- Must not import from `caracalEnterprise/`.
+
+## Validation
+- Validate with the owning `go test ./services/<name>/...` command or root Go test script.
+
