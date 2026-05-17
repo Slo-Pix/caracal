@@ -1,12 +1,21 @@
-# connectors/redis/go
+# packages/connectors/redis/go
 
 ## Scope
-- Covers only the `github.com/garudex-labs/caracal/packages/connectors/redis/go` Go module.
+- Covers the Go Redis revocation connector module under `packages/connectors/redis/go/`.
+
+## Architecture Design
+- The module implements `packages/revocation/go.Store` against Redis and consumes revocation stream updates.
 
 ## Required
-- Must implement the `github.com/garudex-labs/caracal/packages/revocation/go.Store` interface.
-- Must use Redis only for revocation key lookup and revocation stream consumption.
-- Must keep stream-consumer logic independent of MCP, net/http, and identity packages.
+- Must use Go 1.26 and `github.com/redis/go-redis/v9`.
+- Must keep Redis client behavior separate from MCP and HTTP middleware.
+- Must verify stream signatures when configured.
 
 ## Forbidden
 - Must not verify JWTs or own request authentication.
+- Must not depend on transport, identity, or framework packages unless the public revocation interface requires it.
+- Must not log raw token identifiers beyond approved fingerprints or keys.
+
+## Validation
+- Validate with `go test ./packages/connectors/redis/go/...`.
+

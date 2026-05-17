@@ -1,11 +1,19 @@
-# revocation/go
+# packages/revocation/go
 
 ## Scope
-- Covers only the `github.com/garudex-labs/caracal/packages/revocation/go` Go module under `packages/revocation/go/`.
+- Covers the Go revocation module under `packages/revocation/go/`.
+
+## Architecture Design
+- The module defines the revocation lookup interface and an in-memory implementation.
 
 ## Required
-- Must define the revocation lookup interface and ship an in-memory default implementation.
+- Must use Go 1.26 and keep the module storage-neutral.
+- Must keep the in-memory implementation safe for test and local use.
 
 ## Forbidden
-- Must not contain any storage backend code.
-- Must not depend on identity, transport, or framework packages.
+- Must not depend on identity, transport, Redis, Postgres, or framework packages.
+- Must not verify JWTs.
+
+## Validation
+- Validate with `go test ./packages/revocation/go/...` and shared Go revocation tests.
+

@@ -1,16 +1,24 @@
-# core/go
+# packages/core/go
 
 ## Scope
-- Covers only the Go core foundation under `caracal/packages/core/go/`.
+- Covers the Go core module under `packages/core/go/`.
+
+## Architecture Design
+- Packages under this module provide shared audit, command catalog, config, crypto, errors, logging, metrics, scope, and STS types.
+- Go services and Go library packages consume these primitives through public package paths.
 
 ## Required
-- Go packages (`config`, `errors`, `crypto`, `logging`, `audit`, `scope`, `sts`, `commands`) live directly in this directory under the module `github.com/garudex-labs/caracal/packages/core/go`.
-- Every Go service must import core utilities only from `github.com/garudex-labs/caracal/packages/core/go/*`.
-- `crypto` package must wrap ChaCha20-Poly1305 and ECDSA P-256 primitives only; no raw cipher usage outside this package.
-- `logging` package must produce structured JSON on stderr; no plaintext log lines elsewhere.
-- `commands` package must mirror the canonical TS catalog at `packages/core/ts/src/commands.ts`; parity is enforced by `tests/typescript/scripts/catalog-parity.test.ts`.
+- Must use Go 1.26 and keep the module path `github.com/garudex-labs/caracal/packages/core/go`.
+- Must keep crypto primitives centralized in `crypto`.
+- Must keep structured logging and redaction centralized in `logging`.
+- Must keep command catalog parity with `packages/core/ts/src/commands.ts`.
+- Must keep service-specific behavior out of core packages.
 
 ## Forbidden
-- Must not add platform-specific dependencies to the core layer.
-- Must not embed service-specific business logic.
-- Must not add packages beyond those listed above without updating this file.
+- Must not import service `internal/` packages.
+- Must not add platform-specific behavior outside a narrow, documented core boundary.
+- Must not duplicate package behavior already owned by another core subpackage.
+
+## Validation
+- Validate with `go test ./packages/core/go/...` and command-catalog parity tests when catalog behavior changes.
+

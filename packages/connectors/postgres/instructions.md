@@ -1,10 +1,20 @@
-# connectors/postgres
+# packages/connectors/postgres
 
 ## Scope
-- Covers the per-language Postgres-backed token state binding.
+- Covers Postgres-backed connector package grouping under `packages/connectors/postgres/`.
+
+## Architecture Design
+- The current implementation is TypeScript-only under `ts/`.
+- Postgres connectors implement persistence-backed state, not transport or request authentication.
 
 ## Required
-- Each language subdirectory must implement the token state interface against Postgres.
+- Must keep Postgres-specific behavior inside language subdirectories.
+- Must keep token-state persistence separate from revocation and transport packages.
 
 ## Forbidden
-- Must not host token cache, transport, or framework logic.
+- Must not host JWT verification, framework middleware, or generic transport logic.
+- Must not add non-Postgres storage adapters here.
+
+## Validation
+- Validate through the touched child package.
+

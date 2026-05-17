@@ -1,13 +1,22 @@
-# connectors/express/ts
+# packages/connectors/express/ts
 
 ## Scope
-- Covers only the `@caracalai/mcp-express` TS package under `packages/connectors/express/ts/`.
+- Covers the `@caracalai/mcp-express` TypeScript package under `packages/connectors/express/ts/`.
+
+## Architecture Design
+- The package adapts `@caracalai/transport-mcp` authentication results to Express `RequestHandler` middleware.
+- Express is a peer dependency; Caracal auth logic stays in transport and SDK packages.
 
 ## Required
-- Must adapt the `@caracalai/transport-mcp` `authenticate` result onto an Express `RequestHandler`.
-- Must map every `AuthError` code to the matching HTTP status and JSON body.
-- Must require a `RevocationStore` on the middleware options and forward it to `authenticate`.
+- Must map transport authentication errors to stable HTTP status codes and JSON bodies.
+- Must require caller-provided revocation behavior through middleware options.
+- Must keep Express request augmentation minimal and typed.
 
 ## Forbidden
-- Must not re-implement JWT verification or revocation lookup.
-- Must not depend on FastMCP, net/http, or any storage backend.
+- Must not reimplement JWT verification, JWKS fetching, revocation lookup, or token exchange.
+- Must not depend on FastMCP, Go net/http, Redis, or Postgres.
+- Must not pass unauthenticated requests to downstream handlers.
+
+## Validation
+- Validate with `pnpm --dir packages/connectors/express/ts build` and its connector tests.
+

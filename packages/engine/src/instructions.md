@@ -1,13 +1,23 @@
-# engine/src
+# packages/engine/src
 
 ## Scope
-- Covers verb-body source modules under `packages/engine/src/`.
+- Covers source modules for `@caracalai/engine` under `packages/engine/src/`.
+
+## Architecture Design
+- Each module owns one execution concern or command noun.
+- `index.ts` re-exports the package surface; module-internal helpers stay private.
 
 ## Required
-- Each module groups one CLI noun's verbs (e.g. `zone.ts`, `app.ts`).
-- Module-internal helpers must stay private; only verb functions and shared types may be re-exported through `index.ts`.
-- Every source file must begin with the project file header.
+- Must keep verb bodies independent of CLI flag parsing and terminal rendering.
+- Must accept typed options objects instead of positional command-line state.
+- Must keep generated `embedded.ts` produced by the build script.
+- Must preserve token scrubbing on any user-visible string path.
 
 ## Forbidden
-- Must not contain CLI flag parsing or terminal printing.
-- Must not import from `apps/`.
+- Must not import from `apps/cli` or `apps/tui`.
+- Must not write to stdout, stderr, or terminal APIs.
+- Must not call `process.exit`.
+
+## Validation
+- Validate with `pnpm --dir packages/engine build` after source changes.
+

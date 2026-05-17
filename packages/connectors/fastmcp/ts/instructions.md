@@ -1,12 +1,21 @@
-# connectors/fastmcp/ts
+# packages/connectors/fastmcp/ts
 
 ## Scope
-- Covers only the `@caracalai/mcp-fastmcp` TS package under `packages/connectors/fastmcp/ts/`.
+- Covers the `@caracalai/mcp-fastmcp` TypeScript package under `packages/connectors/fastmcp/ts/`.
+
+## Architecture Design
+- The package adapts `@caracalai/transport-mcp` authentication to FastMCP token-validation hooks.
 
 ## Required
-- Must call `authenticate` from `@caracalai/transport-mcp` for every token verification.
-- Must expose only the FastMCP-shaped binding for token validation.
+- Must call `@caracalai/transport-mcp` for token authentication.
+- Must keep FastMCP request shaping local to this package.
+- Must keep exported types usable without importing app or service code.
 
 ## Forbidden
-- Must not import `jose`, perform JWKS fetches, or implement JWT verification directly.
-- Must not depend on Express, net/http, or any storage backend.
+- Must not import `jose` or implement JWT verification directly.
+- Must not depend on Express, Go net/http, Redis, or Postgres.
+- Must not pass unauthenticated requests to FastMCP handlers.
+
+## Validation
+- Validate with `pnpm --dir packages/connectors/fastmcp/ts build` and its connector tests.
+

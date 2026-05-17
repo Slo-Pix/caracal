@@ -1,12 +1,21 @@
-# core/go/commands
+# packages/core/go/commands
 
 ## Scope
-- Covers only the Go command catalog mirror under `packages/core/go/commands/`.
+- Covers the Go command catalog mirror under `packages/core/go/commands/`.
+
+## Architecture Design
+- This package describes command and subcommand shape for Go consumers such as the control service.
+- The TypeScript catalog in `packages/core/ts/src/commands.ts` is the canonical source.
 
 ## Required
-- `catalog.go` must mirror `packages/core/ts/src/commands.ts` exactly: same command names, groups, subcommands, hidden flag.
-- Only the control service and any future Go consumer of the canonical surface may import this package.
+- Must mirror command names, groups, subcommands, and hidden flags from the TypeScript catalog.
+- Must keep catalog data declarative.
+- Must preserve parity coverage through existing catalog tests.
 
 ## Forbidden
-- Must not add executor logic; this package only describes shape.
-- Must not include flags, defaults, or per-command argument schemas beyond what the TS catalog declares.
+- Must not add command execution, flag parsing, defaults, or argument schemas.
+- Must not diverge from the TypeScript catalog.
+
+## Validation
+- Validate with `go test ./packages/core/go/commands` and `pnpm test -- --run tests/typescript/scripts/catalog-parity.test.ts` when the catalog changes.
+

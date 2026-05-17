@@ -1,12 +1,21 @@
-# transport/mcp/go
+# packages/transport/mcp/go
 
 ## Scope
-- Covers only the `github.com/garudex-labs/caracal/packages/transport/mcp/go` Go module under `packages/transport/mcp/go/`.
+- Covers the Go MCP authentication module under `packages/transport/mcp/go/`.
+
+## Architecture Design
+- The module authenticates Caracal JWTs with `packages/identity/go` and checks revocation through `packages/revocation/go`.
 
 ## Required
-- Must consume only the `identity` and `revocation` Go modules.
-- Must expose a framework-neutral `Authenticate` returning a typed result.
+- Must use Go 1.26 and expose a framework-neutral `Authenticate` result.
+- Must require caller-provided revocation behavior for session checks.
+- Must keep auth errors typed for connector mapping.
 
 ## Forbidden
-- Must not depend on `net/http`, FastMCP, Express, or any storage backend.
-- Must not import driver libraries or cross-package wrappers.
+- Must not depend on net/http middleware, Express, FastMCP, Redis, Postgres, or service internals.
+- Must not perform storage lookups except through the revocation interface.
+- Must not log plaintext tokens.
+
+## Validation
+- Validate with `go test ./packages/transport/mcp/go/...`.
+

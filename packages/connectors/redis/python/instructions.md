@@ -1,12 +1,21 @@
-# connectors/redis/python
+# packages/connectors/redis/python
 
 ## Scope
-- Covers only the `caracalai-revocation-redis` Python package.
+- Covers the `caracalai-revocation-redis` Python package under `packages/connectors/redis/python/`.
+
+## Architecture Design
+- The package implements `caracalai_revocation.RevocationStore` with Redis-compatible structural clients.
 
 ## Required
-- Must implement the `caracalai_revocation.RevocationStore` protocol.
-- Must use structural Redis client calls so callers can provide compatible Redis clients.
-- Must keep stream-consumer logic independent of MCP, FastMCP, and identity packages.
+- Must require Python 3.14+ through `pyproject.toml`.
+- Must keep Redis calls structural so callers can provide compatible clients.
+- Must keep stream-consumer logic independent from MCP, FastMCP, and identity packages.
 
 ## Forbidden
 - Must not verify JWTs or own request authentication.
+- Must not depend on transport or framework packages.
+- Must not log raw token identifiers beyond approved fingerprints or keys.
+
+## Validation
+- Validate with the relevant `tests/python/unit/caracalai_revocation_redis` tests.
+

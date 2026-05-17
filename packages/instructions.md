@@ -1,20 +1,27 @@
 # packages
 
 ## Scope
-- Covers only library packages under this directory.
+- Covers reusable library packages under `packages/`.
+
+## Architecture Design
+- Domain packages use `<domain>/<language>/` when multiple language bindings exist.
+- Transport packages live under `transport/<protocol>/<language>/`.
+- Framework and storage adapters live under `connectors/<adapter>/<language>/`.
+- Runnable services and apps consume packages; packages must not depend on apps or services.
 
 ## Required
-- Must place each package under a single domain directory containing one subdirectory per language (`ts/`, `go/`, `python/`).
-- Must place wire-protocol packages under `transport/<protocol>/<language>/` (e.g. `transport/mcp`, `transport/a2a`).
-- Must place every framework or storage connector under `connectors/<single-word>/<language>/` (e.g. `connectors/express`, `connectors/postgres`).
-- Must give every Go package its own `go.mod` and list it in `go.work`.
-- Must give every TS package its own `package.json` and list it in `pnpm-workspace.yaml`.
-- Must give every Python package its own `pyproject.toml`.
+- Must keep TypeScript packages listed in `pnpm-workspace.yaml`.
+- Must keep Go modules listed in `go.work`.
+- Must keep Python packages defined by their own `pyproject.toml`.
+- Must preserve language boundaries and publishable package surfaces.
+- Must route shared primitives through `core`, not ad hoc shared folders.
 
 ## Forbidden
-- Must not contain runnable services or applications.
-- Must not contain infra configuration.
-- Must not duplicate logic already owned by a sibling package.
-- Must not import across the `caracal/` and `caracalEnterprise/` product boundary.
-- Must not introduce a top-level `shared/` or `ts-shared/` directory; the foundation lives under `core/`.
-- Must not reintroduce legacy framework, runtime, or state backend directories; all adapters live under `connectors/`.
+- Must not contain runnable app or service entrypoints.
+- Must not contain infrastructure orchestration.
+- Must not import from sibling implementation internals when a public package surface exists.
+- Must not import from `caracalEnterprise/`.
+
+## Validation
+- Validate with the touched package's declared build, typecheck, or test command.
+

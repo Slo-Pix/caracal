@@ -1,14 +1,21 @@
-# transport/a2a/ts
+# packages/transport/a2a/ts
 
 ## Scope
-- Covers only the `@caracalai/transport-a2a` TS package under `packages/transport/a2a/ts/`.
+- Covers the `@caracalai/transport-a2a` TypeScript package under `packages/transport/a2a/ts/`.
+
+## Architecture Design
+- The package provides A2A subject-token preservation, scope subset enforcement, and message envelope behavior.
+- It consumes OAuth and SDK primitives through public package surfaces.
 
 ## Required
-- Must implement A2A protocol primitives: subject token preservation, scope subset enforcement, message envelope.
-- Must remain agent-agnostic and reusable by any service performing A2A calls.
-- Must route token exchange through `@caracalai/oauth`.
+- Must use TypeScript strict mode and keep exports through `src/index.ts`.
+- Must prevent scope escalation across agent-to-agent hops.
+- Must preserve subject identity and delegation context in envelopes.
 
 ## Forbidden
-- Must not import any agent runtime, framework SDK, or storage backend.
-- Must not allow scope escalation across hops.
+- Must not import agent runtime implementations, framework SDKs, storage backends, or service internals.
 - Must not log plaintext tokens.
+
+## Validation
+- Validate with `pnpm --dir packages/transport/a2a/ts build` and `pnpm --dir packages/transport/a2a/ts test`.
+

@@ -1,13 +1,20 @@
-# transport/mcp/ts
+# packages/transport/mcp/ts
 
 ## Scope
-- Covers only the `@caracalai/transport-mcp` TS package under `packages/transport/mcp/ts/`.
+- Covers the `@caracalai/transport-mcp` TypeScript package under `packages/transport/mcp/ts/`.
+
+## Architecture Design
+- The package authenticates Caracal JWTs with `@caracalai/identity` and checks revocation through `@caracalai/revocation`.
 
 ## Required
-- Must consume only the `@caracalai/identity` and `@caracalai/revocation` interfaces.
-- Must expose a transport-neutral `authenticate` function returning a typed `Result<Principal, AuthError>`.
-- Must require a `RevocationStore` on every `authenticate` call and consult it for every authenticated session.
+- Must use TypeScript strict mode and expose a transport-neutral `authenticate` result.
+- Must require caller-provided revocation behavior for every authenticated session.
+- Must keep auth errors typed for connector mapping.
 
 ## Forbidden
-- Must not depend on Express, FastMCP, net/http, or any framework runtime.
-- Must not depend on any storage backend or database driver.
+- Must not depend on Express, FastMCP, Go net/http, Redis, Postgres, or service internals.
+- Must not perform storage lookups except through the revocation interface.
+- Must not log plaintext tokens.
+
+## Validation
+- Validate with `pnpm --dir packages/transport/mcp/ts build` and `pnpm --dir packages/transport/mcp/ts test`.

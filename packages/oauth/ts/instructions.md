@@ -1,19 +1,23 @@
-# oauth/ts
+# packages/oauth/ts
 
 ## Scope
-- Covers only the `@caracalai/oauth` TS package under `packages/oauth/ts/`.
+- Covers the `@caracalai/oauth` TypeScript package under `packages/oauth/ts/`.
+
+## Architecture Design
+- The package implements RFC 8693 token exchange against STS `/oauth/2/token`.
+- It owns `TokenCache`, `InMemoryTokenCache`, exchange types, and `InteractionRequiredError`.
 
 ## Required
-- Must implement RFC 8693 token exchange against STS `/oauth/2/token`.
-- Must define a `TokenCache` interface and ship `InMemoryTokenCache` as the default.
-- Must perform pre-flight expiry check: re-exchange if token expires within `timeoutMs + 30 s`.
-- Must retry once on 401 before propagating failure.
-- Must surface `interaction_required` errors as `InteractionRequiredError` with `challengeId`.
+- Must use TypeScript strict mode and keep exports through `src/index.ts`.
+- Must perform pre-flight expiry checks before reusing cached tokens.
+- Must retry once on 401 only when the existing token is stale or rejected.
+- Must scope cache entries by subject token context.
 
 ## Forbidden
-- Must not import provider, runtime, or framework SDKs (no Cloudflare, no Express, no FastMCP).
-- Must not depend on `@caracalai/identity`, `@caracalai/revocation`, or `@caracalai/transport-mcp`.
 - Must not persist tokens to disk.
+- Must not depend on identity, revocation, transport, framework, or provider SDK packages.
+- Must not proactively refresh tokens without a caller exchange request.
 - Must not log token values.
-- Must not proactively refresh tokens.
-- Must not share cache entries across different subject tokens.
+
+## Validation
+- Validate with `pnpm --dir packages/oauth/ts build` and `pnpm --dir packages/oauth/ts test`.

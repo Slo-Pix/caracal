@@ -1,19 +1,25 @@
 # packages/connectors
 
 ## Scope
-- Covers framework and infrastructure adapters that wire a host runtime into Caracal.
+- Covers framework and storage adapters under `packages/connectors/`.
+
+## Architecture Design
+- Framework connectors adapt transport or SDK primitives to host runtimes.
+- Storage connectors implement persistence-backed interfaces that neutral packages define elsewhere.
+- Connector siblings must share through `core`, `identity`, `revocation`, `sdk`, or `transport`, not through each other.
 
 ## Required
-- Each child must depend only on `packages/core`, `packages/identity`, `packages/sdk`, `packages/transport`, and the framework it adapts.
-- Each child must verify every inbound bearer through STS or the embedded SDK before invoking the host application.
-- Each child must surface a runbook entry covering how requests bypass Caracal when the host is reached directly (without the connector).
+- Must keep each connector under `<adapter>/<language>/`.
+- Must keep request authentication fail-closed in production paths.
+- Must document direct-host bypass risk where a connector only protects traffic that reaches it.
+- Must keep framework adapters free of storage ownership unless the connector name is a storage backend.
 
 ## Forbidden
-- Must not provide a public path that forwards an unverified request to the host application.
-- Must not stub out token verification with environment toggles in production builds.
-- Must not depend on another `packages/connectors/*` sibling; share through the approved core/identity/sdk layers only.
+- Must not provide a public path that forwards unverified requests to host applications.
+- Must not stub token verification with production runtime toggles.
+- Must not import sibling connector internals.
+- Must not import from `caracalEnterprise/`.
 
-## Direct-API bypass posture
-- A connector enforces Caracal only on traffic that reaches it. Any host port left open outside the connector (private LAN, sidecar bypass, raw provider key) is outside Caracal's trust boundary.
-- Production deployments must front the host with the connector or the gateway, and must firewall every other path.
-- The CLI prints the gateway/connector enforcement warning whenever a fresh `caracal.toml` is created; do not remove it.
+## Validation
+- Validate through the touched connector package and its unit tests.
+

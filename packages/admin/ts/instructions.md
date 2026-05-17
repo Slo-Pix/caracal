@@ -1,17 +1,23 @@
-# admin/ts
+# packages/admin/ts
 
 ## Scope
-- Covers only the `@caracalai/admin` TS package under `packages/admin/ts/`.
+- Covers the `@caracalai/admin` TypeScript package under `packages/admin/ts/`.
+
+## Architecture Design
+- `AdminClient` is the typed HTTP wrapper for the control-plane API and coordinator API.
+- Callers provide URLs and tokens explicitly; this package performs no environment or disk discovery.
 
 ## Required
-- Must export a single `AdminClient` typed wrapper over the Caracal admin API (`/v1/*`) and the agent coordinator API.
-- Must take `apiUrl`, `coordinatorUrl`, and tokens via the constructor.
-- Must use the platform `fetch`.
-- Must surface non-2xx responses as `AdminApiError` with `status`, `code`, and `body`.
-- Must remain framework-agnostic and consumable from CLI, scripts, and tests.
+- Must use the platform `fetch` API.
+- Must surface non-2xx responses as `AdminApiError` with status, code, and body.
+- Must keep exported types stable for app, CLI, TUI, script, and test consumers.
+- Must remain framework-agnostic.
 
 ## Forbidden
-- Must not read environment variables or disk state.
-- Must not embed credentials.
-- Must not introduce schema validation libraries; types are TypeScript-only.
-- Must not pull in heavy HTTP dependencies.
+- Must not read environment variables, config files, or credentials from disk.
+- Must not embed tokens, generated secrets, or default credentials.
+- Must not introduce heavy HTTP clients or runtime schema libraries.
+
+## Validation
+- Validate with `pnpm --dir packages/admin/ts build` and `pnpm --dir packages/admin/ts test` when admin client code changes.
+

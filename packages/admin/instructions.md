@@ -1,10 +1,20 @@
-# admin
+# packages/admin
 
 ## Scope
-- Covers the `@caracalai/admin` package; per-language implementations live in subdirectories.
+- Covers admin API client package grouping under `packages/admin/`.
+
+## Architecture Design
+- Language implementations live in child directories.
+- The current implementation is TypeScript-only under `ts/`.
 
 ## Required
-- Each language implementation must live in its own subdirectory (`ts/`).
+- Must keep implementation code inside language subdirectories.
+- Must keep admin clients framework-agnostic and reusable by CLI, TUI, scripts, and tests.
 
 ## Forbidden
-- Must not contain implementation code at this level.
+- Must not place source files at this level.
+- Must not duplicate API route schemas outside the owning language package.
+
+## Validation
+- Validate through the touched child package.
+

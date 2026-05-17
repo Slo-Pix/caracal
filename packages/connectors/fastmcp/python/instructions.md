@@ -1,13 +1,22 @@
-# connectors/fastmcp/python
+# packages/connectors/fastmcp/python
 
 ## Scope
-- Covers only the `caracalai-mcp-fastmcp` Python package under `packages/connectors/fastmcp/python/`.
+- Covers the `caracalai-mcp-fastmcp` Python package under `packages/connectors/fastmcp/python/`.
+
+## Architecture Design
+- The package adapts `caracalai_transport_mcp.authenticate` to FastMCP authentication hooks.
+- FastMCP support is optional through package extras.
 
 ## Required
-- Must call `authenticate` from `caracalai_transport_mcp` for every token verification.
-- Must expose only the FastMCP-shaped binding for token validation.
-- Must require a `RevocationStore` on `CaracalAuth` construction and forward it to `authenticate`.
+- Must require Python 3.14+ through `pyproject.toml`.
+- Must call `caracalai_transport_mcp.authenticate` for token verification.
+- Must require caller-provided revocation behavior and forward it to transport authentication.
 
 ## Forbidden
-- Must not implement JWT verification or revocation lookup directly.
-- Must not depend on Express, net/http, or any storage backend.
+- Must not implement JWT verification, JWKS fetching, or revocation lookup directly.
+- Must not depend on Express, Go net/http, Redis, or Postgres.
+- Must not pass unauthenticated requests to FastMCP handlers.
+
+## Validation
+- Validate with the relevant `tests/python/unit/caracalai_mcp_fastmcp` tests.
+
