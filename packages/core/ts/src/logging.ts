@@ -55,7 +55,9 @@ const AWS_ASIA = /ASIA[0-9A-Z]{16}/g;
 const GCP_KEY = /AIza[0-9A-Za-z_-]{35}/g;
 const GITHUB_PAT = /gh[pousr]_[A-Za-z0-9]{36,255}/g;
 const SLACK_TOKEN = /xox[abprs]-[A-Za-z0-9-]{10,}/g;
-const PEM_BLOCK = /-----BEGIN [A-Z ]+PRIVATE KEY-----[\s\S]*?-----END [A-Z ]+PRIVATE KEY-----/g;
+const PEM_BEGIN = '-----BEGIN ';
+const PEM_END = '-----END ';
+const PEM_TAIL = '-----';
 
 export const MAX_FIELD_BYTES = (() => {
   const v = process.env.CARACAL_LOG_MAX_FIELD_BYTES;
@@ -88,7 +90,7 @@ export function buildPinoRedactPaths(): string[] {
  */
 export function redactString(s: string): string {
   if (s.length < 16) return s;
-  let out = s.replace(PEM_BLOCK, REDACT_VALUE);
+  let out = redactPemBlocks(s);
   out = out.replace(BEARER_PATTERN, `Bearer ${REDACT_VALUE}`);
   out = out.replace(JWT_PATTERN, REDACT_VALUE);
   out = out.replace(AWS_AKIA, REDACT_VALUE);
@@ -97,6 +99,50 @@ export function redactString(s: string): string {
   out = out.replace(GITHUB_PAT, REDACT_VALUE);
   out = out.replace(SLACK_TOKEN, REDACT_VALUE);
   return out;
+}
+
+function redactPemBlocks(s: string): string {
+  let copyStart = 0;
+  let pendingBegin = -1;
+  let begin = s.indexOf(PEM_BEGIN);
+  let end = s.indexOf(PEM_END);
+  const chunks: string[] = [];
+
+  while (begin !== -1 || end !== -1) {
+    if (begin !== -1 && (end === -1 || begin < end)) {
+      const label = readPemLabel(s, begin + PEM_BEGIN.length);
+      if (label && isPrivateKeyPemLabel(label.value) && pendingBegin === -1) pendingBegin = begin;
+      begin = s.indexOf(PEM_BEGIN, label?.end ?? begin + PEM_BEGIN.length);
+      continue;
+    }
+
+    const label = readPemLabel(s, end + PEM_END.length);
+    if (label && isPrivateKeyPemLabel(label.value) && pendingBegin !== -1) {
+      chunks.push(s.slice(copyStart, pendingBegin), REDACT_VALUE);
+      copyStart = label.end;
+      pendingBegin = -1;
+    }
+    end = s.indexOf(PEM_END, label?.end ?? end + PEM_END.length);
+  }
+
+  if (chunks.length === 0) return s;
+  chunks.push(s.slice(copyStart));
+  return chunks.join('');
+}
+
+function readPemLabel(s: string, start: number): { value: string; end: number } | null {
+  const end = s.indexOf(PEM_TAIL, start);
+  if (end === -1) return null;
+  return { value: s.slice(start, end), end: end + PEM_TAIL.length };
+}
+
+function isPrivateKeyPemLabel(label: string): boolean {
+  if (!label.endsWith('PRIVATE KEY')) return false;
+  for (let i = 0; i < label.length; i++) {
+    const code = label.charCodeAt(i);
+    if (code !== 32 && (code < 65 || code > 90)) return false;
+  }
+  return true;
 }
 
 export function truncateString(s: string): string {
@@ -295,5 +341,3 @@ function makeLogger(
     metrics: () => devLogMetrics(),
   };
 }
-
-

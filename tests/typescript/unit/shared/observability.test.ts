@@ -56,6 +56,13 @@ describe('cloud secret redaction', () => {
   it('scrubs PEM private keys', () => {
     const pem = '-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAKj34GkxFhD\n-----END RSA PRIVATE KEY-----'
     expect(redactString(pem)).toBe('***')
+    expect(redactString('-----BEGIN PRIVATE KEY-----\nkey\n-----END PRIVATE KEY-----')).toBe('***')
+    expect(redactString('-----BEGIN ENCRYPTED PRIVATE KEY-----\nkey\n-----END ENCRYPTED PRIVATE KEY-----')).toBe('***')
+  })
+
+  it('handles repeated unterminated PEM headers without regex backtracking', () => {
+    const input = '-----BEGIN RSA PRIVATE KEY-----'.repeat(10_000)
+    expect(redactString(input)).toBe(input)
   })
 })
 
