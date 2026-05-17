@@ -15,8 +15,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/garudex-labs/caracal/core/audit"
-	"github.com/garudex-labs/caracal/core/config"
+	"github.com/garudex-labs/caracal/packages/core/go/audit"
+	"github.com/garudex-labs/caracal/packages/core/go/config"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )

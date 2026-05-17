@@ -28,6 +28,21 @@ describe('OAuthClient', () => {
     expect(body.get('client_secret')).toBe('secret-1')
   })
 
+  it('supports application-principal exchanges with multiple resources', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: 'tok-app', expires_in: 900 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+    const res = await client.exchange('', ['resource://a', 'resource://b'], { clientSecret: 'secret-1' })
+    expect(res.accessToken).toBe('tok-app')
+    const body = fetchMock.mock.calls[0][1].body as URLSearchParams
+    expect(body.get('subject_token')).toBeNull()
+    expect(body.getAll('resource')).toEqual(['resource://a', 'resource://b'])
+  })
+
   it('returns cached token without calling STS again', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

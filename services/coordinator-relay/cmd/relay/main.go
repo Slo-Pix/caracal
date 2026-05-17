@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/garudex-labs/caracal/coordinator-relay/internal"
-	"github.com/garudex-labs/caracal/core/logging"
+	"github.com/garudex-labs/caracal/packages/core/go/logging"
 )
 
 func main() {

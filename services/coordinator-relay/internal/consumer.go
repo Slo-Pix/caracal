@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/garudex-labs/caracal/core/config"
-	sharedcrypto "github.com/garudex-labs/caracal/core/crypto"
-	"github.com/garudex-labs/caracal/core/logging"
+	"github.com/garudex-labs/caracal/packages/core/go/config"
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	"github.com/garudex-labs/caracal/packages/core/go/logging"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
