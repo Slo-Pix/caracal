@@ -17,24 +17,21 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from langchain_core.messages import AIMessageChunk, SystemMessage
 
-from app.agents.runner import create_runner
+import app.agents.runner as runner_mod
+import app.core.workers as workers_mod
+import app.events.bus as bus_mod
+import app.orchestration.swarm as swarm_mod
 from app.config import load_config
 from app.core.blackboard import RunBlackboard
 from app.core.files import RunFileStore
 from app.core.jobs import JobRegistry
 from app.core.memory import RunMemoryStore
 from app.core.plans import RunPlanStore
-from app.core.workers import WorkerPool
-from app.events.bus import EventBus
-import app.events.bus as bus_mod
-import app.agents.runner as runner_mod
-import app.core.workers as workers_mod
-import app.orchestration.swarm as swarm_mod
 
 
 @pytest.fixture(autouse=True)
 def fresh_bus(monkeypatch):
-    new_bus = EventBus()
+    new_bus = bus_mod.EventBus()
     monkeypatch.setattr(bus_mod, "bus", new_bus)
     monkeypatch.setattr(runner_mod, "bus", new_bus)
     monkeypatch.setattr(swarm_mod, "bus", new_bus)
@@ -45,13 +42,13 @@ def fresh_bus(monkeypatch):
 
 def test_worker_pool_acquire_release(fresh_bus):
     run_id = "wp-1"
-    runner = create_runner(run_id)
+    runner = runner_mod.create_runner(run_id)
     parent = runner.spawn(
         role="finance-control", scope="global", parent=None,
         layer="finance-control", region=None,
     )
     parent.start()
-    pool = WorkerPool(run_id, runner, parent)
+    pool = workers_mod.WorkerPool(run_id, runner, parent)
 
     w = pool.acquire("invoice-intake", "scope-1")
     assert w.id in pool.active_ids()
@@ -67,13 +64,13 @@ def test_worker_pool_acquire_release(fresh_bus):
 
 def test_worker_pool_drain_terminates_active(fresh_bus):
     run_id = "wp-2"
-    runner = create_runner(run_id)
+    runner = runner_mod.create_runner(run_id)
     parent = runner.spawn(
         role="finance-control", scope="global", parent=None,
         layer="finance-control", region=None,
     )
     parent.start()
-    pool = WorkerPool(run_id, runner, parent)
+    pool = workers_mod.WorkerPool(run_id, runner, parent)
     w = pool.acquire("policy-check", "scope-2")
     pool.drain("cancelled")
     assert pool.active_ids() == []
@@ -158,7 +155,7 @@ class _StageFakeLLM:
 
 def test_stage_complete_writes_finding_and_exits_loop(fresh_bus):
     run_id = "stage-1"
-    runner = create_runner(run_id)
+    runner = runner_mod.create_runner(run_id)
     agent = runner.spawn(
         role="regional-orchestrator", scope="region:US",
         parent=None, layer="regional-orchestrator", region="US",
@@ -168,7 +165,7 @@ def test_stage_complete_writes_finding_and_exits_loop(fresh_bus):
     plans = RunPlanStore(run_id)
     files = RunFileStore(run_id=run_id)
     board = RunBlackboard(run_id)
-    pool = WorkerPool(run_id, runner, agent)
+    pool = workers_mod.WorkerPool(run_id, runner, agent)
     state = {"current": None}
 
     tools = swarm_mod._build_agent_builtins(
@@ -218,7 +215,7 @@ class _RunawayFakeLLM:
 
 def test_turn_loop_honors_stage_budget(fresh_bus):
     run_id = "stage-budget"
-    runner = create_runner(run_id)
+    runner = runner_mod.create_runner(run_id)
     agent = runner.spawn(
         role="regional-orchestrator", scope="region:US",
         parent=None, layer="regional-orchestrator", region="US",

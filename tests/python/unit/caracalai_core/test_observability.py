@@ -13,6 +13,7 @@ from caracalai_core.logging import (
     parse_traceparent,
     redact_string,
     reset_trace,
+    truncate_string,
 )
 
 
@@ -44,10 +45,8 @@ def test_redact_cloud_secrets() -> None:
 
 
 def test_truncate_string(monkeypatch) -> None:
-    import caracalai_core.logging as L
-
-    monkeypatch.setattr(L, "MAX_FIELD_BYTES", 16)
-    out = L.truncate_string("x" * 64)
+    monkeypatch.setattr("caracalai_core.logging.MAX_FIELD_BYTES", 16)
+    out = truncate_string("x" * 64)
     assert out.endswith("[truncated]")
 
 

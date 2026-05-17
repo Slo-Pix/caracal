@@ -267,7 +267,6 @@ function renderPlan() {
     return;
   }
 
-  const owner = state.agents[ownerId];
   const done = plan.items.filter((item) => item.status === "completed").length;
   const overall = computeOverallPlanStatus(plan.items);
 

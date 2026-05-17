@@ -16,9 +16,11 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
+import app.agents.runner as runner_mod
+import app.agents.tools as tools_mod
+import app.events.bus as bus_mod
+import app.orchestration.swarm as swarm_mod
 from app.config import load_config
-from app.events.bus import EventBus
-from app.orchestration.swarm import run_swarm
 
 
 class _FakeLLM:
@@ -156,11 +158,7 @@ class _FakeLLM:
 @pytest.fixture(autouse=True)
 def fresh_bus(monkeypatch):
     """Replace the global bus with a fresh instance and swap in a fake LLM."""
-    new_bus = EventBus()
-    import app.events.bus as bus_mod
-    import app.orchestration.swarm as swarm_mod
-    import app.agents.runner as runner_mod
-    import app.agents.tools as tools_mod
+    new_bus = bus_mod.EventBus()
     monkeypatch.setattr(bus_mod, "bus", new_bus)
     monkeypatch.setattr(swarm_mod, "bus", new_bus)
     monkeypatch.setattr(runner_mod, "bus", new_bus)
@@ -178,7 +176,7 @@ def _run(coro):
 
 def test_spawn_terminate_pairing(fresh_bus):
     run_id = "test-lifecycle-pairing"
-    _run(run_swarm(run_id, "process weekly payouts"))
+    _run(swarm_mod.run_swarm(run_id, "process weekly payouts"))
 
     events = fresh_bus.history(run_id)
     spawns = {e.payload["agent_id"] for e in events if e.kind == "agent_spawn"}
@@ -199,7 +197,7 @@ def test_spawn_terminate_pairing(fresh_bus):
 
 def test_run_end_after_all_terminates(fresh_bus):
     run_id = "test-run-end-order"
-    _run(run_swarm(run_id, "process weekly payouts"))
+    _run(swarm_mod.run_swarm(run_id, "process weekly payouts"))
 
     events = fresh_bus.history(run_id)
     positions = {e.kind: [] for e in events}
@@ -222,7 +220,7 @@ def test_run_end_after_all_terminates(fresh_bus):
 
 def test_ephemeral_agents_terminate_completely(fresh_bus):
     run_id = "test-ephemeral"
-    _run(run_swarm(run_id, "process weekly payouts"))
+    _run(swarm_mod.run_swarm(run_id, "process weekly payouts"))
 
     events = fresh_bus.history(run_id)
 
@@ -249,7 +247,7 @@ def test_ephemeral_agents_terminate_completely(fresh_bus):
 
 def test_start_end_within_lifecycle(fresh_bus):
     run_id = "test-lifecycle-order"
-    _run(run_swarm(run_id, "process weekly payouts"))
+    _run(swarm_mod.run_swarm(run_id, "process weekly payouts"))
 
     events = fresh_bus.history(run_id)
     pos: dict[str, dict[str, int]] = {}

@@ -64,7 +64,7 @@ describe('dispatch', () => {
   })
 
   it('prints version on --version', async () => {
-    const exit = exitSpy()
+    exitSpy()
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
     await expect(dispatch(makeOpts(vi.fn() as Executor), ['--version'])).rejects.toThrow('exit:0')
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
