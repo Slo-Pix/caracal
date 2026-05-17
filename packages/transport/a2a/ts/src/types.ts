@@ -3,6 +3,8 @@
 //
 // A2A protocol message and option types.
 
+import type { OAuthClient } from '@caracalai/oauth'
+
 export interface A2ARequest {
   agentUrl: string
   resource?: string
@@ -31,6 +33,7 @@ export interface A2AOptions {
   retries?: number
   retryBaseMs?: number
   fetchImpl?: FetchLike
+  oauthClient?: Pick<OAuthClient, 'exchange'>
 }
 
 export interface A2AResponse {

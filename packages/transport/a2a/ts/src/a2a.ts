@@ -4,7 +4,7 @@
 // A2A call helper: exchanges subject authority for a target agent token.
 
 import { OAuthClient } from '@caracalai/oauth'
-import { toEnvelope, toHeaders, current, type Envelope } from '@caracalai/sdk/advanced'
+import { toHeaders, current, type Envelope } from '@caracalai/sdk/advanced'
 import type { A2AOptions, A2ARequest, A2AResponse, FetchLike } from './types.js'
 
 export async function a2aCall(
@@ -14,7 +14,7 @@ export async function a2aCall(
   applicationId: string,
   opts: A2AOptions,
 ): Promise<A2AResponse> {
-  const token = await new OAuthClient(opts.stsUrl, zoneId, applicationId).exchange(
+  const token = await (opts.oauthClient ?? new OAuthClient(opts.stsUrl, zoneId, applicationId)).exchange(
     subjectToken,
     req.resource ?? req.agentUrl,
     {
@@ -26,26 +26,26 @@ export async function a2aCall(
       agentSessionId: req.agentSessionId,
       delegationEdgeId: req.delegationEdgeId,
       ttlSeconds: opts.ttlSeconds,
+      timeoutMs: opts.timeoutMs,
+      retries: opts.retries,
     },
   )
 
   const ctx = current()
-  const envelope: Envelope = ctx
-    ? toEnvelope(ctx)
-    : {
-        subjectToken: token.accessToken,
-        agentSessionId: req.agentSessionId,
-        delegationEdgeId: req.delegationEdgeId,
-        hop: 0,
-      }
-  const envHeaders = toHeaders(envelope)
+  const envelope: Envelope = {
+    subjectToken: token.accessToken,
+    agentSessionId: ctx?.agentSessionId ?? req.agentSessionId,
+    delegationEdgeId: ctx?.delegationEdgeId ?? req.delegationEdgeId,
+    parentEdgeId: ctx?.parentEdgeId,
+    traceId: ctx?.traceId,
+    hop: ctx?.hop ?? 0,
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token.accessToken}`,
+    ...toHeaders(envelope),
     'X-Caracal-Zone-Id': zoneId,
     'X-Caracal-Application-Id': applicationId,
-    ...envHeaders,
   }
 
   const fetchImpl = opts.fetchImpl ?? (globalThis as unknown as { fetch: FetchLike }).fetch
@@ -74,7 +74,7 @@ export async function a2aCall(
     throw new Error(`A2A call failed: ${res.status}`)
   }
 
-  return (await res.json()) as A2AResponse
+  return parseA2AResponse(await res.json(), req.requestId)
 }
 
 async function fetchWithRetry(
@@ -117,4 +117,18 @@ function jitteredBackoff(baseMs: number, attempt: number): number {
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function parseA2AResponse(value: unknown, requestId: string): A2AResponse {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('A2A response invalid: expected object')
+  }
+  const body = value as Record<string, unknown>
+  if (body.requestId !== requestId) {
+    throw new Error('A2A response invalid: requestId mismatch')
+  }
+  if (!Object.hasOwn(body, 'result')) {
+    throw new Error('A2A response invalid: result is required')
+  }
+  return { requestId, result: body.result }
 }

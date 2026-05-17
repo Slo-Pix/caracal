@@ -7,7 +7,7 @@
  * Fastify (via preHandler), and any framework exposing (req, res, next).
  */
 
-import { Caracal } from "./client.js";
+import { Caracal, type RootOptions } from "./client.js";
 
 export interface IncomingLike {
   headers: Record<string, string | string[] | undefined>;
@@ -21,18 +21,18 @@ export type ConnectMiddleware = (
   next: (err?: unknown) => void,
 ) => void;
 
-export function caracalHttpMiddleware(caracal: Caracal): ConnectMiddleware {
+export function caracalHttpMiddleware(caracal: Caracal, opts: RootOptions = {}): ConnectMiddleware {
   return (req, _res, next) => {
     caracal
       .bindFromHeaders(req.headers, async () => {
         next();
-      })
+      }, opts)
       .catch(next);
   };
 }
 
-export function caracalFastifyHook(caracal: Caracal) {
+export function caracalFastifyHook(caracal: Caracal, opts: RootOptions = {}) {
   return async (req: IncomingLike) => {
-    await caracal.bindFromHeaders(req.headers, async () => undefined);
+    await caracal.bindFromHeaders(req.headers, async () => undefined, opts);
   };
 }
