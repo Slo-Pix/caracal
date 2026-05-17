@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/garudex-labs/caracal/revocation"
+	"github.com/garudex-labs/caracal/packages/revocation/go"
 )
 
 func TestInMemoryStoreRevokesUntilTTLExpiry(t *testing.T) {

@@ -15,9 +15,9 @@ import (
 	"os"
 	"time"
 
-	sharedcrypto "github.com/garudex-labs/caracal/core/crypto"
-	sharederr "github.com/garudex-labs/caracal/core/errors"
-	"github.com/garudex-labs/caracal/core/logging"
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
+	"github.com/garudex-labs/caracal/packages/core/go/logging"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 )

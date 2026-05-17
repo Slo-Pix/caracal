@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/garudex-labs/caracal/identity"
+	"github.com/garudex-labs/caracal/packages/identity/go"
 )
 
 func TestGetJWKSFetchesFromWellKnownEndpoint(t *testing.T) {

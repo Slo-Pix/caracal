@@ -8,8 +8,8 @@ package internal
 import (
 	"encoding/json"
 
-	"github.com/garudex-labs/caracal/core/audit"
-	corests "github.com/garudex-labs/caracal/core/sts"
+	"github.com/garudex-labs/caracal/packages/core/go/audit"
+	corests "github.com/garudex-labs/caracal/packages/core/go/sts"
 )
 
 // AuditEvent is the wire-format audit record produced by STS.

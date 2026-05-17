@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	sharederr "github.com/garudex-labs/caracal/core/errors"
+	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 

@@ -8,9 +8,9 @@ module github.com/garudex-labs/caracal/tests
 go 1.26
 
 require (
-	github.com/garudex-labs/caracal/identity v0.0.0-00010101000000-000000000000
-	github.com/garudex-labs/caracal/revocation v0.0.0-00010101000000-000000000000
-	github.com/garudex-labs/caracal/transport-mcp v0.0.0-00010101000000-000000000000
+	github.com/garudex-labs/caracal/packages/identity/go v0.0.0-00010101000000-000000000000
+	github.com/garudex-labs/caracal/packages/revocation/go v0.0.0-00010101000000-000000000000
+	github.com/garudex-labs/caracal/packages/transport/mcp/go v0.0.0-00010101000000-000000000000
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/open-policy-agent/opa v1.16.2
@@ -21,7 +21,7 @@ require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
-	github.com/garudex-labs/caracal/core v0.0.0-00010101000000-000000000000 // indirect
+	github.com/garudex-labs/caracal/packages/core/go v0.0.0-00010101000000-000000000000 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -55,8 +55,8 @@ require (
 )
 
 replace (
-	github.com/garudex-labs/caracal/core => ../../packages/core/go
-	github.com/garudex-labs/caracal/identity => ../../packages/identity/go
-	github.com/garudex-labs/caracal/revocation => ../../packages/revocation/go
-	github.com/garudex-labs/caracal/transport-mcp => ../../packages/transport/mcp/go
+	github.com/garudex-labs/caracal/packages/core/go => ../../packages/core/go
+	github.com/garudex-labs/caracal/packages/identity/go => ../../packages/identity/go
+	github.com/garudex-labs/caracal/packages/revocation/go => ../../packages/revocation/go
+	github.com/garudex-labs/caracal/packages/transport/mcp/go => ../../packages/transport/mcp/go
 )
