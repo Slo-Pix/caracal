@@ -1,24 +1,23 @@
----
-description: Apply when adding, editing, or reviewing example applications.
-applyTo: examples/**
----
+# examples
 
-## Purpose
-Reference example applications demonstrating Caracal integration patterns.
+## Scope
+- Covers runnable example applications under `examples/`.
 
-## Rules
-- Each example is a self-contained directory with its own `pyproject.toml` and `README.md` inside its own folder.
-- Examples must use only the public Caracal SDK; no direct imports from `packages/`.
-- Example tests live in `<example>/tests/`; use `pytest` with standard fixtures.
-- Mock external services via `_mock/` directories within the example; no live external calls in tests.
-- Each example must be independently installable without modifying the root workspace.
+## Architecture Design
+- Each example is self-contained and demonstrates Caracal through public SDKs and connectors only.
+- Example-specific mocks, fixtures, configuration, and tests stay inside the example directory.
 
-## Constraints
-- Forbidden: adding example code that imports from `caracal.core`, `caracal.db`, or `caracal.runtime` directly.
-- Forbidden: committing secrets or real API keys in example config files.
-- Forbidden: referencing production endpoints in example code.
-- Directory names: `camelCase` (e.g., `lynxCapital`).
+## Required
+- Must keep each example independently installable from its own manifest.
+- Must use only published/public Caracal package surfaces.
+- Must keep external systems mocked or deterministic.
+- Must place example tests inside the example directory.
 
-## Testing
-- Example tests must pass in isolation with `pytest` from within the example directory.
-- All external service calls must be mocked via the `_mock/` server fixtures.
+## Forbidden
+- Must not import directly from repository internals under `apps/`, `services/`, or unpublished package source.
+- Must not call live third-party services from example tests.
+- Must not commit secrets, real API keys, or production endpoints.
+
+## Validation
+- Validate each touched example from its own directory using its declared test command.
+
