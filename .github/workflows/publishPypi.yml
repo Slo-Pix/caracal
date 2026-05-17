@@ -93,12 +93,12 @@ jobs:
         working-directory: ${{ matrix.dir }}
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip build==1.5.0 twine==6.2.0
+          python -m pip install --require-hashes --requirement "$GITHUB_WORKSPACE/scripts/publishPypiRequirements.lock"
           rm -rf dist build *.egg-info
           python -m build
           twine check dist/*
 
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           packages-dir: ${{ matrix.dir }}/dist
           skip-existing: true

@@ -31,6 +31,8 @@ defaults:
 env:
   NODE_VERSION: '24'
   PNPM_VERSION: '11.1.1'
+  UV_VERSION: '0.11.14'
+  POETRY_VERSION: '2.4.1'
   FINDINGS_DIR: findings
 
 jobs:
@@ -78,11 +80,19 @@ jobs:
         with:
           python-version: ${{ matrix.py }}
 
-      - if: matrix.pm == 'uv'
-        run: python -m pip install --upgrade uv
+      - if: matrix.pm == 'uv' || matrix.pm == 'poetry'
+        uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a # v7.1.5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
 
       - if: matrix.pm == 'poetry'
-        run: python -m pip install --upgrade poetry
+        env:
+          UV_TOOL_BIN_DIR: ${{ runner.temp }}/uv-tools
+        run: |
+          mkdir -p "$UV_TOOL_BIN_DIR"
+          echo "$UV_TOOL_BIN_DIR" >> "$GITHUB_PATH"
+          uv tool install "poetry==${POETRY_VERSION}"
 
       - run: mkdir -p "$FINDINGS_DIR" && bash scripts/postRelease/validatePypiInstall.sh
 
@@ -222,7 +232,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
       - run: mkdir -p "$FINDINGS_DIR" && bash scripts/postRelease/validateProvenance.sh
 
@@ -299,7 +309,7 @@ jobs:
 
       - id: report-pr
         continue-on-error: true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
           branch: release-validation/${{ inputs.release }}
           title: 'release-validation: ${{ inputs.release }} report'
