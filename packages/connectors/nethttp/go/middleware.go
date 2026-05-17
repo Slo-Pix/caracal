@@ -11,8 +11,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/garudex-labs/caracal/identity"
-	transportmcp "github.com/garudex-labs/caracal/transport-mcp"
+	"github.com/garudex-labs/caracal/packages/identity/go"
+	transportmcp "github.com/garudex-labs/caracal/packages/transport/mcp/go"
 )
 
 // Options configures the auth middleware.

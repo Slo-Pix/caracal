@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	sharedcrypto "github.com/garudex-labs/caracal/core/crypto"
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
 	"github.com/redis/go-redis/v9"
 )
 

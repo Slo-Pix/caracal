@@ -1,10 +1,10 @@
 # connectors/redis/go
 
 ## Scope
-- Covers only the `github.com/garudex-labs/caracal/revocationredis` Go module.
+- Covers only the `github.com/garudex-labs/caracal/packages/connectors/redis/go` Go module.
 
 ## Required
-- Must implement the `github.com/garudex-labs/caracal/revocation.Store` interface.
+- Must implement the `github.com/garudex-labs/caracal/packages/revocation/go.Store` interface.
 - Must use Redis only for revocation key lookup and revocation stream consumption.
 - Must keep stream-consumer logic independent of MCP, net/http, and identity packages.
 

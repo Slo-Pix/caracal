@@ -1,7 +1,7 @@
 # connectors/nethttp/go
 
 ## Scope
-- Covers only the `github.com/garudex-labs/caracal/mcp-nethttp` Go module under `packages/connectors/nethttp/go/`.
+- Covers only the `github.com/garudex-labs/caracal/packages/connectors/nethttp/go` Go module under `packages/connectors/nethttp/go/`.
 
 ## Required
 - Must adapt `transport-mcp.Authenticate` results onto an `http.Handler`.

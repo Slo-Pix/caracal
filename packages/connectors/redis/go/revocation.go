@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	sharedcrypto "github.com/garudex-labs/caracal/core/crypto"
-	"github.com/garudex-labs/caracal/revocation"
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	"github.com/garudex-labs/caracal/packages/revocation/go"
 	"github.com/redis/go-redis/v9"
 )
 
