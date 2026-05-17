@@ -24,9 +24,10 @@ class CaracalASGIMiddleware:
     """ASGI middleware (Starlette/FastAPI/raw ASGI) that binds a Caracal
     context for every HTTP request scope from inbound envelope headers."""
 
-    def __init__(self, app: ASGIApp, caracal: Caracal) -> None:
+    def __init__(self, app: ASGIApp, caracal: Caracal, *, allow_root: bool = False) -> None:
         self.app = app
         self.caracal = caracal
+        self.allow_root = allow_root
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope.get("type") != "http":
@@ -36,5 +37,18 @@ class CaracalASGIMiddleware:
         headers: dict[str, str] = {}
         for k, v in raw:
             headers[k.decode("latin-1")] = v.decode("latin-1")
-        async with self.caracal.bind_from_headers(headers):
-            await self.app(scope, receive, send)
+        try:
+            async with self.caracal.bind_from_headers(headers, allow_root=self.allow_root):
+                await self.app(scope, receive, send)
+        except RuntimeError as err:
+            if "missing a bearer token" not in str(err):
+                raise
+            await send({
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [(b"content-type", b"application/json")],
+            })
+            await send({
+                "type": "http.response.body",
+                "body": b'{"error":"missing_token","message":"Missing bearer token"}',
+            })

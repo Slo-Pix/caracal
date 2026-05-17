@@ -8,11 +8,14 @@ package sdk
 import "net/http"
 
 // Middleware returns an http.Handler middleware that binds a CaracalContext
-// for each inbound request from envelope headers. Falls back to the
-// configured subject token when the request does not carry one.
-func (c *Caracal) Middleware(next http.Handler) http.Handler {
+// for each inbound request from envelope headers.
+func (c *Caracal) Middleware(next http.Handler, opts ...RootOptions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := c.BindFromRequest(r.Context(), r)
+		ctx, err := c.BindFromRequest(r.Context(), r, opts...)
+		if err != nil {
+			http.Error(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

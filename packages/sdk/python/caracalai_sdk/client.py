@@ -92,17 +92,26 @@ def _parse_resource_bindings(raw: str | None) -> list[ResourceBinding]:
     if not raw:
         return []
     out: list[ResourceBinding] = []
-    for entry in raw.split(","):
+    errors: list[str] = []
+    for index, entry in enumerate(raw.split(","), start=1):
         trimmed = entry.strip()
         if not trimmed:
             continue
         idx = trimmed.find("=")
         if idx <= 0:
+            errors.append(f"entry {index} must use resource_id=upstream_prefix")
             continue
         rid = trimmed[:idx].strip()
         prefix = trimmed[idx + 1 :].strip()
-        if rid and prefix:
-            out.append(ResourceBinding(resource_id=rid, upstream_prefix=prefix))
+        if not rid or not prefix:
+            errors.append(f"entry {index} must contain non-empty resource_id and upstream_prefix")
+            continue
+        if not _is_absolute_url(prefix):
+            errors.append(f"entry {index} upstream_prefix must be an absolute URL")
+            continue
+        out.append(ResourceBinding(resource_id=rid, upstream_prefix=prefix))
+    if errors:
+        raise ValueError("invalid CARACAL_RESOURCES:\n  - " + "\n  - ".join(errors))
     return out
 
 
@@ -117,6 +126,11 @@ def _load_resource_bindings_file(path: str | None) -> list[ResourceBinding]:
 
 
 _BINDING_FIELDS = frozenset({"resource_id", "upstream_prefix"})
+
+
+def _is_absolute_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return bool(parsed.scheme and parsed.netloc)
 
 
 def _validate_resource_bindings(data: object, *, source: str) -> list[ResourceBinding]:
@@ -138,6 +152,9 @@ def _validate_resource_bindings(data: object, *, source: str) -> list[ResourceBi
                 continue
             if not isinstance(value, str) or not value:
                 errors.append(f"{source}: entry {key!r}: upstream_prefix must be a non-empty string")
+                continue
+            if not _is_absolute_url(value):
+                errors.append(f"{source}: entry {key!r}: upstream_prefix must be an absolute URL")
                 continue
             out.append(ResourceBinding(resource_id=key, upstream_prefix=value))
     elif isinstance(data, list):
@@ -162,6 +179,9 @@ def _validate_resource_bindings(data: object, *, source: str) -> list[ResourceBi
                 continue
             if not isinstance(prefix, str) or not prefix:
                 errors.append(f"{source}[{idx}]: upstream_prefix must be a non-empty string")
+                continue
+            if not _is_absolute_url(prefix):
+                errors.append(f"{source}[{idx}]: upstream_prefix must be an absolute URL")
                 continue
             out.append(ResourceBinding(resource_id=rid, upstream_prefix=prefix))
     else:
@@ -435,15 +455,10 @@ class Caracal:
         )
         resource_ids = [b.resource_id for b in bindings]
         if not resource_ids:
-            extra_resources = (
-                cfg.get("credentials") or []
+            raise RuntimeError(
+                "Caracal.from_config: at least one resource binding is required via "
+                "caracal.toml credentials, CARACAL_RESOURCES, or CARACAL_RESOURCES_FILE"
             )
-            for cred in extra_resources:
-                rid = cred.get("resource") if isinstance(cred, dict) else None
-                if rid:
-                    resource_ids.append(str(rid))
-        if not resource_ids:
-            resource_ids = ["resource://example"]
 
         return cls.from_client_secret(
             coordinator_url=coordinator_url,
@@ -603,6 +618,8 @@ class Caracal:
     async def bind_from_headers(
         self,
         headers: Mapping[str, str],
+        *,
+        allow_root: bool = False,
     ) -> AsyncGenerator[CaracalContext, None]:
         def get(name: str) -> str | None:
             lower = name.lower()
@@ -613,6 +630,11 @@ class Caracal:
 
         env = decode_envelope(get)
         if not env.subject_token:
+            if not allow_root:
+                raise RuntimeError(
+                    "Caracal.bind_from_headers(): inbound request is missing a bearer token. "
+                    "Pass allow_root=True only for trusted service-root ingress."
+                )
             env.subject_token = self.config.subject_token
         ctx = from_envelope(
             env,

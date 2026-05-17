@@ -65,13 +65,17 @@ func FromEnv() (*Caracal, error) {
 	if err := validateSubjectToken(tok); err != nil {
 		return nil, err
 	}
+	bindings, err := parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))
+	if err != nil {
+		return nil, err
+	}
 	return &Caracal{
 		Coordinator:   &CoordinatorClient{BaseURL: url},
 		ZoneID:        zone,
 		ApplicationID: app,
 		SubjectToken:  tok,
 		GatewayURL:    os.Getenv("CARACAL_GATEWAY_URL"),
-		Resources:     sortBindingsLongestFirst(parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))),
+		Resources:     sortBindingsLongestFirst(bindings),
 	}, nil
 }
 
@@ -126,30 +130,42 @@ func (c *Caracal) Close() error {
 
 // parseResourceBindings reads the CARACAL_RESOURCES env format
 // "rid=https://upstream/prefix,rid2=https://other/prefix".
-func parseResourceBindings(raw string) []ResourceBinding {
+func parseResourceBindings(raw string) ([]ResourceBinding, error) {
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
 	out := []ResourceBinding{}
-	for _, entry := range strings.Split(raw, ",") {
+	errors := []string{}
+	for index, entry := range strings.Split(raw, ",") {
 		trimmed := strings.TrimSpace(entry)
 		if trimmed == "" {
 			continue
 		}
 		idx := strings.Index(trimmed, "=")
 		if idx <= 0 {
+			errors = append(errors, fmt.Sprintf("entry %d must use resourceID=upstreamPrefix", index+1))
 			continue
 		}
 		rid := strings.TrimSpace(trimmed[:idx])
 		prefix := strings.TrimSpace(trimmed[idx+1:])
-		if rid != "" && prefix != "" {
-			out = append(out, ResourceBinding{ResourceID: rid, UpstreamPrefix: prefix})
+		if rid == "" || prefix == "" {
+			errors = append(errors, fmt.Sprintf("entry %d must contain non-empty resourceID and upstreamPrefix", index+1))
+			continue
 		}
+		parsed, err := url.Parse(prefix)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			errors = append(errors, fmt.Sprintf("entry %d upstreamPrefix must be an absolute URL", index+1))
+			continue
+		}
+		out = append(out, ResourceBinding{ResourceID: rid, UpstreamPrefix: prefix})
+	}
+	if len(errors) > 0 {
+		return nil, fmt.Errorf("caracal: invalid CARACAL_RESOURCES: %s", strings.Join(errors, "; "))
 	}
 	if len(out) == 0 {
-		return nil
+		return nil, nil
 	}
-	return out
+	return out, nil
 }
 
 // OnAgentStart registers a hook fired when Spawn binds a new agent session.
@@ -291,32 +307,47 @@ func (c *Caracal) DelegateToSpawn(ctx context.Context, opts DelegateToSpawnOptio
 	}, fn)
 }
 
-// Headers returns the envelope headers for the current ctx (or a baseline
-// using the configured subject token if no context is bound).
-func (c *Caracal) Headers(ctx context.Context) http.Header {
+// RootOptions controls explicit use of the application subject token when no
+// CaracalContext is bound.
+type RootOptions struct {
+	AllowRoot bool
+}
+
+func allowRoot(opts []RootOptions) bool {
+	return len(opts) > 0 && opts[0].AllowRoot
+}
+
+// Headers returns the envelope headers for the current ctx. Root application
+// identity requires RootOptions{AllowRoot: true}.
+func (c *Caracal) Headers(ctx context.Context, opts ...RootOptions) (http.Header, error) {
 	h := http.Header{}
 	cur, ok := Current(ctx)
 	if !ok {
+		if !allowRoot(opts) {
+			return nil, fmt.Errorf("caracal: Headers called without a bound CaracalContext; pass RootOptions{AllowRoot: true} to use the application subject token")
+		}
 		InjectHTTP(Envelope{SubjectToken: c.SubjectToken, Hop: 0}, h)
-		return h
+		return h, nil
 	}
 	InjectHTTP(ToEnvelope(cur), h)
-	return h
+	return h, nil
 }
 
 // BindFromRequest extracts the envelope from an inbound request and returns a
-// context bound with the resulting CaracalContext. If the inbound request has
-// no subject token, the configured default is used.
-func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request) context.Context {
+// context bound with the resulting CaracalContext.
+func (c *Caracal) BindFromRequest(ctx context.Context, r *http.Request, opts ...RootOptions) (context.Context, error) {
 	env := FromHTTPRequest(r)
 	if env.SubjectToken == "" {
+		if !allowRoot(opts) {
+			return ctx, fmt.Errorf("caracal: BindFromRequest missing bearer token")
+		}
 		env.SubjectToken = c.SubjectToken
 	}
 	cc, err := FromEnvelope(env, c.ZoneID, c.ApplicationID)
 	if err != nil {
-		return ctx
+		return ctx, err
 	}
-	return Bind(ctx, cc)
+	return Bind(ctx, cc), nil
 }
 
 // Current returns the Caracal context bound on ctx, or a zero value and false.
@@ -327,7 +358,7 @@ func (c *Caracal) Current(ctx context.Context) (CaracalContext, bool) {
 // Transport returns an *http.Client whose RoundTripper auto-injects the
 // Caracal envelope headers from the request's context. Pass to any HTTP or
 // provider SDK that accepts a custom *http.Client.
-func (c *Caracal) Transport(base *http.Client) *http.Client {
+func (c *Caracal) Transport(base *http.Client, opts ...RootOptions) *http.Client {
 	if base == nil {
 		base = &http.Client{}
 	}
@@ -336,19 +367,23 @@ func (c *Caracal) Transport(base *http.Client) *http.Client {
 		rt = http.DefaultTransport
 	}
 	out := *base
-	out.Transport = &caracalTransport{base: rt, client: c}
+	out.Transport = &caracalTransport{base: rt, client: c, allowRoot: allowRoot(opts)}
 	return &out
 }
 
 type caracalTransport struct {
 	base   http.RoundTripper
 	client *Caracal
+	allowRoot bool
 }
 
 func (t *caracalTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	cur, ok := Current(req.Context())
 	var env Envelope
 	if !ok {
+		if !t.allowRoot {
+			return nil, fmt.Errorf("caracal: Transport request has no bound CaracalContext; pass RootOptions{AllowRoot: true} to use the application subject token")
+		}
 		env = Envelope{SubjectToken: t.client.SubjectToken, Hop: 0}
 	} else {
 		env = ToEnvelope(cur)
