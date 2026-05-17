@@ -31,7 +31,6 @@ def build(
     write_actions get idempotency key enforcement.
     """
     router = APIRouter(prefix=f"/{prefix}", tags=[provider])
-    job_event_map = dict(job_actions)
     writes = set(write_actions)
 
     for action in sync_actions:

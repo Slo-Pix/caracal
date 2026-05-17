@@ -5,6 +5,7 @@ Caracal, a product of Garudex Labs
 Caracal drop-in client tests for env loading, header projection, and ASGI middleware.
 """
 
+import base64
 import json
 import unittest
 
@@ -49,9 +50,6 @@ class FromEnvTests(unittest.TestCase):
         self.assertEqual(c.config.subject_token, "t1")
 
     def test_rejects_expired_jwt_subject_token(self) -> None:
-        import base64
-        import json
-
         header = base64.urlsafe_b64encode(b'{"alg":"ES256"}').rstrip(b"=").decode()
         payload = base64.urlsafe_b64encode(
             json.dumps({"exp": 1_000_000}).encode()
