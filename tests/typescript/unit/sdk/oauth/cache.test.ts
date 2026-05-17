@@ -3,7 +3,7 @@
 //
 // InMemoryTokenCache unit tests.
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { InMemoryTokenCache } from '../../../../../packages/oauth/ts/src/cache.js'
 import type { TokenExchangeResponse } from '../../../../../packages/oauth/ts/src/types.js'
 

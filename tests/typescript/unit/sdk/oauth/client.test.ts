@@ -5,7 +5,6 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { OAuthClient } from '../../../../../packages/oauth/ts/src/client.js'
-import { InMemoryTokenCache } from '../../../../../packages/oauth/ts/src/cache.js'
 import { InteractionRequiredError } from '../../../../../packages/oauth/ts/src/types.js'
 
 describe('OAuthClient', () => {

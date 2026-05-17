@@ -19,7 +19,6 @@ import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
 import {
   resolveCliConfigPath,
-  resolveServiceUrl,
   type CliConfig,
 } from '@caracalai/engine/cli'
 import { pad, truncate, ui } from '../ansi.ts'

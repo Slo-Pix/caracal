@@ -3,7 +3,7 @@
 //
 // Unit tests for the keyset list pagination helpers.
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import {
   appendKeysetCondition,
   encodeCursor,
@@ -12,17 +12,6 @@ import {
   DEFAULT_LIST_LIMIT,
   MAX_LIST_LIMIT,
 } from '../../../../../apps/api/src/routes/list-pagination.js'
-
-function fakeReply() {
-  const sent: { code?: number; body?: unknown; headers: Record<string, string> } = { headers: {} }
-  return {
-    sent,
-    code: vi.fn((c: number) => { sent.code = c; return reply }),
-    send: vi.fn((b: unknown) => { sent.body = b; return reply }),
-    header: vi.fn((k: string, v: string) => { sent.headers[k.toLowerCase()] = v; return reply }),
-  } as never
-  // The factory form below assigns then returns; intermediate name needed for chaining.
-}
 
 function makeReply() {
   const headers: Record<string, string> = {}

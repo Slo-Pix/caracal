@@ -8,10 +8,8 @@ import {
   verify,
   verifyChainContains,
   AgentIdentityRequiredError,
-  ChainMismatchError,
   DelegationRequiredError,
   HopCountExceededError,
-  ScopeInsufficientError,
   TokenInvalidError,
   ZoneInvalidError,
 } from '../../../../packages/identity/ts/src/verify.js'
