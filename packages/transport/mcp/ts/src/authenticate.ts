@@ -20,8 +20,9 @@ import type { AuthResult } from './types.js'
 export type AuthDeps = JwtConfig & { revocations: RevocationStore }
 
 export function extractBearer(authHeader: string | undefined): string | null {
-  if (!authHeader?.startsWith('Bearer ') || authHeader.length <= 7) return null
-  const token = authHeader.slice(7).trim()
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i)
+  if (!match) return null
+  const token = match[1].trim()
   return token === '' ? null : token
 }
 

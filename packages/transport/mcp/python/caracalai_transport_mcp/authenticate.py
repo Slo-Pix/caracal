@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import re
+
 from caracalai_identity import (
     AgentIdentityRequiredError,
     ChainMismatchError,
@@ -22,9 +24,12 @@ from .types import AuthError, AuthResult
 
 
 def extract_bearer(auth_header: str | None) -> str | None:
-    if not auth_header or not auth_header.startswith("Bearer ") or len(auth_header) <= 7:
+    if not auth_header:
         return None
-    token = auth_header[7:].strip()
+    match = re.match(r"^Bearer\s+(.+)$", auth_header, re.IGNORECASE)
+    if not match:
+        return None
+    token = match.group(1).strip()
     return token or None
 
 

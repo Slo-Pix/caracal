@@ -27,8 +27,11 @@ func TestExtractBearer(t *testing.T) {
 	if got, ok := transportmcp.ExtractBearer("Bearer token-1"); !ok || got != "token-1" {
 		t.Fatalf("expected bearer token, got %q ok=%v", got, ok)
 	}
-	if _, ok := transportmcp.ExtractBearer("bearer token-1"); ok {
-		t.Fatal("expected lowercase bearer scheme to be rejected")
+	if got, ok := transportmcp.ExtractBearer("bearer token-1"); !ok || got != "token-1" {
+		t.Fatalf("expected lowercase bearer token, got %q ok=%v", got, ok)
+	}
+	if got, ok := transportmcp.ExtractBearer("BEARER token-1"); !ok || got != "token-1" {
+		t.Fatalf("expected uppercase bearer token, got %q ok=%v", got, ok)
 	}
 	if _, ok := transportmcp.ExtractBearer("Bearer   "); ok {
 		t.Fatal("expected blank bearer token to be rejected")

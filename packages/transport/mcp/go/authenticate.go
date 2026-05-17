@@ -51,10 +51,11 @@ func (e *AuthError) Error() string { return e.Description }
 
 // ExtractBearer pulls a non-empty bearer token from an Authorization header value, or returns false.
 func ExtractBearer(authHeader string) (string, bool) {
-	if !strings.HasPrefix(authHeader, "Bearer ") {
+	parts := strings.Fields(authHeader)
+	if len(parts) < 2 || !strings.EqualFold(parts[0], "Bearer") {
 		return "", false
 	}
-	token := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+	token := strings.Join(parts[1:], " ")
 	if token == "" {
 		return "", false
 	}
