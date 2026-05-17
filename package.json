@@ -5,7 +5,7 @@
   "pnpm": {
     "overrides": {
       "fast-uri": "3.1.2",
-      "devalue": ">=5.3.2"
+      "devalue": "5.8.1"
     }
   },
   "bin": {
