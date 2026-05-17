@@ -7,7 +7,7 @@
 - Must use Go 1.26 with net/http only; no external HTTP framework.
 - Must listen on port 8081 only; loadConfig must reject any other PORT.
 - Must perform a fresh STS exchange on every proxied request.
-- Must use github.com/garudex-labs/caracal/core/* for config, errors, and logging.
+- Must use github.com/garudex-labs/caracal/packages/core/go/* for config, errors, and logging.
 - Must require STS_URL; under CARACAL_MODE=runtime STS_URL must use https unless the target host is internal (single-label / loopback).
 - Must run plaintext when TLS_CERT_FILE/TLS_KEY_FILE are unset, and TLS when both are set; rejects partial config.
 - Must require DATABASE_URL and load resource→client_id bindings from gateway_resource_bindings.

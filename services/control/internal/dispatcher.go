@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/garudex-labs/caracal/core/commands"
+	"github.com/garudex-labs/caracal/packages/core/go/commands"
 )
 
 type Request struct {

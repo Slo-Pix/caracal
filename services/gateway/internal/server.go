@@ -14,8 +14,8 @@ import (
 	"net/http"
 	"time"
 
-	sharedcrypto "github.com/garudex-labs/caracal/core/crypto"
-	"github.com/garudex-labs/caracal/core/logging"
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	"github.com/garudex-labs/caracal/packages/core/go/logging"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
