@@ -86,7 +86,7 @@ The STS returns up to **two keys**: the current active key and the previous key 
 
 **Cache-Control header:** `public, max-age=300, must-revalidate` (5-minute client-side cache).
 
-Consuming packages (`@caracalai/identity`, `caracalai_identity`, `github.com/garudex-labs/caracal/identity`) cache JWKS responses per issuer for 5 minutes with stale-while-revalidate on fetch errors.
+Consuming packages (`@caracalai/identity`, `caracalai_identity`, `github.com/garudex-labs/caracal/packages/identity/go`) cache JWKS responses per issuer for 5 minutes with stale-while-revalidate on fetch errors.
 
 ---
 

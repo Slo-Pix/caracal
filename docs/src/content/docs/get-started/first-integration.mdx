@@ -172,7 +172,7 @@ The ASGI middleware extracts the agent's mandate from inbound request headers an
 Install the SDK:
 
 ```sh
-go get github.com/garudex-labs/caracal/sdk
+go get github.com/garudex-labs/caracal/packages/sdk/go
 ```
 
 Minimal example:
@@ -186,7 +186,7 @@ import (
     "io"
     "net/http"
 
-    caracal "github.com/garudex-labs/caracal/sdk"
+    caracal "github.com/garudex-labs/caracal/packages/sdk/go"
 )
 
 func main() {
@@ -223,13 +223,13 @@ func main() {
 ### net/http middleware
 
 ```sh
-go get github.com/garudex-labs/caracal/connectors/nethttp
+go get github.com/garudex-labs/caracal/packages/connectors/nethttp/go
 ```
 
 ```go
 import (
-    caracal "github.com/garudex-labs/caracal/sdk"
-    "github.com/garudex-labs/caracal/connectors/nethttp"
+    caracal "github.com/garudex-labs/caracal/packages/sdk/go"
+    "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
 )
 
 c, _ := caracal.FromEnv()

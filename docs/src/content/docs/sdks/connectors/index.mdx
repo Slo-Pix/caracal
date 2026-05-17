@@ -14,7 +14,7 @@ Choose the connector for your framework. If your framework is not listed, use th
 | --- | --- | --- | --- |
 | [`@caracalai/mcp-express`](./express/) | TypeScript | Express | `caracalAuth()` middleware — attaches verified `Claims` to `req.caracalClaims` |
 | [`caracalai-mcp-fastmcp`](./fastmcp/) | Python | FastMCP | `CaracalAuth` callable — verifies bearer token and returns `Claims` |
-| [`github.com/garudex-labs/caracal/mcp-nethttp`](./nethttp/) | Go | `net/http` | `Middleware()` — wraps any `http.Handler`; attaches claims to request context |
+| [`github.com/garudex-labs/caracal/packages/connectors/nethttp/go`](./nethttp/) | Go | `net/http` | `Middleware()` — wraps any `http.Handler`; attaches claims to request context |
 | [`@caracalai/tokenstate-postgres`](./postgres/) | TypeScript | Any | `PostgresBackend` — persists MCP token state to a Postgres table |
 | [`@caracalai/revocation-redis`](./redis/) | TypeScript | Any | Redis-backed `RevocationStore` and stream consumer |
 | [`caracalai-revocation-redis`](./redis/) | Python | Any | Python equivalent with synchronous `poll_once()` |

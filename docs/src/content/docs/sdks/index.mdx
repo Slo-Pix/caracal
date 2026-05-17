@@ -14,7 +14,7 @@ Caracal publishes a layered set of packages across TypeScript, Python, and Go. T
 | ------- | -------- | ------- | ------- |
 | [`@caracalai/sdk`](./typescript/) | TypeScript | `npm install @caracalai/sdk` | Agent sessions, delegation, outbound transport, ASGI/express middleware |
 | [`caracalai-sdk`](./python/) | Python | `pip install caracalai-sdk` | Agent sessions, delegation, outbound transport, ASGI middleware |
-| [`github.com/garudex-labs/caracal/sdk`](./go/) | Go | `go get github.com/garudex-labs/caracal/sdk` | Agent sessions, delegation, outbound transport, net/http middleware |
+| [`github.com/garudex-labs/caracal/packages/sdk/go`](./go/) | Go | `go get github.com/garudex-labs/caracal/packages/sdk/go` | Agent sessions, delegation, outbound transport, net/http middleware |
 
 ### Shared packages
 
@@ -22,7 +22,7 @@ Caracal publishes a layered set of packages across TypeScript, Python, and Go. T
 | ------- | -------- | ------- | ------- |
 | [`@caracalai/identity`](./identity/) | TypeScript | `npm install @caracalai/identity` | JWT verification, JWKS caching, scope evaluation |
 | [`caracalai-identity`](./identity/) | Python | `pip install caracalai-identity` | Same as above |
-| [`github.com/garudex-labs/caracal/identity`](./identity/) | Go | `go get github.com/garudex-labs/caracal/identity` | Same as above |
+| [`github.com/garudex-labs/caracal/packages/identity/go`](./identity/) | Go | `go get github.com/garudex-labs/caracal/packages/identity/go` | Same as above |
 | [`@caracalai/oauth`](./oauth/) | TypeScript | `npm install @caracalai/oauth` | RFC 8693 token exchange, token caching, step-up handling |
 | [`@caracalai/revocation`](./revocation/) | TypeScript | `npm install @caracalai/revocation` | RevocationStore interface and in-memory implementation |
 | [`caracalai-revocation`](./revocation/) | Python | `pip install caracalai-revocation` | Same as above |
@@ -42,7 +42,7 @@ Caracal publishes a layered set of packages across TypeScript, Python, and Go. T
 | ------- | -------- | ------- | ------- |
 | [`@caracalai/mcp-express`](./connectors/express/) | TypeScript | `npm install @caracalai/mcp-express` | Express middleware for mandate verification |
 | [`caracalai-mcp-fastmcp`](./connectors/fastmcp/) | Python | `pip install caracalai-mcp-fastmcp` | FastMCP auth callable |
-| [`github.com/garudex-labs/caracal/mcp-nethttp`](./connectors/nethttp/) | Go | `go get github.com/garudex-labs/caracal/mcp-nethttp` | Go net/http middleware |
+| [`github.com/garudex-labs/caracal/packages/connectors/nethttp/go`](./connectors/nethttp/) | Go | `go get github.com/garudex-labs/caracal/packages/connectors/nethttp/go` | Go net/http middleware |
 | [`@caracalai/tokenstate-postgres`](./connectors/postgres/) | TypeScript | `npm install @caracalai/tokenstate-postgres` | Postgres-backed MCP token state |
 | [`@caracalai/revocation-redis`](./connectors/redis/) | TypeScript | `npm install @caracalai/revocation-redis` | Redis-backed revocation store and stream consumer |
 | [`caracalai-revocation-redis`](./connectors/redis/) | Python | `pip install caracalai-revocation-redis` | Same as above |

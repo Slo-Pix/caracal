@@ -4,18 +4,18 @@ description: Middleware() function reference — Options struct, ClaimsFromConte
 pageType: reference
 ---
 
-`github.com/garudex-labs/caracal/mcp-nethttp` provides a Go `net/http`-compatible middleware that verifies Caracal mandates on inbound requests. It wraps any `http.Handler`, extracts the bearer token from the `Authorization` header, verifies the ES256 signature and revocation status using `transport/mcp`, and attaches the verified `identity.Claims` to the request context. Requests that fail verification receive a JSON error response and the wrapped handler is not called.
+`github.com/garudex-labs/caracal/packages/connectors/nethttp/go` provides a Go `net/http`-compatible middleware that verifies Caracal mandates on inbound requests. It wraps any `http.Handler`, extracts the bearer token from the `Authorization` header, verifies the ES256 signature and revocation status using `transport/mcp`, and attaches the verified `identity.Claims` to the request context. Requests that fail verification receive a JSON error response and the wrapped handler is not called.
 
 ## Install
 
 ```bash
-go get github.com/garudex-labs/caracal/mcp-nethttp
+go get github.com/garudex-labs/caracal/packages/connectors/nethttp/go
 ```
 
 ## `Middleware(opts)`
 
 ```go
-import mcpnethttp "github.com/garudex-labs/caracal/mcp-nethttp"
+import mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
 
 func Middleware(opts Options) func(http.Handler) http.Handler
 ```
@@ -56,8 +56,8 @@ type Options struct {
 
 ```go
 import (
-    mcpnethttp "github.com/garudex-labs/caracal/mcp-nethttp"
-    "github.com/garudex-labs/caracal/identity"
+    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
+    "github.com/garudex-labs/caracal/packages/identity/go"
 )
 
 func ClaimsFromContext(ctx context.Context) (identity.Claims, bool)
@@ -120,8 +120,8 @@ import (
     "net/http"
     "os"
 
-    mcpnethttp "github.com/garudex-labs/caracal/mcp-nethttp"
-    "github.com/garudex-labs/caracal/revocation"
+    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
+    "github.com/garudex-labs/caracal/packages/revocation/go"
 )
 
 func main() {
@@ -151,7 +151,7 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 ```go
 import (
     "github.com/go-chi/chi/v5"
-    mcpnethttp "github.com/garudex-labs/caracal/mcp-nethttp"
+    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
 )
 
 r := chi.NewRouter()
@@ -179,6 +179,6 @@ r.With(adminMiddleware).Post("/tool/admin", adminHandler)
 
 ## Relationship to the identity package
 
-The middleware calls `identity.Verify()` from `github.com/garudex-labs/caracal/identity` internally, using all fields from `Options` as the `identity.Config`. `ClaimsFromContext` returns the `identity.Claims` struct populated by that call. For non-HTTP contexts — for example, verifying a token in a background job or a gRPC handler — call `identity.Verify()` directly rather than threading an HTTP request through the middleware.
+The middleware calls `identity.Verify()` from `github.com/garudex-labs/caracal/packages/identity/go` internally, using all fields from `Options` as the `identity.Config`. `ClaimsFromContext` returns the `identity.Claims` struct populated by that call. For non-HTTP contexts — for example, verifying a token in a background job or a gRPC handler — call `identity.Verify()` directly rather than threading an HTTP request through the middleware.
 
 See the [Identity Package reference](../../identity/#go) for the full `Claims` type and error values.

@@ -15,7 +15,7 @@ The Go SDK propagates identity through standard `context.Context` — there is n
 ## Install
 
 ```bash
-go get github.com/garudex-labs/caracal/sdk
+go get github.com/garudex-labs/caracal/packages/sdk/go
 ```
 
 ## Environment variables
@@ -32,7 +32,7 @@ go get github.com/garudex-labs/caracal/sdk
 ## Construct the client
 
 ```go
-import sdk "github.com/garudex-labs/caracal/sdk"
+import sdk "github.com/garudex-labs/caracal/packages/sdk/go"
 
 client, err := sdk.FromEnv()
 if err != nil {
@@ -207,7 +207,7 @@ import (
     "log"
     "net/http"
 
-    sdk "github.com/garudex-labs/caracal/sdk"
+    sdk "github.com/garudex-labs/caracal/packages/sdk/go"
 )
 
 func main() {
