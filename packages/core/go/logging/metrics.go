@@ -43,10 +43,10 @@ func newAsyncWriter(sink io.Writer) *asyncWriter {
 		}
 	}
 	w := &asyncWriter{
-		sink:    sink,
-		ch:      make(chan []byte, cap),
+		sink:     sink,
+		ch:       make(chan []byte, cap),
 		queueCap: cap,
-		done:    make(chan struct{}),
+		done:     make(chan struct{}),
 	}
 	go w.run()
 	globalWriter = w

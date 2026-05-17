@@ -187,4 +187,3 @@ func isDebugLine(p []byte) bool {
 	}
 	return strings.Contains(string(p[:min(len(p), 64)]), marker)
 }
-

@@ -9,17 +9,17 @@ import "testing"
 
 func TestIsSecretKey(t *testing.T) {
 	cases := map[string]bool{
-		"password":           true,
-		"user_password":      true,
-		"X-Auth-Token":       true,
-		"Authorization":      true,
-		"refresh_token":      true,
-		"hmac_key":           true,
-		"set-cookie":         true,
-		"signature":          true,
-		"zone_id":            false,
-		"request_id":         false,
-		"username":           false,
+		"password":      true,
+		"user_password": true,
+		"X-Auth-Token":  true,
+		"Authorization": true,
+		"refresh_token": true,
+		"hmac_key":      true,
+		"set-cookie":    true,
+		"signature":     true,
+		"zone_id":       false,
+		"request_id":    false,
+		"username":      false,
 	}
 	for k, want := range cases {
 		if got := IsSecretKey(k); got != want {

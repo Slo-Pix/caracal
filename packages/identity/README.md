@@ -13,7 +13,7 @@ The package does not perform transport authentication, framework middleware, tok
 | Language | Path | Package |
 | --- | --- | --- |
 | TypeScript | `packages/identity/ts` | `@caracalai/identity` |
-| Go | `packages/identity/go` | `github.com/garudex-labs/caracal/identity` |
+| Go | `packages/identity/go` | `github.com/garudex-labs/caracal/packages/identity/go` |
 | Python | `packages/identity/python` | `caracalai-identity` |
 
 ## Failure behavior
