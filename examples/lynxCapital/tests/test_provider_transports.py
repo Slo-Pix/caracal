@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
-import os
 import threading
 import time
 from hashlib import sha256

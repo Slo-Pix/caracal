@@ -13,7 +13,6 @@ from caracalai_core.logging import (
     parse_traceparent,
     redact_string,
     reset_trace,
-    truncate_string,
 )
 
 

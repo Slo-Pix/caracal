@@ -9,10 +9,8 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from uuid import uuid4
 
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk
 
 # Make the demo package importable when running from the repo root.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -20,7 +18,6 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 
 from app.config import load_config
 from app.events.bus import EventBus
-from app.events import types as ev
 from app.orchestration.swarm import run_swarm
 
 

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Awaitable, Callable
+from typing import Callable
 
-from fastapi import HTTPException, Request, Response
+from fastapi import HTTPException, Request
 
 from _mock.faults.engine import FaultDecision, evaluate, profile_for
 from _mock.rest import idempotency
