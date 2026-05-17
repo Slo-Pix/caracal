@@ -19,7 +19,10 @@ go get github.com/garudex-labs/caracal/packages/sdk/go
 | `CARACAL_COORDINATOR_URL` | Yes | Coordinator base URL (e.g., `http://coordinator:4000`) |
 | `CARACAL_ZONE_ID` | Yes | Zone identifier |
 | `CARACAL_APPLICATION_ID` | Yes | Registered application ID |
-| `CARACAL_SUBJECT_TOKEN` | Yes | Ambient bearer token |
+| `CARACAL_SUBJECT_TOKEN` | Token mode | Ambient bearer token |
+| `CARACAL_APP_CLIENT_SECRET` | Client-secret mode | Application secret used to refresh subject tokens through STS |
+| `CARACAL_STS_URL` | Client-secret mode | STS base URL |
+| `CARACAL_APP_RESOURCES` | Client-secret mode if `CARACAL_RESOURCES` is unset | Comma-separated resource IDs for token exchange |
 | `CARACAL_GATEWAY_URL` | No | Gateway base URL for resource-routed calls |
 | `CARACAL_RESOURCES` | No | Comma-separated `resourceId=https://upstream/prefix` pairs |
 
@@ -33,6 +36,7 @@ type Caracal struct {
     ZoneID            string
     ApplicationID     string
     SubjectToken      string
+    TokenSource       TokenSource
     GatewayURL        string
     Resources         []ResourceBinding
     DefaultKind       AgentKind
@@ -52,10 +56,29 @@ type ResourceBinding struct {
 
 ### `FromEnv()`
 
-Reads all `CARACAL_*` environment variables and returns a `*Caracal`. Returns an error if any required variable is missing.
+Reads all `CARACAL_*` environment variables and returns a `*Caracal`. Static-token mode uses `CARACAL_SUBJECT_TOKEN`; client-secret mode uses `CARACAL_APP_CLIENT_SECRET`, `CARACAL_STS_URL`, and resource IDs from `CARACAL_APP_RESOURCES` or `CARACAL_RESOURCES`.
 
 ```go
 func FromEnv() (*Caracal, error)
+```
+
+### `FromClientSecret(opts)`
+
+Builds a client with an SDK-managed token source. The token source uses STS token exchange, caches through the OAuth client, and refreshes before expiry.
+
+```go
+type ClientSecretOptions struct {
+    CoordinatorURL string
+    STSURL         string
+    ZoneID         string
+    ApplicationID  string
+    ClientSecret   string
+    Resources      []string
+    GatewayURL     string
+    Scope          string // default: agent:lifecycle
+}
+
+func FromClientSecret(opts ClientSecretOptions) (*Caracal, error)
 ```
 
 ## Agent kind constants

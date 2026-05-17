@@ -19,7 +19,10 @@ npm install @caracalai/sdk
 | `CARACAL_COORDINATOR_URL` | Yes | Coordinator base URL (e.g., `http://coordinator:4000`) |
 | `CARACAL_ZONE_ID` | Yes | Zone identifier |
 | `CARACAL_APPLICATION_ID` | Yes | Registered application ID |
-| `CARACAL_SUBJECT_TOKEN` | Yes | Ambient bearer token |
+| `CARACAL_SUBJECT_TOKEN` | Token mode | Ambient bearer token |
+| `CARACAL_APP_CLIENT_SECRET` | Client-secret mode | Application secret used to refresh subject tokens through STS |
+| `CARACAL_STS_URL` | Client-secret mode | STS base URL |
+| `CARACAL_APP_RESOURCES` | Client-secret mode if `CARACAL_RESOURCES` is unset | Comma-separated resource IDs for token exchange |
 | `CARACAL_GATEWAY_URL` | No | Gateway base URL for resource-routed calls |
 | `CARACAL_RESOURCES` | No | Comma-separated `resourceId=upstreamPrefix` pairs |
 
@@ -38,7 +41,8 @@ interface CaracalConfig {
   coordinator: { baseUrl: string; fetchImpl?: typeof fetch };
   zoneId: string;
   applicationId: string;
-  subjectToken: string;
+  subjectToken?: string;
+  tokenSource?: () => string | Promise<string>;
   gatewayUrl?: string;
   resources?: ResourceBinding[];       // [{ resourceId: string; upstreamPrefix: string }]
   defaultKind?: AgentKind;             // default: 'instance'
@@ -48,10 +52,27 @@ interface CaracalConfig {
 
 ### `Caracal.fromEnv(env?)`
 
-Reads all `CARACAL_*` environment variables and constructs a `Caracal` instance. Throws if any required variable is missing.
+Reads all `CARACAL_*` environment variables and constructs a `Caracal` instance. Static-token mode uses `CARACAL_SUBJECT_TOKEN`; client-secret mode uses `CARACAL_APP_CLIENT_SECRET`, `CARACAL_STS_URL`, and resource IDs from `CARACAL_APP_RESOURCES` or `CARACAL_RESOURCES`.
 
 ```typescript
 static fromEnv(env?: NodeJS.ProcessEnv): Caracal
+```
+
+### `Caracal.fromClientSecret(opts)`
+
+Builds a client with an SDK-managed token source. The token source uses STS token exchange, caches through the OAuth client, and refreshes before expiry.
+
+```typescript
+static fromClientSecret(opts: {
+  coordinatorUrl: string;
+  stsUrl: string;
+  zoneId: string;
+  applicationId: string;
+  clientSecret: string;
+  resources: string[] | ResourceBinding[];
+  gatewayUrl?: string;
+  scope?: string; // default: agent:lifecycle
+}): Caracal
 ```
 
 ## Agent session methods
@@ -143,6 +164,8 @@ Returns the current envelope as a plain `Record<string, string>`. Use this to in
 ```typescript
 headers(opts?: { allowRoot?: boolean }): Record<string, string>
 ```
+
+Clients backed by an async token source should use `headersAsync({ allowRoot: true })` for root headers.
 
 ### `bindFromHeaders(headers, fn)`
 

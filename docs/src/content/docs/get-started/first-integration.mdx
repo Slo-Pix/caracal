@@ -20,16 +20,16 @@ When `spawn()` exits — normally or on error — the session is terminated in t
 
 ## Configuration
 
-All three SDKs read configuration from the same four environment variables:
+All three SDKs read the same base configuration from environment variables:
 
 | Variable | Source | Description |
 | -------- | ------ | ----------- |
 | `CARACAL_COORDINATOR_URL` | Stack | URL of the Coordinator service |
 | `CARACAL_ZONE_ID` | `caracal.toml` | Zone the application belongs to |
 | `CARACAL_APPLICATION_ID` | `caracal.toml` | Application ID in that zone |
-| `CARACAL_SUBJECT_TOKEN` | Obtained at runtime | Ambient mandate for this agent |
+| `CARACAL_SUBJECT_TOKEN` | Obtained at runtime | Ambient mandate for this agent when using static-token startup |
 
-The subject token is not a static secret — it is an ambient mandate obtained by exchanging the application's client credentials with the STS. The SDK's `fromEnv()` factory handles this transparently when used with `caracal run`.
+The subject token is not a static secret — it is an ambient mandate obtained by exchanging the application's client credentials with the STS. The SDK's `fromEnv()` factory handles this transparently when used with `caracal run`. For long-running services, TypeScript, Python, and Go can also read `CARACAL_APP_CLIENT_SECRET` plus `CARACAL_STS_URL` and refresh the application subject token on demand.
 
 Two additional optional variables:
 
@@ -37,6 +37,9 @@ Two additional optional variables:
 | -------- | ----------- |
 | `CARACAL_GATEWAY_URL` | URL of the Gateway (needed when routing tool calls through it) |
 | `CARACAL_RESOURCES` | Comma-separated `resourceId=https://upstream/prefix` pairs |
+| `CARACAL_APP_CLIENT_SECRET` | Application client secret for SDK-managed token refresh |
+| `CARACAL_STS_URL` | STS base URL required with `CARACAL_APP_CLIENT_SECRET` |
+| `CARACAL_APP_RESOURCES` | Comma-separated resource IDs for token exchange when `CARACAL_RESOURCES` is not set |
 
 ## Using `caracal run` for local development
 
@@ -82,7 +85,7 @@ await caracal.spawn(async () => {
 }, { kind: AgentKind.Ephemeral });
 ```
 
-`Caracal.fromEnv()` throws if any of the four required env vars are missing. Wrap your process startup in `caracal run` to inject them automatically.
+`Caracal.fromEnv()` requires the base Coordinator, zone, and application variables plus either `CARACAL_SUBJECT_TOKEN` or `CARACAL_APP_CLIENT_SECRET` with `CARACAL_STS_URL`. Wrap local process startup in `caracal run` to inject a short-lived subject token automatically.
 
 ### Express middleware
 
