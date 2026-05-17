@@ -1,22 +1,26 @@
-# caracal/postgres
+# infra/postgres
 
 ## Scope
-- Covers only the PostgreSQL schema, migrations, and image build under `caracal/infra/postgres/`.
+- Covers the PostgreSQL image, migrations, and database scripts under `infra/postgres/`.
+
+## Architecture Design
+- Numbered migrations define the canonical OSS schema.
+- The Postgres image packages migrations and the `caracal-migrate` entrypoint used by Compose.
+- Database roles, RLS, immutable audit/policy tables, and secret ciphertext storage are schema-owned concerns.
 
 ## Required
-- Must use PostgreSQL 18 only.
-- Must listen on port 5432 only.
-- Must package migrations and `caracal-migrate` inside the Postgres image.
-- Must apply numbered `NNNN_*.up.sql` migrations in order; pair every `up` with a `down`.
-- Must run schema migrations through the Compose `dbMigrate` one-shot before app services start.
-- Must keep `audit_events` writable only by `caracalAudit` (INSERT + SELECT).
-- Must keep `policy_versions` immutable through the `reject_policy_version_mutation` trigger.
-- Must store secrets only as ChaCha20 ciphertext in `secrets.ciphertext` with `nonce` and `dek_id` populated.
-- Must use CamelCase role names (e.g., `caracalSts`).
+- Must use PostgreSQL 18 and port 5432.
+- Must add new migrations as paired `NNNN_*.up.sql` and `NNNN_*.down.sql` files.
+- Must keep committed migrations immutable after merge.
+- Must preserve audit append-only behavior and policy-version immutability.
+- Must store secrets only as ciphertext with nonce and DEK metadata.
 
 ## Forbidden
-- Must not import or reference `caracalEnterprise/`.
-- Must not edit a committed migration file in place; add a new numbered migration instead.
-- Must not grant UPDATE or DELETE on `audit_events` to any role.
-- Must not grant write on `policy_versions` to any role.
-- Must not store plaintext credentials, tokens, or subject claims in any column.
+- Must not edit a committed migration in place.
+- Must not grant UPDATE or DELETE on append-only audit records.
+- Must not store plaintext private keys, credentials, tokens, or subject claims.
+- Must not place service query code in this directory.
+
+## Validation
+- Validate migration changes with the Postgres scripts in `infra/postgres/scripts/`.
+

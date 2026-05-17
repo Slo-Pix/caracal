@@ -1,15 +1,23 @@
-# caracal/secrets
+# infra/secrets
 
 ## Scope
-- Covers only the secret-file layout consumed by the Caracal compose stack under `caracal/infra/`.
+- Covers local development secret generation under `infra/secrets/`.
+
+## Architecture Design
+- `secretInit.mjs` creates file-backed Compose secrets under `files/` for local development only.
+- Production deployments must provide secrets from an external manager.
 
 ## Required
-- Must generate dev secrets via `pnpm secrets:init`; output lands in `files/`.
-- Must keep the `files/` directory gitignored at all times.
-- Must use cryptographically random hex strings for every key/password (Node's `crypto.randomBytes`).
-- Must use 0444 permissions on every generated secret file (Compose v2 ignores `mode:` for file-based secrets — the file is bind-mounted with its host permissions; the parent `files/` directory is 0700, so reads stay scoped to the host owner). Production deployments must source secrets from an external manager instead.
+- Must generate secret material with Node cryptographic randomness.
+- Must keep `files/` gitignored and host-readable only by the local owner.
+- Must keep generated filenames aligned with Compose secret declarations.
+- Must support repeatable local initialization without printing secret values.
 
 ## Forbidden
-- Must not commit the contents of `files/` to git.
-- Must not bake secrets into images.
-- Must not log or echo secret material from any script in this directory.
+- Must not commit generated files from `files/`.
+- Must not bake secrets into images or manifests.
+- Must not log, echo, snapshot, or test-assert raw secret values.
+
+## Validation
+- Validate with `pnpm secrets:init` after changing secret names or generation behavior.
+

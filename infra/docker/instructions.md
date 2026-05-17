@@ -1,24 +1,26 @@
-# caracal/docker
+# infra/docker
 
 ## Scope
-- Covers only the OSS Docker Compose orchestration under `caracal/infra/docker/`.
+- Covers Docker and Docker Compose orchestration under `infra/docker/`.
+
+## Architecture Design
+- `docker-compose.yml` is the local development stack using local images and repo paths.
+- `runtime-compose.yml` is the self-hosted runtime stack using versioned GHCR images.
+- Service Dockerfiles remain with their owning service or app unless shared Go-service packaging is required.
 
 ## Required
-- Must use Docker Compose v2 with multi-stage Dockerfiles authored in each service directory.
-- Must keep `docker-compose.yml` for local development and `runtime-compose.yml` for self-hosted GHCR releases.
-- Must keep the runtime Compose source only in this directory.
-- Must use only these OSS host ports: 3000, 4000, 5432, 6379, 8080, 8081, 9090.
-- Must declare a healthcheck for every long-running service.
-- Must use `depends_on: { service_healthy }` for ordering against postgres and redis.
-- Must run the `dbMigrate` one-shot before any application service starts; every app service must declare `dbMigrate: { condition: service_completed_successfully }`.
-- Must keep Redis stream provisioning inside the redis container's entrypoint so it is idempotent and re-runs on every boot.
-- Must source local secret values from `infra/secrets/files/` through Compose secrets.
-- Must tag locally-built images as `localhost/caracal-{svc}:dev-${CARACAL_DEV_SHA}`; must not use floating `:dev` tags or `ghcr.io/...` references in the dev compose file.
-- Must propagate `CARACAL_MODE` to every app service.
+- Must keep local images tagged as `localhost/caracal-*:dev-${CARACAL_DEV_SHA:-local}`.
+- Must keep runtime images pinned to `v${CARACAL_VERSION}` through `CARACAL_REGISTRY`.
+- Must keep healthchecks on long-running services and gate startup with `service_healthy` or `service_completed_successfully`.
+- Must source secrets through Compose secrets, never inline environment literals.
+- Must preserve OSS host ports: 3000, 4000, 5432, 6379, 8080, 8081, 8087, and 9090.
 
 ## Forbidden
-- Must not import or reference `caracalEnterprise/`.
-- Must not bind the same host port twice across services.
-- Must not run any container as root.
-- Must not bake secrets into images.
-- Must not add profiled, experimental, or unreleased services.
+- Must not use floating release tags for runtime images.
+- Must not make local development pull GHCR images.
+- Must not run application containers as root or bake secrets into images.
+- Must not bind the same host port twice.
+
+## Validation
+- Validate Compose edits with `docker compose -f infra/docker/docker-compose.yml config`.
+

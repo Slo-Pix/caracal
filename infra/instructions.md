@@ -1,17 +1,26 @@
 # infra
 
 ## Scope
-- Covers only infrastructure configuration under this directory.
+- Covers infrastructure assets under `infra/`.
+
+## Architecture Design
+- `docker/` owns local and runtime Compose orchestration.
+- `postgres/` owns the database image, migrations, and verification scripts.
+- `redis/` owns Redis configuration and stream provisioning.
+- `healthcheck/` owns the reusable Go healthcheck binary used by service images.
+- `secrets/` owns local secret-file generation.
+- `scripts/` owns operator probes for the local stack.
 
 ## Required
-- Must name every subdirectory by a single infrastructure concern.
-- Permitted subdirectories: `docker`, `postgres`, `redis`, `healthcheck`,
-  `secrets`, `scripts`.
-- Must keep concern-specific assets in their own subdirectory.
+- Must keep each infrastructure concern in its own subdirectory.
+- Must keep runtime, local-development, secret, schema, and probe concerns separated.
+- Must keep host ports consistent with the Compose files and product-isolation rules.
 
 ## Forbidden
-- Must not contain service source code (Go or TypeScript).
-- Must not contain shared library code.
-- Must not duplicate environment configuration already in service directories.
-- Must not check in generated secrets, TLS material, or backups; each producing
-  directory must gitignore its output.
+- Must not place service business logic or reusable SDK code in this directory.
+- Must not commit generated secret files, backups, cache output, or database dumps.
+- Must not duplicate configuration already owned by a service or package manifest.
+
+## Validation
+- Validate touched infrastructure with the owning script or Compose command for that subdirectory.
+
