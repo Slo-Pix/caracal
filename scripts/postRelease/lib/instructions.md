@@ -1,12 +1,21 @@
-# Post Release Validation Library
+# scripts/postRelease/lib
 
 ## Scope
-- Only shared helpers sourced by sibling `validate*.sh` scripts.
+- Covers shared helpers sourced by post-release validation scripts.
+
+## Architecture Design
+- Helpers centralize finding emission, severity/status constants, filtering, and common release environment handling.
 
 ## Required
-- Helpers must operate on `$CARACAL_VERSION` and `$FINDINGS_DIR` env vars only.
-- New helpers must be additive and must not shadow POSIX builtins.
+- Must operate through `CARACAL_VERSION`, `FINDINGS_DIR`, `DRY_RUN`, and `ONLY`.
+- Must keep helper functions additive and reusable by sibling validators.
+- Must keep JSONL output stable for `aggregateReport.ts`.
 
 ## Forbidden
-- Must not perform validation logic; helpers must be primitives only.
-- Must not introduce stateful globals beyond severity and status constants.
+- Must not perform artifact-specific validation in this library.
+- Must not shadow POSIX builtins.
+- Must not create persistent files outside `FINDINGS_DIR`.
+
+## Validation
+- Validate helper edits by running at least one validator that sources `lib/common.sh`.
+

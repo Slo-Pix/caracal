@@ -1,15 +1,23 @@
-# Scripts
+# scripts
 
 ## Scope
-- Only repo-level automation scripts that wrap pnpm, git, and CI workflows.
+- Covers repository-level automation under `scripts/`.
+
+## Architecture Design
+- Root scripts orchestrate release, publish, CI, and post-release validation workflows.
+- Shared shell presentation and selection helpers live under `scripts/lib/`.
+- Published-artifact checks live under `scripts/postRelease/`.
 
 ## Required
-- Every script must be executable and start with `#!/usr/bin/env bash` (or matching interpreter).
-- Every script must include the standard file header.
-- Scripts must be idempotent and fail fast (`set -euo pipefail`).
-- Scripts must run from the repo root regardless of caller cwd.
+- Must keep scripts executable, fail-fast, and runnable from the repository root.
+- Must reuse `pnpm`, Go, Python, and package-manager commands already declared by the workspace.
+- Must keep release and publish scripts deterministic and registry-explicit.
 
 ## Forbidden
-- Must not embed secrets or tokens.
-- Must not duplicate logic that already exists as a `pnpm` workspace script.
-- Must not call services other than git, pnpm, node, npm, python, twine, and standard POSIX tools.
+- Must not embed secrets, tokens, or registry credentials.
+- Must not duplicate complex package logic that belongs in package scripts.
+- Must not mutate generated release findings outside the owning post-release workflow.
+
+## Validation
+- Validate touched scripts with shell syntax checks and the narrow workflow command they wrap.
+
