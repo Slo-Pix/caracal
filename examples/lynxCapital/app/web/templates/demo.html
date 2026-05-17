@@ -1,65 +1,172 @@
+{#
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+Demo workspace template for chat, runtime visibility, and orchestration graph panels.
+#}
+{#
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+Demo page template for the Lynx Capital runtime workspace.
+#}
 {% extends "layout.html" %}
 {% block title %}{{ company }} - Demo{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/demo.css?v=7">
+<link rel="stylesheet" href="/static/demo.css?v=8">
 
 <div class="demo-shell">
   <div class="demo-body">
-    <aside class="chat-panel">
+    <section class="chat-panel" aria-label="Conversational runtime workspace">
       <header class="panel-header chat-header">
         <div class="panel-header-copy">
-          <h1 class="panel-title">Chat</h1>
+          <span class="panel-eyebrow">Caracal runtime</span>
+          <h1 class="panel-title">{{ shortName }} agent workspace</h1>
+          <p class="panel-copy">Conversation, execution traces, context pressure, and control events stay visible as work runs.</p>
         </div>
         <div class="panel-meta-block">
-          <div class="chat-controls" style="display:flex; justify-content: flex-end; gap:8px; margin-bottom:12px;">
-            <button id="clear-chat-btn" class="btn btn-ghost" title="Clear current visible history" style="padding:4px 8px; font-size:10px; height:auto;">Clear View</button>
-            <button id="new-chat-btn" class="btn btn-ghost" title="Start a new chat session" style="padding:4px 8px; font-size:10px; height:auto;">New Chat</button>
+          <div class="chat-controls">
+            <button id="clear-chat-btn" class="btn btn-ghost btn-compact" title="Clear current visible history">Clear view</button>
+            <button id="new-chat-btn" class="btn btn-ghost btn-compact" title="Start a new chat session">New chat</button>
           </div>
-          <span id="agent-count" class="agent-count">Idle</span>
+          <div class="run-status-card">
+            <span class="panel-meta-label">Run state</span>
+            <span id="agent-count" class="agent-count">Idle</span>
+            <span id="run-id" class="run-id">No active run</span>
+          </div>
         </div>
       </header>
 
-      <section id="memory-bar" class="memory-bar" aria-label="Context usage">
-        <div class="mem-row">
-          <span class="mem-label">Context</span>
-          <div class="mem-track" aria-hidden="true">
-            <div id="mem-fill" class="mem-fill"></div>
+      <div class="workspace-grid">
+        <section class="conversation-column" aria-label="Conversation stream">
+          <div class="conversation-toolbar" aria-label="Runtime counters">
+            <div class="metric-card">
+              <span class="metric-label">Events</span>
+              <strong id="event-count">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Tools</span>
+              <strong id="tool-count">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Services</span>
+              <strong id="service-count">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Controls</span>
+              <strong id="security-count">0</strong>
+            </div>
           </div>
-          <span id="mem-tokens" class="mem-tokens">0 / 128k</span>
-        </div>
-        <div class="mem-row mem-row-compact">
-          <span id="mem-agents" class="mem-chip">0 agents</span>
-          <span id="mem-compactions" class="mem-chip">0 compactions</span>
-          <span id="mem-files" class="mem-chip">0 files</span>
-          <button type="button" id="mem-toggle" class="mem-toggle" aria-expanded="false">View summaries</button>
-        </div>
-        <div id="mem-detail" class="mem-detail" hidden></div>
-      </section>
 
-      {% include "components/demo/plan_block.html" %}
-
-      <div class="chat-stream-shell">
-        <div class="chat-stream" id="chat-stream">
-          <div class="chat-empty" id="chat-empty">
-            <span class="chat-empty-title">No activity yet</span>
-            <span class="chat-empty-copy">Start a run to see the live conversation, execution trail, and system events.</span>
+          <div class="chat-stream-shell">
+            <div class="chat-stream" id="chat-stream">
+              <div class="chat-empty" id="chat-empty">
+                <span class="chat-empty-title">No activity yet</span>
+                <span class="chat-empty-copy">Start a run to see the live conversation, execution trail, and system events.</span>
+              </div>
+            </div>
           </div>
-        </div>
+
+          {% include "components/demo/input_component.html" %}
+        </section>
+
+        <aside class="runtime-rail" aria-label="Runtime visibility">
+          <section class="runtime-card runtime-card-context">
+            <div class="runtime-card-head">
+              <div>
+                <span class="runtime-eyebrow">Context</span>
+                <h2>Memory pressure</h2>
+              </div>
+              <span id="mem-tokens" class="mem-tokens">0 / 128k</span>
+            </div>
+            <div id="memory-bar" class="memory-bar" aria-label="Context usage">
+              <div class="mem-track" aria-hidden="true">
+                <div id="mem-fill" class="mem-fill"></div>
+              </div>
+              <div class="mem-row mem-row-compact">
+                <span id="mem-agents" class="mem-chip">0 agents</span>
+                <span id="mem-compactions" class="mem-chip">0 compactions</span>
+                <span id="mem-files" class="mem-chip">0 files</span>
+                <button type="button" id="mem-toggle" class="mem-toggle" aria-expanded="false">Summaries</button>
+              </div>
+              <div id="mem-detail" class="mem-detail" hidden></div>
+            </div>
+          </section>
+
+          {% include "components/demo/plan_block.html" %}
+
+          <section class="runtime-card runtime-card-feed" aria-label="Live runtime activity">
+            <div class="runtime-card-head">
+              <div>
+                <span class="runtime-eyebrow">Trace</span>
+                <h2>Runtime activity</h2>
+              </div>
+              <span id="runtime-state" class="runtime-state">Idle</span>
+            </div>
+            <div id="runtime-feed" class="runtime-feed">
+              <div class="runtime-feed-empty">Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.</div>
+            </div>
+          </section>
+        </aside>
       </div>
-
-      {% include "components/demo/input_component.html" %}
-    </aside>
+    </section>
 
     <section class="graph-panel">
       <header class="panel-header">
         <div class="panel-header-copy">
           <h2 class="panel-title">Orchestration graph</h2>
+          <p class="panel-copy">Live observability across Caracal control, agent execution, provider calls, approvals, and runtime telemetry.</p>
         </div>
         <span id="graph-status" class="graph-status">idle</span>
       </header>
-      <div class="graph-canvas">
-        <div class="graph-empty" id="graph-empty">Live topology appears as agents reason, delegate, and complete work.</div>
-        <svg id="graph-svg" style="display:none"></svg>
+      <div class="graph-workspace">
+        <aside class="graph-rail" aria-label="Execution stages">
+          <div class="graph-rail-head">
+            <span class="graph-rail-eyebrow">Stages</span>
+            <span id="graph-stage-summary" class="graph-rail-summary">Waiting for a run</span>
+          </div>
+          <div id="graph-stage-rail" class="graph-stage-rail"></div>
+        </aside>
+
+        <div class="graph-main">
+          <div class="graph-toolbar" aria-label="Graph controls">
+            <div class="graph-toolbar-group">
+              <button type="button" id="graph-zoom-out" class="graph-tool-btn" aria-label="Zoom out">-</button>
+              <button type="button" id="graph-zoom-reset" class="graph-tool-btn">100%</button>
+              <button type="button" id="graph-zoom-in" class="graph-tool-btn" aria-label="Zoom in">+</button>
+              <button type="button" id="graph-fit" class="graph-tool-btn">Fit</button>
+            </div>
+            <span class="graph-toolbar-hint">Drag to pan - scroll to zoom - select any node or flow</span>
+          </div>
+
+          <div id="graph-canvas" class="graph-canvas" tabindex="0" aria-label="Zoomable orchestration graph">
+            <div class="graph-empty" id="graph-empty">
+              <span class="graph-empty-title">Topology waiting for execution</span>
+              <span>Start a run to watch Caracal coordinate agents, intercept service calls, and stream runtime state.</span>
+            </div>
+            <svg id="graph-svg" style="display:none" role="img" aria-label="Live orchestration topology"></svg>
+          </div>
+        </div>
+
+        <aside class="graph-side" aria-label="Runtime details">
+          <section class="graph-inspector" aria-live="polite">
+            <div class="graph-side-head">
+              <span class="graph-side-eyebrow">Inspector</span>
+              <span id="graph-inspector-type" class="graph-side-chip">Overview</span>
+            </div>
+            <h3 id="graph-inspector-title" class="graph-inspector-title">No node selected</h3>
+            <p id="graph-inspector-copy" class="graph-inspector-copy">Select a stage, agent, service, or connection to inspect runtime state.</p>
+            <dl id="graph-inspector-metrics" class="graph-metric-list"></dl>
+          </section>
+
+          <section class="graph-timeline" aria-label="Execution timeline">
+            <div class="graph-side-head">
+              <span class="graph-side-eyebrow">Execution timeline</span>
+              <span id="graph-timeline-count" class="graph-side-chip">0 events</span>
+            </div>
+            <ol id="graph-timeline-list" class="graph-timeline-list"></ol>
+          </section>
+        </aside>
       </div>
     </section>
   </div>
@@ -68,6 +175,6 @@
   {% include "components/demo/event_block.html" %}
 </div>
 
-<script src="/static/chat.js?v=7" type="module"></script>
-<script src="/static/graph.js?v=7" type="module"></script>
+<script src="/static/chat.js?v=8" type="module"></script>
+<script src="/static/graph.js?v=8" type="module"></script>
 {% endblock %}

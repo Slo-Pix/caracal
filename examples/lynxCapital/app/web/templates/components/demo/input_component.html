@@ -1,6 +1,12 @@
+{#
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+Demo chat composer template for prompts and run controls.
+#}
 <div class="chat-composer">
   <div class="composer-input-shell">
-    <textarea id="prompt-input" rows="1" placeholder="Ask a question or describe a task..."></textarea>
+    <textarea id="prompt-input" rows="1" placeholder="Ask Caracal to run a finance operation, investigate an exception, or coordinate a workflow..."></textarea>
   </div>
 
   <div class="composer-footer">
@@ -10,7 +16,7 @@
         <select id="model-select" class="model-picker-select"></select>
       </label>
       <button class="btn btn-ghost" id="pause-btn" hidden title="Pause or resume stream rendering">Pause</button>
-      <span class="composer-hint">Enter to send, Shift+Enter for newline</span>
+      <span class="composer-hint">Enter sends - Shift+Enter adds a line - traces stay visible</span>
     </div>
 
     <div class="composer-actions">

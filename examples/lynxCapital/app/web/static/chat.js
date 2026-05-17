@@ -2,8 +2,7 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Chat panel driver: template-based live stream rendering with batched
- * updates, structured execution blocks, and persistent run history.
+ * Chat panel driver for live conversation, runtime traces, and run controls.
  */
 
 const $ = (id) => document.getElementById(id);
@@ -31,6 +30,13 @@ const planToggle = $("plan-toggle");
 const planActivePreview = $("plan-active-preview");
 const clearChatBtn = $("clear-chat-btn");
 const newChatBtn = $("new-chat-btn");
+const runIdEl = $("run-id");
+const runtimeState = $("runtime-state");
+const runtimeFeed = $("runtime-feed");
+const eventCount = $("event-count");
+const toolCount = $("tool-count");
+const serviceCount = $("service-count");
+const securityCount = $("security-count");
 
 const tplUserMessage = $("tpl-user-message");
 const tplAgentTurn = $("tpl-agent-turn");
@@ -63,7 +69,23 @@ const state = {
   pendingScrollForce: false,
   pendingScrollSmooth: false,
   autoScroll: true,
+  metrics: {
+    events: 0,
+    tools: 0,
+    services: 0,
+    controls: 0,
+  },
 };
+
+const RUNTIME_FEED_LIMIT = 90;
+const CONTROL_EVENTS = new Set([
+  "audit_record",
+  "error",
+  "model_change",
+  "replan",
+  "run_cancelled",
+  "tool_retry",
+]);
 
 function cloneTemplate(template) {
   return template.content.firstElementChild.cloneNode(true);
@@ -80,7 +102,8 @@ function shortId(id) {
 }
 
 function formatTime(ts = Date.now()) {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const value = typeof ts === "number" && ts < 10_000_000_000 ? ts * 1000 : ts;
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 function titleCase(value) {
@@ -127,6 +150,20 @@ function summarizeArgs(args) {
       .join("  "),
     180,
   );
+}
+
+function renderJson(value) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function eventAgentLabel(agentId) {
+  return agentId ? agentLabel(state.agents[agentId]) : "";
 }
 
 function clearEmpty() {
@@ -208,6 +245,29 @@ function updateHeaderCount() {
   agentCount.textContent = running
     ? `${running} running / ${state.spawned} total`
     : `${state.spawned} total - ${state.terminated} finished`;
+}
+
+function updateRunMeta() {
+  if (runIdEl) runIdEl.textContent = state.runId ? `Run ${shortId(state.runId)}` : "No active run";
+  if (runtimeState) {
+    if (state.paused) runtimeState.textContent = `${state.queue.length} queued`;
+    else runtimeState.textContent = state.active ? "Streaming" : "Idle";
+  }
+}
+
+function refreshMetrics() {
+  if (eventCount) eventCount.textContent = String(state.metrics.events);
+  if (toolCount) toolCount.textContent = String(state.metrics.tools);
+  if (serviceCount) serviceCount.textContent = String(state.metrics.services);
+  if (securityCount) securityCount.textContent = String(state.metrics.controls);
+}
+
+function countEvent(event) {
+  state.metrics.events += 1;
+  if (event.kind === "tool_call") state.metrics.tools += 1;
+  if (event.kind === "service_call") state.metrics.services += 1;
+  if (CONTROL_EVENTS.has(event.kind)) state.metrics.controls += 1;
+  refreshMetrics();
 }
 
 function refreshMemoryBar() {
@@ -314,6 +374,7 @@ function createEventBlock(kind, options = {}) {
   block.classList.remove("kind-system");
   block.classList.add(`kind-${kind}`);
   if (options.surface) block.classList.add(`event-block-${options.surface}`);
+  if (options.open) block.open = true;
 
   const kicker = block.querySelector(".event-kicker");
   const title = block.querySelector(".event-title");
@@ -333,9 +394,106 @@ function createEventBlock(kind, options = {}) {
   if (options.body) {
     body.hidden = false;
     body.textContent = options.body;
+  } else {
+    block.classList.add("event-block-compact");
   }
 
   return block;
+}
+
+function runtimeEventSummary(event) {
+  const payload = event.payload || {};
+  const agent = eventAgentLabel(payload.agent_id);
+  switch (event.kind) {
+    case "run_start":
+      return { kind: "system", kicker: "Run", title: "Execution started", body: payload.prompt };
+    case "run_end":
+      return { kind: payload.status === "failed" ? "error" : "system", kicker: "Run", title: "Execution finished", pill: titleCase(payload.status || "completed") };
+    case "run_cancelled":
+      return { kind: "system", kicker: "Run", title: "Cancellation requested" };
+    case "agent_spawn":
+      return {
+        kind: "spawn",
+        kicker: "Spawn",
+        title: `${payload.region ? `${titleCase(payload.layer)} ${payload.region}` : titleCase(payload.layer)} spawned`,
+        body: payload.scope,
+      };
+    case "agent_start":
+      return { kind: "spawn", kicker: "Agent", title: `${agent} started` };
+    case "agent_end":
+      return { kind: "result", kicker: "Agent", title: `${agent} completed`, body: renderJson(payload.result) };
+    case "agent_terminate":
+      return { kind: payload.status === "failed" || payload.status === "denied" ? "error" : "system", kicker: "Agent", title: `${agent} terminated`, pill: titleCase(payload.status || "completed") };
+    case "delegation":
+      return { kind: "spawn", kicker: "Delegation", title: `${agentLabel(state.agents[payload.parent_id])} delegated work`, body: payload.scope };
+    case "llm_call":
+      return { kind: "system", kicker: "Provider", title: payload.model, body: `${payload.latency_ms}ms | ${payload.input_tokens}->${payload.output_tokens} tokens | ${payload.tool_calls} tool calls` };
+    case "tool_call":
+      return { kind: "tool", kicker: "Tool call", title: payload.tool_name, body: renderJson(payload.args) };
+    case "tool_result":
+      return { kind: "result", kicker: "Tool result", title: payload.tool_name, body: renderJson(payload.result) };
+    case "service_call":
+      return { kind: "tool", kicker: "Provider call", title: `${payload.service_id} - ${payload.action}`, body: renderJson(payload.payload) };
+    case "service_result":
+      return { kind: "result", kicker: "Provider result", title: `${payload.service_id} returned`, body: renderJson(payload.result) };
+    case "memory_update":
+      return { kind: "memory", kicker: "Memory", title: `${agent} context updated`, body: `${fmtTok(payload.tokens_used)} / ${fmtTok(payload.tokens_limit)} across ${payload.message_count} messages` };
+    case "memory_compaction":
+      return { kind: "memory", kicker: "Memory", title: `${agent} compacted context`, body: `${fmtTok(payload.tokens_before)} -> ${fmtTok(payload.tokens_after)} tokens` };
+    case "plan_update":
+      return { kind: "plan", kicker: "Plan", title: `${agent} revised execution`, body: `${(payload.todos || []).length} checklist items | revision ${payload.revision}` };
+    case "replan":
+      return { kind: "plan", kicker: "Replan", title: `${agent} adjusted course`, body: payload.reason, pill: `rev ${payload.revision}` };
+    case "stage_start":
+      return { kind: "plan", kicker: "Stage", title: `${titleCase(payload.stage)} started`, body: payload.intent };
+    case "stage_end":
+      return { kind: "result", kicker: "Stage", title: `${titleCase(payload.stage)} completed`, body: payload.summary };
+    case "worker_acquire":
+      return { kind: "spawn", kicker: "Worker", title: `${payload.role} acquired`, body: payload.scope };
+    case "worker_release":
+      return { kind: "result", kicker: "Worker", title: `Worker ${shortId(payload.worker_id)} released`, body: renderJson(payload.result) };
+    case "job_started":
+      return { kind: "spawn", kicker: "Job", title: `${payload.job_kind || "job"} started`, body: `${payload.target} | ${shortId(payload.job_id)}` };
+    case "job_completed":
+      return { kind: payload.status === "failed" ? "error" : "result", kicker: "Job", title: `${payload.job_kind || "job"} ${payload.status || "completed"}`, body: renderJson(payload.result), pill: payload.target };
+    case "blackboard_post":
+      return { kind: "system", kicker: "Blackboard", title: `${agent} posted ${payload.kind}`, body: payload.content };
+    case "file_write":
+      return { kind: "file", kicker: "File write", title: payload.path, body: `${payload.size}B | ${agent}` };
+    case "file_read":
+      return { kind: "file", kicker: "File read", title: payload.path, body: `${payload.size}B | ${agent}` };
+    case "audit_record":
+      return { kind: "audit", kicker: "Audit", title: "Audit record created", body: renderJson(payload.record), open: true };
+    case "tool_retry":
+      return { kind: "audit", kicker: "Retry", title: `${payload.tool_name} attempt ${payload.attempt}`, body: payload.error, open: true };
+    case "model_change":
+      return { kind: "system", kicker: "Model", title: `${payload.prior} -> ${payload.model}` };
+    case "error":
+      return { kind: "error", kicker: "Error", title: payload.message || "Unknown error", open: true };
+    default:
+      if (event.kind === "chat_token" || event.kind === "chat_message" || event.kind === "chat_user") return null;
+      return { kind: "system", kicker: titleCase(event.category), title: titleCase(event.kind), body: renderJson(payload) };
+  }
+}
+
+function appendRuntimeEvent(event) {
+  if (!runtimeFeed) return;
+  const summary = runtimeEventSummary(event);
+  if (!summary) return;
+
+  const empty = runtimeFeed.querySelector(".runtime-feed-empty");
+  if (empty) empty.remove();
+
+  const node = createEventBlock(summary.kind, {
+    surface: "runtime",
+    meta: formatTime(event.ts),
+    ...summary,
+  });
+  runtimeFeed.prepend(node);
+
+  while (runtimeFeed.children.length > RUNTIME_FEED_LIMIT) {
+    runtimeFeed.removeChild(runtimeFeed.lastElementChild);
+  }
 }
 
 function addInline(kind, options) {
@@ -467,6 +625,9 @@ function flushEventQueue() {
 
 function handleEvent(event) {
   const payload = event.payload || {};
+  countEvent(event);
+  appendRuntimeEvent(event);
+  updateRunMeta();
 
   switch (event.kind) {
     case "run_start":
@@ -500,6 +661,25 @@ function handleEvent(event) {
       break;
     }
 
+    case "agent_start": {
+      const agent = state.agents[payload.agent_id];
+      addInline("spawn", {
+        kicker: "Agent",
+        title: `${agentLabel(agent)} started work`,
+      });
+      break;
+    }
+
+    case "agent_end": {
+      const agent = state.agents[payload.agent_id];
+      addInline("result", {
+        kicker: "Agent",
+        title: `${agentLabel(agent)} completed work`,
+        body: summarizeObject(payload.result),
+      });
+      break;
+    }
+
     case "agent_terminate": {
       state.terminated += 1;
       updateHeaderCount();
@@ -508,6 +688,99 @@ function handleEvent(event) {
         kicker: "Agent",
         title: `${agentLabel(agent)} finished`,
         pill: titleCase(payload.status || "completed"),
+      });
+      break;
+    }
+
+    case "stage_start": {
+      addInline("plan", {
+        kicker: "Stage",
+        title: `${titleCase(payload.stage)} started`,
+        body: payload.intent || "",
+      });
+      break;
+    }
+
+    case "stage_end": {
+      addInline("result", {
+        kicker: "Stage",
+        title: `${titleCase(payload.stage)} completed`,
+        body: payload.summary || "",
+      });
+      break;
+    }
+
+    case "replan": {
+      addInline("plan", {
+        kicker: "Replan",
+        title: `${agentLabel(state.agents[payload.agent_id])} revised the plan`,
+        pill: `rev ${payload.revision}`,
+        body: payload.reason || "",
+      });
+      break;
+    }
+
+    case "blackboard_post": {
+      addInline("system", {
+        kicker: "Blackboard",
+        title: `${agentLabel(state.agents[payload.agent_id])} posted ${payload.kind}`,
+        body: payload.content || "",
+      });
+      break;
+    }
+
+    case "tool_retry": {
+      const turn = findActiveTurn(payload.agent_id);
+      if (turn) {
+        appendExecutionEvent(turn, "audit", {
+          kicker: "Retry",
+          title: `${payload.tool_name} attempt ${payload.attempt}`,
+          body: payload.error || "",
+          open: true,
+        });
+      } else {
+        addInline("audit", {
+          kicker: "Retry",
+          title: `${payload.tool_name} attempt ${payload.attempt}`,
+          body: payload.error || "",
+        });
+      }
+      break;
+    }
+
+    case "worker_acquire": {
+      addInline("spawn", {
+        kicker: "Worker",
+        title: `${payload.role} acquired`,
+        body: payload.scope || "",
+      });
+      break;
+    }
+
+    case "worker_release": {
+      addInline("result", {
+        kicker: "Worker",
+        title: `Worker ${shortId(payload.worker_id)} released`,
+        body: summarizeObject(payload.result),
+      });
+      break;
+    }
+
+    case "job_started": {
+      addInline("spawn", {
+        kicker: "Job",
+        title: `${titleCase(payload.job_kind || "job")} started`,
+        body: `${payload.target || ""} ${payload.job_id ? `(${shortId(payload.job_id)})` : ""}`.trim(),
+      });
+      break;
+    }
+
+    case "job_completed": {
+      addInline(payload.status === "failed" ? "error" : "result", {
+        kicker: "Job",
+        title: `${titleCase(payload.job_kind || "job")} ${payload.status || "completed"}`,
+        pill: payload.target || "",
+        body: summarizeObject(payload.result),
       });
       break;
     }
@@ -696,6 +969,7 @@ function handleEvent(event) {
         pill: titleCase(payload.status || "completed"),
       });
       finishRun();
+      updateRunMeta();
       break;
 
     case "error":
@@ -722,6 +996,7 @@ function resetState() {
   state.planOwner = null;
   state.paused = false;
   state.queue = [];
+  state.metrics = { events: 0, tools: 0, services: 0, controls: 0 };
   state.pendingEvents = [];
   state.dirtyTurns.clear();
   state.pendingScrollForce = false;
@@ -739,6 +1014,13 @@ function resetState() {
   planMeta.textContent = "";
   planStatus.className = "plan-status status-pending";
   planStatus.textContent = "Pending";
+  if (runtimeFeed) {
+    runtimeFeed.replaceChildren();
+    const empty = document.createElement("div");
+    empty.className = "runtime-feed-empty";
+    empty.textContent = "Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.";
+    runtimeFeed.append(empty);
+  }
 
   if (pauseBtn) {
     pauseBtn.hidden = true;
@@ -748,6 +1030,8 @@ function resetState() {
   refreshMemoryBar();
   refreshMemDetail();
   updateHeaderCount();
+  refreshMetrics();
+  updateRunMeta();
 }
 
 function finishRun() {
@@ -771,6 +1055,7 @@ function finishRun() {
   }
 
   updateHeaderCount();
+  updateRunMeta();
 }
 
 async function stopRun() {
@@ -822,6 +1107,7 @@ function startRun() {
     .then((response) => response.json())
     .then((data) => {
       state.runId = data.runId;
+      updateRunMeta();
       try {
         localStorage.setItem("lynx.runId", data.runId);
       } catch {
@@ -898,6 +1184,7 @@ async function tryResume() {
       if (agentCount) agentCount.textContent = "Reattaching...";
     }
 
+    updateRunMeta();
     window.dispatchEvent(new CustomEvent("run-started", { detail: { runId: saved } }));
     attachStream(saved, data.active);
   } catch {
@@ -987,6 +1274,7 @@ stopBtn.addEventListener("click", stopRun);
 pauseBtn?.addEventListener("click", () => {
   state.paused = !state.paused;
   pauseBtn.textContent = state.paused ? "Resume" : "Pause";
+  updateRunMeta();
   if (!state.paused) {
     const queued = state.queue.splice(0);
     for (const event of queued) queueIncomingEvent(event);
@@ -1009,6 +1297,8 @@ loadModelList();
 refreshMemoryBar();
 refreshMemDetail();
 updateHeaderCount();
+refreshMetrics();
+updateRunMeta();
 tryResume();
 autoResizeInput();
 
