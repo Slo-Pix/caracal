@@ -3,12 +3,13 @@
 //
 // `caracal`: thin top-level shell that owns stack lifecycle commands and dispatches cli/tui to their sibling binaries.
 //
-// Surface invariant: SHELL_COMMANDS in @caracalai/core/commands is the single source of truth for the six top-level commands (up, down, status, purge, cli, tui). buildRegistry enforces a 1:1 mapping with the executors below; any drift fails the build.
+// Surface invariant: SHELL_COMMANDS in @caracalai/core/commands is the single source of truth for the top-level commands. buildRegistry enforces a 1:1 mapping with the executors below; any drift fails the build.
 
 import '@caracalai/engine/scrubCwdEnv'
 import { installCrashHandlers } from './crash.ts'
 import { upCommand, downCommand, statusCommand } from './commands/stack.ts'
 import { purgeCommand } from './commands/purge.ts'
+import { controlToggleCommand } from './commands/controlToggle.ts'
 import { cliDispatch, tuiDispatch } from './commands/dispatch.ts'
 import { CARACAL_MODE, CARACAL_SHA, CARACAL_VERSION } from './runtime/version.gen.ts'
 import { SHELL_COMMANDS } from '@caracalai/engine/commands'
@@ -22,6 +23,7 @@ const executors: Record<string, Executor> = {
   down: (argv) => downCommand([...argv]),
   status: () => statusCommand(),
   purge: (argv) => purgeCommand([...argv]),
+  control: (argv) => controlToggleCommand([...argv]),
   cli: (argv) => { cliDispatch([...argv]) },
   tui: (argv) => { tuiDispatch([...argv]) },
 }

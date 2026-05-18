@@ -334,6 +334,10 @@ jobs:
             context: .
             dockerfile: apps/coordinator/Dockerfile
             build_args: ""
+          - name: control
+            context: .
+            dockerfile: apps/control/Dockerfile
+            build_args: ""
           - name: postgres
             context: infra/postgres
             dockerfile: infra/postgres/Dockerfile

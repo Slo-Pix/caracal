@@ -12,8 +12,11 @@ import {
   controlKeyList,
   controlKeyRevoke,
   controlKeyRotate,
+  controlStateFile,
   credentialRead,
+  isControlEnabled,
   runExec,
+  setControlEnabled,
 } from '@caracalai/engine'
 import { readFileSync } from 'node:fs'
 import { parse } from 'smol-toml'
@@ -191,6 +194,9 @@ class ControlMenuView implements View {
   constructor(ctx: Ctx) {
     this.ctx = ctx
     this.items = [
+      { key: 'e', label: 'enable service', build: () => this.toggleView(true) },
+      { key: 'd', label: 'disable service', build: () => this.toggleView(false) },
+      { key: 's', label: 'service status', build: () => this.statusView() },
       { key: 'l', label: 'list keys',  build: () => this.listView() },
       { key: 'g', label: 'get key', build: () => this.getForm() },
       { key: 'c', label: 'create key', build: () => this.createForm() },
@@ -224,6 +230,30 @@ class ControlMenuView implements View {
     return new DetailView({
       title: 'control / keys',
       load: () => controlKeyList(this.ctx.client, this.ctx.zoneId),
+    })
+  }
+
+  private toggleView(enable: boolean): View {
+    return new DetailView({
+      title: `control / ${enable ? 'enable' : 'disable'}`,
+      load: async () => {
+        setControlEnabled(enable)
+        return {
+          state: isControlEnabled() ? 'enabled' : 'disabled',
+          marker: controlStateFile(),
+          note: 'Run `caracal up` to apply.',
+        }
+      },
+    })
+  }
+
+  private statusView(): View {
+    return new DetailView({
+      title: 'control / status',
+      load: async () => ({
+        state: isControlEnabled() ? 'enabled' : 'disabled',
+        marker: controlStateFile(),
+      }),
     })
   }
 
