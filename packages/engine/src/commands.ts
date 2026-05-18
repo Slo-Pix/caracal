@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Canonical command catalog shared by every Caracal interface so CLI and TUI advertise identical names, groups, and subcommand surfaces.
+// Canonical command catalog shared by every Caracal interface so CLI, TUI, and Control advertise identical names, groups, subcommands, and scopes.
 
 export type CommandGroup =
   | 'shell'
@@ -16,6 +16,8 @@ export interface FlagDescriptor {
   readonly summary: string;
 }
 
+export type ScopeVerb = 'read' | 'write' | 'delete';
+
 export interface CommandDescriptor {
   readonly name: string;
   readonly group: CommandGroup;
@@ -26,6 +28,28 @@ export interface CommandDescriptor {
   readonly hidden?: boolean;
   /** Flags keyed by subcommand name; use '' for commands with no subcommands. */
   readonly flags?: { readonly [k: string]: readonly FlagDescriptor[] | undefined };
+  /** Required scope verb per subcommand. Used by the Control API to gate per-resource access. */
+  readonly scopes?: { readonly [k: string]: ScopeVerb | undefined };
+}
+
+const READ_VERBS = new Set([
+  'list', 'get', 'tree', 'children', 'tail', 'inbound', 'outbound', 'traverse', 'read', 'use',
+]);
+
+const DELETE_VERBS = new Set(['delete', 'terminate', 'revoke', 'purge']);
+
+/** Derive a default scope verb for a subcommand using verb conventions. Explicit `scopes` map wins. */
+export function scopeFor(desc: CommandDescriptor, sub: string): ScopeVerb {
+  const explicit = desc.scopes?.[sub];
+  if (explicit) return explicit;
+  if (READ_VERBS.has(sub)) return 'read';
+  if (DELETE_VERBS.has(sub)) return 'delete';
+  return 'write';
+}
+
+/** Format the full scope string a token must carry for the (command, subcommand) pair. */
+export function scopeName(desc: CommandDescriptor, sub: string): string {
+  return `control:${desc.name}:${scopeFor(desc, sub)}`;
 }
 
 export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([

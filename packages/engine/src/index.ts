@@ -4,6 +4,8 @@
 // @caracalai/engine — shared execution engine for the Caracal CLI and TUI.
 
 export * from './shared.js'
+export * from './commands.js'
+export * from './dispatch.js'
 export * from './coordinator.js'
 export * from './control.js'
 export * from './credential.js'
