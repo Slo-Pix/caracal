@@ -2,15 +2,14 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// rc workflow for artifact validation and consumer selection.
+// rc workflow for versioning and manifests.
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const stateFileName = '.caracalRcState.json'
 
 const npmPaths = [
   'packages/core/ts',
@@ -54,7 +53,7 @@ function parseArgs(argv) {
     const arg = argv[i]
     if (!arg.startsWith('--')) die(`unexpected positional argument: ${arg}`)
     const key = arg.slice(2)
-    if (['base-version', 'consumer', 'manifest', 'npm-registry', 'pypi-index', 'oci-registry', 'github-release-base', 'suffix'].includes(key)) {
+    if (['base-version', 'manifest', 'npm-registry', 'pypi-index', 'oci-registry', 'github-release-base', 'suffix'].includes(key)) {
       args.values[key] = argv[++i]
       if (!args.values[key]) die(`--${key} requires a value`)
     } else {
@@ -65,7 +64,7 @@ function parseArgs(argv) {
 }
 
 function shortSha() {
-  if (process.env.CARACAL_RC_SHA) return process.env.CARACAL_RC_SHA
+  if (process.env.CARACAL_SHA) return process.env.CARACAL_SHA
   return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim()
 }
 
@@ -84,7 +83,7 @@ function cleanBase(version) {
 }
 
 function rcSuffix(options) {
-  return options.suffix ?? process.env.CARACAL_RC_SUFFIX ?? `rc.sha${shortSha()}`
+  return options.suffix ?? process.env.CARACAL_SUFFIX ?? `rc.sha${shortSha()}`
 }
 
 function npmRcVersion(version, suffix) {
@@ -120,17 +119,17 @@ function readPythonVersions(paths) {
 
 function registries(options) {
   return {
-    npm: options['npm-registry'] ?? process.env.CARACAL_RC_NPM_REGISTRY ?? 'https://registry.npmjs.org/',
-    pypi: options['pypi-index'] ?? process.env.CARACAL_RC_PYPI_INDEX ?? 'https://pypi.org/simple/',
-    oci: options['oci-registry'] ?? process.env.CARACAL_RC_OCI_REGISTRY ?? 'ghcr.io/garudex-labs',
-    githubReleases: options['github-release-base'] ?? process.env.CARACAL_RC_GITHUB_RELEASE_BASE ?? 'https://github.com/Garudex-Labs/caracal/releases/download',
+    npm: options['npm-registry'] ?? process.env.CARACAL_NPM_REGISTRY ?? 'https://registry.npmjs.org/',
+    pypi: options['pypi-index'] ?? process.env.CARACAL_PYPI_INDEX ?? 'https://pypi.org/simple/',
+    oci: options['oci-registry'] ?? process.env.CARACAL_OCI_REGISTRY ?? 'ghcr.io/garudex-labs',
+    githubReleases: options['github-release-base'] ?? process.env.CARACAL_GITHUB_RELEASE_BASE ?? 'https://github.com/Garudex-Labs/caracal/releases/download',
   }
 }
 
 function makeManifest(options = {}) {
   const sha = shortSha()
   const suffix = rcSuffix(options)
-  const baseVersion = cleanBase(options['base-version'] ?? process.env.CARACAL_RC_BASE_VERSION ?? currentCalVer())
+  const baseVersion = cleanBase(options['base-version'] ?? process.env.CARACAL_BASE_VERSION ?? currentCalVer())
   const version = `${baseVersion}-${suffix}`
   const tag = `v${version}`
   const npm = Object.fromEntries(Object.entries(readPackageVersions(npmPaths)).map(([name, base]) => [name, npmRcVersion(base, suffix)]))
@@ -211,162 +210,6 @@ function rewritePyproject(path, versions) {
   writeFileSync(path, text)
 }
 
-function updateConsumerPackageJson(path, versions) {
-  if (!existsSync(path)) return false
-  const pkg = JSON.parse(readFileSync(path, 'utf8'))
-  let changed = false
-  for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
-    if (!pkg[field]) continue
-    for (const [name, version] of Object.entries(versions)) {
-      if (pkg[field][name]) {
-        pkg[field][name] = version
-        changed = true
-      }
-    }
-  }
-  if (changed) writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`)
-  return changed
-}
-
-function updateConsumerPython(path, versions) {
-  if (!existsSync(path)) return false
-  let text = readFileSync(path, 'utf8')
-  const original = text
-  for (const [name, version] of Object.entries(versions)) {
-    text = text.replace(new RegExp(`"${name}[^"]*"`, 'g'), `"${name}==${version}"`)
-    text = text.replace(new RegExp(`^${name}[^\\s\\\\;]*(.*)$`, 'gm'), `${name}==${version}$1`)
-  }
-  if (text !== original) writeFileSync(path, text)
-  return text !== original
-}
-
-function updateConsumerCompose(path, images) {
-  if (!existsSync(path)) return false
-  let text = readFileSync(path, 'utf8')
-  const original = text
-  for (const [name, image] of Object.entries(images)) {
-    text = text.replace(new RegExp(`([\\w./:-]*/)?caracal-${name}:v?[A-Za-z0-9_.+-]+`, 'g'), image)
-  }
-  if (text !== original) writeFileSync(path, text)
-  return text !== original
-}
-
-function replaceManagedBlock(text, name, body) {
-  const start = `# caracal-rc:${name}:start`
-  const end = `# caracal-rc:${name}:end`
-  const block = body ? `${start}\n${body.trim()}\n${end}\n` : ''
-  const pattern = new RegExp(`\\n?${start}[\\s\\S]*?${end}\\n?`, 'm')
-  if (pattern.test(text)) return text.replace(pattern, block ? `\n${block}` : '\n')
-  return block ? `${text.replace(/\s*$/, '\n')}\n${block}` : text
-}
-
-function consumerFiles(consumer) {
-  return [
-    'package.json',
-    '.npmrc',
-    'pyproject.toml',
-    'requirements.txt',
-    'requirements.lock',
-    'compose.yaml',
-    'docker-compose.yml',
-    'caracal.rc.env',
-    '.gitignore',
-  ].map((file) => join(consumer, file)).filter((file) => existsSync(file))
-}
-
-function touchGitignore(consumer) {
-  const path = join(consumer, '.gitignore')
-  const text = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  if (text.split(/\r?\n/).includes(stateFileName)) return
-  writeFileSync(path, `${text.replace(/\s*$/, '\n')}${stateFileName}\n`)
-}
-
-function writeConsumerEndpoints(consumer, manifest) {
-  const npmrc = join(consumer, '.npmrc')
-  const npmText = existsSync(npmrc) ? readFileSync(npmrc, 'utf8') : ''
-  writeFileSync(npmrc, replaceManagedBlock(npmText, 'npm', `@caracalai:registry=${manifest.registries.npm}`))
-
-  const envFile = join(consumer, 'caracal.rc.env')
-  const envText = existsSync(envFile) ? readFileSync(envFile, 'utf8') : ''
-  const body = [
-    `CARACAL_MODE=rc`,
-    `CARACAL_VERSION=${manifest.version}`,
-    `CARACAL_REGISTRY=${manifest.registries.oci.replace(/\/?$/, '/')}`,
-    `CARACAL_RC_NPM_REGISTRY=${manifest.registries.npm}`,
-    `CARACAL_RC_PYPI_INDEX=${manifest.registries.pypi}`,
-    `PIP_INDEX_URL=${manifest.registries.pypi}`,
-    `UV_INDEX_URL=${manifest.registries.pypi}`,
-    `CARACAL_RC_GITHUB_RELEASE=${manifest.githubRelease.assets}`,
-  ].join('\n')
-  writeFileSync(envFile, replaceManagedBlock(envText, 'env', body))
-}
-
-function commandExists(name) {
-  return spawnSync(name, ['--version'], { stdio: 'ignore' }).status === 0
-}
-
-function runConsumerCommand(consumer, command, args, manifest) {
-  if (!commandExists(command)) die(`${command} is required to refresh lockfiles in ${consumer}`)
-  const result = spawnSync(command, args, {
-    cwd: consumer,
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      PIP_INDEX_URL: manifest.registries.pypi,
-      UV_INDEX_URL: manifest.registries.pypi,
-    },
-  })
-  if (result.status !== 0) die(`${command} ${args.join(' ')} failed in ${consumer}`)
-}
-
-function refreshConsumerLocks(consumer, manifest) {
-  if (existsSync(join(consumer, 'pnpm-lock.yaml'))) {
-    runConsumerCommand(consumer, 'pnpm', ['install', '--lockfile-only', '--ignore-scripts'], manifest)
-  } else if (existsSync(join(consumer, 'package-lock.json'))) {
-    runConsumerCommand(consumer, 'npm', ['install', '--package-lock-only', '--ignore-scripts'], manifest)
-  }
-
-  if (existsSync(join(consumer, 'uv.lock'))) {
-    runConsumerCommand(consumer, 'uv', ['lock'], manifest)
-  } else if (existsSync(join(consumer, 'poetry.lock'))) {
-    runConsumerCommand(consumer, 'poetry', ['lock'], manifest)
-  }
-}
-
-function selectConsumer(options, local) {
-  const consumer = options.consumer ? resolve(options.consumer) : die('--consumer is required')
-  if (!existsSync(consumer)) die(`consumer path not found: ${consumer}`)
-  const stateFile = join(consumer, stateFileName)
-  if (!local) {
-    if (!existsSync(stateFile)) die(`no saved rc state found in ${consumer}`)
-    const state = JSON.parse(readFileSync(stateFile, 'utf8'))
-    for (const [file, body] of Object.entries(state.files ?? {})) writeFileSync(join(consumer, file), body)
-    for (const file of state.createdFiles ?? []) rmSync(join(consumer, file), { force: true })
-    rmSync(stateFile, { force: true })
-    say(`reverted ${consumer} from saved rc state`)
-    return
-  }
-  if (existsSync(stateFile)) die(`rc state already exists in ${consumer}; run revert before selecting another rc`)
-
-  const manifest = loadManifest(options.manifest)
-  const managedFiles = ['.npmrc', 'caracal.rc.env', '.gitignore']
-  const backup = Object.fromEntries(consumerFiles(consumer).map((file) => [relative(consumer, file), readFileSync(file, 'utf8')]))
-  const createdFiles = managedFiles.filter((file) => !existsSync(join(consumer, file)))
-  writeFileSync(stateFile, `${JSON.stringify({ manifestId: manifest.release, createdAt: new Date().toISOString(), createdFiles, files: backup }, null, 2)}\n`)
-  touchGitignore(consumer)
-
-  const npmChanged = updateConsumerPackageJson(join(consumer, 'package.json'), manifest.npm)
-  const pyChanged = updateConsumerPython(join(consumer, 'pyproject.toml'), manifest.pypi)
-  updateConsumerPython(join(consumer, 'requirements.txt'), manifest.pypi)
-  updateConsumerPython(join(consumer, 'requirements.lock'), manifest.pypi)
-  updateConsumerCompose(join(consumer, 'compose.yaml'), manifest.images)
-  updateConsumerCompose(join(consumer, 'docker-compose.yml'), manifest.images)
-  writeConsumerEndpoints(consumer, manifest)
-  if (!options['skip-lock-refresh']) refreshConsumerLocks(consumer, manifest)
-  say(`selected Caracal ${manifest.release} for ${consumer}`)
-  if (!npmChanged && !pyChanged) say('no npm or Python dependency declarations referenced Caracal packages')
-}
-
 function prepare(options) {
   if (dirtyTree() && !options.flags.has('allow-dirty')) die('working tree is dirty; commit/stash first or pass --allow-dirty')
   const manifest = makeManifest(options.values)
@@ -398,12 +241,6 @@ function main() {
     case 'prepare':
       prepare(options)
       break
-    case 'select':
-      selectConsumer(options.values, true)
-      break
-    case 'revert':
-      selectConsumer(options.values, false)
-      break
     case 'clean':
       clean(options)
       break
@@ -415,20 +252,16 @@ function main() {
 Commands:
   version                 Generate an rc manifest under releases/<tag>/manifest.json.
   prepare [--allow-dirty] Generate the manifest and stamp package metadata to rc versions.
-  select --consumer PATH  Switch a downstream repo to rc package/image versions.
-  revert --consumer PATH  Restore downstream files saved by select.
   clean --manifest PATH   Remove an rc manifest directory.
 
 Options:
-  --base-version VER      Base runtime version; default UTC CalVer.
+  --base-version VER      Base version; default UTC CalVer.
   --suffix VALUE          rc suffix; default rc.sha<gitsha>. Also supports rc.<number>.
-  --manifest PATH|TAG     rc manifest path or tag for select/revert/clean.
-  --consumer PATH         Downstream repository path.
+  --manifest PATH|TAG     rc manifest path or tag for clean.
   --npm-registry URL      npm registry endpoint; default https://registry.npmjs.org/.
   --pypi-index URL        Python simple index endpoint; default https://pypi.org/simple/.
   --oci-registry HOST     OCI registry namespace; default ghcr.io/garudex-labs.
-  --github-release-base   GitHub Releases download base URL.
-  --skip-lock-refresh     Update manifests without running package-manager lock refresh.`)
+  --github-release-base   GitHub Releases download base URL.`)
       break
     default:
       die(`unknown command: ${options.command}`)

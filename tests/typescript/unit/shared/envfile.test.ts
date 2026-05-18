@@ -1,15 +1,15 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// TypeScript shared envfile tests covering admin-token discovery from runtime home.
+// TypeScript shared envfile tests covering admin-token discovery from installed home.
 
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { discoverAdminToken, runtimeEnvFile } from '../../../../packages/core/ts/src/envfile.js'
+import { discoverAdminToken, installedEnvFile } from '../../../../packages/core/ts/src/envfile.js'
 
-describe('runtimeEnvFile', () => {
+describe('installedEnvFile', () => {
   const saved = { ...process.env }
   afterEach(() => {
     process.env = { ...saved }
@@ -17,12 +17,12 @@ describe('runtimeEnvFile', () => {
 
   it('honours CARACAL_HOME', () => {
     process.env.CARACAL_HOME = '/tmp/caracal-test-home'
-    expect(runtimeEnvFile()).toBe('/tmp/caracal-test-home/.env')
+    expect(installedEnvFile()).toBe('/tmp/caracal-test-home/.env')
   })
 
   it('falls back to a platform default when CARACAL_HOME is unset', () => {
     delete process.env.CARACAL_HOME
-    const path = runtimeEnvFile()
+    const path = installedEnvFile()
     expect(path.endsWith('/caracal/.env')).toBe(true)
   })
 })
@@ -52,15 +52,15 @@ describe('discoverAdminToken', () => {
     expect(discoverAdminToken('explicit-token')).toBe('explicit-token')
   })
 
-  it('reads from the runtime-home env file', () => {
+  it('reads from the installed-home env file', () => {
     process.env.CARACAL_HOME = dir
-    writeFileSync(join(dir, '.env'), 'CARACAL_ADMIN_TOKEN=runtime-token\n')
-    expect(discoverAdminToken()).toBe('runtime-token')
+    writeFileSync(join(dir, '.env'), 'CARACAL_ADMIN_TOKEN=installed-token\n')
+    expect(discoverAdminToken()).toBe('installed-token')
   })
 
-  it('honours CARACAL_ENV_FILE before runtime home', () => {
+  it('honours CARACAL_ENV_FILE before installed home', () => {
     process.env.CARACAL_HOME = dir
-    writeFileSync(join(dir, '.env'), 'CARACAL_ADMIN_TOKEN=runtime-token\n')
+    writeFileSync(join(dir, '.env'), 'CARACAL_ADMIN_TOKEN=installed-token\n')
     const explicitFile = join(cwd, 'explicit.env')
     writeFileSync(explicitFile, 'CARACAL_ADMIN_TOKEN=explicit-file-token\n')
     process.env.CARACAL_ENV_FILE = explicitFile
