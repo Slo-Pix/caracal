@@ -69,7 +69,7 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 | T6 | Audit evidence is missing, forgeable, mutable, unverifiable, or loses ordering during dependency failures. | `services/audit`, audit producers, Redis Streams, PostgreSQL | Audit and producer maintainers |
 | T7 | Redis Streams messages are forged, replayed, dropped, processed twice, or acknowledged before durable handling. | STS, API, coordinator, audit, relay, gateway revocation consumers | Stream producer/consumer maintainers |
 | T8 | Runtime availability degrades enough to disable enforcement, token exchange, audit, revocation, or control invocation. | Compose stack, PostgreSQL, Redis, STS, gateway, audit, control | Infra and service maintainers |
-| T9 | Optional control invocation becomes a command execution path outside the canonical command catalog or without audit. | `services/control`, `packages/core/go/commands` | Control maintainers |
+| T9 | Optional control invocation becomes a command execution path outside `engine.dispatch` or without audit. | `apps/control`, `packages/engine` | Control maintainers |
 | T10 | A compromised dependency, generated artifact, installer, image, or release process ships malicious or vulnerable code. | `package.json`, `pnpm-lock.yaml`, Go modules, Dockerfiles, installers, releases | Release maintainers |
 | T11 | Security boundaries drift when new services, ports, packages, transports, provider integrations, or enterprise references are added. | Repo architecture and governance | Maintainers approving the change |
 
@@ -101,7 +101,7 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 | T6 | Run `go test ./services/audit/...`; verify append-only writes, HMAC chain checks, tamper mismatch metrics, DLQ paths, retention rotation, and export behavior. |
 | T7 | Run stream consumer tests for valid signature, missing signature in runtime, duplicate message, transient dependency failure, PEL reclaim, and DLQ routing. |
 | T8 | Run service readiness checks in the Compose stack; confirm dependency outages return unavailable status and do not produce success-shaped responses. |
-| T9 | Run `go test ./services/control/...`; verify disabled startup, missing scope, invalid command, replay, rate limit, upstream failure, and audit emission cases. |
+| T9 | Run `pnpm --dir apps/control test` and `pnpm --dir packages/engine test`; verify disabled startup, missing scope, hidden-command refusal, invalid flags, replay, rate limit, upstream failure, and audit emission cases. |
 | T10 | Run dependency review, lockfile diff review, release smoke tests, image build checks, and installer/archive secret scans before publishing. |
 | T11 | During review, compare changed files against this model, `go.work`, workspace packages, service instructions, and Compose boundaries. |
 
