@@ -47,6 +47,14 @@ describe('docker-compose default substitutions', () => {
       expect(subs.has(key)).toBe(false)
     }
   })
+
+  it('dev compose builds local images and defaults services to dev mode', () => {
+    const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'docker-compose.yml'), 'utf8')
+    expect(yaml).toContain('build:')
+    expect(yaml).toContain('${CARACAL_MODE:-dev}')
+    expect(yaml).toContain('localhost/caracal-api:')
+    expect(yaml).not.toContain('ghcr.io/garudex-labs/}caracal-api')
+  })
 })
 
 describe('runtime-compose default substitutions', () => {
@@ -68,5 +76,24 @@ describe('runtime-compose default substitutions', () => {
   it('embedded COMPOSE_YML stays byte-for-byte in sync with runtime-compose.yml', () => {
     const runtimeCompose = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
     expect(COMPOSE_YML).toBe(runtimeCompose)
+  })
+
+  it('runtime compose uses release images, stable defaults, and no build contexts', () => {
+    const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
+    expect(yaml).toContain('${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-api:v${CARACAL_VERSION}')
+    expect(yaml).toContain('${CARACAL_MODE:-stable}')
+    expect(yaml).not.toContain('build:')
+    expect(yaml).not.toContain('-dev.sha')
+  })
+
+  it('runtime compose declares persistent volumes at the top level', () => {
+    const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
+    expect(yaml).toMatch(/\nvolumes:\n  postgresData:\n  redisData:\n  stsReplay:\n?$/)
+  })
+
+  it('runtime compose never exposes container ports on non-loopback addresses', () => {
+    const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
+    expect(yaml).not.toMatch(/^\s*-\s*"\d+:\d+"/m)
+    expect(yaml).not.toMatch(/^\s*-\s*"0\.0\.0\.0:\d+:\d+"/m)
   })
 })

@@ -4,6 +4,7 @@
 // Runtime env loader: resolves the declared schema against build pins, mode defaults, override files, and process.env, with _FILE secret resolution and pinned-var enforcement.
 
 import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { ENV_SCHEMA, envEntries, isPinned, resolveDefault, type EnvKey, type EnvSpec, type StackMode } from './envSchema.js'
 
 export type EnvValues = Readonly<Record<EnvKey, string | undefined>>
@@ -36,19 +37,32 @@ export function readDotenv(path: string): Record<string, string> {
   return out
 }
 
+export class SecretFileError extends Error {
+  constructor(public readonly key: string, public readonly path: string) {
+    super(`secret file empty: ${key}_FILE=${path}`)
+    this.name = 'SecretFileError'
+  }
+}
+
+function readSecret(key: EnvKey, path: string): string {
+  const value = readFileSync(path, 'utf8').trim()
+  if (!value) throw new SecretFileError(key, path)
+  return value
+}
+
 function resolveSecret(key: EnvKey, spec: EnvSpec, env: Record<string, string | undefined>): string | undefined {
   // Honour the *_FILE convention: services and the loader prefer file material
   // and never carry secret strings through env files.
   const filePath = env[`${key}_FILE`]
-  if (filePath && existsSync(filePath)) return readFileSync(filePath, 'utf8').trim()
+  if (filePath && existsSync(filePath)) return readSecret(key, filePath)
   const direct = env[key]
   if (direct) return direct
   // Resolve from the schema-declared secret basename when a per-spec file is set
   // and CARACAL_SECRETS_DIR is in scope (engine sets it during bootstrap).
   const dir = env.CARACAL_SECRETS_DIR
   if (spec.file && dir) {
-    const candidate = `${dir.replace(/\/$/, '')}/${spec.file}`
-    if (existsSync(candidate)) return readFileSync(candidate, 'utf8').trim()
+    const candidate = join(dir, spec.file)
+    if (existsSync(candidate)) return readSecret(key, candidate)
   }
   return undefined
 }

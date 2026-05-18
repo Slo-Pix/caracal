@@ -13,6 +13,7 @@ import {
   loadEnv,
   PinnedVarError,
   readDotenv,
+  SecretFileError,
 } from '../../../../packages/engine/src/envLoad.ts'
 import { envEntries } from '../../../../packages/engine/src/envSchema.ts'
 
@@ -72,6 +73,36 @@ describe('loadEnv precedence', () => {
     })
     expect(values.LOG_LEVEL).toBe('')
   })
+
+  it('resolves every mode with its mode-specific defaults', () => {
+    const cases = [
+      ['dev', {}, 'dev', 'http://sts:8080'],
+      ['rc', { CARACAL_MODE: 'rc', CARACAL_VERSION: '1.0.0-rc.1', CARACAL_REGISTRY: 'ghcr.io/garudex-labs/' }, 'rc', 'http://localhost:8080'],
+      ['stable', { CARACAL_MODE: 'stable', CARACAL_VERSION: '1.0.0', CARACAL_REGISTRY: 'ghcr.io/garudex-labs/' }, 'stable', 'http://localhost:8080'],
+    ] as const
+
+    for (const [mode, pins, expectedMode, issuer] of cases) {
+      const values = loadEnv({ mode, pins, processEnv: {} })
+      expect(values.CARACAL_MODE).toBe(expectedMode)
+      expect(values.CARACAL_STS_ISSUER_URL).toBe(issuer)
+      expect(values.LOG_LEVEL).toBe('info')
+      expect(values.POSTGRES_USER).toBe('caracal')
+    }
+  })
+
+  it('process.env wins over matching override file and pins without mutating either input', () => {
+    const override = join(dir, 'override.env')
+    writeFileSync(override, 'LOG_LEVEL=warn\nCARACAL_DEV_SHA=fromOverride\n')
+    const pins = { CARACAL_DEV_SHA: 'fromPin' }
+    const processEnv = { LOG_LEVEL: 'error' }
+
+    const values = loadEnv({ mode: 'dev', pins, overrideFile: override, processEnv })
+
+    expect(values.LOG_LEVEL).toBe('error')
+    expect(values.CARACAL_DEV_SHA).toBe('fromOverride')
+    expect(pins.CARACAL_DEV_SHA).toBe('fromPin')
+    expect(processEnv.LOG_LEVEL).toBe('error')
+  })
 })
 
 describe('loadEnv pinned-var enforcement', () => {
@@ -119,6 +150,33 @@ describe('loadEnv pinned-var enforcement', () => {
         }),
       ).toThrow(PinnedVarError)
     }
+  })
+
+  it('rejects every pinned var when overridden in rc', () => {
+    const pins = { CARACAL_MODE: 'rc', CARACAL_VERSION: '1.0.0-rc.1', CARACAL_REGISTRY: 'ghcr.io/garudex-labs/' }
+    for (const key of Object.keys(pins)) {
+      expect(() =>
+        loadEnv({
+          mode: 'rc',
+          pins,
+          processEnv: { [key]: 'evil' },
+        }),
+      ).toThrow(PinnedVarError)
+    }
+  })
+
+  it('rejects pinned vars from stable operator override files before compose substitution', () => {
+    const override = join(dir, 'operator.env')
+    writeFileSync(override, 'CARACAL_REGISTRY=ghcr.io/attacker/\nLOG_LEVEL=debug\n')
+
+    expect(() =>
+      loadEnv({
+        mode: 'stable',
+        pins: { CARACAL_MODE: 'stable', CARACAL_VERSION: '1.0.0', CARACAL_REGISTRY: 'ghcr.io/garudex-labs/' },
+        overrideFile: override,
+        processEnv: {},
+      }),
+    ).toThrow(PinnedVarError)
   })
 
   it('allows pinned-var override in dev (no pinning enforced)', () => {
@@ -171,6 +229,59 @@ describe('loadEnv secret resolution', () => {
     expect(values.ZONE_KEK).toBe('kek-material')
   })
 
+  it('resolves CARACAL_SECRETS_DIR with a trailing separator', () => {
+    const secretsDir = join(dir, 'secrets')
+    mkdirSync(secretsDir, { recursive: true })
+    writeFileSync(join(secretsDir, 'auditHmacKey'), 'audit-material\n')
+
+    const values = loadEnv({
+      mode: 'stable',
+      pins: { CARACAL_MODE: 'stable', CARACAL_VERSION: '1.0.0', CARACAL_REGISTRY: 'ghcr.io/garudex-labs/' },
+      processEnv: { CARACAL_SECRETS_DIR: `${secretsDir}/` },
+    })
+
+    expect(values.AUDIT_HMAC_KEY).toBe('audit-material')
+  })
+
+  it('prefers direct secret env over CARACAL_SECRETS_DIR material', () => {
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'streamsHmacKey'), 'from-dir\n')
+
+    const values = loadEnv({
+      mode: 'dev',
+      processEnv: {
+        CARACAL_SECRETS_DIR: join(dir, 'secrets'),
+        STREAMS_HMAC_KEY: 'from-env',
+      },
+    })
+
+    expect(values.STREAMS_HMAC_KEY).toBe('from-env')
+  })
+
+  it('fails when an explicit secret file exists but is empty', () => {
+    const file = join(dir, 'postgresPassword')
+    writeFileSync(file, ' \n\t')
+
+    expect(() =>
+      loadEnv({
+        mode: 'dev',
+        processEnv: { POSTGRES_PASSWORD_FILE: file },
+      }),
+    ).toThrow(SecretFileError)
+  })
+
+  it('fails when a schema secret file under CARACAL_SECRETS_DIR is empty', () => {
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'redisPassword'), '\n')
+
+    expect(() =>
+      loadEnv({
+        mode: 'dev',
+        processEnv: { CARACAL_SECRETS_DIR: join(dir, 'secrets') },
+      }),
+    ).toThrow(SecretFileError)
+  })
+
   it('returns undefined when no secret source is available', () => {
     const values = loadEnv({ mode: 'dev', processEnv: {} })
     expect(values.POSTGRES_PASSWORD).toBeUndefined()
@@ -189,7 +300,7 @@ describe('loadEnv secret resolution', () => {
 
   it('never reads secrets from the override file', () => {
     const override = join(dir, 'override.env')
-    writeFileSync(override, 'POSTGRES_PASSWORD=leaked-from-env-file\n')
+    writeFileSync(override, 'POSTGRES_PASSWORD=leaked-from-env-file\nPOSTGRES_PASSWORD_FILE=/tmp/leaked\n')
     const values = loadEnv({ mode: 'dev', overrideFile: override, processEnv: {} })
     expect(values.POSTGRES_PASSWORD).toBeUndefined()
   })
@@ -255,6 +366,13 @@ describe('readDotenv parser', () => {
     expect(out.A).toBe('double')
     expect(out.B).toBe('single')
     expect(out.C).toBe(`"mismatch'`)
+  })
+
+  it('handles CRLF files and trims surrounding whitespace', () => {
+    const file = join(dir, 'crlf.env')
+    writeFileSync(file, 'FOO=bar\r\n  BAZ=qux  \r\n# comment\r\n')
+
+    expect(readDotenv(file)).toEqual({ FOO: 'bar', BAZ: 'qux' })
   })
 
   it('keeps `=` characters in values', () => {
