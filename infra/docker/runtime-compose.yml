@@ -334,7 +334,46 @@ services:
       retries: 20
       start_period: 20s
 
-volumes:
+  control:
+    <<: *appService
+    profiles: [control]
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-control:v${CARACAL_VERSION}
+    depends_on:
+      sts:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dbMigrate:
+        condition: service_completed_successfully
+    secrets:
+      - source: redisUrl
+        target: redisUrl
+      - source: auditHmacKey
+        target: auditHmacKey
+      - source: caracalAdminToken
+        target: caracalAdminToken
+    environment:
+      CARACAL_MODE: ${CARACAL_MODE:-stable}
+      CARACAL_CONTROL_ENABLED: "true"
+      STS_JWKS_URL: ${CARACAL_STS_ISSUER_URL:-http://localhost:8080}/.well-known/jwks.json
+      STS_ISSUER_URL: ${CARACAL_STS_ISSUER_URL:-http://localhost:8080}
+      CONTROL_AUDIENCE: ${CONTROL_AUDIENCE:-caracal-control}
+      CONTROL_PORT: "8087"
+      CONTROL_HOST: 0.0.0.0
+      CONTROL_REDIS_URL_FILE: /run/secrets/redisUrl
+      AUDIT_HMAC_KEY_FILE: /run/secrets/auditHmacKey
+      CARACAL_API_URL: http://api:3000
+      CONTROL_API_TOKEN_FILE: /run/secrets/caracalAdminToken
+    ports:
+      - "127.0.0.1:8087:8087"
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
   postgresData:
   redisData:
   stsReplay:

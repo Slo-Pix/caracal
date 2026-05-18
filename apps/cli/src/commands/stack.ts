@@ -4,7 +4,7 @@
 // `caracal up | down | status`: docker-compose lifecycle and health probes for the OSS stack.
 
 import {
-  DEFAULT_SERVICE_PROBES,
+  defaultServiceProbes,
   resolveStackPaths,
   stackDown,
   stackStatus,
@@ -74,8 +74,9 @@ export async function downCommand(argv: string[]): Promise<void> {
 export async function statusCommand(): Promise<void> {
   const paths = resolvePaths()
   printBanner(paths)
-  const results = await stackStatus({ probes: DEFAULT_SERVICE_PROBES })
-  const width = DEFAULT_SERVICE_PROBES.reduce((m, s) => Math.max(m, s.name.length), 0)
+  const probes = defaultServiceProbes()
+  const results = await stackStatus({ probes })
+  const width = probes.reduce((m, s) => Math.max(m, s.name.length), 0)
   let allOk = true
   process.stdout.write(
     `${style.header('service'.padEnd(width))}  ${style.header('port ')}  ${style.header('status')}  ${style.header('detail')}\n`,
