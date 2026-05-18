@@ -149,7 +149,7 @@ The Gateway is stateless per request. Scale horizontally for throughput. Per-ins
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PORT` | `8081` | HTTP(S) listen port; must be `8081` |
-| `CARACAL_MODE` | `runtime` | `runtime` or `dev`; controls runtime safety checks |
+| `CARACAL_MODE` | `stable` | `dev`, `rc`, or `stable`; controls safety checks |
 | `STS_URL` | — | **Required.** STS base URL with scheme. In rc or stable mode, HTTP is allowed only for internal hosts. |
 | `STS_TIMEOUT` | `5s` | Timeout for STS token exchange calls |
 | `UPSTREAM_TIMEOUT` | `30s` | Timeout for upstream resource calls |

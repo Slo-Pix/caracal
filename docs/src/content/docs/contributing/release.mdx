@@ -4,7 +4,7 @@ description: dev, rc, stable, and package publishing.
 pageType: workflow
 ---
 
-Caracal uses only three versioning modes: dev, rc, and stable. rc and stable artifacts use the same artifact channels; dev artifacts stay local.
+Caracal uses only three versioning modes: dev, rc, and stable. rc and stable artifacts use the same artifact destinations; dev artifacts stay local.
 
 ---
 
@@ -27,7 +27,7 @@ The tag drives binaries, OCI image tags, GitHub Releases, and release manifests.
 
 ---
 
-## RC workflow
+## rc workflow
 
 Use rc when a downstream project must consume Caracal as a normal third-party dependency before stable. The consumer changes only package versions and registry/index endpoints; it must not reference Caracal source paths, workspace links, editable installs, or Docker build contexts from the Caracal checkout.
 
@@ -56,7 +56,7 @@ scripts/rc.sh select --manifest releases/vYYYY.MM.DD-rc.sha<gitsha>/manifest.jso
 scripts/rc.sh revert --consumer /path/to/downstream
 ```
 
-`select` updates package manifests, compose image references, `.npmrc`, and `caracal.rc.env` using only artifact channels and exact rc versions. It refreshes recognized lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `uv.lock`, or `poetry.lock`) against the selected registry/index endpoints; pass `--skip-lock-refresh` only when the consumer repo intentionally refreshes locks in a separate CI job. `revert` restores the files saved by `select`.
+`select` updates package manifests, compose image references, `.npmrc`, and `caracal.rc.env` using only artifact destinations and exact rc versions. It refreshes recognized lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `uv.lock`, or `poetry.lock`) against the selected registry/index endpoints; pass `--skip-lock-refresh` only when the consumer repo intentionally refreshes locks in a separate CI job. `revert` restores the files saved by `select`.
 
 ---
 
