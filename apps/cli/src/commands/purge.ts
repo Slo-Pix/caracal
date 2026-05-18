@@ -43,14 +43,14 @@ interface Target {
 interface ComposeStack {
   label: string
   composeFile: string
-  envFile: string
+  envFiles: string[]
   cwd: string
 }
 
 interface PurgeContext {
   mode: 'dev' | 'rc' | 'stable'
   composeFile: string
-  envFile: string
+  envFiles: string[]
   cwd: string
   stacks: ComposeStack[]
   configPath: string | undefined
@@ -94,20 +94,20 @@ function buildContext(dryRun: boolean): PurgeContext {
   const configPath = resolveCliConfigPath()
   const repoRoot = paths.mode === 'dev' ? paths.cwd : undefined
   const stacks: ComposeStack[] = [
-    { label: paths.mode, composeFile: paths.composeFile, envFile: paths.envFile, cwd: paths.cwd },
+    { label: paths.mode, composeFile: paths.composeFile, envFiles: paths.envFiles, cwd: paths.cwd },
   ]
   if (paths.mode === 'dev' && existsSync(runtime.composeFile)) {
     stacks.push({
       label: 'runtime',
       composeFile: runtime.composeFile,
-      envFile: existsSync(runtime.envFile) ? runtime.envFile : paths.envFile,
+      envFiles: existsSync(runtime.overrideEnvFile) ? [runtime.overrideEnvFile] : paths.envFiles,
       cwd: runtime.home,
     })
   }
   return {
     mode: paths.mode,
     composeFile: paths.composeFile,
-    envFile: paths.envFile,
+    envFiles: paths.envFiles,
     cwd: paths.cwd,
     stacks,
     configPath,
@@ -127,7 +127,7 @@ async function runCompose(args: string[], ctx: PurgeContext, stack?: ComposeStac
   if (!process.env.CARACAL_VERSION) env.CARACAL_VERSION = CARACAL_VERSION
   if (!process.env.CARACAL_REGISTRY) env.CARACAL_REGISTRY = CARACAL_REGISTRY
   const handle = composeRun({
-    paths: { composeFile: s.composeFile, envFile: s.envFile, cwd: s.cwd, mode: ctx.mode },
+    paths: { composeFile: s.composeFile, envFiles: s.envFiles, cwd: s.cwd, mode: ctx.mode },
     args,
     env,
   })
@@ -232,15 +232,15 @@ const TARGETS: Target[] = [
   },
   {
     id: 'secrets',
-    label: 'Remove dev .env and secret files (DESTRUCTIVE)',
+    label: 'Remove operator overrides and secret files (DESTRUCTIVE)',
     describe: (ctx) =>
       ctx.repoRoot
-        ? `${join(ctx.repoRoot, 'infra/docker/.env')}, ${join(ctx.repoRoot, 'infra/secrets/files')}`
+        ? `${join(ctx.repoRoot, 'infra/docker/local.env')}, ${join(ctx.repoRoot, 'infra/secrets/files')}`
         : '(dev mode only)',
     available: (ctx) => ctx.repoRoot !== undefined,
     run: async (ctx) => {
       if (!ctx.repoRoot) return
-      removePath(join(ctx.repoRoot, 'infra/docker/.env'), ctx, 'infra/docker/.env')
+      removePath(join(ctx.repoRoot, 'infra/docker/local.env'), ctx, 'infra/docker/local.env')
       removePath(join(ctx.repoRoot, 'infra/secrets/files'), ctx, 'infra/secrets/files')
     },
   },

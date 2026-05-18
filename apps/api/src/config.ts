@@ -15,7 +15,8 @@ function loadEnvChain(): void {
 
   if (process.env.CARACAL_ENV_FILE) candidates.push(resolve(process.env.CARACAL_ENV_FILE))
   if (isDevMode && process.env.CARACAL_REPO_ROOT) {
-    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', '.env'))
+    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', 'dev.env'))
+    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', 'local.env'))
   }
 
   for (const path of candidates) {

@@ -8,11 +8,15 @@ import { homedir, platform } from 'node:os'
 import { join } from 'node:path'
 import { COMPOSE_YML } from './embedded.js'
 import { bootstrapSecrets, runtimeBootstrapPaths } from './secrets.js'
+import { renderOperatorTemplate } from './envRender.js'
+import type { StackMode } from './stackPaths.js'
 
 export interface RuntimePaths {
   home: string
   composeFile: string
-  envFile: string
+  // Operator override file. Generated as a fully commented template on first
+  // install and never overwritten if it already exists.
+  overrideEnvFile: string
 }
 
 function defaultRuntimeHome(): string {
@@ -27,7 +31,7 @@ export function runtimePaths(home: string = defaultRuntimeHome()): RuntimePaths 
   return {
     home,
     composeFile: join(home, 'compose.yml'),
-    envFile: join(home, '.env'),
+    overrideEnvFile: join(home, 'caracal.env'),
   }
 }
 
@@ -36,7 +40,10 @@ export interface InstallReport {
   filesCreated: string[]
 }
 
-export function installRuntimeAssets(paths: RuntimePaths = runtimePaths()): InstallReport {
+export function installRuntimeAssets(
+  paths: RuntimePaths = runtimePaths(),
+  mode: StackMode = 'stable',
+): InstallReport {
   mkdirSync(paths.home, { recursive: true })
   let created = false
 
@@ -46,11 +53,16 @@ export function installRuntimeAssets(paths: RuntimePaths = runtimePaths()): Inst
     created = true
   }
 
-  const report = bootstrapSecrets(runtimeBootstrapPaths(paths.home))
-  if (report.envCreated || report.envUpdated || report.filesCreated.length > 0) created = true
-
-  if (existsSync(paths.envFile)) {
-    try { chmodSync(paths.envFile, 0o600) } catch { /* perms may be unsupported */ }
+  // Only seed the override template if missing; never clobber operator edits.
+  if (!existsSync(paths.overrideEnvFile)) {
+    writeFileSync(paths.overrideEnvFile, renderOperatorTemplate(mode), { mode: 0o600 })
+    created = true
+  } else {
+    try { chmodSync(paths.overrideEnvFile, 0o600) } catch { /* perms may be unsupported */ }
   }
+
+  const report = bootstrapSecrets(runtimeBootstrapPaths(paths.home))
+  if (report.filesCreated.length > 0) created = true
+
   return { created, filesCreated: report.filesCreated }
 }
