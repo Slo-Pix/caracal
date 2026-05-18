@@ -17,9 +17,9 @@ import { style, SYMBOL, printError, printInfo } from '../style.ts'
 
 function resolveMode(): StackMode {
   const override = process.env.CARACAL_MODE
-  if (override === 'dev' || override === 'runtime') return override
+  if (override === 'dev' || override === 'rc' || override === 'stable') return override
   if (override) {
-    printError(`CARACAL_MODE must be 'dev' or 'runtime' (got '${override}')`)
+    printError(`CARACAL_MODE must be 'dev', 'rc', or 'stable' (got '${override}')`)
     process.exit(1)
   }
   return CARACAL_MODE
@@ -38,18 +38,19 @@ function printBanner(paths: StackPaths): void {
   const tag =
     paths.mode === 'dev'
       ? `dev (sha ${CARACAL_SHA})`
-      : `runtime (${CARACAL_VERSION})`
+      : `${paths.mode} (${CARACAL_VERSION})`
   process.stdout.write(`${style.label('caracal mode:')} ${style.header(tag)}\n`)
 }
 
 function composeEnv(paths: StackPaths): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { CARACAL_MODE: paths.mode }
-  if (paths.mode === 'runtime') {
+  if (paths.mode !== 'dev') {
     if (!process.env.CARACAL_VERSION) env.CARACAL_VERSION = CARACAL_VERSION
     if (!process.env.CARACAL_REGISTRY) env.CARACAL_REGISTRY = CARACAL_REGISTRY
   }
   if (paths.mode === 'dev') {
     env.CARACAL_DEV_SHA = CARACAL_SHA
+    env.CARACAL_DEV_VERSION = CARACAL_VERSION
   }
   return env
 }

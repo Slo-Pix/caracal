@@ -23,7 +23,7 @@ const GROUP_TITLES: Record<CommandGroup, string> = {
 export interface DispatchOptions {
   readonly binary: string
   readonly version: string
-  readonly mode: 'dev' | 'runtime'
+  readonly mode: 'dev' | 'rc' | 'stable'
   readonly sha: string
   readonly registry: CommandRegistry
   readonly extras?: readonly string[]
@@ -62,7 +62,7 @@ export function printUsage(opts: DispatchOptions, out: NodeJS.WriteStream = proc
   const lines: string[] = [
     `${style.title('Usage:')} ${opts.binary} <command> [options]`,
     '',
-    `Caracal ${opts.mode === 'dev' ? 'development' : 'runtime'} command surface.`,
+    `Caracal ${opts.mode} command surface.`,
     '',
   ]
   const groups = new Map<CommandGroup, typeof opts.registry.ordered>()
@@ -109,7 +109,7 @@ export async function dispatch(opts: DispatchOptions, rawArgs: readonly string[]
     process.exit(0)
   }
   if (command === '--version' || command === '-v' || command === 'version') {
-    const tag = opts.mode === 'dev' ? `dev (sha ${opts.sha})` : 'runtime'
+    const tag = opts.mode === 'dev' ? `dev (sha ${opts.sha})` : opts.mode
     if (rest.includes('--json')) {
       process.stdout.write(JSON.stringify({
         binary: opts.binary,

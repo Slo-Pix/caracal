@@ -51,7 +51,7 @@ function main(): void {
   }
   if (command === '--version' || command === '-v' || command === 'version') {
     const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
-    const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${CARACAL_TUI_SHA})` : 'runtime'
+    const tag = CARACAL_TUI_MODE === 'dev' ? `dev (sha ${CARACAL_TUI_SHA})` : CARACAL_TUI_MODE
     if (process.argv.includes('--json')) {
       process.stdout.write(JSON.stringify({
         binary: bin,
