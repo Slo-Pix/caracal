@@ -46,6 +46,7 @@ function composeEnv(paths: StackPaths): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { CARACAL_MODE: paths.mode }
   if (paths.mode === 'runtime') {
     if (!process.env.CARACAL_VERSION) env.CARACAL_VERSION = CARACAL_VERSION
+    if (!process.env.CARACAL_IMAGE_VERSION) env.CARACAL_IMAGE_VERSION = CARACAL_VERSION.replace('+', '-')
     if (!process.env.CARACAL_REGISTRY) env.CARACAL_REGISTRY = CARACAL_REGISTRY
   }
   if (paths.mode === 'dev') {

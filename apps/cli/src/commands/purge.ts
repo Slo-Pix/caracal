@@ -125,6 +125,7 @@ async function runCompose(args: string[], ctx: PurgeContext, stack?: ComposeStac
   }
   const env: Record<string, string | undefined> = {}
   if (!process.env.CARACAL_VERSION) env.CARACAL_VERSION = CARACAL_VERSION
+  if (!process.env.CARACAL_IMAGE_VERSION) env.CARACAL_IMAGE_VERSION = CARACAL_VERSION.replace('+', '-')
   if (!process.env.CARACAL_REGISTRY) env.CARACAL_REGISTRY = CARACAL_REGISTRY
   const handle = composeRun({
     paths: { composeFile: s.composeFile, envFile: s.envFile, cwd: s.cwd, mode: ctx.mode },

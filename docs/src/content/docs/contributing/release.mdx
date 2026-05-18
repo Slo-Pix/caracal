@@ -1,6 +1,6 @@
 ---
 title: Release and Versioning
-description: CalVer tags, CLI binaries, container images, and local npm/PyPI publishing.
+description: CalVer tags, release artifacts, prerelease channels, and package publishing.
 pageType: workflow
 ---
 
@@ -121,6 +121,36 @@ npm and PyPI packages are published from a maintainer workstation using the scri
 **npm packages** (`@caracalai/*`): `core`, `oauth`, `admin`, `identity`, `revocation`, `sdk`, `transport-mcp`, `transport-a2a`, `mcp-express`, `mcp-fastmcp`, `tokenstate-postgres`, `revocation-redis`. Browse at [npmjs.com/~caracal-run](https://www.npmjs.com/~caracal-run).
 
 **PyPI packages** (`caracalai-*`): `core`, `identity`, `revocation`, `sdk`, `transport-mcp`, `mcp-fastmcp`, `revocation-redis`. Browse at [pypi.org/user/CaracalAI](https://pypi.org/user/CaracalAI).
+
+---
+
+## Prerelease runtime testing
+
+Use the prerelease channel when a downstream project needs to consume the current Caracal checkout exactly like production third-party dependencies without linking to source paths. This separate staging workflow reads the current package versions, stamps rc versions, stages npm packages, Python packages, OCI images, and CLI/TUI binaries only in loopback or local-network staging registries, then switches a consumer repo by changing only versions and registry/index endpoints.
+
+Prerelease versions use release-candidate terminology:
+
+| Artifact type | Format |
+| --- | --- |
+| npm | `<base>-rc.sha<gitsha>` |
+| PyPI | `<base>rc0+sha<gitsha>` |
+| OCI images | `<base>-rc.sha<gitsha>` |
+| CLI/TUI binaries | `<base>-rc.sha<gitsha>` |
+
+The PyPI form is PEP 440 compatible while keeping the same rc/sha meaning. The `+dev.sha<gitsha>` convention remains reserved for direct developer builds and non-runtime development workflows.
+
+Prerelease artifacts must never be uploaded to public internet registries or GitHub Releases. `scripts/prerelease.sh` refuses public endpoints such as npmjs.org, pypi.org, ghcr.io, Docker Hub, and GitHub release URLs; use localhost, RFC1918, `.local`, or single-label staging hosts instead.
+
+```sh
+scripts/prerelease.sh version
+scripts/prerelease.sh build
+scripts/prerelease.sh stage
+scripts/prerelease.sh select --consumer /path/to/downstream
+scripts/prerelease.sh revert --consumer /path/to/downstream
+scripts/prerelease.sh clean
+```
+
+The generated manifest lives under `.prereleases/<runtime-version>-rc.sha<gitsha>/manifest.json` and records source metadata, current base versions, rc versions, registry endpoints, image tags, and built artifact paths. It does not read or embed official release manifests. `stage` also places `install-cli.sh` and `install-tui.sh` in the local binary channel root so consumers can install rc binaries without fetching prerelease artifacts from GitHub. `select` writes managed prerelease endpoint blocks such as `.npmrc` and `caracal.prerelease.env`; it must not write source paths, editable installs, or workspace links. `revert` restores the consumer files saved by `select` instead of deriving anything from official release metadata.
 
 ---
 
