@@ -10,6 +10,21 @@ import { describe, expect, it } from 'vitest'
 import { installRuntimeAssets, runtimePaths } from '../../../../packages/engine/dist/index.js'
 
 describe('runtime installer', () => {
+  it('runtimePaths honours CARACAL_HOME for end-user package installs', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-home-'))
+    const saved = process.env.CARACAL_HOME
+    try {
+      process.env.CARACAL_HOME = home
+      const paths = runtimePaths()
+      expect(paths.home).toBe(home)
+      expect(paths.composeFile).toBe(join(home, 'compose.yml'))
+      expect(paths.overrideEnvFile).toBe(join(home, 'caracal.env'))
+    } finally {
+      if (saved === undefined) delete process.env.CARACAL_HOME
+      else process.env.CARACAL_HOME = saved
+    }
+  })
+
   it('writes compose and operator template with secure modes', () => {
     const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
     const paths = runtimePaths(home)
@@ -97,6 +112,35 @@ describe('runtime installer', () => {
       const value = readFileSync(secretPath, 'utf8').trim()
       expect(value.length).toBeGreaterThan(0)
     }
+  })
+
+  it('preserves non-empty operator secrets and regenerates empty secret files on upgrade', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
+    const paths = runtimePaths(home)
+    installRuntimeAssets(paths)
+    const secretPath = join(home, 'secrets', 'postgresPassword')
+    writeFileSync(secretPath, 'operator-secret\n', { mode: 0o600 })
+    writeFileSync(join(home, 'secrets', 'redisPassword'), '\n', { mode: 0o600 })
+
+    const result = installRuntimeAssets(paths)
+
+    expect(result.filesCreated).toContain('redisPassword')
+    expect(readFileSync(secretPath, 'utf8').trim()).toBe('operator-secret')
+    expect(readFileSync(join(home, 'secrets', 'redisPassword'), 'utf8').trim().length).toBeGreaterThan(0)
+    expect(readFileSync(join(home, 'secrets', 'redisUrl'), 'utf8')).toContain('@redis:6379')
+  })
+
+  it('does not persist pinned or secret values in end-user operator env files', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
+    const paths = runtimePaths(home)
+    installRuntimeAssets(paths, 'stable')
+
+    const env = readFileSync(paths.overrideEnvFile, 'utf8')
+    expect(env).not.toContain('CARACAL_VERSION=')
+    expect(env).not.toContain('CARACAL_REGISTRY=')
+    expect(env).not.toContain('CARACAL_MODE=')
+    expect(env).not.toContain('POSTGRES_PASSWORD=')
+    expect(env).toContain('# LOG_LEVEL=info')
   })
 
   it('compose file never references secret material directly', () => {

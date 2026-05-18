@@ -80,6 +80,17 @@ describe('resolveCliConfigPath', () => {
 
     expect(resolveCliConfigPath()).toBeUndefined()
   })
+
+  it('ignores missing explicit config and continues to project-level config', () => {
+    const cwdDir = join(root, 'cwd')
+    mkdirSync(cwdDir, { recursive: true })
+    process.chdir(cwdDir)
+    process.env.CARACAL_CONFIG = join(root, 'missing.toml')
+    const cwdConfig = join(cwdDir, 'caracal.toml')
+    writeFileSync(cwdConfig, 'zone_id = "cwd"\n')
+
+    expect(resolveCliConfigPath()).toBe(cwdConfig)
+  })
 })
 
 describe('resolveServiceUrl', () => {
@@ -96,6 +107,10 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 
+  it('treats unset NODE_ENV as development for local CLI and TUI runs', () => {
+    expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
+  })
+
   it('throws ServiceUrlMissingError when unset in non-development mode', () => {
     process.env.NODE_ENV = 'production'
 
@@ -106,5 +121,12 @@ describe('resolveServiceUrl', () => {
       expect((err as ServiceUrlMissingError).envKey).toBe('CARACAL_API_URL')
       expect((err as ServiceUrlMissingError).nodeEnv).toBe('production')
     }
+  })
+
+  it('treats empty production overrides as missing service URLs', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.CARACAL_API_URL = ''
+
+    expect(() => resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toThrow(ServiceUrlMissingError)
   })
 })
