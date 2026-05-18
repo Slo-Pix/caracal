@@ -39,7 +39,7 @@ pnpm caracal up                     # Build and start the full stack
 pnpm caracal --help                 # Show CLI help and available commands
 pnpm caracal status                 # Check health status of all services
 pnpm caracal down [--help]          # Stop the stack
-pnpm caracal purge                  # Remove stack, volumes, logs, cache, and runtime data
+pnpm caracal purge                  # Remove stack, volumes, logs, cache, and installed data
 ```
 
 <details>
@@ -154,18 +154,16 @@ Use `scripts/rc.sh version` only to preview a manifest without stamping package 
 
 Pushing an rc tag runs `.github/workflows/release.yml`, publishes OCI images to GHCR, and creates a GitHub Release for rc. npm packages publish with the `rc` dist-tag through `scripts/publishNpm.sh`; PyPI packages publish with PEP 440 rc versions through `scripts/publishPypi.sh`.
 
-Switch a downstream repo to an rc without exposing this source tree:
+Switch a downstream repo between rc and stable by changing only the Caracal versions it already consumes:
 
 ```bash
-scripts/rc.sh select --manifest releases/vYYYY.MM.DD-rc.sha<sha>/manifest.json --consumer /path/to/downstream
-scripts/rc.sh revert --consumer /path/to/downstream
+npm install @caracalai/sdk@1.4.2-rc.sha<sha>      # rc
+npm install @caracalai/sdk@1.4.2                  # stable
+uv add caracalai-sdk==1.4.2rc0+sha<sha>           # rc
+uv add caracalai-sdk==1.4.2                       # stable
 ```
 
-`select` writes exact package versions and registry/index endpoints only. It must not introduce `file:../caracal`, editable Caracal installs, Docker `COPY` from this checkout, or Caracal source paths.
-
-The selector refreshes recognized lockfiles (`pnpm-lock.yaml`, `package-lock.json`, `uv.lock`, or `poetry.lock`) against the selected registry/index endpoints. Use `--skip-lock-refresh` only when the consumer repo intentionally manages lock refresh in its own CI job. The selector saves the previous downstream state in `.caracalRcState.json` so `revert` can restore official dependency versions and endpoint configuration.
-
-Switch a downstream repo back to stable by reverting the rc selection and installing the stable package versions from the standard registry/index endpoints.
+For containers, change only `ghcr.io/garudex-labs/caracal-{svc}:v<version>`. For binaries, install the desired `--version`. Do not add `file:../caracal`, editable Caracal installs, Docker `COPY` from this checkout, Caracal source paths, or extra consumer env files.
 
 ### Create and publish stable
 
