@@ -57,4 +57,39 @@ describe('runtime installer', () => {
     installRuntimeAssets(paths)
     expect(statSync(paths.overrideEnvFile).mode & 0o777).toBe(0o600)
   })
+
+  it('writes mode-specific operator templates that differ between rc and stable banners', () => {
+    const homeRc = mkdtempSync(join(tmpdir(), 'caracal-runtime-rc-'))
+    const homeStable = mkdtempSync(join(tmpdir(), 'caracal-runtime-stable-'))
+    installRuntimeAssets(runtimePaths(homeRc), 'rc')
+    installRuntimeAssets(runtimePaths(homeStable), 'stable')
+    const rc = readFileSync(join(homeRc, 'caracal.env'), 'utf8')
+    const stable = readFileSync(join(homeStable, 'caracal.env'), 'utf8')
+    expect(rc).toContain('Caracal rc stack')
+    expect(stable).toContain('Caracal stable stack')
+    expect(rc).not.toBe(stable)
+  })
+
+  it('bootstraps secret files under home/secrets with 0o444 mode', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
+    const result = installRuntimeAssets(runtimePaths(home))
+    expect(result.filesCreated.length).toBeGreaterThan(0)
+    for (const name of ['postgresPassword', 'redisPassword', 'caracalAdminToken', 'zoneKek']) {
+      const secretPath = join(home, 'secrets', name)
+      expect(statSync(secretPath).mode & 0o777).toBe(0o444)
+      const value = readFileSync(secretPath, 'utf8').trim()
+      expect(value.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('compose file never references secret material directly', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-runtime-'))
+    const paths = runtimePaths(home)
+    installRuntimeAssets(paths)
+    const compose = readFileSync(paths.composeFile, 'utf8')
+    for (const tail of ['POSTGRES_PASSWORD:', 'REDIS_PASSWORD:', 'CARACAL_ADMIN_TOKEN:']) {
+      expect(compose).not.toContain(`\n      ${tail} `)
+    }
+    expect(compose).toMatch(/POSTGRES_PASSWORD_FILE/)
+  })
 })

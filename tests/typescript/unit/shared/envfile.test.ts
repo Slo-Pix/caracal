@@ -89,4 +89,27 @@ describe('discoverAdminToken', () => {
     process.env.CARACAL_HOME = dir
     expect(discoverAdminToken()).toBeUndefined()
   })
+
+  it('returns undefined when the secret file exists but is empty', () => {
+    process.env.CARACAL_HOME = dir
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'caracalAdminToken'), '   \n')
+    expect(discoverAdminToken()).toBeUndefined()
+  })
+
+  it('CARACAL_ADMIN_TOKEN env var beats secret file', () => {
+    process.env.CARACAL_HOME = dir
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'caracalAdminToken'), 'from-file\n')
+    process.env.CARACAL_ADMIN_TOKEN = 'from-env'
+    expect(discoverAdminToken()).toBe('from-env')
+  })
+
+  it('CARACAL_ENV_FILE is used only as a last resort', () => {
+    process.env.CARACAL_HOME = dir
+    const envFile = join(cwd, '.env')
+    writeFileSync(envFile, 'CARACAL_ADMIN_TOKEN=fallback-env-file\n')
+    process.env.CARACAL_ENV_FILE = envFile
+    expect(discoverAdminToken()).toBe('fallback-env-file')
+  })
 })
