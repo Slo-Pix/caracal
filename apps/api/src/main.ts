@@ -12,9 +12,9 @@ import { startSessionsReaper } from './jobs/sessions-reaper.js'
 import { ShutdownRegistry } from './lifecycle.js'
 import { OutboxDispatcher } from './outbox.js'
 import { seedBootstrapAdminToken } from './auth.js'
-import { assertRuntimeSafe, createLogger } from '@caracalai/core'
+import { assertPublishedSafe, createLogger } from '@caracalai/core'
 
-assertRuntimeSafe()
+assertPublishedSafe()
 
 const cfg = loadConfig()
 
