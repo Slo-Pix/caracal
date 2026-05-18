@@ -2,10 +2,10 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Builds the 5 service images at localhost/caracal-<svc>:dev-<sha> for local release-style binary testing; no-op when CARACAL_RELEASE_VERSION is set (CI publish flow).
+// Builds service images tagged with the developer version for local runtime testing.
 
 import { execSync, spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { bootstrapSecrets, devBootstrapPaths } from '@caracalai/engine'
@@ -31,9 +31,15 @@ function shortSha() {
   }
 }
 
+function baseVersion() {
+  const raw = readFileSync(resolve(repoRoot, 'packages/engine/runtime/release.json'), 'utf8')
+  return JSON.parse(raw).version
+}
+
 const sha = shortSha()
+const devVersion = `${baseVersion()}-dev.sha${sha}`
 const services = ['redis', 'sts', 'api', 'gateway', 'audit', 'coordinator']
-process.stdout.write(`buildLocalImages: tagging localhost/caracal-<svc>:dev-${sha}\n`)
+process.stdout.write(`buildLocalImages: tagging localhost/caracal-<svc>:${devVersion}\n`)
 
 const args = ['compose']
 if (existsSync(envFile)) args.push('--env-file', envFile)
@@ -41,7 +47,7 @@ args.push('-f', composeFile, 'build', ...services)
 const res = spawnSync('docker', args, {
   stdio: 'inherit',
   cwd: repoRoot,
-  env: { ...process.env, CARACAL_DEV_SHA: sha, CARACAL_MODE: 'dev' },
+  env: { ...process.env, CARACAL_DEV_SHA: sha, CARACAL_DEV_VERSION: devVersion, CARACAL_MODE: 'dev' },
 })
 if (res.status !== 0) {
   process.stderr.write(`buildLocalImages: docker compose build exited ${res.status}\n`)
@@ -50,10 +56,10 @@ if (res.status !== 0) {
 
 // Re-tag with the runtime compose's expected `:v<version>` pattern so the
 // release binary can resolve `localhost/caracal-<svc>:v${CARACAL_VERSION}`
-// where CARACAL_VERSION = `dev-<sha>` (from stampRelease).
-const runtimeTag = `vdev-${sha}`
+// where CARACAL_VERSION uses the developer version from stampRelease.
+const runtimeTag = `v${devVersion}`
 for (const svc of services) {
-  const src = `localhost/caracal-${svc}:dev-${sha}`
+  const src = `localhost/caracal-${svc}:${devVersion}`
   const dst = `localhost/caracal-${svc}:${runtimeTag}`
   const tag = spawnSync('docker', ['tag', src, dst], { stdio: 'inherit' })
   if (tag.status !== 0) {

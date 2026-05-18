@@ -2,10 +2,10 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Writes apps/cli/src/runtime/version.gen.ts with the runtime CLI identity; CI sets CARACAL_RELEASE_VERSION for GHCR builds, otherwise stamps a developer-local release pointing at localhost dev images.
+// Writes apps/cli/src/runtime/version.gen.ts with the runtime CLI identity; CI sets CARACAL_RELEASE_VERSION for published builds, otherwise stamps a developer-local runtime pointing at localhost images.
 
 import { execSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,12 +22,17 @@ function shortSha() {
   }
 }
 
+function baseVersion() {
+  const raw = readFileSync(resolve(repoRoot, 'packages/engine/runtime/release.json'), 'utf8')
+  return JSON.parse(raw).version
+}
+
 const ciRelease = process.env.CARACAL_RELEASE_VERSION
 const sha = shortSha()
-const version = ciRelease ?? `dev-${sha}`
+const version = ciRelease ?? `${baseVersion()}-dev.sha${sha}`
 const registry = ciRelease ? 'ghcr.io/garudex-labs/' : 'localhost/'
 
-if (ciRelease && /\+dev\.|-dev\./.test(ciRelease)) {
+if (ciRelease && /(^|[+-])dev\./.test(ciRelease)) {
   process.stderr.write(`stampRelease: refusing dev-suffixed CARACAL_RELEASE_VERSION '${ciRelease}'\n`)
   process.exit(1)
 }
