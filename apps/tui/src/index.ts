@@ -24,6 +24,16 @@ function loadConfig(): CliConfig | undefined {
   return parse(readFileSync(path, 'utf8')) as unknown as CliConfig
 }
 
+function nonInteractiveReason(): string | undefined {
+  if (!process.stdin.isTTY) return 'stdin is not a TTY'
+  if (!process.stdout.isTTY) return 'stdout is not a TTY'
+  if (typeof (process as { send?: unknown }).send === 'function') return 'launched with an IPC channel'
+  const term = process.env.TERM
+  if (!term || term === 'dumb') return 'TERM is unset or "dumb"'
+  if (process.env.CI === 'true') return 'CI=true detected'
+  return undefined
+}
+
 function printHelp(): void {
   const bin = process.env.CARACAL_INVOKED_AS ?? 'caracal-tui'
   process.stdout.write(
@@ -64,8 +74,12 @@ function main(): void {
     }
     return
   }
-  if (!process.stdin.isTTY) {
-    process.stderr.write('caracal-tui: stdin is not a TTY — run from an interactive terminal.\n')
+  const reason = nonInteractiveReason()
+  if (reason) {
+    process.stderr.write(
+      `caracal-tui: ${reason}\n` +
+      'TUI accepts input only from a controlling terminal. Use caracal-cli, the Control API, or the SDK for automation.\n',
+    )
     process.exit(1)
   }
   let adminCtx: import('@caracalai/engine').AdminContext
