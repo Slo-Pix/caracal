@@ -91,6 +91,7 @@ class RestClient:
             headers: dict[str, str], attempt: int) -> httpx.Response:
         h = dict(headers)
         h["X-Attempt"] = str(attempt)
+        h["X-Caracal-Resource"] = f"lynx/{self.provider}"
         self._auth.apply(h)
         return self._http.request(method, path, json=json, headers=h)
 

@@ -1,10 +1,10 @@
 ---
 title: "Lynx Capital: Autonomous Payouts"
-description: A FastAPI and LangGraph multi-agent swarm that processes a weekly invoice batch across 5 regions through 14 mock financial providers — demonstrating Caracal's delegation, ephemeral agent, and multi-protocol transport patterns.
+description: A FastAPI and LangGraph multi-agent swarm that processes a weekly invoice batch across 5 regions through 14 financial provider integrations — demonstrating Caracal's delegation, ephemeral agent, and multi-protocol transport patterns.
 pageType: workflow
 ---
 
-The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, TUI, and control API are the actual integration path. Only the third-party financial providers are deterministic mocks.
+The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, TUI, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
 
 The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads — specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and multi-protocol transport across REST, gRPC, MCP, and SSE endpoints.
 
@@ -54,7 +54,7 @@ examples/lynxCapital/
 ├── config/
 │   └── company.yaml            # Regions, providers, agent layers, system prompts
 ├── _mock/
-│   ├── docker-compose.yml      # 5 mock service containers
+│   ├── docker-compose.yml      # 5 local provider service containers
 │   ├── rest/                   # Single FastAPI app fronting 13 REST providers
 │   ├── grpc/                   # gRPC servers: treasury-ops (50051), compliance (50052)
 │   ├── mcp/                    # MCP vendor portal (7800)
@@ -101,24 +101,16 @@ In the TUI, create or inspect:
 | Control key | `lynx-control` | Real application credential used by Lynx as `application_id` + `app_client_secret` |
 | Resources | `lynx/<provider>` | One protected resource per provider in `config/company.yaml` |
 
-The setup page also exposes an auto-setup button that runs the same automation
-as the command-line script:
-
-```bash
-python setupCaracal.py
-```
-
-The script starts Caracal, creates the zone, creates the control API key,
-registers every provider resource, writes `~/.config/caracal/caracal.toml`, and
-copies `.env.example` to `.env` if needed. The generated config includes SDK
-resource bindings:
+After creating the Lynx zone, control key, and resources in the TUI, write
+`~/.config/caracal/caracal.toml` from the TUI values. The generated config
+includes SDK resource bindings:
 
 ```toml
 zone_url = "http://127.0.0.1:8080"
 sts_url = "http://127.0.0.1:8080"
 coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
-zone_id = "<zone id>"
+zone_id = "<zone id from TUI>"
 application_id = "<control key client_id>"
 app_client_secret = "<control key client_secret>"
 
@@ -128,10 +120,17 @@ resource = "lynx/mercury-bank"
 upstream_prefix = "http://127.0.0.1:8800"
 ```
 
-### Start mock providers
+Repeat `[[credentials]]` for every `lynx/<provider>` resource in
+`config/company.yaml`. REST provider bindings use
+`upstream_prefix = "http://127.0.0.1:8800"` for local Python runs; direct
+protocol providers use their own local endpoints, such as
+`http://127.0.0.1:50051` for `lynx/treasury-ops` and
+`http://127.0.0.1:7800` for `lynx/vendor-portal`.
 
-All 14 external providers run as deterministic mock services in Docker. The
-mock network joins `caracalData` so the real Caracal gateway can forward REST
+### Start local providers
+
+All 14 external providers run through local fixtures in Docker. The provider
+network joins `caracalData` so the real Caracal gateway can forward REST
 resource calls to provider aliases such as `mercury-bank.mock`:
 
 ```bash
@@ -154,12 +153,12 @@ This starts:
 cp .env.example .env
 ```
 
-Edit `.env` and set `OPENAI_API_KEY`. All other variables have defaults that point to the mock containers:
+Edit `.env` and set `OPENAI_API_KEY`. All other variables have defaults that point to the local provider containers:
 
 ```bash
 OPENAI_API_KEY=sk-...
 
-# Mock service URLs (defaults shown — no change needed for local dev)
+# Provider URLs (defaults shown — no change needed for local setup)
 LYNX_MERCURY_URL=http://127.0.0.1:8800
 LYNX_WISE_URL=http://127.0.0.1:8800
 LYNX_FX_STREAM_URL=http://127.0.0.1:8810/v1/stream
@@ -167,16 +166,14 @@ LYNX_TREASURY_GRPC=127.0.0.1:50051
 LYNX_MCP_HOST=127.0.0.1
 LYNX_MCP_PORT=7800
 
-# Dev credentials (pre-configured for mock services)
-LYNX_MERCURY_KEY=dev-mercury-bank-key
-LYNX_WISE_KEY=dev-wise-payouts-key
+# Provider credentials for local setup
+LYNX_MERCURY_KEY=local-mercury-bank-key
+LYNX_WISE_KEY=local-wise-payouts-key
 # ... (see .env.example for the full list)
 ```
 
-`LYNX_MOCK_FAST=1` speeds up mock response latencies during development. The
-`dev-*` provider credentials are accepted only by the mock third-party
-providers. They are not Caracal credentials and should be replaced if you point
-Lynx at real provider APIs.
+Provider credentials are not Caracal credentials and should be replaced if you
+point Lynx at hosted provider APIs.
 
 ### Start the application
 
@@ -251,9 +248,9 @@ The registry dispatches to the appropriate transport client (REST, gRPC, MCP, or
 
 ---
 
-## Mock services
+## Local provider fixtures
 
-Every external provider call goes to a deterministic mock. Mock responses are defined in `cases.json` files keyed by a primary identifier (usually `vendor_id`):
+For local runs, every external provider call goes to a deterministic fixture under `_mock/`. Fixture responses are defined in `cases.json` files keyed by a primary identifier (usually `vendor_id`):
 
 ```json
 {
@@ -277,7 +274,7 @@ Every external provider call goes to a deterministic mock. Mock responses are de
 
 The same input always produces the same output. This makes the example fully reproducible and testable without real credentials.
 
-Payment submission mocks also emit webhooks with configurable delays, simulating the asynchronous settlement flow of real banking APIs:
+Payment submission fixtures also emit webhooks with configurable delays, simulating the asynchronous settlement flow of real banking APIs:
 
 ```python
 # In _mock/rest/routers/mercury_bank.py
@@ -513,8 +510,8 @@ The browser demo uses the FastAPI control routes under `/api/run`:
 | `/api/run/{run_id}/graph` | `GET` | Returns graph nodes and edges for the topology view |
 
 Setup routes live under `/api/setup`: `GET /api/setup/validate` checks
-configuration, and `POST /api/setup/caracal/auto` runs the Lynx Caracal setup
-script from the setup page.
+configuration after the user creates the TUI objects and writes
+`caracal.toml`.
 
 ---
 
@@ -537,8 +534,8 @@ pytest tests/ -v
 ```
 
 Tests cover agent lifecycle behavior, topology graph correctness, provider
-transport logic, and the Caracal boundary. Provider tests use the same mock
-services and do not require live third-party credentials.
+transport logic, and the Caracal boundary. Provider tests use the local
+fixtures and do not require hosted third-party credentials.
 
 ---
 
