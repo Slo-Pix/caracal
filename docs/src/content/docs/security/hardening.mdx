@@ -63,7 +63,7 @@ Zone signing keys are rotated by the Control-Plane API. The JWKS endpoint return
 
 ### Stream integrity (`STREAMS_HMAC_KEY`)
 
-HMAC-signs Redis stream messages for session revocation, policy invalidation, audit, and lifecycle events. Required when `CARACAL_MODE=runtime` for services that publish or verify signed streams; Gateway requires it in all modes.
+HMAC-signs Redis stream messages for session revocation, policy invalidation, audit, and lifecycle events. Required when `CARACAL_MODE=rc` or `CARACAL_MODE=stable` for services that publish or verify signed streams; Gateway requires it in all modes.
 
 - Must be hex-encoded, at least 32 bytes (64 hex characters).
 - Must be identical across all services that publish or consume streams.

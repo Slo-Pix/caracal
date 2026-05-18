@@ -168,4 +168,4 @@ Provision them using the CLI admin commands (`caracal zone create`, `caracal app
 | PostgreSQL | 5432 | TCP |
 | Redis | 6379 | TCP |
 
-Use `CARACAL_MODE=runtime` for runtime deployments and `CARACAL_MODE=dev` for local development. Runtime mode rejects developer-only escape hatches such as insecure STS or Gateway flags; configure Gateway TLS directly with certificate files or terminate TLS at a trusted ingress.
+Use `CARACAL_MODE=stable` for stable deployments, `CARACAL_MODE=rc` for rc deployments, and `CARACAL_MODE=dev` for development. rc and stable reject developer-only escape hatches such as insecure STS or Gateway flags; configure Gateway TLS directly with certificate files or terminate TLS at a trusted ingress.

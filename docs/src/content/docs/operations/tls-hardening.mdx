@@ -6,7 +6,7 @@ pageType: config
 
 The Gateway is the Caracal service intended to sit on the protected resource boundary. It verifies inbound mandates, exchanges a fresh per-call mandate, blocks unsafe upstream targets, and can serve HTTPS directly when certificate files are configured.
 
-Use `CARACAL_MODE=runtime` for runtime deployments and `CARACAL_MODE=dev` for local development. Runtime mode enables safety checks in service code; it does not replace network-level hardening, TLS termination, secret management, or private service networking.
+Use `CARACAL_MODE=stable` for stable deployments, `CARACAL_MODE=rc` for rc deployments, and `CARACAL_MODE=dev` for development. rc and stable enable safety checks in service code; they do not replace network-level hardening, TLS termination, secret management, or private service networking.
 
 ---
 
@@ -68,8 +68,8 @@ Two flags exist for local development compatibility:
 
 | Variable | Effect | Forbidden when |
 | --- | --- | --- |
-| `INSECURE_HTTP=true` | Marks plaintext Gateway operation as intentional | `CARACAL_MODE=runtime` |
-| `INSECURE_STS=true` | Marks plaintext STS calls as intentional | `CARACAL_MODE=runtime` |
+| `INSECURE_HTTP=true` | Marks plaintext Gateway operation as intentional | `CARACAL_MODE=rc` or `CARACAL_MODE=stable` |
+| `INSECURE_STS=true` | Marks plaintext STS calls as intentional | `CARACAL_MODE=rc` or `CARACAL_MODE=stable` |
 
 Do not set either flag in deployments that handle real credentials or tokens.
 
@@ -92,7 +92,7 @@ ALLOW_PRIVATE_UPSTREAMS=true
 UPSTREAM_HOST_ALLOWLIST=api.internal.company.com,payments.internal.company.com
 ```
 
-When `CARACAL_MODE=runtime` and private upstreams are allowed, `UPSTREAM_HOST_ALLOWLIST` is required. Requests to hosts outside the allowlist are rejected.
+When `CARACAL_MODE=rc` or `CARACAL_MODE=stable` and private upstreams are allowed, `UPSTREAM_HOST_ALLOWLIST` is required. Requests to hosts outside the allowlist are rejected.
 
 **Path traversal protection:**
 
@@ -107,7 +107,7 @@ The Gateway tracks JWT IDs (`jti` claims) in Redis to prevent replay of intercep
 | Setting | Behavior |
 | --- | --- |
 | `JTI_FAIL_OPEN=false` | Reject requests if Redis JTI lookup fails; default |
-| `JTI_FAIL_OPEN=true` | Allow requests through when Redis JTI lookup fails; forbidden when `CARACAL_MODE=runtime` |
+| `JTI_FAIL_OPEN=true` | Allow requests through when Redis JTI lookup fails; forbidden when `CARACAL_MODE=rc` or `CARACAL_MODE=stable` |
 
 ---
 
@@ -129,7 +129,7 @@ Tune `UPSTREAM_TIMEOUT` to the protected service's P99 response time. A timeout 
 
 ## Hardening checklist
 
-- Set `CARACAL_MODE=runtime`.
+- Set `CARACAL_MODE=stable`.
 - Provide `TLS_CERT_FILE` and `TLS_KEY_FILE`, or terminate TLS at a trusted ingress before traffic reaches the Gateway.
 - Keep `INSECURE_HTTP`, `INSECURE_STS`, and `JTI_FAIL_OPEN` unset or explicitly `false`.
 - Set `STREAMS_HMAC_KEY` and `AUDIT_HMAC_KEY` to 32-byte hex secrets.
