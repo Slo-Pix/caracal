@@ -101,3 +101,29 @@ def test_registry_required_env_raises_when_unset(monkeypatch):
     registry.reset()
     with pytest.raises(RuntimeError, match="provider env var not set: LYNX_MERCURY_URL"):
         registry._build_rest("mercury-bank")
+
+
+def test_rest_transport_sets_explicit_caracal_resource(monkeypatch):
+    from app.services.transport.rest import AuthSpec, RestClient
+
+    class FakeHttp:
+        def __init__(self):
+            self.headers = {}
+
+        def request(self, _method, _path, *, json, headers):
+            self.headers = headers
+            return type("Response", (), {"status_code": 200, "content": b"{}", "json": lambda _self: {}})()
+
+        def close(self):
+            return None
+
+    monkeypatch.setenv("LYNX_MERCURY_KEY", "local-mercury-bank-key")
+    client = RestClient(
+        "mercury-bank",
+        "http://127.0.0.1:8800",
+        AuthSpec("Authorization", "Bearer ", "LYNX_MERCURY_KEY"),
+    )
+    fake = FakeHttp()
+    client._http = fake
+    client._do("POST", "/v1/accounts/balance", json={}, headers={}, attempt=1)
+    assert fake.headers["X-Caracal-Resource"] == "lynx/mercury-bank"

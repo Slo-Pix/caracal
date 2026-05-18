@@ -2,8 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Test fixtures: spin up real local mock servers (REST, SSE, gRPC, MCP) on
-free ports and point the application at them via environment variables.
+Test fixtures start local provider services on free ports for application tests.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ import uvicorn
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Vendored mock provider SDKs live under _mock/sdk/<pkg>/<pkg>/. When the
+# Vendored provider SDK fixtures live under _mock/sdk/<pkg>/<pkg>/. When the
 # example is launched via `uv run`, [tool.uv.sources] installs them editable.
 # Bare `pytest` invocations skip that step, so make the package roots
 # importable directly.
@@ -37,6 +36,11 @@ _caracal_toml.write_text(
     'app_client_secret = "test-secret"\n'
     'sts_url = "http://127.0.0.1:0"\n'
     'coordinator_url = "http://127.0.0.1:0"\n'
+    'gateway_url = "http://127.0.0.1:0"\n'
+    '[[credentials]]\n'
+    'env = "LYNX_MERCURY_BANK_TOKEN"\n'
+    'resource = "lynx/mercury-bank"\n'
+    'upstream_prefix = "http://127.0.0.1:8800"\n'
 )
 os.environ["CARACAL_CONFIG"] = str(_caracal_toml)
 
@@ -85,19 +89,19 @@ def rest_url() -> str:
         os.environ[env] = url
 
     keys = {
-        "LYNX_MERCURY_KEY":     "dev-mercury-bank-key",
-        "LYNX_WISE_KEY":        "dev-wise-payouts-key",
-        "LYNX_STRIPE_KEY":      "dev-stripe-treasury-key",
-        "LYNX_QB_KEY":          "dev-quickbooks-key",
-        "LYNX_NETSUITE_KEY":    "dev-netsuite-key",
-        "LYNX_SAP_KEY":         "dev-sap-erp-key",
-        "LYNX_OCR_KEY":         "dev-ocr-vision-key",
-        "LYNX_CLOSE_KEY":       "dev-close-engine-key",
-        "LYNX_REGULATORY_KEY":  "dev-regulatory-filings-key",
-        "LYNX_BILLING_KEY":     "dev-customer-billing-key",
-        "LYNX_TAX_KEY":         "dev-tax-rules-key",
-        "LYNX_COMPLIANCE_KEY":  "dev-compliance-nexus-key",
-        "LYNX_FX_KEY":          "dev-fx-rates-key",
+        "LYNX_MERCURY_KEY":     "local-mercury-bank-key",
+        "LYNX_WISE_KEY":        "local-wise-payouts-key",
+        "LYNX_STRIPE_KEY":      "local-stripe-treasury-key",
+        "LYNX_QB_KEY":          "local-quickbooks-key",
+        "LYNX_NETSUITE_KEY":    "local-netsuite-key",
+        "LYNX_SAP_KEY":         "local-sap-erp-key",
+        "LYNX_OCR_KEY":         "local-ocr-vision-key",
+        "LYNX_CLOSE_KEY":       "local-close-engine-key",
+        "LYNX_REGULATORY_KEY":  "local-regulatory-filings-key",
+        "LYNX_BILLING_KEY":     "local-customer-billing-key",
+        "LYNX_TAX_KEY":         "local-tax-rules-key",
+        "LYNX_COMPLIANCE_KEY":  "local-compliance-nexus-key",
+        "LYNX_FX_KEY":          "local-fx-rates-key",
     }
     for k, v in keys.items():
         os.environ.setdefault(k, v)
@@ -159,7 +163,7 @@ def treasury_grpc(rest_url) -> str:
     runner.start()
     time.sleep(0.2)
     os.environ["LYNX_TREASURY_GRPC"] = addr
-    os.environ.setdefault("LYNX_TREASURY_KEY", "dev-treasury-ops-key")
+    os.environ.setdefault("LYNX_TREASURY_KEY", "local-treasury-ops-key")
     yield addr
     runner.stop()
 
@@ -174,7 +178,7 @@ def compliance_grpc(rest_url) -> str:
     runner.start()
     time.sleep(0.2)
     os.environ["LYNX_COMPLIANCE_GRPC"] = addr
-    os.environ.setdefault("LYNX_COMPLIANCE_KEY", "dev-compliance-nexus-key")
+    os.environ.setdefault("LYNX_COMPLIANCE_KEY", "local-compliance-nexus-key")
     yield addr
     runner.stop()
 
@@ -189,6 +193,6 @@ def vendor_mcp() -> tuple[str, int]:
     time.sleep(0.2)
     os.environ["LYNX_MCP_HOST"] = "127.0.0.1"
     os.environ["LYNX_MCP_PORT"] = str(port)
-    os.environ.setdefault("LYNX_VENDOR_PORTAL_KEY", "dev-vendor-portal-key")
+    os.environ.setdefault("LYNX_VENDOR_PORTAL_KEY", "local-vendor-portal-key")
     yield ("127.0.0.1", port)
     runner.stop()

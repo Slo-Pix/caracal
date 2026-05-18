@@ -45,7 +45,7 @@ def test_rest_unauthenticated(rest_url, monkeypatch):
     registry.reset()
     with pytest.raises(Exception):
         registry.call("mercury-bank", "get_account_balance", {"vendor_id": "V1"})
-    monkeypatch.setenv("LYNX_MERCURY_KEY", "dev-mercury-bank-key")
+    monkeypatch.setenv("LYNX_MERCURY_KEY", "local-mercury-bank-key")
     registry.reset()
 
 
@@ -137,7 +137,7 @@ def test_grpc_treasury_unauth(treasury_grpc, monkeypatch):
     registry.reset()
     with pytest.raises(Exception):
         registry.call("treasury-ops", "get_cash_position", {"region": "US"})
-    monkeypatch.setenv("LYNX_TREASURY_KEY", "dev-treasury-ops-key")
+    monkeypatch.setenv("LYNX_TREASURY_KEY", "local-treasury-ops-key")
     registry.reset()
 
 
