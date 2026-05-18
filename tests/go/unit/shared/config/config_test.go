@@ -3,12 +3,15 @@
 //
 // Shared config unit tests for environment-driven defaults and required values.
 
-package config
+package config_test
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
+
+	. "github.com/garudex-labs/caracal/packages/core/go/config"
 )
 
 func TestGetenvUsesFallbackForMissingOrEmptyValue(t *testing.T) {
@@ -85,4 +88,100 @@ func TestLoadReadsBaseConfig(t *testing.T) {
 	if cfg.Port != "8080" || cfg.DatabaseURL != "postgres://example" || cfg.RedisURL != "redis://example" || cfg.LogLevel != "debug" {
 		t.Fatalf("unexpected config: %#v", cfg)
 	}
+}
+
+func TestModeDefaultsToStableAndNormalizesExplicitModes(t *testing.T) {
+	t.Setenv("CARACAL_MODE", "")
+	if got := Mode(); got != "stable" {
+		t.Fatalf("unset mode should default to stable, got %q", got)
+	}
+	for _, tc := range []struct {
+		raw  string
+		want string
+	}{
+		{raw: " DEV ", want: "dev"},
+		{raw: "rc", want: "rc"},
+		{raw: "stable", want: "stable"},
+	} {
+		t.Setenv("CARACAL_MODE", tc.raw)
+		if got := Mode(); got != tc.want {
+			t.Fatalf("Mode(%q) = %q, want %q", tc.raw, got, tc.want)
+		}
+	}
+}
+
+func TestModeRejectsInvalidValues(t *testing.T) {
+	t.Setenv("CARACAL_MODE", "prod")
+	assertPanics(t, func() { Mode() })
+}
+
+func TestAssertPublishedSafeBlocksInsecureTogglesOutsideDev(t *testing.T) {
+	for _, mode := range []string{"rc", "stable"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Setenv("CARACAL_MODE", mode)
+			t.Setenv("INSECURE_STS", "true")
+			t.Setenv("INSECURE_HTTP", "1")
+			assertPanics(t, func() { AssertPublishedSafe() })
+		})
+	}
+}
+
+func TestAssertPublishedSafeAllowsDevAndFalseValues(t *testing.T) {
+	t.Setenv("CARACAL_MODE", "dev")
+	t.Setenv("INSECURE_STS", "true")
+	t.Setenv("INSECURE_HTTP", "yes")
+	AssertPublishedSafe()
+
+	t.Setenv("CARACAL_MODE", "stable")
+	t.Setenv("INSECURE_STS", "false")
+	t.Setenv("INSECURE_HTTP", "0")
+	AssertPublishedSafe()
+}
+
+func TestResolveFileSecretsReadsTrimsAndClearsFileVars(t *testing.T) {
+	path := t.TempDir() + "/secret"
+	if err := os.WriteFile(path, []byte("secret-value\n\n"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	t.Setenv("CARACAL_TEST_VALUE_FILE", path)
+
+	ResolveFileSecrets("CARACAL_TEST_VALUE")
+
+	if got := os.Getenv("CARACAL_TEST_VALUE"); got != "secret-value" {
+		t.Fatalf("secret value = %q", got)
+	}
+	if got := os.Getenv("CARACAL_TEST_VALUE_FILE"); got != "" {
+		t.Fatalf("file env var should be cleared, got %q", got)
+	}
+}
+
+func TestResolveFileSecretsPreservesDirectValue(t *testing.T) {
+	path := t.TempDir() + "/secret"
+	if err := os.WriteFile(path, []byte("from-file\n"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	t.Setenv("CARACAL_TEST_VALUE", "from-env")
+	t.Setenv("CARACAL_TEST_VALUE_FILE", path)
+
+	ResolveFileSecrets("CARACAL_TEST_VALUE")
+
+	if got := os.Getenv("CARACAL_TEST_VALUE"); got != "from-env" {
+		t.Fatalf("direct env value should win, got %q", got)
+	}
+	if got := os.Getenv("CARACAL_TEST_VALUE_FILE"); got != path {
+		t.Fatalf("file env var should remain untouched, got %q", got)
+	}
+}
+
+func TestResolveFileSecretsPanicsForEmptyOrMissingFiles(t *testing.T) {
+	t.Setenv("CARACAL_TEST_VALUE", "")
+	empty := t.TempDir() + "/empty"
+	if err := os.WriteFile(empty, []byte(" \n"), 0o600); err != nil {
+		t.Fatalf("write secret: %v", err)
+	}
+	t.Setenv("CARACAL_TEST_VALUE_FILE", empty)
+	assertPanics(t, func() { ResolveFileSecrets("CARACAL_TEST_VALUE") })
+
+	t.Setenv("CARACAL_TEST_VALUE_FILE", t.TempDir()+"/missing")
+	assertPanics(t, func() { ResolveFileSecrets("CARACAL_TEST_VALUE") })
 }

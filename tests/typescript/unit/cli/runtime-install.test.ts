@@ -119,6 +119,8 @@ describe('runtime installer', () => {
     const paths = runtimePaths(home)
     installRuntimeAssets(paths)
     const secretPath = join(home, 'secrets', 'postgresPassword')
+    chmodSync(secretPath, 0o600)
+    chmodSync(join(home, 'secrets', 'redisPassword'), 0o600)
     writeFileSync(secretPath, 'operator-secret\n', { mode: 0o600 })
     writeFileSync(join(home, 'secrets', 'redisPassword'), '\n', { mode: 0o600 })
 

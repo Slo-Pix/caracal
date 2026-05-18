@@ -15,10 +15,14 @@ let originalCwd: string
 const SAVED_KEYS = [
   'CARACAL_ENV_FILE',
   'CARACAL_REPO_ROOT',
+  'CARACAL_HOME',
   'API_TEST_VAR',
   'DATABASE_URL',
+  'DATABASE_URL_FILE',
   'REDIS_URL',
+  'REDIS_URL_FILE',
   'TRUST_PROXY',
+  'API_ENABLE_DOCS',
   'CARACAL_MODE',
   'NODE_ENV',
 ]
@@ -80,6 +84,31 @@ describe('api config loadEnvChain', () => {
     expect(process.env.API_TEST_VAR).toBeUndefined()
   })
 
+  test('loads installed operator env file in stable mode', async () => {
+    mkdirSync(join(dir, 'home'), { recursive: true })
+    writeFileSync(join(dir, 'home', 'caracal.env'), 'API_TEST_VAR=installed-value\n')
+    process.env.CARACAL_MODE = 'stable'
+    process.env.CARACAL_HOME = join(dir, 'home')
+
+    await import(CONFIG_PATH)
+
+    expect(process.env.API_TEST_VAR).toBe('installed-value')
+  })
+
+  test('explicit env file wins over installed operator env file', async () => {
+    mkdirSync(join(dir, 'home'), { recursive: true })
+    const explicit = join(dir, 'explicit.env')
+    writeFileSync(explicit, 'API_TEST_VAR=explicit-value\n')
+    writeFileSync(join(dir, 'home', 'caracal.env'), 'API_TEST_VAR=installed-value\n')
+    process.env.CARACAL_MODE = 'stable'
+    process.env.CARACAL_HOME = join(dir, 'home')
+    process.env.CARACAL_ENV_FILE = explicit
+
+    await import(CONFIG_PATH)
+
+    expect(process.env.API_TEST_VAR).toBe('explicit-value')
+  })
+
   test('does not walk up from cwd looking for infra/docker/dev.env', async () => {
     const sub = join(dir, 'a', 'b')
     mkdirSync(sub, { recursive: true })
@@ -108,5 +137,31 @@ describe('api config trustProxy', () => {
     process.env.TRUST_PROXY = 'true'
     const { loadConfig } = await import(CONFIG_PATH) as typeof import('../../../../apps/api/src/config')
     expect(loadConfig().trustProxy).toBe(true)
+  })
+
+  test('resolves required database and redis URLs from secret files', async () => {
+    const databaseFile = join(dir, 'databaseUrl')
+    const redisFile = join(dir, 'redisUrl')
+    writeFileSync(databaseFile, 'postgres://file\n')
+    writeFileSync(redisFile, 'redis://file\n')
+    delete process.env.DATABASE_URL
+    delete process.env.REDIS_URL
+    process.env.DATABASE_URL_FILE = databaseFile
+    process.env.REDIS_URL_FILE = redisFile
+
+    const { loadConfig } = await import(CONFIG_PATH) as typeof import('../../../../apps/api/src/config')
+    const cfg = loadConfig()
+
+    expect(cfg.databaseUrl).toBe('postgres://file')
+    expect(cfg.redisUrl).toBe('redis://file')
+    expect(process.env.DATABASE_URL_FILE).toBeUndefined()
+    expect(process.env.REDIS_URL_FILE).toBeUndefined()
+  })
+
+  test('rejects invalid boolean values', async () => {
+    process.env.API_ENABLE_DOCS = 'maybe'
+    const { loadConfig } = await import(CONFIG_PATH) as typeof import('../../../../apps/api/src/config')
+
+    expect(() => loadConfig()).toThrow('Invalid boolean env var API_ENABLE_DOCS')
   })
 })

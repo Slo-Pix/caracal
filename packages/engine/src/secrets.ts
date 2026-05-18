@@ -101,6 +101,7 @@ export function bootstrapSecrets(paths: BootstrapPaths): BootstrapReport {
     const rendered = derived.render(values)
     const existing = existsSync(filePath) ? readFileSync(filePath, 'utf8').trim() : ''
     if (existing !== rendered) {
+      if (existing) chmodSafe(filePath, 0o600)
       writeFileSync(filePath, rendered, { mode: 0o444 })
       chmodSafe(filePath, 0o444)
       if (!existing) filesCreated.push(derived.fileName)
