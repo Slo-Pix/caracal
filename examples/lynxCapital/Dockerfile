@@ -9,6 +9,7 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY requirements.lock ./
+COPY .env.example ./
 COPY app ./app
 
 RUN python -m pip install --no-cache-dir --require-hashes -r requirements.lock
