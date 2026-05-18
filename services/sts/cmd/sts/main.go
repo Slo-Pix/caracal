@@ -17,7 +17,7 @@ import (
 )
 
 func main() {
-	config.AssertRuntimeSafe()
+	config.AssertPublishedSafe()
 	log := logging.New("sts")
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
