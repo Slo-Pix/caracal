@@ -7,7 +7,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { discoverAdminToken, installedHome } from '../../../../packages/core/ts/src/envfile.js'
+import { discoverAdminToken, installedHome, readEnvFile } from '../../../../packages/core/ts/src/envfile.js'
 
 describe('installedHome', () => {
   const saved = { ...process.env }
@@ -24,6 +24,44 @@ describe('installedHome', () => {
     delete process.env.CARACAL_HOME
     const path = installedHome()
     expect(path.endsWith('/caracal')).toBe(true)
+  })
+
+  it('uses XDG_DATA_HOME before the platform data-home fallback', () => {
+    delete process.env.CARACAL_HOME
+    process.env.XDG_DATA_HOME = '/tmp/caracal-xdg-data'
+
+    expect(installedHome()).toBe('/tmp/caracal-xdg-data/caracal')
+  })
+})
+
+describe('readEnvFile', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'caracal-envfile-parser-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('parses CRLF dotenv files with whitespace and quoted values', () => {
+    const file = join(dir, 'operator.env')
+    writeFileSync(file, 'FOO = bar\r\nBAZ="quoted value"\r\nSINGLE=\'single value\'\r\n')
+
+    expect(readEnvFile(file)).toEqual({
+      FOO: 'bar',
+      BAZ: 'quoted value',
+      SINGLE: 'single value',
+    })
+  })
+
+  it('returns an empty object for missing files and ignores malformed keys', () => {
+    const file = join(dir, 'operator.env')
+    writeFileSync(file, 'lower=ignored\nBROKEN\nGOOD=value\n')
+
+    expect(readEnvFile(join(dir, 'missing.env'))).toEqual({})
+    expect(readEnvFile(file)).toEqual({ GOOD: 'value' })
   })
 })
 

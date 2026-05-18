@@ -3,7 +3,7 @@
 //
 // Unit tests for stack mode path resolution and env-file layering.
 
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -48,6 +48,24 @@ describe('resolvePaths', () => {
     expect(paths.envFiles).toEqual([join(repoRoot, 'infra', 'docker', 'dev.env')])
   })
 
+  it('bootstraps dev secret files idempotently', () => {
+    const repoRoot = repoFixture()
+    vi.stubEnv('CARACAL_MODE', 'dev')
+    vi.stubEnv('CARACAL_REPO_ROOT', repoRoot)
+
+    const paths = resolvePaths()
+
+    expect(paths.mode).toBe('dev')
+    for (const name of ['postgresPassword', 'redisPassword', 'caracalAdminToken', 'zoneKek', 'auditHmacKey', 'streamsHmacKey']) {
+      const file = join(repoRoot, 'infra', 'secrets', 'files', name)
+      expect(existsSync(file)).toBe(true)
+      expect(readFileSync(file, 'utf8').trim().length).toBeGreaterThan(0)
+    }
+
+    const second = resolvePaths()
+    expect(second.envFiles).toEqual(paths.envFiles)
+  })
+
   it('includes local.env in envFiles when present (dev.env first, local.env second)', () => {
     const repoRoot = repoFixture()
     writeFileSync(join(repoRoot, 'infra', 'docker', 'local.env'), 'LOG_LEVEL=debug\n')
@@ -87,6 +105,18 @@ describe('resolvePaths', () => {
     expect(paths.composeFile).toBe(join(home, 'compose.yml'))
     expect(paths.envFiles).toEqual([join(home, 'caracal.env')])
     expect(existsSync(join(home, 'caracal.env'))).toBe(true)
+  })
+
+  it('stable mode installs runtime assets under CARACAL_HOME', () => {
+    const home = mkdtempSync(join(tmpdir(), 'caracal-home-'))
+    vi.stubEnv('CARACAL_MODE', 'stable')
+    vi.stubEnv('CARACAL_HOME', home)
+
+    const paths = resolvePaths()
+
+    expect(existsSync(paths.composeFile)).toBe(true)
+    expect(existsSync(join(home, 'secrets', 'databaseUrl'))).toBe(true)
+    expect(readFileSync(paths.envFiles[0], 'utf8')).toContain('Caracal stable stack')
   })
 
   it('honours CARACAL_COMPOSE_FILE and CARACAL_ENV_FILE in stable mode', () => {
