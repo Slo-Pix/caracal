@@ -178,7 +178,7 @@ All commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zone_id` i
 <summary><strong>TUI</strong></summary>
 
 ```bash
-export CARACAL_ADMIN_TOKEN=<your-admin-token>   # printed by the installer; or read from infra/docker/.env
+export CARACAL_ADMIN_TOKEN=<your-admin-token>   # printed by the installer; or read from $CARACAL_HOME/secrets/caracalAdminToken
 caracal-tui
 ```
 
