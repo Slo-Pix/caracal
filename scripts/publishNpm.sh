@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Publishes selected @caracalai/* npm packages to npm, using the rc dist-tag for release candidates and latest for stable releases.
+# Publishes selected @caracalai/* npm packages to npm, using the rc dist-tag for rc and latest for stable.
 
 set -euo pipefail
 

@@ -23,7 +23,7 @@ Usage: scripts/release.sh [--dry-run]
 
 Tag format: vYYYY.MM.DD (with .N suffix on additional cuts the same day).
 Per-package versions follow semver and are bumped by Changesets.
-Use scripts/rc.sh for release candidates.
+Use scripts/rc.sh for rc.
 EOF
             exit 0
             ;;
@@ -128,7 +128,7 @@ const pypi = Object.fromEntries(
 );
 const manifest = {
   release,
-  channel: "stable",
+  mode: "stable",
   publishedAt,
   binaries: { cli: version, tui: version },
   containers: Object.fromEntries(containers.map((name) => [name, version])),
