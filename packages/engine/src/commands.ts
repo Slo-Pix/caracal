@@ -64,6 +64,12 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
   { name: 'cli', group: 'shell', summary: 'Open the Caracal command shell' },
   { name: 'tui', group: 'shell', summary: 'Launch the Caracal TUI' },
+  {
+    name: 'control',
+    group: 'stack',
+    summary: 'Toggle the optional Control automation service',
+    subcommands: ['enable', 'disable', 'status'],
+  },
 ]);
 
 export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([

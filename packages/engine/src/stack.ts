@@ -6,6 +6,7 @@
 import { rmSync, statSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { runExec } from './run.js'
+import { isControlEnabled } from './controlState.js'
 
 export interface StackPaths {
   composeFile: string
@@ -27,7 +28,8 @@ export interface StackComposeHandle {
 }
 
 function composeArgv(paths: StackPaths, args: string[]): string[] {
-  return ['docker', 'compose', '--env-file', paths.envFile, '-f', paths.composeFile, ...args]
+  const profile = isControlEnabled() ? ['--profile', 'control'] : []
+  return ['docker', 'compose', '--env-file', paths.envFile, '-f', paths.composeFile, ...profile, ...args]
 }
 
 export function stackUp(opts: StackComposeOpts): StackComposeHandle {
@@ -80,10 +82,11 @@ export const DEFAULT_SERVICE_PROBES: ServiceProbe[] = [
 ]
 
 // Returns probes for the active deployment surface. Includes the optional control
-// service only when CARACAL_CONTROL_ENABLED=true so default `up`/`status` flows stay unchanged.
-export function defaultServiceProbes(): ServiceProbe[] {
+// service only when it has been turned on via `caracal control enable` so the default
+// `up`/`status` flow stays unchanged.
+export function defaultServiceProbes(home?: string): ServiceProbe[] {
   const probes = [...DEFAULT_SERVICE_PROBES]
-  if (process.env.CARACAL_CONTROL_ENABLED === 'true') {
+  if (isControlEnabled(home)) {
     const port = Number(process.env.CONTROL_PORT ?? 8087)
     probes.push({ name: 'control', url: `http://localhost:${port}/health`, port })
   }
