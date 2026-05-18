@@ -11,12 +11,16 @@ import { getenv, mustGetenv, intEnv, boolEnv, resolveFileSecrets } from '@caraca
 function loadEnvChain(): void {
   const seen = new Set<string>()
   const candidates: string[] = []
-  const isDevMode = process.env.CARACAL_MODE === 'dev' && process.env.NODE_ENV !== 'production'
+  const mode = process.env.CARACAL_MODE
+  const isDevMode = mode === 'dev' && process.env.NODE_ENV !== 'production'
 
   if (process.env.CARACAL_ENV_FILE) candidates.push(resolve(process.env.CARACAL_ENV_FILE))
   if (isDevMode && process.env.CARACAL_REPO_ROOT) {
-    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', 'dev.env'))
     candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', 'local.env'))
+    candidates.push(join(process.env.CARACAL_REPO_ROOT, 'infra', 'docker', 'dev.env'))
+  }
+  if (!isDevMode && process.env.CARACAL_HOME) {
+    candidates.push(join(process.env.CARACAL_HOME, 'caracal.env'))
   }
 
   for (const path of candidates) {

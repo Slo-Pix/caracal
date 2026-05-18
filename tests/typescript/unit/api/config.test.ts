@@ -52,29 +52,39 @@ describe('api config loadEnvChain', () => {
     expect(process.env.API_TEST_VAR).toBe('explicit-value')
   })
 
-  test('loads infra/docker/.env when CARACAL_REPO_ROOT is set', async () => {
+  test('loads infra/docker/dev.env when CARACAL_REPO_ROOT is set in dev mode', async () => {
     mkdirSync(join(dir, 'infra', 'docker'), { recursive: true })
-    writeFileSync(join(dir, 'infra', 'docker', '.env'), 'API_TEST_VAR=repo-value\n')
+    writeFileSync(join(dir, 'infra', 'docker', 'dev.env'), 'API_TEST_VAR=repo-value\n')
     process.env.CARACAL_MODE = 'dev'
     process.env.CARACAL_REPO_ROOT = dir
     await import(CONFIG_PATH)
     expect(process.env.API_TEST_VAR).toBe('repo-value')
   })
 
+  test('local.env overrides dev.env in dev mode', async () => {
+    mkdirSync(join(dir, 'infra', 'docker'), { recursive: true })
+    writeFileSync(join(dir, 'infra', 'docker', 'dev.env'), 'API_TEST_VAR=dev-default\n')
+    writeFileSync(join(dir, 'infra', 'docker', 'local.env'), 'API_TEST_VAR=local-override\n')
+    process.env.CARACAL_MODE = 'dev'
+    process.env.CARACAL_REPO_ROOT = dir
+    await import(CONFIG_PATH)
+    expect(process.env.API_TEST_VAR).toBe('local-override')
+  })
+
   test('does not load repo env files in stable mode', async () => {
     mkdirSync(join(dir, 'infra', 'docker'), { recursive: true })
-    writeFileSync(join(dir, 'infra', 'docker', '.env'), 'API_TEST_VAR=stable-leak\n')
+    writeFileSync(join(dir, 'infra', 'docker', 'dev.env'), 'API_TEST_VAR=stable-leak\n')
     process.env.CARACAL_MODE = 'stable'
     process.env.CARACAL_REPO_ROOT = dir
     await import(CONFIG_PATH)
     expect(process.env.API_TEST_VAR).toBeUndefined()
   })
 
-  test('does not walk up from cwd looking for infra/docker/.env', async () => {
+  test('does not walk up from cwd looking for infra/docker/dev.env', async () => {
     const sub = join(dir, 'a', 'b')
     mkdirSync(sub, { recursive: true })
     mkdirSync(join(dir, 'infra', 'docker'), { recursive: true })
-    writeFileSync(join(dir, 'infra', 'docker', '.env'), 'API_TEST_VAR=walked-up\n')
+    writeFileSync(join(dir, 'infra', 'docker', 'dev.env'), 'API_TEST_VAR=walked-up\n')
     process.chdir(sub)
     await import(CONFIG_PATH)
     expect(process.env.API_TEST_VAR).toBeUndefined()
