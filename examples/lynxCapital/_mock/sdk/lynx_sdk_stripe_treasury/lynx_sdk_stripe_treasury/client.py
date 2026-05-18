@@ -38,12 +38,11 @@ class OutboundPayment:
 
 class StripeTreasuryClient:
     def __init__(self, api_key: str, base_url: str = "http://stripe-treasury.mock",
-                 timeout: float = 5.0, transport: httpx.BaseTransport | None = None):
+                 timeout: float = 5.0, transport: httpx.BaseTransport | None = None,
+                 http_client: httpx.Client | None = None):
         self._api_key = api_key
-        self._http = httpx.Client(
-            base_url=base_url,
-            timeout=timeout,
-            transport=transport,
+        self._http = http_client or httpx.Client(
+            base_url=base_url, timeout=timeout, transport=transport,
             headers={"Authorization": f"Bearer {api_key}", "User-Agent": "lynx-sdk-stripe/0.1.0"},
         )
 

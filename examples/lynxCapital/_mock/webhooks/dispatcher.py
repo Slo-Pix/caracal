@@ -32,7 +32,7 @@ def _secret(provider: str) -> str:
     env = profile_for(provider).get("webhook_secret_env")
     if not env:
         return ""
-    return os.getenv(env, f"dev-{provider}-secret")
+    return os.getenv(env, f"local-{provider}-secret")
 
 
 def sign(provider: str, body: bytes, ts: str) -> str:

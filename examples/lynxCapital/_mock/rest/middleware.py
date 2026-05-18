@@ -16,12 +16,23 @@ from _mock.faults.engine import FaultDecision, evaluate, profile_for
 from _mock.rest import idempotency
 
 
+def _caracal_token(request: Request) -> str | None:
+    identity = request.headers.get("X-Caracal-Identity")
+    if identity:
+        return identity
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        return None
+    token = auth.removeprefix("Bearer ").strip()
+    return token if token.count(".") == 2 else None
+
+
 def _expected_auth(provider: str) -> tuple[str, str, str] | None:
     p = profile_for(provider)
     auth = p.get("auth")
     if not auth:
         return None
-    secret = os.getenv(auth["env"], f"dev-{provider}-key")
+    secret = os.getenv(auth["env"], f"local-{provider}-key")
     return auth["header"], auth["prefix"], secret
 
 
@@ -39,6 +50,9 @@ def authenticate(provider: str, request: Request) -> str:
         raise HTTPException(status_code=401, detail=f"{provider}: bad auth prefix")
     token = received[len(prefix):] if prefix else received
     if token != expected:
+        caracal_token = _caracal_token(request)
+        if caracal_token is not None:
+            return f"caracal:{caracal_token[:16]}"
         raise HTTPException(status_code=401, detail=f"{provider}: invalid credential")
     return token
 
