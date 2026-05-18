@@ -33,20 +33,21 @@ When neither variable is set, the Gateway listens over plain HTTP. That is accep
 
 ---
 
-## Runtime mode
+## Mode
 
-`CARACAL_MODE` accepts exactly two values:
+`CARACAL_MODE` accepts exactly three values:
 
 | Value | Use |
 | --- | --- |
-| `dev` | Local repository and Docker Compose development |
-| `runtime` | Packaged or production-like runtime deployments |
+| `dev` | Development |
+| `rc` | rc |
+| `stable` | stable |
 
-If unset, Go service configuration defaults to `runtime`; the local compose stack sets `CARACAL_MODE=dev`.
+If unset, Go service configuration defaults to `stable`; the local compose stack sets `CARACAL_MODE=dev`.
 
-Runtime mode enforces these Gateway checks at startup:
+rc and stable enforce these Gateway checks at startup:
 
-| Check | Runtime behavior |
+| Check | rc and stable behavior |
 | --- | --- |
 | `INSECURE_HTTP` | Must not be truthy |
 | `INSECURE_STS` | Must not be truthy |
