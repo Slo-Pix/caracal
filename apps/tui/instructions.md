@@ -14,12 +14,14 @@
 - Must keep view timers, streams, and child processes disposable when a view leaves the stack.
 - Must mask credential and token fields by default.
 - Must keep CLI-compatible config resolution for API URL, coordinator URL, zone ID, and `caracal.toml`.
+- Must accept input only from a controlling terminal: refuse to start when stdin or stdout is not a TTY, when `TERM` is unset or `dumb`, when `CI=true`, or when launched with an IPC channel.
 
 ## Forbidden
 - Must not use React, Ink, blessed, or another heavyweight terminal UI framework.
 - Must not write secrets, tokens, or refresh tokens to disk.
 - Must not pass user input to a shell.
 - Must not render unsanitized JWTs, Caracal tokens, or credentials in exceptions.
+- Must not expose any scripted-input, replay, or automation entry point: automation belongs to the CLI, Control API, or SDK.
 
 ## Validation
 - Validate with `pnpm --dir apps/tui typecheck` and `pnpm --dir apps/tui test` when TUI code changes.
