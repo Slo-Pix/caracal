@@ -6,8 +6,8 @@
 package sts
 
 // UpstreamDirective tells the gateway which URL to dial and which credential
-// shape the upstream expects. ProviderToken is the raw bearer the provider
-// itself accepts; for caracal_jwt mode it is empty and the gateway forwards
+// shape the upstream expects. ProviderToken is only populated on authenticated
+// Gateway exchanges; for caracal_jwt mode it is empty and the gateway forwards
 // the Caracal JWT from TokenResponse.AccessToken instead.
 type UpstreamDirective struct {
 	URL           string `json:"url"`

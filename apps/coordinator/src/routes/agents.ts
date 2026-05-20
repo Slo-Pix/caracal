@@ -287,6 +287,11 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         dedupeKey: `suspend:${row.id}`,
         payload: { event: 'suspend', zone_id: zoneId, agent_session_id: row.id, parent_id: row.parent_id },
       })))
+      await enqueueMany(client, changed.map((row): OutboxItem => ({
+        topic: Topics.SessionsRevoke,
+        dedupeKey: `agent_suspend:${row.id}`,
+        payload: { zone_id: zoneId, agent_session_id: row.id, reason: 'agent_suspended' },
+      })))
       await client.query('COMMIT')
       return { suspended: changed.length }
     } catch (err) {
@@ -453,6 +458,11 @@ export async function terminateSubtree(
         event: 'terminate', zone_id: zoneId, agent_session_id: row.id,
         parent_id: row.parent_id, reason,
       },
+    })
+    items.push({
+      topic: Topics.SessionsRevoke,
+      dedupeKey: `agent_terminate:${row.id}`,
+      payload: { zone_id: zoneId, agent_session_id: row.id, reason },
     })
   }
   await enqueueMany(client as Queryable, items)
