@@ -286,6 +286,40 @@ func TestValidateTokenSessionBindsClientID(t *testing.T) {
 	}
 }
 
+func TestAuthenticateAppAllowsSignedGatewayExchangeWithoutClientSecret(t *testing.T) {
+	srv := &Server{db: &stubDB{app: &Application{
+		ID:                 "app1",
+		ZoneID:             "zone1",
+		Name:               "Test App",
+		RegistrationMethod: "managed",
+	}}}
+	app, zoneID, err := srv.authenticateApp(context.Background(), TokenExchangeRequest{
+		ZoneID:               "zone1",
+		ApplicationID:        "app1",
+		SubjectToken:         "ambient-token",
+		GatewayAuthenticated: true,
+	})
+	if err != nil || app.ID != "app1" || zoneID != "zone1" {
+		t.Fatalf("gateway-authenticated exchange should not require client secret, app=%#v zone=%q err=%v", app, zoneID, err)
+	}
+}
+
+func TestAuthenticateAppRejectsGatewayBootstrapWithoutSubjectToken(t *testing.T) {
+	srv := &Server{db: &stubDB{app: &Application{
+		ID:                 "app1",
+		ZoneID:             "zone1",
+		Name:               "Test App",
+		RegistrationMethod: "managed",
+	}}}
+	if _, _, err := srv.authenticateApp(context.Background(), TokenExchangeRequest{
+		ZoneID:               "zone1",
+		ApplicationID:        "app1",
+		GatewayAuthenticated: true,
+	}); err == nil {
+		t.Fatalf("gateway-authenticated exchanges must not bootstrap ambient tokens")
+	}
+}
+
 // TestExchangePartialDeny verifies that partial OPA evaluation status causes HTTP 403.
 // This is the hard invariant: a partial result must never produce a token.
 func TestExchangePartialDeny(t *testing.T) {
@@ -349,8 +383,8 @@ func TestValidateSessionReferencesRequiresAgentSessionForDelegation(t *testing.T
 	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
 		DelegationEdgeID: "edge1",
 	}, true)
-	if err == nil || err.Description != "delegation edge requires source agent session" {
-		t.Fatalf("want source agent session error, got %#v", err)
+	if err == nil || err.Description != "delegation edge requires target agent session" {
+		t.Fatalf("want target agent session error, got %#v", err)
 	}
 }
 
@@ -389,8 +423,8 @@ func TestValidateSessionReferencesAcceptsActiveGraphEdge(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db}
-	proof, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	proof, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 	}, true)
@@ -434,8 +468,8 @@ func TestValidateSessionReferencesRejectsDelegationBudget(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db}
-	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read write",
 	}, true)
@@ -479,8 +513,8 @@ func TestValidateSessionReferencesRejectsDelegationTTLConstraint(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db}
-	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 		TTLSeconds:       60,
@@ -524,8 +558,8 @@ func TestValidateSessionReferencesRejectsMalformedDelegationConstraints(t *testi
 		},
 	}
 	srv := &Server{db: db}
-	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 	}, true)
@@ -559,7 +593,7 @@ func TestExchangeRejectsResourceOutsideDelegationEdge(t *testing.T) {
 	}
 	db := &stubDB{
 		app: &Application{
-			ID:                 "app1",
+			ID:                 "app2",
 			ZoneID:             "zone1",
 			Name:               "Test App",
 			RegistrationMethod: "managed",
@@ -590,11 +624,11 @@ func TestExchangeRejectsResourceOutsideDelegationEdge(t *testing.T) {
 	srv := &Server{db: db, auditBuffer: &AuditBuffer{ch: make(chan AuditEvent, 100)}}
 	_, _, code, apiErr := srv.exchange(context.Background(), TokenExchangeRequest{
 		ZoneID:           "zone1",
-		ApplicationID:    "app1",
+		ApplicationID:    "app2",
 		ClientSecret:     "test-secret",
 		Resources:        []string{"resource://api/other"},
 		Scope:            "read",
-		AgentSessionID:   source.ID,
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 	}, "req-1")
 	if code != http.StatusForbidden || apiErr == nil || apiErr.Description != "policy denied" {
@@ -636,8 +670,8 @@ func TestValidateSessionReferencesRejectsInvalidDelegationPath(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db, metrics: &STSMetrics{}}
-	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 	}, true)
@@ -684,8 +718,8 @@ func TestValidateSessionReferencesRejectsMaxHopOverflow(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db}
-	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 	}, true)
@@ -756,8 +790,8 @@ func TestValidateSessionReferencesAcceptsDeepDelegationPath(t *testing.T) {
 		},
 	}
 	srv := &Server{db: db}
-	proof, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
-		AgentSessionID:   source.ID,
+	proof, err := srv.validateSessionReferences(context.Background(), "zone1", "app2", TokenExchangeRequest{
+		AgentSessionID:   target.ID,
 		DelegationEdgeID: "edge1",
 		Scope:            "read",
 	}, true)
@@ -773,7 +807,7 @@ import rego.v1
 
 result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [{"policy": "delegation-load"}], "diagnostics": []} if {
   count(input.delegation_edge.path) == 3
-  input.context.agent_session_id == input.delegation_edge.source_session_id
+  input.context.agent_session_id == input.delegation_edge.target_session_id
   every scope in input.context.requested_scopes {
     scope in input.delegation_edge.scopes
   }
@@ -790,7 +824,7 @@ result := {"decision": "allow", "evaluation_status": "complete", "determining_po
 	opaEngine.zones["zone1"] = &opaZoneState{query: &pq}
 	opaEngine.mu.Unlock()
 	input := OPAInput{
-		Principal: OPAPrincipal{ID: "app1", ZoneID: "zone1"},
+		Principal: OPAPrincipal{ID: "app2", ZoneID: "zone1"},
 		Resource:  OPAResource{Type: "api", ID: "res1", Identifier: "https://api.example.com", Scopes: []string{"read"}},
 		Action:    OPAAction{ID: "TokenExchange"},
 		DelegationEdge: &OPADelegationEdge{
@@ -802,8 +836,8 @@ result := {"decision": "allow", "evaluation_status": "complete", "determining_po
 			GraphEpoch:      12,
 		},
 		Context: OPAContext{
-			ActorClaims:     map[string]any{"sub": "app1"},
-			AgentSessionID:  "agent-src",
+			ActorClaims:     map[string]any{"sub": "app2"},
+			AgentSessionID:  "agent-dst",
 			RequestedScopes: []string{"read"},
 		},
 	}

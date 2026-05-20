@@ -41,6 +41,10 @@ func (allowRevocations) IsRevoked(string) bool {
 	return false
 }
 
+func (allowRevocations) IsAgentRevoked(string) bool {
+	return false
+}
+
 // makeJWT builds an unsigned-but-shaped token whose exp is offset seconds in the future.
 func makeJWT(t *testing.T, offset time.Duration) string {
 	t.Helper()
@@ -76,7 +80,7 @@ func newFakeSTS(t *testing.T, upstream string, calls *int32) *httptest.Server {
 }
 
 func newProxyForTest(_ *testing.T, sts *httptest.Server, allowPrivate bool) *proxy {
-	stsClient := newSTSClient(sts.URL, 2*time.Second)
+	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
 	guard := newUpstreamGuard(nil, allowPrivate)
 	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{})
 }
@@ -396,7 +400,7 @@ func TestProxyBodySizeLimitEnforced(t *testing.T) {
 	sts := newFakeSTS(t, upstream.URL, nil)
 	defer sts.Close()
 
-	stsClient := newSTSClient(sts.URL, 2*time.Second)
+	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
 	guard := newUpstreamGuard(nil, true)
 	p := newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{})
 
@@ -544,7 +548,7 @@ func TestRequestIDMiddlewarePreservesValidIDs(t *testing.T) {
 }
 
 func TestSTSClientTransportFailureSanitised(t *testing.T) {
-	c := newSTSClient("http://127.0.0.1:1", 100*time.Millisecond)
+	c := newSTSClient("http://127.0.0.1:1", 100*time.Millisecond, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	outcome := c.Exchange(ctx, "tok", binding{}, "r", "rid")
