@@ -12,6 +12,7 @@ import { resolveCliConfigPath } from '@caracalai/engine/cli'
 import {
   caracalBinaries as caracalBinariesCore,
   composeRun,
+  installRuntimeAssets,
   listCaracalImages,
   removeFsPath,
   removeImages,
@@ -432,6 +433,16 @@ export async function purgeCommand(argv: string[]): Promise<void> {
       printWarn('Aborted.')
       return
     }
+  }
+
+  const targetIds = new Set(targets.map((t) => t.id))
+  if (
+    !dryRun &&
+    targetIds.has('runtime') &&
+    (targetIds.has('stack') || targetIds.has('volumes') || targetIds.has('logs')) &&
+    ctx.stacks.some((s) => s.label === 'runtime')
+  ) {
+    installRuntimeAssets(runtimePaths(ctx.runtimeHome), 'stable')
   }
 
   for (const t of targets) {
