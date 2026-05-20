@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { auditCommand, explainCommand } from '../../../../apps/cli/src/commands/audit.ts'
 import { zoneCommand } from '../../../../apps/cli/src/commands/zone.ts'
 import { agentCommand, delegationCommand } from '../../../../apps/cli/src/commands/agent.ts'
+import { policyCommand } from '../../../../apps/cli/src/commands/policy.ts'
 
 const ORIG_ENV = { ...process.env }
 
@@ -123,6 +124,37 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
     expect(out).toContain('Usage: caracal delegation')
     expect(out).toContain('inbound <session-id>')
     expect(out).not.toContain('Usage: caracal agent')
+  })
+
+  it('policy template list prints built-in templates', async () => {
+    const fetchMock = stubFetch((url) => {
+      expect(url).toBe('http://api/v1/policy-templates')
+      return [{ id: 'baseline-scopes', name: 'Baseline Scopes', description: 'Scope checks', content: 'package caracal.authz\nresult := {}' }]
+    })
+    await policyCommand(['template', 'list'])
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const out = stdout.mock.calls.map((c) => c[0]).join('')
+    expect(out).toContain('baseline-scopes')
+    expect(out).toContain('Scope checks')
+  })
+
+  it('policy template use creates a policy from template content', async () => {
+    const fetchMock = stubFetch((url, init) => {
+      if (url === 'http://api/v1/policy-templates') {
+        return [{ id: 'baseline-scopes', name: 'Baseline Scopes', description: 'Scope checks', content: 'package caracal.authz\nresult := {}' }]
+      }
+      expect(url).toBe('http://api/v1/zones/z1/policies')
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(String(init.body))).toMatchObject({
+        name: 'Agent Gateway Policy',
+        description: 'Scope checks',
+        content: 'package caracal.authz\nresult := {}',
+      })
+      return { id: 'policy-1', version: { id: 'version-1' } }
+    })
+    await policyCommand(['template', 'use', 'baseline-scopes', '--name', 'Agent Gateway Policy'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(stdout.mock.calls.map((c) => c[0]).join('')).toContain('policy-1')
   })
 
   it('audit command exits 1 when CARACAL_ADMIN_TOKEN is missing', async () => {

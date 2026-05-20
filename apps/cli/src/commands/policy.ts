@@ -58,6 +58,39 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
           owner_type: flagString(flags, 'owner-type'),
         }))
       }
+      case 'template': {
+        const templateVerb = positional[0]
+        const templateID = positional[1]
+        switch (templateVerb) {
+          case 'list': {
+            const rows = await client.policyTemplates.list()
+            if (json) return printJSON(rows)
+            return printTable(rows, ['id', 'name', 'description'])
+          }
+          case 'get': {
+            if (!templateID) return usage('policy template get <id> [--json]')
+            const template = await client.policyTemplates.get(templateID)
+            if (json) return printJSON(template)
+            process.stdout.write(template.content)
+            if (!template.content.endsWith('\n')) process.stdout.write('\n')
+            return
+          }
+          case 'use': {
+            const zoneId = requireZone(ctx, flags)
+            if (!templateID) return usage('policy template use <id> --name <policy-name> [--zone …]')
+            const template = await client.policyTemplates.get(templateID)
+            const name = flagString(flags, 'name') ?? template.name
+            return printJSON(await client.policies.create(zoneId, {
+              name,
+              content: template.content,
+              description: flagString(flags, 'description') ?? template.description,
+              owner_type: flagString(flags, 'owner-type'),
+            }))
+          }
+          default:
+            return usage('policy template list|get|use [id] [--name …] [--json]')
+        }
+      }
       case 'version': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
@@ -167,6 +200,12 @@ function policyHelp(): never {
       '    --name <n>                 Policy name (required)',
       '    --file <path>              Path to Rego file (required if --content omitted)',
       '    --content <rego>           Inline Rego content (required if --file omitted)',
+      '    --description <d>          Optional description',
+      '    --owner-type <t>           Owner type',
+      '  template list              List built-in policy templates',
+      '  template get <id>          Print a template Rego body',
+      '  template use <id>          Create a policy from a template',
+      '    --name <n>                 Policy name (default: template name)',
       '    --description <d>          Optional description',
       '    --owner-type <t>           Owner type',
       '  version <id>               Add a new Rego version to an existing policy',

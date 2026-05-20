@@ -20,6 +20,7 @@ import type {
   PolicyInput,
   PolicySet,
   PolicySetVersion,
+  PolicyTemplate,
   PolicyVersion,
   Provider,
   ProviderInput,
@@ -230,6 +231,16 @@ export class AdminClient {
       }),
     delete: (zoneId: string, id: string) =>
       this.request<void>(`/v1/zones/${zoneId}/policies/${id}`, { method: 'DELETE', expectEmpty: true }),
+  }
+
+  policyTemplates = {
+    list: () => this.request<PolicyTemplate[]>('/v1/policy-templates'),
+    get: async (id: string) => {
+      const templates = await this.request<PolicyTemplate[]>('/v1/policy-templates')
+      const template = templates.find((item) => item.id === id)
+      if (!template) throw new AdminApiError(404, 'policy_template_not_found', { error: 'policy_template_not_found', id })
+      return template
+    },
   }
 
   // Policy sets

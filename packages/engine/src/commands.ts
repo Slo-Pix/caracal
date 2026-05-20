@@ -167,7 +167,7 @@ export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
 
   {
     name: 'policy', group: 'admin', summary: 'Manage policies',
-    subcommands: ['list', 'get', 'create', 'version', 'delete'], requiresZone: true,
+    subcommands: ['list', 'get', 'create', 'template', 'version', 'delete'], requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Policy name' },
