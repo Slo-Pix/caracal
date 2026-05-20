@@ -95,6 +95,10 @@ if [ "${VERSION}" = "latest" ]; then
 else
     tag="${VERSION}"
 fi
+case "${tag}" in
+    v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]|v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9]*|v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9]-rc.*|v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9]*-rc.*) ;;
+    *) err "release tag ${tag} is not a supported Caracal release tag" ;;
+esac
 base="https://github.com/${REPO}/releases/download/${tag}"
 
 printf 'caracal-install: target release %s (%s-%s)\n' "${tag}" "${os}" "${arch}"

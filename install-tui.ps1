@@ -30,6 +30,9 @@ if ($Version -eq 'latest') {
 } else {
     $tag = $Version
 }
+if ($tag -notmatch '^v\d{4}\.\d{2}\.\d{2}(\.\d+)?(-rc\.(sha[0-9A-Za-z]+|\d+))?$') {
+    throw "release tag $tag is not a supported Caracal release tag"
+}
 $base = "https://github.com/$repo/releases/download/$tag"
 
 $tmp = New-Item -ItemType Directory -Force -Path (Join-Path $env:TEMP "caracal-install-$([guid]::NewGuid())")
@@ -69,7 +72,8 @@ try {
         return $sums.ContainsKey($archive)
     }
 
-    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    $installPath = New-Item -ItemType Directory -Force -Path $InstallDir
+    if (-not $installPath) { throw "failed to create or access install directory: $InstallDir" }
     $installedShell = $false
     if (Test-Archive -Kind 'shell') {
         $installedShell = $true
