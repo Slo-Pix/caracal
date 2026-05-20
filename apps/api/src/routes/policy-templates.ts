@@ -141,7 +141,7 @@ allow if {
   count(edge.path) <= edge.constraints_json.max_hops
   count(input.context.requested_scopes) <= edge.constraints_json.budget
   edge.constraints_json.policy_approved == true
-  input.context.agent_session_id == edge.source_session_id
+  input.context.agent_session_id == edge.target_session_id
 }
 `,
   },

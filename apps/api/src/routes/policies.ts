@@ -9,7 +9,7 @@ import { sha256Hex } from '@caracalai/core'
 import { v7 as uuidv7 } from 'uuid'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { zoneExists } from '../zone-guard.js'
-import { validatePolicySource } from '../rego.js'
+import { analyzeAuthzPolicy, validateAuthzPolicy } from '../rego.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
 
 const PolicyBody = z.object({
@@ -25,11 +25,22 @@ const VersionBody = z.object({
   schema_version: z.string().default('2026-03-16'),
 })
 
+const ValidateBody = z.object({
+  content: z.string().min(1),
+})
+
 function validateRego(content: string): string | null {
-  return validatePolicySource(content)
+  return validateAuthzPolicy(content)
 }
 
 export const policiesRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.post('/policies/validate', async (req, reply) => {
+    const body = ValidateBody.parse(req.body)
+    const regoErr = validateRego(body.content)
+    if (regoErr) return reply.code(422).send({ valid: false, error: 'invalid_rego', detail: regoErr })
+    return { valid: true, warnings: analyzeAuthzPolicy(body.content) }
+  })
+
   fastify.get('/zones/:zoneId/policies', async (req, reply) => {
     const params = parseParams(ZoneParams, req, reply)
     if (!params) return

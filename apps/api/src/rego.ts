@@ -13,6 +13,7 @@ const FORBIDDEN_BUILTINS = [
   'net.cidr_contains',
   'net.cidr_intersects',
   'net.cidr_expand',
+  'net.cidr_merge',
   'opa.runtime',
   'rand.intn',
   'time.now_ns',
@@ -120,4 +121,18 @@ export function validateAuthzPolicy(content: string): string | null {
   if (check.packageName !== 'caracal.authz') return 'must_use_package_caracal_authz'
   if (!check.rules.has('result')) return 'must_define_result_rule'
   return null
+}
+
+export function analyzeAuthzPolicy(content: string): string[] {
+  if (validateAuthzPolicy(content)) return []
+  const { source } = stripCommentsAndStrings(content)
+  const warnings: string[] = []
+  if (/default\s+result\s*:=\s*\{[\s\S]*?decision\s*:\s*allow/.test(source)
+    || /default\s+result\s*:=\s*\{[\s\S]*?"decision"\s*:\s*"allow"/.test(content)) {
+    warnings.push('default_result_allows_access')
+  }
+  if (!/\brequested_scopes\b/.test(source)) {
+    warnings.push('missing_requested_scope_check')
+  }
+  return warnings
 }
