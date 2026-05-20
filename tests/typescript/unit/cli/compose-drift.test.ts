@@ -88,7 +88,7 @@ describe('runtime-compose default substitutions', () => {
 
   it('runtime compose declares persistent volumes at the top level', () => {
     const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
-    expect(yaml).toMatch(/\nvolumes:\n  postgresData:\n  redisData:\n  stsReplay:\n?$/)
+    expect(yaml).toMatch(/\nvolumes:\n  postgresData:\n  redisData:\n  stsReplay:\n  gatewayReplay:\n?$/)
   })
 
   it('runtime compose never exposes container ports on non-loopback addresses', () => {
