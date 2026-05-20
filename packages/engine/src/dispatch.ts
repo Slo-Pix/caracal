@@ -115,6 +115,17 @@ function getBool(flags: FlagMap | undefined, key: string): boolean | undefined {
   return undefined
 }
 
+function getList(flags: FlagMap | undefined, key: string): string[] | undefined {
+  const v = flags?.[key]
+  if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
+  if (Array.isArray(v)) {
+    return v.flatMap(item => (typeof item === 'string' ? item.split(',') : []))
+      .map(s => s.trim())
+      .filter(Boolean)
+  }
+  return undefined
+}
+
 function requireZone(principal: Principal): string {
   if (!principal.zoneId) invalid('zone_id is required')
   return principal.zoneId
@@ -183,16 +194,22 @@ const resourceHandler = bySubcommand({
   list: ({ principal, ctx }) => ctx.admin.resources.list(requireZone(principal)),
   get: ({ principal, flags, ctx }) => ctx.admin.resources.get(requireZone(principal), mustStr(flags, 'id')),
   create: ({ principal, flags, ctx }) => ctx.admin.resources.create(requireZone(principal), {
-    name: mustStr(flags, 'name'),
+    name: getStr(flags, 'name'),
     identifier: mustStr(flags, 'identifier'),
+    scopes: getList(flags, 'scopes') ?? [],
     upstream_url: getStr(flags, 'upstream-url'),
-    provider_id: getStr(flags, 'provider'),
-    treat_identifier_as_prefix: getBool(flags, 'prefix'),
+    gateway_application_id: getStr(flags, 'gateway-application-id'),
+    credential_provider_id: getStr(flags, 'provider'),
+    prefix: getBool(flags, 'prefix'),
   } as never),
   patch: ({ principal, flags, ctx }) => ctx.admin.resources.patch(requireZone(principal), mustStr(flags, 'id'), {
+    identifier: getStr(flags, 'identifier'),
     name: getStr(flags, 'name'),
+    scopes: getList(flags, 'scopes'),
     upstream_url: getStr(flags, 'upstream-url'),
-    treat_identifier_as_prefix: getBool(flags, 'prefix'),
+    gateway_application_id: getStr(flags, 'gateway-application-id'),
+    prefix: getBool(flags, 'prefix'),
+    credential_provider_id: getStr(flags, 'provider'),
   } as never),
   delete: ({ principal, flags, ctx }) => ctx.admin.resources.delete(requireZone(principal), mustStr(flags, 'id')),
 })

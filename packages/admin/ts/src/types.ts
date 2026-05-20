@@ -63,6 +63,7 @@ export interface Resource {
   name: string
   identifier: string
   upstream_url: string | null
+  gateway_application_id: string | null
   prefix: boolean
   scopes: string[]
   credential_provider_id: string | null
@@ -74,6 +75,7 @@ export interface ResourceInput {
   name?: string
   identifier: string
   upstream_url?: string
+  gateway_application_id?: string
   prefix?: boolean
   scopes: string[]
   credential_provider_id?: string
