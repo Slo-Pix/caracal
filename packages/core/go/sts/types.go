@@ -10,12 +10,13 @@ package sts
 // Gateway exchanges; for caracal_jwt mode it is empty and the gateway forwards
 // the Caracal JWT from TokenResponse.AccessToken instead.
 type UpstreamDirective struct {
-	URL           string `json:"url"`
-	AuthMode      string `json:"auth_mode"`
-	AuthHeader    string `json:"auth_header,omitempty"`
-	AuthScheme    string `json:"auth_scheme,omitempty"`
-	ProviderToken string `json:"provider_token,omitempty"`
-	ExpiresAt     int64  `json:"expires_at,omitempty"`
+	URL                    string `json:"url"`
+	AuthMode               string `json:"auth_mode"`
+	AuthHeader             string `json:"auth_header,omitempty"`
+	AuthScheme             string `json:"auth_scheme,omitempty"`
+	ProviderToken          string `json:"provider_token,omitempty"`
+	ForwardCaracalIdentity bool   `json:"forward_caracal_identity,omitempty"`
+	ExpiresAt              int64  `json:"expires_at,omitempty"`
 }
 
 // TokenResponse is the JSON response body for a successful exchange.

@@ -45,6 +45,18 @@ func (allowRevocations) IsAgentRevoked(string) bool {
 	return false
 }
 
+func (allowRevocations) IsDelegationRevoked(string) bool {
+	return false
+}
+
+type revokedDelegation struct {
+	allowRevocations
+}
+
+func (revokedDelegation) IsDelegationRevoked(edgeID string) bool {
+	return edgeID == "edge-revoked"
+}
+
 type recordAudit struct {
 	events []audit.Event
 }
@@ -61,6 +73,18 @@ func makeJWT(t *testing.T, offset time.Duration) string {
 		Exp    int64  `json:"exp"`
 		ZoneID string `json:"zone_id"`
 	}{Exp: time.Now().Add(offset).Unix(), ZoneID: "z"})
+	body := base64.RawURLEncoding.EncodeToString(payload)
+	return header + "." + body + ".sig"
+}
+
+func makeJWTWithDelegation(t *testing.T, offset time.Duration, edgeID string) string {
+	t.Helper()
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
+	payload, _ := json.Marshal(struct {
+		Exp              int64  `json:"exp"`
+		ZoneID           string `json:"zone_id"`
+		DelegationEdgeID string `json:"delegation_edge_id"`
+	}{Exp: time.Now().Add(offset).Unix(), ZoneID: "z", DelegationEdgeID: edgeID})
 	body := base64.RawURLEncoding.EncodeToString(payload)
 	return header + "." + body + ".sig"
 }
@@ -92,6 +116,12 @@ func newProxyForTest(_ *testing.T, sts *httptest.Server, allowPrivate bool) *pro
 	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
 	guard := newUpstreamGuard(nil, allowPrivate)
 	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{}, nil)
+}
+
+func newProxyForTestWithRevocations(_ *testing.T, sts *httptest.Server, revocations revocationChecker) *proxy {
+	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
+	guard := newUpstreamGuard(nil, true)
+	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, revocations, &GatewayMetrics{}, nil)
 }
 
 // testBindings returns a bindingStore preloaded with the resource identifiers used
@@ -227,6 +257,25 @@ func TestProxyPathTraversalBlocked(t *testing.T) {
 	}
 }
 
+func TestProxyRejectsRevokedDelegationEdge(t *testing.T) {
+	var calls int32
+	sts := newFakeSTS(t, "http://127.0.0.1:1", &calls)
+	defer sts.Close()
+	p := newProxyForTestWithRevocations(t, sts, revokedDelegation{})
+
+	tok := makeJWTWithDelegation(t, time.Hour, "edge-revoked")
+	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
+		"Authorization":      {"Bearer " + tok},
+		"X-Caracal-Resource": {"r1"},
+	})
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected revoked delegation to return 401, got %d", resp.StatusCode)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("revoked delegation must not reach STS")
+	}
+}
+
 func TestProxySSRFBlocksLoopback(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -306,7 +355,7 @@ func TestProxyHappyPathForwardsAndStripsHeaders(t *testing.T) {
 	}
 }
 
-func TestProxyProviderAPIKeyDoesNotLeakInboundAuthorization(t *testing.T) {
+func TestProxyProviderAPIKeyDoesNotLeakInboundAuthorizationOrIdentity(t *testing.T) {
 	var seen *http.Request
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Clone(context.Background())
@@ -351,6 +400,50 @@ func TestProxyProviderAPIKeyDoesNotLeakInboundAuthorization(t *testing.T) {
 	}
 	if got := seen.Header.Get("X-Api-Key"); got != "provider-secret" {
 		t.Fatalf("provider API key header = %q", got)
+	}
+	if got := seen.Header.Get("X-Caracal-Identity"); got != "" {
+		t.Fatalf("Caracal identity leaked upstream by default: %q", got)
+	}
+}
+
+func TestProxyProviderAPIKeyForwardsIdentityWhenOptedIn(t *testing.T) {
+	var seen *http.Request
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Clone(context.Background())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	sts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		resource := r.Form.Get("resource")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(stsResponseFixture{
+			AccessToken: "caracal-identity-token",
+			ExpiresIn:   300,
+			Upstreams: map[string]corests.UpstreamDirective{resource: {
+				URL:                    upstream.URL,
+				AuthMode:               "provider_apikey",
+				AuthHeader:             "X-Api-Key",
+				ProviderToken:          "provider-secret",
+				ForwardCaracalIdentity: true,
+			}},
+		})
+	}))
+	defer sts.Close()
+	p := newProxyForTest(t, sts, true)
+
+	tok := makeJWT(t, time.Hour)
+	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
+		"Authorization":      {"Bearer " + tok},
+		"X-Caracal-Resource": {"r1"},
+	})
+	if resp.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 204, got %d: %s", resp.StatusCode, body)
+	}
+	if seen == nil {
+		t.Fatal("upstream never received request")
 	}
 	if got := seen.Header.Get("X-Caracal-Identity"); got != "caracal-identity-token" {
 		t.Fatalf("Caracal identity header = %q", got)

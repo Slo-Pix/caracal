@@ -56,11 +56,13 @@ type replayTracker interface {
 type revocationChecker interface {
 	IsRevoked(sid string) bool
 	IsAgentRevoked(agentSessionID string) bool
+	IsDelegationRevoked(delegationEdgeID string) bool
 }
 
 type tokenRevocationIDs struct {
-	SID            string
-	AgentSessionID string
+	SID              string
+	AgentSessionID   string
+	DelegationEdgeID string
 }
 
 func newProxy(sts *stsClient, jwks tokenVerifier, guard *upstreamGuard, log zerolog.Logger, maxBytes int64, upstreamTimeout time.Duration, bindings *bindingStore, tracker replayTracker, revocations revocationChecker, metrics *GatewayMetrics, audit auditEmitter) *proxy {
@@ -199,8 +201,14 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	revocationIDs := tokenRevocationIDs{SID: jwtSID(bearer), AgentSessionID: jwtAgentSessionID(bearer)}
-	if p.revocations.IsRevoked(revocationIDs.SID) || p.revocations.IsAgentRevoked(revocationIDs.AgentSessionID) {
+	revocationIDs := tokenRevocationIDs{
+		SID:              jwtSID(bearer),
+		AgentSessionID:   jwtAgentSessionID(bearer),
+		DelegationEdgeID: jwtDelegationEdgeID(bearer),
+	}
+	if p.revocations.IsRevoked(revocationIDs.SID) ||
+		p.revocations.IsAgentRevoked(revocationIDs.AgentSessionID) ||
+		p.revocations.IsDelegationRevoked(revocationIDs.DelegationEdgeID) {
 		writeErr(w, requestID, http.StatusUnauthorized, sharederr.InvalidToken, "session revoked")
 		p.metrics.RequestsDenied.Add(1)
 		p.metrics.DenialsRevoked.Add(1)
@@ -208,6 +216,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Int("status", http.StatusUnauthorized).
 			Str("sid", revocationIDs.SID).
 			Str("agent_session_id", revocationIDs.AgentSessionID).
+			Str("delegation_edge_id", revocationIDs.DelegationEdgeID).
 			Msg("denied: session revoked")
 		return
 	}
@@ -339,8 +348,8 @@ func (p *proxy) emitActionAudit(input gatewayAuditInput) {
 // merged query string, and the credential class STS chose for the resource. For
 // caracal_jwt mode the Caracal STS-issued bearer is forwarded; for provider_oauth /
 // provider_apikey the provider-native credential is substituted into the header the
-// upstream expects, and the Caracal JWT is exposed separately as X-Caracal-Identity so
-// Caracal-aware sidecars can still attribute the call.
+// upstream expects. The Caracal JWT is forwarded as X-Caracal-Identity only when
+// the resource/provider directive explicitly opts in for a trusted upstream.
 func buildUpstreamRequest(r *http.Request, upstreamURL *url.URL, caracalToken string, directive corests.UpstreamDirective, body io.ReadCloser, requestID string) (*http.Request, error) {
 	joinedPath := joinURLPath(upstreamURL.Path, r.URL.Path)
 	mergedQuery, err := mergeQuery(upstreamURL.RawQuery, r.URL.RawQuery)
@@ -379,7 +388,9 @@ func buildUpstreamRequest(r *http.Request, upstreamURL *url.URL, caracalToken st
 			value = scheme + " " + value
 		}
 		req.Header.Set(authHeader, value)
-		req.Header.Set("X-Caracal-Identity", caracalToken)
+		if directive.ForwardCaracalIdentity {
+			req.Header.Set("X-Caracal-Identity", caracalToken)
+		}
 	default:
 		scheme := directive.AuthScheme
 		if scheme == "" {
@@ -478,7 +489,9 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revoca
 func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations revocationChecker, ids tokenRevocationIDs) bool {
 	buf := make([]byte, 4*1024)
 	for {
-		if revocations.IsRevoked(ids.SID) || revocations.IsAgentRevoked(ids.AgentSessionID) {
+		if revocations.IsRevoked(ids.SID) ||
+			revocations.IsAgentRevoked(ids.AgentSessionID) ||
+			revocations.IsDelegationRevoked(ids.DelegationEdgeID) {
 			_ = src.Close()
 			return true
 		}
