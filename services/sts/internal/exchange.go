@@ -16,6 +16,7 @@ import (
 	"time"
 
 	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
+	corests "github.com/garudex-labs/caracal/packages/core/go/sts"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -29,6 +30,7 @@ const (
 	// or a fresh exchange and reconnect orchestrated by the SDK.
 	ttlPerCallSDK = 15 * time.Minute
 	ttlAmbient    = 60 * time.Minute
+	gatewayExchangeSkew = 60 * time.Second
 )
 
 type delegationProof struct {
@@ -61,6 +63,22 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		ttlSeconds = parsedTTL
 	}
 
+	requestID := r.Header.Get("X-Request-Id")
+	if requestID == "" {
+		id, err := uuid.NewV7()
+		if err != nil {
+			s.log.Error().Err(err).Msg("request id generation failed")
+			writeError(w, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "generate request id"))
+			return
+		}
+		requestID = id.String()
+	}
+	gatewayAuthenticated, gatewayErr := s.verifyGatewayExchange(r, requestID)
+	if gatewayErr != nil {
+		writeError(w, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "invalid gateway exchange signature"))
+		return
+	}
+
 	req := TokenExchangeRequest{
 		GrantType:           r.FormValue("grant_type"),
 		SubjectToken:        r.FormValue("subject_token"),
@@ -79,17 +97,7 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 		AgentSessionID:      r.FormValue("agent_session_id"),
 		DelegationEdgeID:    r.FormValue("delegation_edge_id"),
 		TTLSeconds:          ttlSeconds,
-	}
-
-	requestID := r.Header.Get("X-Request-Id")
-	if requestID == "" {
-		id, err := uuid.NewV7()
-		if err != nil {
-			s.log.Error().Err(err).Msg("request id generation failed")
-			writeError(w, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "generate request id"))
-			return
-		}
-		requestID = id.String()
+		GatewayAuthenticated: gatewayAuthenticated,
 	}
 
 	resp, challenge, code, apiErr := s.exchange(r.Context(), req, requestID)
@@ -106,6 +114,22 @@ func (s *Server) handleTokenExchange(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.log.Warn().Err(err).Str("request_id", requestID).Msg("failed to encode token response")
 	}
+}
+
+func (s *Server) verifyGatewayExchange(r *http.Request, requestID string) (bool, error) {
+	timestamp := r.Header.Get(corests.GatewayTimestampHeader)
+	signature := r.Header.Get(corests.GatewaySignatureHeader)
+	gatewayRequestID := r.Header.Get(corests.GatewayRequestHeader)
+	if timestamp == "" && signature == "" && gatewayRequestID == "" {
+		return false, nil
+	}
+	if gatewayRequestID != requestID {
+		return false, fmt.Errorf("gateway request id mismatch")
+	}
+	if err := corests.VerifyGatewayExchange(s.cfg.GatewayHMACKey, time.Now().UTC(), gatewayExchangeSkew, timestamp, gatewayRequestID, signature, []byte(r.PostForm.Encode())); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, requestID string) (*TokenResponse, *challengeState, int, *sharederr.CaracalError) {
@@ -418,7 +442,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		if resource.UpstreamURL != nil {
 			directive.URL = *resource.UpstreamURL
 		}
-		if resource.CredentialProviderID != nil {
+		if req.GatewayAuthenticated && resource.CredentialProviderID != nil {
 			userID, _ := subjectClaims["sub"].(string)
 			if userID != "" {
 				if grant, gerr := s.db.GetDelegatedGrant(ctx, zoneID, userID, resource.ID); gerr == nil && len(grant.AccessTokenCt) > 0 {
@@ -455,6 +479,12 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 	app, err := s.db.GetApplicationByID(ctx, appID, zoneID)
 	if err != nil {
 		return nil, "", err
+	}
+	if req.GatewayAuthenticated {
+		if req.SubjectToken == "" {
+			return nil, "", fmt.Errorf("gateway exchanges require subject_token")
+		}
+		return app, zoneID, nil
 	}
 	if app.ClientSecretHash != nil {
 		credential := req.ClientSecret
@@ -665,8 +695,8 @@ func (s *Server) validateAgentSessionOwnership(ctx context.Context, zoneID, appI
 
 // validateSessionReferences is the single source of truth for binding a token
 // exchange to user/agent sessions and delegation edges. When a delegation_edge_id
-// is present the source agent session's ownership is verified inside the
-// delegation block (source.ApplicationID == appID); otherwise the calling
+// is present the receiving target agent session's ownership is verified inside
+// the delegation block (target.ApplicationID == appID); otherwise the calling
 // application's ownership of the asserted agent_session_id is verified directly,
 // preventing peer-app forgery through either path.
 func (s *Server) validateSessionReferences(ctx context.Context, zoneID, appID string, req TokenExchangeRequest, hasSubjectToken bool) (*delegationProof, *sharederr.CaracalError) {
@@ -695,22 +725,22 @@ func (s *Server) validateSessionReferences(ctx context.Context, zoneID, appID st
 		return nil, nil
 	}
 	if req.AgentSessionID == "" {
-		return nil, sharederr.New(sharederr.AccessDenied, "delegation edge requires source agent session")
+		return nil, sharederr.New(sharederr.AccessDenied, "delegation edge requires target agent session")
 	}
 	edge, err := s.db.GetDelegationEdge(ctx, req.DelegationEdgeID)
 	if err != nil || edge.ZoneID != zoneID || edge.Status != "active" || !edge.ExpiresAt.After(now) || edge.RevokedAt != nil {
 		return nil, sharederr.New(sharederr.AccessDenied, "delegation edge inactive or expired")
 	}
-	if edge.SourceSessionID != req.AgentSessionID {
-		return nil, sharederr.New(sharederr.AccessDenied, "delegation edge source mismatch")
+	if edge.TargetSessionID != req.AgentSessionID {
+		return nil, sharederr.New(sharederr.AccessDenied, "delegation edge target mismatch")
 	}
 	source, err := s.db.GetAgentSession(ctx, edge.SourceSessionID)
-	if err != nil || !activeAgentSession(source, zoneID, now) || source.ApplicationID != appID {
-		return nil, sharederr.New(sharederr.AccessDenied, "delegation source inactive or unauthorized")
+	if err != nil || !activeAgentSession(source, zoneID, now) {
+		return nil, sharederr.New(sharederr.AccessDenied, "delegation source inactive or expired")
 	}
 	target, err := s.db.GetAgentSession(ctx, edge.TargetSessionID)
-	if err != nil || !activeAgentSession(target, zoneID, now) {
-		return nil, sharederr.New(sharederr.AccessDenied, "delegation target inactive or expired")
+	if err != nil || !activeAgentSession(target, zoneID, now) || target.ApplicationID != appID {
+		return nil, sharederr.New(sharederr.AccessDenied, "delegation target inactive or unauthorized")
 	}
 	if source.ApplicationID != edge.IssuerAppID || target.ApplicationID != edge.ReceiverAppID {
 		return nil, sharederr.New(sharederr.AccessDenied, "delegation application mismatch")

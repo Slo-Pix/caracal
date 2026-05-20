@@ -107,11 +107,15 @@ func (s *Server) consumePolicyInvalidations(ctx context.Context, consumer string
 func (s *Server) handleRevocation(ctx context.Context, msg streamMessage) error {
 	zoneID, _ := msg.Values["zone_id"].(string)
 	sid, _ := msg.Values["session_id"].(string)
+	agentSessionID, _ := msg.Values["agent_session_id"].(string)
 	if zoneID == "" {
 		return fmt.Errorf("missing zone_id")
 	}
+	if sid == "" && agentSessionID == "" {
+		return fmt.Errorf("missing session_id or agent_session_id")
+	}
 	if sid == "" {
-		return fmt.Errorf("missing session_id")
+		return nil
 	}
 	return s.db.RevokeSession(ctx, zoneID, sid)
 }

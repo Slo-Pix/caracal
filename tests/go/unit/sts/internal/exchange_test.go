@@ -433,6 +433,49 @@ func TestValidateSessionReferencesAcceptsActiveGraphEdge(t *testing.T) {
 	}
 }
 
+func TestValidateSessionReferencesRejectsSourceUsingDelegationEdge(t *testing.T) {
+	now := time.Now()
+	source := &AgentSession{
+		ID:            "agent-src",
+		ZoneID:        "zone1",
+		ApplicationID: "app1",
+		Status:        "active",
+		SpawnedAt:     now.Add(-time.Minute),
+		TTLSeconds:    600,
+	}
+	target := &AgentSession{
+		ID:            "agent-dst",
+		ZoneID:        "zone1",
+		ApplicationID: "app2",
+		Status:        "active",
+		SpawnedAt:     now.Add(-time.Minute),
+		TTLSeconds:    600,
+	}
+	db := &stubDB{
+		agentSessions: []*AgentSession{source, target},
+		edge: &DelegationEdge{
+			ID:              "edge1",
+			ZoneID:          "zone1",
+			SourceSessionID: source.ID,
+			TargetSessionID: target.ID,
+			IssuerAppID:     source.ApplicationID,
+			ReceiverAppID:   target.ApplicationID,
+			Scopes:          []string{"read"},
+			Status:          "active",
+			ExpiresAt:       now.Add(time.Minute),
+		},
+	}
+	srv := &Server{db: db}
+	_, err := srv.validateSessionReferences(context.Background(), "zone1", "app1", TokenExchangeRequest{
+		AgentSessionID:   source.ID,
+		DelegationEdgeID: "edge1",
+		Scope:            "read",
+	}, true)
+	if err == nil || err.Description != "delegation edge target mismatch" {
+		t.Fatalf("source agent must not consume target delegation edge, got %#v", err)
+	}
+}
+
 func TestValidateSessionReferencesRejectsDelegationBudget(t *testing.T) {
 	now := time.Now()
 	source := &AgentSession{
