@@ -26,6 +26,10 @@ const EndBody = z.object({
   reason: z.string().min(1).max(256).optional(),
 })
 
+const SpawnChildBody = BeginBody.extend({
+  parent_agent_session_id: z.string().min(1),
+}).omit({ parent_id: true })
+
 const ExchangeBody = z.object({
   zone_id: z.string().min(1),
   source_session_id: z.string().min(1),
@@ -36,6 +40,23 @@ const ExchangeBody = z.object({
   scopes: z.array(z.string().min(1)).default([]),
   constraints_json: z.record(z.string(), z.unknown()).default({}),
   expires_at: z.string().datetime(),
+})
+
+const DelegateToExistingAgentBody = z.object({
+  zone_id: z.string().min(1),
+  from_agent_session_id: z.string().min(1),
+  to_agent_session_id: z.string().min(1),
+  issuer_application_id: z.string().min(1),
+  receiver_application_id: z.string().min(1),
+  resource_id: z.string().min(1).nullable().default(null),
+  scopes: z.array(z.string().min(1)).default([]),
+  constraints_json: z.record(z.string(), z.unknown()).default({}),
+  expires_at: z.string().datetime(),
+})
+
+const RevokeDelegationBody = z.object({
+  zone_id: z.string().min(1),
+  delegation_edge_id: z.string().min(1),
 })
 
 const VerifyBody = z.object({
@@ -101,6 +122,25 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
     return reply.code(res.statusCode).send(res.json())
   })
 
+  fastify.post('/v1/spawn-child', async (req, reply) => {
+    if (await v1RateLimit(fastify, req, reply)) return
+    const body = SpawnChildBody.parse(req.body)
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/zones/${encodeURIComponent(body.zone_id)}/agents`,
+      headers: { authorization: bearerOf(req), 'content-type': 'application/json' },
+      payload: {
+        application_id: body.application_id,
+        subject_session_id: body.subject_session_id,
+        parent_id: body.parent_agent_session_id,
+        kind: body.kind,
+        capabilities: body.capabilities,
+        ...(body.ttl_seconds ? { ttl_seconds: body.ttl_seconds } : {}),
+      },
+    })
+    return reply.code(res.statusCode).send(res.json())
+  })
+
   fastify.post('/v1/exchange', async (req, reply) => {
     if (await v1RateLimit(fastify, req, reply)) return
     const body = ExchangeBody.parse(req.body)
@@ -112,6 +152,38 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
       payload,
     })
     return reply.code(res.statusCode).send(res.json())
+  })
+
+  fastify.post('/v1/delegate-to-existing-agent', async (req, reply) => {
+    if (await v1RateLimit(fastify, req, reply)) return
+    const body = DelegateToExistingAgentBody.parse(req.body)
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/zones/${encodeURIComponent(body.zone_id)}/delegations`,
+      headers: { authorization: bearerOf(req), 'content-type': 'application/json' },
+      payload: {
+        source_session_id: body.from_agent_session_id,
+        target_session_id: body.to_agent_session_id,
+        issuer_application_id: body.issuer_application_id,
+        receiver_application_id: body.receiver_application_id,
+        resource_id: body.resource_id,
+        scopes: body.scopes,
+        constraints_json: body.constraints_json,
+        expires_at: body.expires_at,
+      },
+    })
+    return reply.code(res.statusCode).send(res.json())
+  })
+
+  fastify.post('/v1/revoke-delegation', async (req, reply) => {
+    if (await v1RateLimit(fastify, req, reply)) return
+    const body = RevokeDelegationBody.parse(req.body)
+    const res = await fastify.inject({
+      method: 'PATCH',
+      url: `/zones/${encodeURIComponent(body.zone_id)}/delegations/${encodeURIComponent(body.delegation_edge_id)}/revoke`,
+      headers: { authorization: bearerOf(req) },
+    })
+    return reply.code(res.statusCode).send(res.statusCode === 204 ? undefined : res.json())
   })
 
   fastify.post('/v1/verify', async (req, reply) => {

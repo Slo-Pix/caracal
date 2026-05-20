@@ -30,6 +30,9 @@ function buildApp() {
   app.post('/zones/:zoneId/delegations', async (req, reply) => {
     return reply.code(201).send({ delegation_edge_id: 'edge-1', body: req.body })
   })
+  app.patch('/zones/:zoneId/delegations/:id/revoke', async (_req, reply) => {
+    return reply.code(200).send({ revoked: 1 })
+  })
 
   app.register(v1Routes)
   return app
@@ -79,6 +82,60 @@ describe('POST /v1/exchange', () => {
     expect(body.delegation_edge_id).toBe('edge-1')
     expect(body.body.zone_id).toBeUndefined()
     expect(body.body.source_session_id).toBe('s1')
+  })
+})
+
+describe('POST /v1/spawn-child', () => {
+  it('dispatches to spawn with the named parent session field', async () => {
+    const app = buildApp()
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/spawn-child',
+      payload: {
+        zone_id: 'z1',
+        application_id: 'app-1',
+        subject_session_id: 'sess-1',
+        parent_agent_session_id: 'parent-1',
+      },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(res.json()).toMatchObject({ agent_session_id: 'sess-spawned' })
+  })
+})
+
+describe('POST /v1/delegate-to-existing-agent', () => {
+  it('maps clear delegation names to the edge route', async () => {
+    const app = buildApp()
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/delegate-to-existing-agent',
+      payload: {
+        zone_id: 'z1',
+        from_agent_session_id: 'source-1',
+        to_agent_session_id: 'target-1',
+        issuer_application_id: 'app-1',
+        receiver_application_id: 'app-2',
+        scopes: ['read'],
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = res.json()
+    expect(body.body.source_session_id).toBe('source-1')
+    expect(body.body.target_session_id).toBe('target-1')
+  })
+})
+
+describe('POST /v1/revoke-delegation', () => {
+  it('dispatches to delegation revoke', async () => {
+    const app = buildApp()
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/revoke-delegation',
+      payload: { zone_id: 'z1', delegation_edge_id: 'edge-1' },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toMatchObject({ revoked: 1 })
   })
 })
 

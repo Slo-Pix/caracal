@@ -4,7 +4,7 @@ description: How the Coordinator manages agent sessions, tracks the delegation g
 pageType: architecture
 ---
 
-The Coordinator is the runtime bookkeeper for agent authority. It records who exists (sessions), tracks how authority flows between agents (delegation edges), and publishes the events that let the STS and Gateway enforce revocation in near real time. The SDK wraps these operations into `spawn()` and `delegate()` calls that bind authority to async execution contexts.
+The Coordinator is the runtime bookkeeper for agent authority. It records who exists (sessions), tracks how authority flows between agents (delegation edges), and publishes the events that let the STS and Gateway enforce revocation in near real time. The SDK and v1 façade expose these as verbs: spawn a child, delegate to an existing agent, revoke a delegation, and terminate a subtree.
 
 ## Agent sessions
 
@@ -48,6 +48,17 @@ Termination cascades. The Coordinator runs a recursive CTE that walks the subtre
 ## Delegation edges
 
 A delegation edge connects two sessions. When agent A creates an edge to agent B, B can use that edge in a token exchange to obtain authority scoped to what the edge permits.
+
+Normal integrations should prefer the verb-shaped façade:
+
+| Intent | Route |
+| --- | --- |
+| Spawn a child session | `POST /v1/spawn-child` |
+| Delegate to an existing receiving session | `POST /v1/delegate-to-existing-agent` |
+| Revoke a delegation | `POST /v1/revoke-delegation` |
+| Terminate a session subtree | `POST /v1/end` |
+
+The lower-level `/zones/{zoneId}/delegations` route remains the control-plane primitive behind those verbs.
 
 **Creating an edge (`POST /v1/exchange`):**
 
