@@ -79,6 +79,7 @@ The STS performs these checks in order. The first failure terminates the request
 | `auth_header` | string | Header name the upstream expects. Required and explicit for API-key provider directives. |
 | `auth_scheme` | string | Token prefix (e.g., `Bearer`) |
 | `provider_token` | string | Present only on authenticated Gateway broker exchanges when `auth_mode` is `provider_oauth` or `provider_apikey`; the actual upstream credential is not returned to normal STS clients |
+| `forward_caracal_identity` | boolean | Present only when provider config explicitly allows Gateway to forward `X-Caracal-Identity`; default false |
 | `expires_at` | integer | Unix timestamp when the provider token expires; present only when `provider_token` is set |
 
 ### JWT claims

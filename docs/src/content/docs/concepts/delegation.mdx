@@ -106,6 +106,7 @@ The revocation event includes both identifiers when available:
 | ----- | ------------------ |
 | `session_id` | STS `sessions.id`; lets STS mark the credential session revoked and reject future exchanges |
 | `agent_session_id` | Coordinator `agent_sessions.id`; lets Gateway reject already-issued mandates by agent authority record |
+| `delegation_edge_id` | Revoked edge identifier; lets Gateway reject already-issued delegated mandates even if an agent-session event is delayed |
 
 This dual identifier is what connects the session tree, STS session state, and already-issued mandates.
 

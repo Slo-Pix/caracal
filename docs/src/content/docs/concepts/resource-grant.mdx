@@ -69,7 +69,7 @@ At each stage, scopes can only be narrowed, never widened. An exchange request c
 
 A resource can be associated with a credential provider via `credential_provider_id`. When this is set, the STS retrieves the relevant provider credential for authenticated Gateway broker exchanges and includes it only in the internal upstream directive returned to the Gateway.
 
-The Gateway reads the `upstreams` directive and substitutes the provider credential as the Authorization header sent to the upstream. Normal STS clients do not receive the provider-native credential. The agent only presents its mandate to the Gateway, and the Gateway handles provider authentication.
+The Gateway reads the `upstreams` directive and substitutes the provider credential as the Authorization header sent to the upstream. Normal STS clients do not receive the provider-native credential. The agent only presents its mandate to the Gateway, and the Gateway handles provider authentication. Caracal identity is not forwarded to provider-native upstreams unless provider config explicitly sets `forward_caracal_identity: true` for a trusted service you control.
 
 Provider `kind` values:
 

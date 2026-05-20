@@ -128,7 +128,7 @@ sessions.id ("sid" in mandate)
             └─ delegation_edges.source_session_id → delegation_edges.target_session_id
 ```
 
-When an agent is terminated, the Coordinator publishes both the STS session ID and the agent session ID. The STS persists the STS session revocation, and the Gateway tracks both IDs so already-issued mandates are blocked even though their signatures remain valid.
+When an agent is terminated, the Coordinator publishes both the STS session ID and the agent session ID. When a delegation is revoked, the event also carries the delegation edge ID. The STS persists the STS session revocation, and the Gateway tracks session, agent-session, and delegation-edge IDs so already-issued mandates are blocked even though their signatures remain valid.
 
 ## Next steps
 

@@ -39,7 +39,7 @@ Every request processed by the Gateway follows this path:
 4. **Check JTI** — checks Redis to determine whether the JWT's `jti` claim has already been seen. Returns 401 if a per-call token is replayed.
 5. **Check revocation** — checks subject and agent session revocation. Returns 401 if either is revoked.
 6. **Exchange mandate** — calls `POST {STS_URL}/oauth/2/token` with the caller's token as `subject_token`, the target resource as `resource`, and an internal Gateway HMAC assertion. Returns 401 or 403 if the STS denies.
-7. **Forward request** — sends the original request to the upstream URL, replacing the `Authorization` header with the STS mandate or provider-native credential chosen by STS. Adds `X-Request-Id` and trace headers.
+7. **Forward request** — sends the original request to the upstream URL, replacing the `Authorization` header with the STS mandate or provider-native credential chosen by STS. Adds `X-Request-Id` and trace headers. Provider-native mode does not forward Caracal identity unless provider config explicitly opts in.
 8. **Audit and stream response** — emits a safe audit event, then copies the upstream response body back to the client.
 
 If the upstream returns an error, the Gateway returns 502 (unreachable) or 504 (timeout).

@@ -32,9 +32,9 @@ Fetches the zone's JWKS from `{STS_URL}/.well-known/jwks.json?zone_id=<zone>`. V
 
 Checks whether the token's `jti` claim has been seen. Tokens with `"use": "ambient"` are reusable; tokens with `"use": "per_call"` are single-use. Single-use JTIs are stored in Redis with a TTL equal to the token's remaining lifetime. Returns `401 InvalidToken` if a per-call token is replayed.
 
-### 6. Session revocation check
+### 6. Authority revocation check
 
-Extracts the `sid` and `agent_session_id` claims and checks the in-memory revocation store. Returns `401 InvalidToken` if the subject session or agent session is revoked.
+Extracts the `sid`, `agent_session_id`, and `delegation_edge_id` claims and checks the in-memory revocation store. Returns `401 InvalidToken` if the STS session, agent session, or delegation edge is revoked.
 
 ---
 
@@ -87,7 +87,7 @@ After a successful exchange, the Gateway sends the request to the upstream URL r
 | `provider_oauth` | `{auth_header}: {auth_scheme} {provider_token}` |
 | `provider_apikey` | `{auth_header}: {provider_token}`, or `{auth_scheme} {provider_token}` when `auth_scheme` is configured |
 
-When `auth_mode` is `provider_oauth` or `provider_apikey`, the inbound `Authorization` header is removed before forwarding and the Caracal mandate is exposed only as `X-Caracal-Identity: <mandate>` for Caracal-aware upstream sidecars.
+When `auth_mode` is `provider_oauth` or `provider_apikey`, the inbound `Authorization` header is removed before forwarding. The Caracal mandate is not forwarded to provider-native upstreams by default. `X-Caracal-Identity: <mandate>` is sent only when the STS upstream directive sets `forward_caracal_identity: true`, which should be reserved for trusted internal services, controlled MCP servers, or sidecars that intentionally verify Caracal identity.
 
 Provider-native credentials are never returned to normal STS clients. They appear only in the internal Gateway-authenticated exchange response and are immediately substituted into the upstream request.
 
@@ -100,6 +100,7 @@ Provider-native credentials are never returned to normal STS clients. They appea
 | `X-Forwarded-For` | Client IP (replaced, never appended) |
 | `X-Forwarded-Proto` | `https` or `http` |
 | `X-Forwarded-Host` | Original `Host` header |
+| `X-Caracal-Identity` | Optional; forwarded only when `forward_caracal_identity` is true |
 | `X-Caracal-Token-Expires-In` | Seconds until the mandate expires (set on the response) |
 
 **Stripped or replaced before forwarding:** inbound `Authorization`, `X-Caracal-Client-ID`, `X-Caracal-Resource`, `X-Caracal-Upstream`, `X-Caracal-Identity`, the selected upstream auth header, and all RFC 7230 hop-by-hop headers.

@@ -78,6 +78,8 @@ Providers define credential metadata for upstream authentication. Registration s
 
 If no active provider grant exists for the configured resource/provider pair, STS denies the Gateway exchange instead of falling back to a different provider or exposing provider credentials to the caller. Malformed provider config is rejected; API-key providers must declare the exact upstream header before STS returns a brokered directive.
 
+By default, provider-native forwarding does **not** send the Caracal mandate to the upstream. Add `"forward_caracal_identity": true` only for upstreams you control, such as an internal sidecar or controlled MCP server that intentionally verifies `X-Caracal-Identity`. Leave it unset for third-party SaaS providers.
+
 ### API key provider
 
 ```bash
@@ -93,7 +95,8 @@ caracal provider create \
 ```json
 {
   "api_key": "<provider-api-key>",
-  "header_name": "X-Api-Key"
+  "header_name": "X-Api-Key",
+  "forward_caracal_identity": false
 }
 ```
 
@@ -119,7 +122,8 @@ caracal provider create \
   "allowed_token_hosts": ["auth.payments.example.com"],
   "client_id": "svc-caracal",
   "client_secret": "super-secret-value",
-  "scopes": ["payments.read", "payments.write"]
+  "scopes": ["payments.read", "payments.write"],
+  "forward_caracal_identity": false
 }
 ```
 
