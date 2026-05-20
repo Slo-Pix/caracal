@@ -67,6 +67,8 @@ All routes are zone-scoped: `/zones/:zoneId/...`
 | Max children per agent | 10 |
 | Max agent sessions per zone | 50 |
 | Max agent sessions per application | 200 |
+| Max capabilities per agent | 32 |
+| Max capability length | 64 characters |
 
 Spawn is idempotent — pass an `Idempotency-Key` header to guarantee at-most-one creation across concurrent callers.
 

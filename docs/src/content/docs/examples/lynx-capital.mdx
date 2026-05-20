@@ -1,12 +1,12 @@
 ---
 title: "Lynx Capital: Autonomous Payouts"
-description: A FastAPI and LangGraph multi-agent swarm that processes a weekly invoice batch across 5 regions through 14 financial provider integrations — demonstrating Caracal's delegation, ephemeral agent, and multi-protocol transport patterns.
+description: A FastAPI and LangGraph multi-agent swarm that processes a weekly invoice batch across 5 regions through 14 financial provider fixtures while demonstrating Caracal delegation and ephemeral agent authority patterns.
 pageType: workflow
 ---
 
 The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, TUI, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
 
-The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads — specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and multi-protocol transport across REST, gRPC, MCP, and SSE endpoints.
+The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads — specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and application-level provider clients across REST, gRPC, MCP, and SSE fixtures.
 
 ---
 
@@ -18,7 +18,7 @@ The application is not a tutorial scaffold. It is a production-pattern reference
 
 **Exception agents.** When anomalies are detected, an Exception agent is spawned with investigative-only scope. It can read vendor and compliance data but is explicitly not permitted to execute payments. The scope boundary is enforced at the authorization layer.
 
-**Multi-protocol transport.** Within the same orchestration run, agents call external services over REST (Mercury Bank, Wise, NetSuite), gRPC (Treasury Operations), MCP (Vendor Portal), and SSE streaming (FX rates). All calls carry the agent's identity and are traceable through the full event stream.
+**Application-level provider transport.** Within the same orchestration run, agents call local provider fixtures over REST (Mercury Bank, Wise, NetSuite), gRPC (Treasury Operations), MCP (Vendor Portal), and SSE streaming (FX rates). Caracal enforces the agent/session authority before those calls; non-HTTP transports are application connector examples, not automatic Gateway brokering paths.
 
 **Full traceability.** Every action — spawn, delegation, tool call, service call, result — emits a typed event. The complete lineage of who spawned whom, what tools they called, and what the external services returned is reconstructable from the event log.
 

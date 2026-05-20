@@ -76,7 +76,7 @@ The STS performs these checks in order. The first failure terminates the request
 | --- | --- | --- |
 | `url` | string | Upstream service URL; used by the Gateway to forward the request |
 | `auth_mode` | string | `caracal_jwt` — forward the Caracal mandate; `provider_oauth` — inject a brokered OAuth2 token; `provider_apikey` — inject a raw credential |
-| `auth_header` | string | Header name the upstream expects (e.g., `Authorization`) |
+| `auth_header` | string | Header name the upstream expects. Required and explicit for API-key provider directives. |
 | `auth_scheme` | string | Token prefix (e.g., `Bearer`) |
 | `provider_token` | string | Present only on authenticated Gateway broker exchanges when `auth_mode` is `provider_oauth` or `provider_apikey`; the actual upstream credential is not returned to normal STS clients |
 | `expires_at` | integer | Unix timestamp when the provider token expires; present only when `provider_token` is set |

@@ -87,7 +87,7 @@ After a successful exchange, the Gateway sends the request to the upstream URL r
 | `provider_oauth` | `{auth_header}: {auth_scheme} {provider_token}` |
 | `provider_apikey` | `{auth_header}: {provider_token}`, or `{auth_scheme} {provider_token}` when `auth_scheme` is configured |
 
-When `auth_mode` is `provider_oauth` or `provider_apikey`, the Caracal mandate is exposed as a separate `X-Caracal-Identity: <mandate>` header for Caracal-aware upstream sidecars.
+When `auth_mode` is `provider_oauth` or `provider_apikey`, the inbound `Authorization` header is removed before forwarding and the Caracal mandate is exposed only as `X-Caracal-Identity: <mandate>` for Caracal-aware upstream sidecars.
 
 Provider-native credentials are never returned to normal STS clients. They appear only in the internal Gateway-authenticated exchange response and are immediately substituted into the upstream request.
 
@@ -102,7 +102,7 @@ Provider-native credentials are never returned to normal STS clients. They appea
 | `X-Forwarded-Host` | Original `Host` header |
 | `X-Caracal-Token-Expires-In` | Seconds until the mandate expires (set on the response) |
 
-**Stripped before forwarding:** `X-Caracal-Client-ID`, `X-Caracal-Resource`, `X-Caracal-Upstream`, `X-Caracal-Identity` (inbound), and all RFC 7230 hop-by-hop headers.
+**Stripped or replaced before forwarding:** inbound `Authorization`, `X-Caracal-Client-ID`, `X-Caracal-Resource`, `X-Caracal-Upstream`, `X-Caracal-Identity`, the selected upstream auth header, and all RFC 7230 hop-by-hop headers.
 
 The upstream URL is constructed by joining the upstream base path with the inbound request path. Query strings are merged; upstream values take precedence on conflicts. Path traversal attempts (`../`) are rejected with `400 InvalidToken`.
 

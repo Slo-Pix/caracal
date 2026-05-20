@@ -61,6 +61,8 @@ Spawn a new agent session. Equivalent to `POST /v1/begin`.
 | Max children per agent | 10 |
 | Max agents per zone | 50 |
 | Max agents per application | 200 |
+| Max capabilities per agent | 32 |
+| Max capability length | 64 characters |
 
 **Validation:** `subject_session_id` must reference an active session. If `parent_id` is set, the parent must be active and the caller must own the parent's application or hold `coordinator.spawn_under:{parentAppId}`.
 

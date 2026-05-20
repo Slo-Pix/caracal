@@ -73,10 +73,10 @@ Providers define credential metadata for upstream authentication. Registration s
 | Kind | Runtime behavior |
 | --- | --- |
 | `oauth2` / `oidc` | Forwards a user-bound delegated provider access token as a bearer-style provider credential. Refresh is supported when the active provider grant has an encrypted refresh token and provider config includes `token_endpoint`. |
-| `apikey` | Forwards an encrypted provider grant value as an API-key credential using `header_name` or `auth_header` from provider config. Caracal does not mint API keys; the key must already exist in the provider-grant storage path. |
+| `apikey` | Forwards an encrypted provider grant value as an API-key credential using the required `header_name` or `auth_header` from provider config. Caracal does not mint API keys; the key must already exist in the provider-grant storage path. |
 | `workload` | Registration metadata only in the current OSS runtime. Workload assertion minting is not brokered by STS/Gateway yet. |
 
-If no active provider grant exists for the configured resource/provider pair, STS denies the Gateway exchange instead of falling back to a different provider or exposing provider credentials to the caller.
+If no active provider grant exists for the configured resource/provider pair, STS denies the Gateway exchange instead of falling back to a different provider or exposing provider credentials to the caller. Malformed provider config is rejected; API-key providers must declare the exact upstream header before STS returns a brokered directive.
 
 ### API key provider
 
@@ -98,6 +98,8 @@ caracal provider create \
 ```
 
 The `api_key` field matches the credential encryption regex (`/(secret|password|token|api[_-]?key|…)/i`), so it is encrypted at rest under the zone KEK.
+
+`header_name` and `auth_header` are mutually equivalent for API-key forwarding. One of them must be present and must be a valid HTTP header name.
 
 ### OAuth2 provider
 
