@@ -530,7 +530,7 @@ volumes:
   gatewayReplay:
 
 # The control service is disabled by default. Start it explicitly with:
-#   docker compose --env-file infra/docker/.env -f infra/docker/docker-compose.yml --profile control up --build control
+#   docker compose --env-file infra/docker/dev.env -f infra/docker/docker-compose.yml --profile control up --build control
 #
 # CARACAL_CONTROL_ENABLED=true, STS_JWKS_URL, STS_ISSUER_URL, and CONTROL_AUDIENCE
-# must be set in infra/docker/.env before enabling this profile.
+# must be set in dev.env or a local override file before enabling this profile.

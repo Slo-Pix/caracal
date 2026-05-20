@@ -72,8 +72,10 @@ CLI and TUI are exact alternatives over the same engine.
 The control service is an OAuth-protected HTTP API hosted by the engine for any external client (script, AI agent, workflow, or another instance of CLI/TUI) that needs to drive Caracal programmatically. It is off by default.
 
 ```bash
-docker compose --env-file infra/docker/dev.env --env-file infra/docker/local.env -f infra/docker/docker-compose.yml --profile control up --build control   # start the surface
+docker compose --env-file infra/docker/dev.env -f infra/docker/docker-compose.yml --profile control up --build control   # start the surface
 ```
+
+If you created `infra/docker/local.env` for operator overrides, pass it after `dev.env` so local entries win.
 
 Clients authenticate with a standard OAuth2 client-credentials flow against STS.
 
