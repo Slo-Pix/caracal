@@ -132,6 +132,8 @@ Fields:
 
 **Gateway consumer (`gateway-revocation`):** Updates an in-memory `revocationStore`. On every inbound request the Gateway checks `sid`, `root_sid`, `agent_session_id`, and `delegation_edge_id` from the mandate. If any anchor is revoked, the request is rejected with HTTP 401. During active streaming responses, the Gateway checks at every 4 KB chunk boundary and truncates the stream if revocation is detected. Revocation entries are retained for 24 hours and garbage-collected on a 30-minute cycle.
 
+Gateway replicas also load a PostgreSQL revocation snapshot at startup and refresh it periodically. The stream is the low-latency path; the snapshot is the durable recovery path for cold starts, Redis lag, or replica restarts.
+
 ---
 
 ## Policy invalidation stream detail

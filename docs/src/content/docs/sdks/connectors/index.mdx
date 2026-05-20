@@ -35,6 +35,18 @@ inbound request
 
 The Redis and Postgres connectors sit on a separate axis — they are storage backends consumed by the verification path, not middleware themselves.
 
+## Certified adapter requirements
+
+Provider SDKs often hide their HTTP, gRPC, queue, or streaming transport. If a provider SDK cannot call the Gateway directly, wrap it with a Caracal-certified adapter before using it in production. A certified adapter must:
+
+- acquire Caracal mandates through the SDK or Gateway path instead of holding provider-native credentials in agent code;
+- attach Caracal authorization and trace context to every provider operation it controls;
+- verify mandates and revocation when it acts as a direct resource rather than a Gateway-proxied resource;
+- emit action-result audit events with request ID, resource, provider operation, status, latency, result class, and revocation interruption state;
+- avoid forwarding Caracal identity tokens to third-party providers unless the resource is explicitly configured as a trusted sidecar.
+
+The safe default is to route provider SDK traffic through the Gateway. Direct adapters are for transports the Gateway cannot proxy or for trusted internal services that can enforce the same verification, revocation, and audit boundaries.
+
 ## Production revocation
 
 The in-memory `RevocationStore` from `@caracalai/revocation` or `caracalai-revocation` is not appropriate for production multi-replica deployments. Replace it with `RedisRevocationStore` from the Redis connector. Pair it with `RedisRevocationConsumer` to automatically populate the store from the `caracal.sessions.revoke` stream.

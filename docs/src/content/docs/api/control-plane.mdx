@@ -292,6 +292,29 @@ Providers define upstream credential metadata used by STS/Gateway brokered forwa
 
 Policies are Rego modules. Policy versions are immutable — once created, a version's content cannot change. Add a new version to revise the policy's logic.
 
+Policy source must use `package caracal.authz` and define `result`. The validator rejects host, network, clock, random, and OPA-runtime built-ins because authorization evaluation runs inside STS.
+
+### `POST /v1/policies/validate`
+
+Validate a policy before saving or activating it.
+
+**Request body:**
+
+| Field | Type | Required |
+| --- | --- | --- |
+| `content` | string | Yes |
+
+**Response 200:**
+
+```json
+{
+  "valid": true,
+  "warnings": ["missing_requested_scope_check"]
+}
+```
+
+Warnings are advisory checks for risky policy shapes such as default-allow results or policies that do not inspect requested scopes. Invalid policies return `422 invalid_rego` with the validation detail.
+
 ### `GET /v1/zones/{zoneId}/policies`
 
 **Response 200:** Array of policy objects (without version content).

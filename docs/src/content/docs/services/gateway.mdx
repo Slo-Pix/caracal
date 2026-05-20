@@ -92,6 +92,8 @@ The Gateway subscribes to the `caracal.sessions.revoke` Redis stream using a con
 
 Revocation propagates from the API → Redis stream → Gateway's in-process set in under 5 seconds under normal conditions. Tokens issued before revocation that have not been used are rejected on the next request when their current `sid`, inherited `root_sid`, `agent_session_id`, or `delegation_edge_id` matches revocation state.
 
+At startup and on a periodic background refresh, the Gateway also loads a durable revocation snapshot from PostgreSQL. The snapshot covers revoked STS sessions, suspended or terminated agent sessions, and revoked delegation edges, so a fresh Gateway replica does not depend only on replaying Redis stream history before it can reject known-revoked authority.
+
 ---
 
 ## TLS and mode
@@ -124,7 +126,7 @@ If neither file is set, the Gateway serves plain HTTP. Use that only for the loc
 ## Startup sequence
 
 1. Parse configuration; validate production security constraints (TLS files, STS HTTPS).
-2. Connect to PostgreSQL; load bindings.
+2. Connect to PostgreSQL; load bindings and the revocation snapshot.
 3. Create STS client.
 4. Create JWKS cache.
 5. Create upstream guard (SSRF allowlist).
@@ -132,7 +134,7 @@ If neither file is set, the Gateway serves plain HTTP. Use that only for the loc
 7. Create JTI tracker and audit client.
 8. Replay pending audit events from disk.
 9. Start binding refresh goroutine (every 30 s).
-10. Start revocation consumer goroutine.
+10. Start revocation consumer and snapshot refresh goroutines.
 11. Listen on `0.0.0.0:8081`; use TLS when both `TLS_CERT_FILE` and `TLS_KEY_FILE` are set.
 
 ---
@@ -143,7 +145,7 @@ The Gateway is stateless per request. Scale horizontally for throughput. Per-ins
 
 - **JWKS cache** — per-zone entries rebuilt on miss or TTL expiry.
 - **Bindings** — whole binding table, refreshed every 30 s.
-- **Revocation set** — in-process set populated from Redis stream. Each replica consumes its own view of the stream. New replicas start with an empty revocation set and fill it as stream messages arrive, so there is a brief window after cold start where a just-revoked session might be accepted. Use Redis JTI tracking to close this window.
+- **Revocation set** — in-process set populated from the PostgreSQL snapshot and Redis stream. Each replica loads durable revoked authority before serving, then consumes its own view of the stream for near-real-time updates. Redis JTI tracking still enforces replay resistance for Gateway-only mandates.
 
 ---
 
