@@ -54,6 +54,12 @@ type replayTracker interface {
 
 type revocationChecker interface {
 	IsRevoked(sid string) bool
+	IsAgentRevoked(agentSessionID string) bool
+}
+
+type tokenRevocationIDs struct {
+	SID            string
+	AgentSessionID string
 }
 
 func newProxy(sts *stsClient, jwks tokenVerifier, guard *upstreamGuard, log zerolog.Logger, maxBytes int64, upstreamTimeout time.Duration, bindings *bindingStore, tracker replayTracker, revocations revocationChecker, metrics *GatewayMetrics) *proxy {
@@ -183,12 +189,16 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sid := jwtSID(bearer)
-	if p.revocations.IsRevoked(sid) {
+	revocationIDs := tokenRevocationIDs{SID: jwtSID(bearer), AgentSessionID: jwtAgentSessionID(bearer)}
+	if p.revocations.IsRevoked(revocationIDs.SID) || p.revocations.IsAgentRevoked(revocationIDs.AgentSessionID) {
 		writeErr(w, requestID, http.StatusUnauthorized, sharederr.InvalidToken, "session revoked")
 		p.metrics.RequestsDenied.Add(1)
 		p.metrics.DenialsRevoked.Add(1)
-		logger.Info().Int("status", http.StatusUnauthorized).Str("sid", sid).Msg("denied: session revoked")
+		logger.Info().
+			Int("status", http.StatusUnauthorized).
+			Str("sid", revocationIDs.SID).
+			Str("agent_session_id", revocationIDs.AgentSessionID).
+			Msg("denied: session revoked")
 		return
 	}
 
@@ -247,7 +257,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if exp.After(time.Now()) {
 		w.Header().Set("X-Caracal-Token-Expires-In", strconv.FormatInt(int64(time.Until(exp).Seconds()), 10))
 	}
-	copyResponse(w, resp, p.revocations, sid)
+	copyResponse(w, resp, p.revocations, revocationIDs)
 	p.metrics.RequestsAllowed.Add(1)
 	logger.Info().
 		Int("status", resp.StatusCode).
@@ -364,7 +374,7 @@ func joinURLPath(upstreamPath, requestPath string) string {
 // consults revocations: if the session id bound to the token is revoked mid-stream the
 // upstream body is closed and the response is truncated so leaked tokens cannot
 // keep streaming indefinitely after revocation.
-func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revocationChecker, sid string) {
+func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revocationChecker, ids tokenRevocationIDs) {
 	// X-Caracal-Identity is the gateway-side mirror of the Caracal JWT for
 	// provider-native auth modes. Echoing it back to clients would surface a
 	// short-TTL but still usable bearer; strip it before fan-out.
@@ -383,7 +393,7 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revoca
 	w.Header().Add("Trailer", "X-Caracal-Revoked")
 	w.WriteHeader(resp.StatusCode)
 	flusher.Flush()
-	if streamCopy(w, resp.Body, flusher, revocations, sid) {
+	if streamCopy(w, resp.Body, flusher, revocations, ids) {
 		w.Header().Set("X-Caracal-Revoked", "true")
 	}
 }
@@ -393,10 +403,10 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revoca
 // stream if the session has been revoked while data is in flight. Returns true when
 // the stream was truncated due to revocation so the caller can emit the
 // X-Caracal-Revoked trailer.
-func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations revocationChecker, sid string) bool {
+func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations revocationChecker, ids tokenRevocationIDs) bool {
 	buf := make([]byte, 4*1024)
 	for {
-		if revocations.IsRevoked(sid) {
+		if revocations.IsRevoked(ids.SID) || revocations.IsAgentRevoked(ids.AgentSessionID) {
 			_ = src.Close()
 			return true
 		}

@@ -26,8 +26,9 @@ const stsErrorBodyLimit = 16 * 1024
 
 // stsClient performs token exchanges against the configured STS.
 type stsClient struct {
-	url    string
-	client *http.Client
+	url             string
+	exchangeHMACKey []byte
+	client          *http.Client
 }
 
 // stsResult holds the successful token and upstream directive from a single Exchange call.
@@ -46,7 +47,7 @@ type exchangeOutcome struct {
 	InternalErr error
 }
 
-func newSTSClient(stsURL string, timeout time.Duration) *stsClient {
+func newSTSClient(stsURL string, timeout time.Duration, exchangeHMACKey []byte) *stsClient {
 	transport := &http.Transport{
 		MaxIdleConns:          200,
 		MaxIdleConnsPerHost:   100,
@@ -57,8 +58,9 @@ func newSTSClient(stsURL string, timeout time.Duration) *stsClient {
 		ResponseHeaderTimeout: timeout,
 	}
 	return &stsClient{
-		url:    strings.TrimRight(stsURL, "/"),
-		client: &http.Client{Timeout: timeout, Transport: transport},
+		url:             strings.TrimRight(stsURL, "/"),
+		exchangeHMACKey: exchangeHMACKey,
+		client:          &http.Client{Timeout: timeout, Transport: transport},
 	}
 }
 
@@ -91,8 +93,9 @@ func (c *stsClient) Exchange(ctx context.Context, subjectToken string, bind bind
 		"subject_token_type": {"urn:ietf:params:oauth:token-type:access_token"},
 		"resource":           {resource},
 	}
+	body := form.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.url+"/oauth/2/token", strings.NewReader(form.Encode()))
+		c.url+"/oauth/2/token", strings.NewReader(body))
 	if err != nil {
 		return exchangeOutcome{Status: http.StatusInternalServerError,
 			ClientErr: sharederr.New(sharederr.STSUnavailable, "sts request build failed"), InternalErr: err}
@@ -102,6 +105,12 @@ func (c *stsClient) Exchange(ctx context.Context, subjectToken string, bind bind
 	req.Header.Set("Accept", "application/json")
 	if requestID != "" {
 		req.Header.Set("X-Request-Id", requestID)
+	}
+	if c.exchangeHMACKey != nil {
+		timestamp := time.Now().UTC()
+		req.Header.Set(corests.GatewayTimestampHeader, fmt.Sprintf("%d", timestamp.Unix()))
+		req.Header.Set(corests.GatewayRequestHeader, requestID)
+		req.Header.Set(corests.GatewaySignatureHeader, corests.SignGatewayExchange(c.exchangeHMACKey, timestamp, requestID, []byte(body)))
 	}
 
 	start := time.Now()

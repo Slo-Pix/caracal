@@ -34,6 +34,7 @@ type Config struct {
 	Port                  string
 	LogLevel              string
 	STSURL                string
+	STSExchangeHMACKey    []byte
 	STSTimeout            time.Duration
 	UpstreamTimeout       time.Duration
 	ReadHeaderTimeout     time.Duration
@@ -55,15 +56,20 @@ type Config struct {
 // loadConfig reads configuration from environment variables and returns an
 // error if any required value is missing or invalid.
 func loadConfig() (Config, error) {
-	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY", "AUDIT_HMAC_KEY")
+	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY", "AUDIT_HMAC_KEY", "GATEWAY_STS_HMAC_KEY")
 	if missing := config.MissingRequired("STS_URL", "DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY"); len(missing) > 0 {
 		return Config{}, fmt.Errorf("required env vars missing: %s", strings.Join(missing, ", "))
+	}
+	exchangeKey, err := decodeHexKey("GATEWAY_STS_HMAC_KEY", os.Getenv("GATEWAY_STS_HMAC_KEY"))
+	if err != nil {
+		return Config{}, err
 	}
 	cfg := Config{
 		Mode:                  config.Mode(),
 		Port:                  config.Getenv("PORT", defaultPort),
 		LogLevel:              config.Getenv("LOG_LEVEL", "info"),
 		STSURL:                os.Getenv("STS_URL"),
+		STSExchangeHMACKey:    exchangeKey,
 		STSTimeout:            config.DurationEnv("STS_TIMEOUT", defaultSTSTimeout),
 		UpstreamTimeout:       config.DurationEnv("UPSTREAM_TIMEOUT", defaultUpstreamTO),
 		ReadHeaderTimeout:     config.DurationEnv("READ_HEADER_TIMEOUT", defaultReadHeader),
@@ -126,6 +132,9 @@ func (c Config) validate() error {
 	if published && len(c.AuditHMACKey) == 0 {
 		return fmt.Errorf("AUDIT_HMAC_KEY is required when CARACAL_MODE=rc or CARACAL_MODE=stable")
 	}
+	if published && len(c.STSExchangeHMACKey) == 0 {
+		return fmt.Errorf("GATEWAY_STS_HMAC_KEY is required when CARACAL_MODE=rc or CARACAL_MODE=stable")
+	}
 	port, err := strconv.Atoi(c.Port)
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("PORT must be a valid TCP port (1-65535)")
@@ -140,6 +149,17 @@ func (c Config) validate() error {
 		return fmt.Errorf("READ_TIMEOUT must be greater than STS_TIMEOUT plus UPSTREAM_TIMEOUT")
 	}
 	return nil
+}
+
+func decodeHexKey(name, raw string) ([]byte, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	key, err := hex.DecodeString(raw)
+	if err != nil || len(key) < 32 {
+		return nil, fmt.Errorf("gateway config: %s must be hex-encoded with at least 32 bytes", name)
+	}
+	return key, nil
 }
 
 // isInternalHost reports whether host is a docker service name or loopback target
