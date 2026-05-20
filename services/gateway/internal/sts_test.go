@@ -22,7 +22,7 @@ func TestSTSClientHealthAcceptsHealthySTS(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newSTSClient(srv.URL, time.Second)
+	client := newSTSClient(srv.URL, time.Second, nil)
 	if err := client.Health(context.Background()); err != nil {
 		t.Fatalf("expected healthy STS, got %v", err)
 	}
@@ -34,7 +34,7 @@ func TestSTSClientHealthRejectsUnhealthySTS(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newSTSClient(srv.URL, time.Second)
+	client := newSTSClient(srv.URL, time.Second, nil)
 	if err := client.Health(context.Background()); err == nil {
 		t.Fatal("expected unhealthy STS to fail readiness")
 	}

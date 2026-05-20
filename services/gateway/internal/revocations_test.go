@@ -22,19 +22,19 @@ func TestRevocationStoreMarkAndExpire(t *testing.T) {
 	if store.IsRevoked("sid1") {
 		t.Fatalf("fresh store should not report sid1 revoked")
 	}
-	store.mark("sid1")
+	store.markSession("sid1")
 	if !store.IsRevoked("sid1") {
 		t.Fatalf("sid1 should be revoked after mark")
 	}
 	store.mu.Lock()
-	store.entries["sid1"] = time.Now().Add(-time.Second)
+	store.sessions["sid1"] = time.Now().Add(-time.Second)
 	store.mu.Unlock()
 	if store.IsRevoked("sid1") {
 		t.Fatalf("expired entry should not report revoked")
 	}
 	store.prune()
 	store.mu.RLock()
-	_, present := store.entries["sid1"]
+	_, present := store.sessions["sid1"]
 	store.mu.RUnlock()
 	if present {
 		t.Fatalf("prune should drop expired entries")
@@ -76,6 +76,20 @@ func TestProcessRevocationMessageMarksSignedSession(t *testing.T) {
 	}
 }
 
+func TestProcessRevocationMessageMarksSignedAgent(t *testing.T) {
+	store := newRevocationStore(zerolog.New(io.Discard))
+	redis := &fakeRevocationRedis{verify: true}
+
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-3", map[string]any{"agent_session_id": "agent1"}), zerolog.New(io.Discard))
+
+	if !store.IsAgentRevoked("agent1") {
+		t.Fatalf("valid revocation message should mark agent revoked")
+	}
+	if len(redis.acked) != 1 || redis.acked[0] != "1-3" {
+		t.Fatalf("valid stream message should be acked once, got %v", redis.acked)
+	}
+}
+
 func TestProcessRevocationMessageDeadLettersPoisonMessage(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: true}
@@ -109,6 +123,14 @@ func TestJWTSIDRequiresSidClaim(t *testing.T) {
 	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
 	if got := jwtSID(tok); got != "" {
 		t.Fatalf("want empty sid, got %q", got)
+	}
+}
+
+func TestJWTAgentSessionIDReadsClaim(t *testing.T) {
+	payload := `{"sid":"sess-123","agent_session_id":"agent-xyz"}`
+	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
+	if got := jwtAgentSessionID(tok); got != "agent-xyz" {
+		t.Fatalf("want agent-xyz, got %q", got)
 	}
 }
 
