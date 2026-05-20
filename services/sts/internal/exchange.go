@@ -156,6 +156,9 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		if req.SessionID == "" {
 			req.SessionID = sid
 		}
+		if aerr := bindSubjectAgentSession(&req, subjectClaims); aerr != nil {
+			return nil, nil, http.StatusForbidden, aerr
+		}
 	}
 
 	actorClaims := map[string]any{}
@@ -768,6 +771,18 @@ func agentAuditMeta(session *AgentSession) map[string]any {
 		"agent_kind":         session.Kind,
 		"agent_capabilities": agentSessionCapabilities(session),
 	}
+}
+
+func bindSubjectAgentSession(req *TokenExchangeRequest, claims map[string]any) *sharederr.CaracalError {
+	agentSessionID := claimString(claims, "agent_session_id")
+	if agentSessionID == "" {
+		return nil
+	}
+	if req.AgentSessionID != "" && req.AgentSessionID != agentSessionID {
+		return sharederr.New(sharederr.AccessDenied, "agent session mismatch")
+	}
+	req.AgentSessionID = agentSessionID
+	return nil
 }
 
 func delegationEdgeInput(proof *delegationProof) *OPADelegationEdge {

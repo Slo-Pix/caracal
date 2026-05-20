@@ -674,6 +674,25 @@ func TestEffectiveTokenTTLCapsAtDelegationConstraint(t *testing.T) {
 	}
 }
 
+func TestBindSubjectAgentSessionCopiesSignedClaim(t *testing.T) {
+	req := TokenExchangeRequest{}
+	err := bindSubjectAgentSession(&req, map[string]any{"agent_session_id": "agent-1"})
+	if err != nil {
+		t.Fatalf("bind signed agent session: %v", err)
+	}
+	if req.AgentSessionID != "agent-1" {
+		t.Fatalf("agent session id = %q, want agent-1", req.AgentSessionID)
+	}
+}
+
+func TestBindSubjectAgentSessionRejectsMismatch(t *testing.T) {
+	req := TokenExchangeRequest{AgentSessionID: "agent-2"}
+	err := bindSubjectAgentSession(&req, map[string]any{"agent_session_id": "agent-1"})
+	if err == nil || err.Description != "agent session mismatch" {
+		t.Fatalf("want mismatch error, got %#v", err)
+	}
+}
+
 func TestValidateSessionReferencesRejectsSourceUsingDelegationEdge(t *testing.T) {
 	now := time.Now()
 	source := &AgentSession{
