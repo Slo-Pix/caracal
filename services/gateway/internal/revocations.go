@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Revocation cache: tracks revoked session and agent ids and aborts affected gateway streams.
+// Revocation cache: tracks revoked session, agent, and delegation ids and aborts affected gateway streams.
 
 package internal
 
@@ -43,17 +43,18 @@ type revocationRedis interface {
 // revocationStore answers revocation lookups for the gateway. It is populated
 // by a background consumer reading the same caracal.sessions.revoke stream STS
 // uses, so revocations propagate to the gateway in near real time. Entries are
-// pruned after revocationTTL — by then any per-call token bound to that session
+// pruned after revocationTTL — by then any per-call token bound to that authority
 // has long since expired (max ttlPerCallSDK = 15m).
 type revocationStore struct {
 	mu       sync.RWMutex
 	sessions map[string]time.Time
 	agents   map[string]time.Time
+	edges    map[string]time.Time
 	log      zerolog.Logger
 }
 
 func newRevocationStore(log zerolog.Logger) *revocationStore {
-	return &revocationStore{sessions: map[string]time.Time{}, agents: map[string]time.Time{}, log: log}
+	return &revocationStore{sessions: map[string]time.Time{}, agents: map[string]time.Time{}, edges: map[string]time.Time{}, log: log}
 }
 
 // IsRevoked reports whether the session id has been revoked recently enough that
@@ -78,6 +79,16 @@ func (s *revocationStore) IsAgentRevoked(agentSessionID string) bool {
 	return ok && time.Now().Before(expiresAt)
 }
 
+func (s *revocationStore) IsDelegationRevoked(delegationEdgeID string) bool {
+	if delegationEdgeID == "" {
+		return false
+	}
+	s.mu.RLock()
+	expiresAt, ok := s.edges[delegationEdgeID]
+	s.mu.RUnlock()
+	return ok && time.Now().Before(expiresAt)
+}
+
 func (s *revocationStore) markSession(sid string) {
 	s.mu.Lock()
 	s.sessions[sid] = time.Now().Add(revocationTTL)
@@ -90,6 +101,12 @@ func (s *revocationStore) markAgent(agentSessionID string) {
 	s.mu.Unlock()
 }
 
+func (s *revocationStore) markDelegation(delegationEdgeID string) {
+	s.mu.Lock()
+	s.edges[delegationEdgeID] = time.Now().Add(revocationTTL)
+	s.mu.Unlock()
+}
+
 // Size reports how many active revocations are currently tracked.
 func (s *revocationStore) Size() int {
 	if s == nil {
@@ -97,7 +114,7 @@ func (s *revocationStore) Size() int {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.sessions) + len(s.agents)
+	return len(s.sessions) + len(s.agents) + len(s.edges)
 }
 
 func (s *revocationStore) prune() {
@@ -111,6 +128,11 @@ func (s *revocationStore) prune() {
 	for agentSessionID, expiresAt := range s.agents {
 		if !cutoff.Before(expiresAt) {
 			delete(s.agents, agentSessionID)
+		}
+	}
+	for delegationEdgeID, expiresAt := range s.edges {
+		if !cutoff.Before(expiresAt) {
+			delete(s.edges, delegationEdgeID)
 		}
 	}
 	s.mu.Unlock()
@@ -186,8 +208,12 @@ func processRevocationMessage(ctx context.Context, redis revocationRedis, store 
 	}
 	sid, _ := msg.Values["session_id"].(string)
 	agentSessionID, _ := msg.Values["agent_session_id"].(string)
-	if sid == "" && agentSessionID == "" {
-		trackRevocationFailure(ctx, redis, msg, fmt.Errorf("missing session_id or agent_session_id"), log)
+	delegationEdgeID, _ := msg.Values["delegation_edge_id"].(string)
+	if delegationEdgeID == "" {
+		delegationEdgeID, _ = msg.Values["edge_id"].(string)
+	}
+	if sid == "" && agentSessionID == "" && delegationEdgeID == "" {
+		trackRevocationFailure(ctx, redis, msg, fmt.Errorf("missing session_id, agent_session_id, or delegation_edge_id"), log)
 		return
 	}
 	if sid != "" {
@@ -195,6 +221,9 @@ func processRevocationMessage(ctx context.Context, redis revocationRedis, store 
 	}
 	if agentSessionID != "" {
 		store.markAgent(agentSessionID)
+	}
+	if delegationEdgeID != "" {
+		store.markDelegation(delegationEdgeID)
 	}
 	if err := redis.XAck(ctx, streamRevoke, groupRevoke, msg.ID); err != nil {
 		log.Error().Err(err).Str("id", msg.ID).Msg("revocation xack failed")
@@ -217,6 +246,24 @@ func jwtAgentSessionID(token string) string {
 		return ""
 	}
 	return claims.AgentSessionID
+}
+
+func jwtDelegationEdgeID(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		DelegationEdgeID string `json:"delegation_edge_id"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return ""
+	}
+	return claims.DelegationEdgeID
 }
 
 func trackRevocationFailure(ctx context.Context, redis revocationRedis, msg redis.XMessage, cause error, log zerolog.Logger) {

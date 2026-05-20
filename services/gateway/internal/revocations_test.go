@@ -90,6 +90,20 @@ func TestProcessRevocationMessageMarksSignedAgent(t *testing.T) {
 	}
 }
 
+func TestProcessRevocationMessageMarksSignedDelegation(t *testing.T) {
+	store := newRevocationStore(zerolog.New(io.Discard))
+	redis := &fakeRevocationRedis{verify: true}
+
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-4", map[string]any{"delegation_edge_id": "edge1"}), zerolog.New(io.Discard))
+
+	if !store.IsDelegationRevoked("edge1") {
+		t.Fatalf("valid revocation message should mark delegation edge revoked")
+	}
+	if len(redis.acked) != 1 || redis.acked[0] != "1-4" {
+		t.Fatalf("valid stream message should be acked once, got %v", redis.acked)
+	}
+}
+
 func TestProcessRevocationMessageDeadLettersPoisonMessage(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: true}
@@ -131,6 +145,14 @@ func TestJWTAgentSessionIDReadsClaim(t *testing.T) {
 	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
 	if got := jwtAgentSessionID(tok); got != "agent-xyz" {
 		t.Fatalf("want agent-xyz, got %q", got)
+	}
+}
+
+func TestJWTDelegationEdgeIDReadsClaim(t *testing.T) {
+	payload := `{"sid":"sess-123","agent_session_id":"agent-xyz","delegation_edge_id":"edge-123"}`
+	tok := "header." + base64.RawURLEncoding.EncodeToString([]byte(payload)) + ".sig"
+	if got := jwtDelegationEdgeID(tok); got != "edge-123" {
+		t.Fatalf("want edge-123, got %q", got)
 	}
 }
 

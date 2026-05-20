@@ -259,7 +259,7 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
           dedupeKey: `delegation:${id}:subject:${row.subject_session_id}`,
           payload: {
             zone_id: zoneId, session_id: row.subject_session_id,
-            agent_session_id: row.id, reason: 'delegation_revoked',
+            agent_session_id: row.id, delegation_edge_id: id, reason: 'delegation_revoked',
           },
         })
       }
