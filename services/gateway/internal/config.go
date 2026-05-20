@@ -136,7 +136,7 @@ func (c Config) validate() error {
 	if c.MaxRequestBytes <= 0 {
 		return fmt.Errorf("MAX_REQUEST_BYTES must be positive")
 	}
-	if c.ReadTimeout <= c.STSTimeout+c.UpstreamTimeout {
+	if c.ReadTimeout > 0 && c.STSTimeout > 0 && c.UpstreamTimeout > 0 && c.ReadTimeout <= c.STSTimeout+c.UpstreamTimeout {
 		return fmt.Errorf("READ_TIMEOUT must be greater than STS_TIMEOUT plus UPSTREAM_TIMEOUT")
 	}
 	return nil

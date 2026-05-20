@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -17,14 +18,21 @@ import (
 
 type DB struct{ pool *pgxpool.Pool }
 
+const dbConnectTimeout = 10 * time.Second
+
 // ErrConcurrentGrantUpdate signals an optimistic-lock conflict on delegated_grants.
 // Callers refresh.go retries on this; other errors are returned as-is.
 var ErrConcurrentGrantUpdate = errors.New("concurrent grant update")
 
 func newDB(ctx context.Context, dsn string) (*DB, error) {
-	pool, err := pgxpool.New(ctx, dsn)
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse postgres config: %w", err)
+	}
+	cfg.ConnConfig.ConnectTimeout = dbConnectTimeout
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("connect postgres: %w", err)
 	}
 	return &DB{pool: pool}, nil
 }
