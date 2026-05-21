@@ -38,8 +38,10 @@ The command must exit `0`. If it does not, run `caracal doctor --extended --json
 
 ```bash
 caracal protect http \
-  --resource-id "demo-api" \
+  --identifier "resource://demo-api" \
   --upstream-url "https://httpbin.org" \
+  --scopes "demo:read" \
+  --user local-user \
   --write-config ./caracal.toml
 ```
 
@@ -49,10 +51,10 @@ Verification:
 
 ```bash
 caracal policy-set list
-caracal binding list
+caracal resource list
 ```
 
-Both must return at least one row. The active policy version id is the one shipped by `caracal protect http`.
+Both must return at least one row. The active policy version id is the one shipped by `caracal protect http`, and the resource row should include `resource://demo-api`.
 
 ## 3. Exchange a session mandate
 
@@ -67,9 +69,10 @@ Verification: the printed environment must include `CARACAL_SUBJECT_TOKEN`, `CAR
 ## 4. Call the protected resource through the Gateway
 
 ```bash
-caracal run -- curl -s \
-  -H "Authorization: Bearer $CARACAL_SUBJECT_TOKEN" \
-  "$CARACAL_GATEWAY_URL/demo-api/get"
+caracal run -- sh -c 'curl -s \
+  -H "Authorization: Bearer $RESOURCE_TOKEN" \
+  -H "X-Caracal-Resource: resource://demo-api" \
+  "$CARACAL_GATEWAY_URL/get"'
 ```
 
 Verification: HTTP 200 from the upstream. If the Gateway denies the call, the response includes a deny reason and an `X-Request-Id` value to feed into `caracal explain`.
@@ -92,7 +95,7 @@ The explanation reproduces the policy decision, the determining policies, and th
 
 You have:
 
-- An active stack with three readiness checks green.
+- An active stack with service readiness checks green.
 - One zone, one application, one resource, one active policy set.
 - A working agent run path through the Gateway.
 - Audit evidence and a `request_id` you can trace end-to-end.
