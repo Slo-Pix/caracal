@@ -1,0 +1,95 @@
+---
+title: Enterprise Runtime Patterns
+description: Integration patterns for FastAPI, gRPC, queues, service mesh, SIEM, and provider SDKs.
+pageType: workflow
+---
+
+Use the Gateway as the default enforcement boundary. Direct framework connectors and adapters are appropriate only when the Gateway cannot safely proxy the transport or when the service itself is the protected resource.
+
+## Integration status
+
+| Pattern | Status | Recommended boundary |
+| --- | --- | --- |
+| HTTP, REST, MCP-over-HTTP | Implemented default | Gateway |
+| Express, FastMCP, Go `net/http` | Supported connector pattern | Connector verifies mandate and revocation |
+| FastAPI and Starlette | Supported ASGI adapter pattern | ASGI middleware built on the Python identity and revocation packages |
+| gRPC | Adapter-required supported pattern | Unary/stream interceptor verifies metadata before handler execution |
+| Queues and batch workers | Adapter-required supported pattern | Producer attaches authority envelope; consumer revalidates before work |
+| Service mesh mTLS | Supported platform pattern | Mesh authenticates workload; Caracal authorizes agent action |
+| SIEM export | Supported data-export pattern | Audit DB/export feeds SOC tooling |
+| Provider SDKs with hidden transport | Adapter-required supported pattern | Wrapper enforces Caracal checks before provider call |
+
+## FastAPI and Starlette
+
+For ASGI applications, keep verification at middleware entry and attach verified claims to `scope["caracal"]`.
+
+```python
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class CaracalMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        claims = authenticate_caracal_request(request.headers)
+        if not claims.has_scope("payments:read"):
+            return JSONResponse({"error": "scope_insufficient"}, status_code=403)
+        request.scope["caracal"] = claims
+        return await call_next(request)
+```
+
+This is a connector pattern, not a replacement for Gateway-mediated enforcement. Use it when the ASGI app is the protected resource and the app can verify mandates, check revocation, preserve trace context, and emit result audit.
+
+## gRPC
+
+Put Caracal authority in metadata. Unary and streaming interceptors must:
+
+1. Extract `authorization`, `x-caracal-request-id`, and trace metadata.
+2. Verify the mandate against STS JWKS.
+3. Check revocation before invoking the handler.
+4. For streams, check revocation periodically or before each message batch.
+5. Map denied authority to `Unauthenticated` or `PermissionDenied`.
+6. Emit action audit after completion or cancellation.
+
+Do not pass provider-native credentials through gRPC metadata. If the gRPC service needs a provider credential, have it call the Gateway or use a brokered provider integration behind the same checks.
+
+## Queues and batch workers
+
+Queue systems are not request/response enforcement points, so the consumer must re-bind authority before work starts.
+
+| Message part | Required content |
+| --- | --- |
+| Headers | Caracal token or reference, request ID, traceparent, resource identifier, requested scopes |
+| Body | Business payload only; do not bury authority in the body |
+| Consumer startup | Load JWKS cache and revocation store before accepting work |
+| Before execution | Reject expired, revoked, wrong-resource, or scope-insufficient authority |
+| After execution | Emit result audit with success/failure, latency, and provider operation |
+
+Use short queue visibility timeouts and idempotent consumers. A retried message must re-check revocation, not reuse an earlier allow decision.
+
+## Service mesh and mTLS
+
+Service mesh identity answers "which workload is calling?" Caracal answers "what action authority does this agent have right now?" Use both:
+
+| Layer | Responsibility |
+| --- | --- |
+| Mesh mTLS | Workload identity, encryption in transit, namespace/service policies |
+| Caracal Gateway or connector | Mandate verification, resource/scope authorization, replay/revocation checks |
+| OPA policy | Agent/action/resource decision |
+| Audit | Evidence of the attempted and completed action |
+
+Do not treat mesh identity as a substitute for Caracal mandates. Mesh authorization is coarse-grained compared with per-agent, per-resource, short-lived mandates.
+
+## SIEM export
+
+Caracal's Audit service persists structured events in Postgres and can export retained data for downstream systems. A SIEM adapter should forward:
+
+- `request_id`, `trace_id`, `zone_id`, principal, resource, action, decision, and evaluation status;
+- policy-set version, manifest SHA, determining policies, and diagnostics;
+- Gateway denial reason, STS error code, revocation status, and upstream result class;
+- audit-chain integrity alerts and DLQ alerts as security events.
+
+Keep SOC export asynchronous. Never put SIEM availability in the Gateway or STS request path.
+
+## Provider SDKs
+
+Prefer SDK configurations that let you supply a custom HTTP transport pointed at the Gateway. If the provider SDK hides transport, wrap the SDK call with an adapter that obtains a Caracal mandate, verifies the requested resource and scopes, calls the provider, and emits action audit.
+
+Do not give provider-native long-lived credentials to agent code. That bypasses the strongest Caracal boundary and should be treated as an exception requiring compensating controls.

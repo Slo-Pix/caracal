@@ -1,0 +1,99 @@
+---
+title: Scale and Capacity Guidance
+description: Practical sizing formulas, benchmark procedure, and rollout profiles for Caracal services.
+pageType: config
+---
+
+Caracal scales across five services with different bottlenecks. Start with the small profile, measure the path you plan to use, and scale only the component whose readiness, latency, or backlog signal is under pressure.
+
+## Sizing model
+
+| Component | Primary driver | First scaling action |
+| --- | --- | --- |
+| Gateway | Protected-resource request rate, upstream latency, streaming duration | Add Gateway replicas and keep upstream timeouts bounded |
+| STS | Token exchanges per second, OPA bundle complexity, signing throughput | Add STS replicas and keep policy bundles small and deterministic |
+| Audit | Event rate, event size, export latency, DLQ volume | Increase Audit replicas only after Redis/Postgres capacity is healthy |
+| Coordinator | Agent session creation, delegation traversal depth, outbox sweeps | Tune pool sizes and add replicas for lifecycle-heavy workloads |
+| API | Operator and automation calls, policy rollout activity | Keep API operator-only and scale for admin automation bursts |
+| Redis | Stream backlog, revocation propagation, rate-limit state | Increase memory and persistence capacity before increasing stream retention |
+| Postgres | Transaction rate, partitions, connection pools, retention | Size max connections and storage before adding service replicas |
+
+## Capacity formulas
+
+Use these formulas for first-pass planning. Replace the values with measured numbers from your environment after the first load run.
+
+| Resource | Formula |
+| --- | --- |
+| Redis stream memory | `event_rate_per_second × average_event_bytes × outage_window_seconds × 1.5` |
+| Audit storage growth | `event_rate_per_second × average_event_bytes × retention_seconds × index_multiplier` |
+| Postgres max connections | `sum(service_replicas × service_pool_max) + admin_connections + maintenance_headroom` |
+| STS replicas | `ceil(target_exchange_rps ÷ measured_single_replica_rps_at_p95_slo)` |
+| Gateway replicas | `ceil(target_gateway_rps ÷ measured_single_replica_rps_at_p95_slo)` |
+| Audit export buffer | `export_lag_seconds × event_rate_per_second × average_event_bytes × 1.5` |
+
+Use an index multiplier of `2` until you have table-specific storage measurements. Use at least 20% maintenance headroom for database connections.
+
+## Evaluation profiles
+
+These profiles are starting points for pilots, not validated production claims. Publish your measured p95/p99 latency, throughput, Redis backlog, audit lag, and Postgres connection use alongside any production sizing decision.
+
+| Profile | Typical use | Starting shape |
+| --- | --- | --- |
+| Small pilot | One protected service, one team, synthetic and low-risk traffic | 2 replicas each for Gateway, STS, API, Audit; 1 Coordinator; managed Postgres and Redis |
+| Department pilot | Several resources, CI/CD policy rollout, moderate agent volume | 3+ Gateway and STS replicas; 2+ Audit and Coordinator replicas; dedicated Redis and Postgres sizing |
+| Production rollout | Multiple teams, compliance retention, on-call ownership | HPA on Gateway/STS/Audit; partitioned audit tables; tested backup/restore; alert-to-runbook mapping |
+
+## Benchmark procedure
+
+Use a repeatable benchmark before changing replica counts or HPA thresholds.
+
+1. Deploy the Helm chart with external Postgres and Redis.
+2. Activate the policy set and resource bindings you plan to use in production.
+3. Warm up for at least 5 seconds, then measure for at least 30 seconds.
+4. Run one scenario at a time: STS exchange, Gateway proxy, Audit ingest, Coordinator lifecycle.
+5. Record p50, p95, p99, error rate, Redis memory, stream lag, Audit DLQ, and Postgres connections.
+6. Repeat after each resource or replica change.
+
+The repository includes a portable HTTP harness that works with STS, Gateway, API, Audit, and mock upstream endpoints:
+
+```bash
+node scripts/benchEnterprise.mjs \
+  --url http://gateway.internal/v1/protected \
+  --method POST \
+  --headers-file headers.json \
+  --body-file request.json \
+  --duration 60 \
+  --warmup 10 \
+  --concurrency 32 \
+  --json
+```
+
+Keep credentials out of command arguments. Put authorization headers in `headers.json` or use a short-lived test token injected by your CI secret store.
+
+## HPA signals
+
+CPU is a useful first signal, but it is not sufficient on its own.
+
+| Service | Primary HPA signal | Guardrail signal |
+| --- | --- | --- |
+| Gateway | CPU and request latency | Upstream 5xx/timeout rate, revocation cache errors |
+| STS | CPU and token-exchange latency | OPA compile/eval errors, signing-key cache misses |
+| Audit | Consumer lag and CPU | DLQ size, tamper mismatch counters, Postgres write latency |
+| Coordinator | Queue depth and CPU | Outbox dead rows, active invocation count |
+| API | CPU during automation bursts | Postgres pool saturation and admin auth failure rate |
+
+## SLO examples
+
+Set SLOs that match your adoption stage. A pilot can tolerate stricter rate limits and lower throughput than production.
+
+| Path | Example SLO |
+| --- | --- |
+| STS token exchange | 99.9% success, p95 under 150 ms for warmed policies |
+| Gateway proxy decision | 99.9% success excluding upstream failures, p95 policy/binding overhead under 50 ms |
+| Revocation propagation | p95 under 5 seconds from revoke command to Gateway denial |
+| Audit ingest | p95 stream-to-Postgres lag under 10 seconds, DLQ size zero |
+| Readiness | `/ready` reflects dependency outage within one probe interval |
+
+## What not to claim
+
+Do not present illustrative demos as validated scale. High-agent-count examples are useful for showing architectural intent, but they are production claims only after the same benchmark procedure has been run with published environment details, policy complexity, event size, storage profile, and failure-mode behavior.

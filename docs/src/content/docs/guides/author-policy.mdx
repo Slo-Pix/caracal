@@ -122,7 +122,7 @@ Validate a Rego module against the STS policy contract before creating a policy:
 caracal policy validate --file policy.rego --schema-version 2026-05-20
 ```
 
-Use `POST /v1/zones/{zone_id}/policy-sets/{policy_set_id}/simulate` before activation to dry-run the rollout contract. The simulation endpoint validates the policy set version, schema compatibility, manifest integrity, and optional OPA input shape without mutating active bindings. It does not replace STS runtime evaluation; it is a deployment safety check for operators.
+Use `POST /v1/zones/{zone_id}/policy-sets/{policy_set_id}/simulate` before activation to dry-run the rollout contract. The simulation endpoint validates the policy set version, schema compatibility, manifest integrity, and optional OPA input shape without mutating active bindings. When you pass an input fixture, the API sends the pinned policy bundle to STS for signed internal simulation, so the response includes the runtime OPA decision, determining policies, diagnostics, manifest SHA, and policy-set version.
 
 The CLI exposes the same check:
 

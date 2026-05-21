@@ -452,7 +452,7 @@ Activation enqueues a `caracal.policy.invalidate` stream message via the outbox,
 
 ### `POST /v1/zones/{zoneId}/policy-sets/{id}/simulate`
 
-Validate a policy-set version and optional OPA input fixture without mutating active bindings.
+Validate a policy-set version and optionally execute an OPA input fixture without mutating active bindings.
 
 **Request body:**
 
@@ -461,7 +461,17 @@ Validate a policy-set version and optional OPA input fixture without mutating ac
 | `version_id` | UUID | Yes |
 | `input` | object | No |
 
-The simulation checks policy-set contract, schema compatibility, manifest integrity, and optional input shape. It does not execute STS OPA evaluation.
+The simulation checks policy-set contract, schema compatibility, manifest integrity, and input shape. When `input` is provided and the API has an internal STS signing key, it signs a request to STS and evaluates the pinned policy bundle through the STS OPA runtime. Without `input`, or when internal STS simulation is not configured, the endpoint performs contract validation only and returns `explanation.evaluation: "not_executed"`.
+
+**Executed response fields:**
+
+| Field | Description |
+| --- | --- |
+| `explanation.evaluation` | `"executed"` when STS evaluated the fixture |
+| `explanation.decision` | OPA decision from `data.caracal.authz.result.decision` |
+| `result.determining_policies` | Policy attribution emitted by the bundle |
+| `result.diagnostics` | Operator diagnostics emitted by the bundle |
+| `manifest_sha256` | Pinned policy-set version manifest hash used for the simulation |
 
 **Errors:**
 

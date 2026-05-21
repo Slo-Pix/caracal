@@ -252,6 +252,8 @@ client.policySets.activate(
 client.policySets.delete(zoneId: string, id: string): Promise<void>
 ```
 
+`simulate` performs policy-set contract validation. When `input` is supplied and the API is configured with internal STS simulation credentials, the response includes `explanation.evaluation: "executed"` plus the STS OPA `result` object; otherwise `result` is `null` and the response describes contract-only validation.
+
 ---
 
 ## Grant methods — `client.grants`

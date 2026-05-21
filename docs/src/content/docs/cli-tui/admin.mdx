@@ -477,7 +477,7 @@ caracal policy-set activate pset_pqr678 --version psetv_mno345 --shadow psetv_jk
 
 ### `caracal policy-set simulate <id>`
 
-Validate a policy-set version and an optional input fixture without changing active bindings.
+Validate a policy-set version and, when an input fixture is provided, execute it through the STS OPA runtime without changing active bindings.
 
 ```bash
 caracal policy-set simulate pset_pqr678 \
@@ -489,7 +489,7 @@ caracal policy-set simulate pset_pqr678 \
   --input '{"schema_version":"2026-05-20","principal":{"zone_id":"zone_abc123"}}'
 ```
 
-The simulation endpoint validates rollout contract, schema compatibility, manifest integrity, public-application invariants, and optional input shape. It does not execute STS OPA evaluation.
+The simulation endpoint always validates rollout contract, schema compatibility, manifest integrity, and public-application invariants. With `--input` or `--input-file`, the API sends the pinned policy bundle to STS for signed internal simulation and returns the decision, determining policies, diagnostics, bundle SHA, and policy-set version. Without an input fixture, the command performs contract validation only.
 
 | Flag | Type | Default | Description |
 | --- | --- | --- | --- |
