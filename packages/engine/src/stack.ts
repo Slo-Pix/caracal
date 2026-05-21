@@ -313,6 +313,13 @@ export async function applyControlLifecycleAction(opts: ControlLifecycleOpts): P
     return controlResult(opts.action, 'disabled', 'gated', state)
   }
   const state = setControlEnabled(opts.action === 'enable') ?? settings
+  if (opts.action === 'enable') {
+    const probe = await probeOne({ name: state.service, url: state.readyUrl, port: state.port }, 1500)
+    if (!probe.ok) {
+      setControlEnabled(false)
+      throw new Error(`Control endpoint gate did not open (${probe.detail}); unmount and mount the Control runtime once, then enable the endpoint.`)
+    }
+  }
   return controlResult(
     opts.action,
     opts.action === 'enable' ? 'enabled' : 'disabled',
@@ -411,7 +418,7 @@ function controlComposeContainerMounted(paths: StackPaths, env?: Record<string, 
 
 function reconciledControlState(opts: ControlServiceStatusOpts): ControlRuntimeState | undefined {
   const state = readControlState(opts.home)
-  if (!state || !opts.paths) return state
+  if (!state) return undefined
   if (!state.enabled && !state.mountedAt) {
     setControlMounted(false, false, { home: opts.home })
     return undefined
@@ -419,6 +426,7 @@ function reconciledControlState(opts: ControlServiceStatusOpts): ControlRuntimeS
   if (state.enabled && !existsSync(controlGateFile(opts.home))) {
     return setControlEnabled(false, { home: opts.home })
   }
+  if (!opts.paths) return state
   const mounted = controlComposeContainerMounted(opts.paths, opts.env)
   if (mounted === false) {
     setControlMounted(false, false, { home: opts.home })
@@ -441,9 +449,19 @@ export async function controlServiceStatus(opts: ControlServiceStatusOpts = {}):
     }, opts.home)
   }
   const [probe] = await stackStatus({
-    probes: [{ name: state.service, url: state.healthUrl, port: state.port }],
+    probes: [{ name: state.service, url: state.readyUrl, port: state.port }],
     timeoutMs: opts.timeoutMs,
   })
+  if (probe?.detail === '503') {
+    const disabled = setControlEnabled(false, { home: opts.home }) ?? { ...state, enabled: false }
+    return enabledControlStatus(disabled, {
+      name: state.service,
+      url: state.readyUrl,
+      port: state.port,
+      ok: false,
+      detail: 'endpoint disabled',
+    }, opts.home)
+  }
   return enabledControlStatus(state, probe!, opts.home)
 }
 
