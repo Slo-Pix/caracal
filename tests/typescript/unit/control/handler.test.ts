@@ -27,6 +27,7 @@ function deps(verify: Authenticator['verify']): InvokeDeps {
     routeRateLimit: { max: 1, timeWindow: 60_000 },
     sink: { emit: vi.fn(async () => {}) } as EventSink,
     ctx: { admin: {} } as DispatchContext,
+    gate: { enabled: () => true },
   }
 }
 
@@ -57,5 +58,27 @@ describe('registerInvokeRoute', () => {
     expect(first.statusCode).toBe(401)
     expect(second.statusCode).toBe(429)
     expect(verify).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks invoke requests when the runtime endpoint gate is closed', async () => {
+    const app = Fastify()
+    apps.push(app)
+    const verify = vi.fn()
+    const d = deps(verify)
+    d.gate = { enabled: () => false }
+
+    await app.register(rateLimit, { global: false, max: 1, timeWindow: 60_000 })
+    registerInvokeRoute(app, d)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: {},
+    })
+
+    expect(res.statusCode).toBe(503)
+    expect(res.json()).toEqual({ error: 'control disabled' })
+    expect(verify).not.toHaveBeenCalled()
   })
 })

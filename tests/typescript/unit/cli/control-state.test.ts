@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { controlStateFile, readControlState, setControlMounted } from '../../../../packages/engine/src/controlState.ts'
+import { controlStateFile, readControlState, setControlEnabled, setControlMounted } from '../../../../packages/engine/src/controlState.ts'
 
 let dir: string | undefined
 
@@ -66,12 +66,28 @@ describe('control lifecycle state', () => {
     expect(setControlMounted(true, false, { home })).toMatchObject({
       mounted: true,
       enabled: false,
+      mountedAt: expect.any(String),
       service: 'control',
       invokeUrl: 'http://localhost:8087/v1/control/invoke',
     })
     expect(readControlState(home)).toMatchObject({
       mounted: true,
       enabled: false,
+      mountedAt: expect.any(String),
+    })
+  })
+
+  it('toggles endpoint state without creating mounted runtime state', () => {
+    const home = tempHome()
+
+    expect(setControlEnabled(true, { home })).toBeUndefined()
+    expect(readControlState(home)).toBeUndefined()
+
+    const mounted = setControlMounted(true, false, { home })!
+    expect(setControlEnabled(true, { home })).toMatchObject({
+      mounted: true,
+      enabled: true,
+      mountedAt: mounted.mountedAt,
     })
   })
 })

@@ -83,6 +83,7 @@ describe('controlCommand', () => {
   it('allows Control lifecycle status from an authenticated interactive CLI session', async () => {
     process.env = { ...originalEnv }
     writeAdminToken()
+    process.env.CARACAL_MODE = 'stable'
     setTty(true, true)
     const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
