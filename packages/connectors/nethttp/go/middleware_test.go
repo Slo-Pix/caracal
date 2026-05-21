@@ -193,6 +193,8 @@ func signedToken(t *testing.T, privateKey *ecdsa.PrivateKey, issuer, audience st
 		"iat":       time.Now().Unix(),
 		"jti":       "jti1",
 		"sub":       "user1",
+		"root_sid":  "root1",
+		"sub_type":  "user",
 		"sid":       "sid1",
 		"client_id": "app1",
 		"use":       "resource",
