@@ -3,9 +3,15 @@
 //
 // Policy set CRUD and activation routes: atomic version pinning with durable STS invalidation.
 
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
-import { sha256Hex } from '@caracalai/core'
+import {
+  GATEWAY_REQUEST_HEADER,
+  GATEWAY_SIGNATURE_HEADER,
+  GATEWAY_TIMESTAMP_HEADER,
+  sha256Hex,
+  signGatewayExchange,
+} from '@caracalai/core'
 import { v7 as uuidv7 } from 'uuid'
 import { STREAM_POLICY_INVALIDATE } from '../redis.js'
 import { enqueueOutbox } from '../outbox.js'
@@ -275,9 +281,18 @@ export const policySetsRoutes: FastifyPluginAsync = async (fastify) => {
       [body.version_id, params.id, params.zoneId],
     )
     if (!rows[0]) return reply.code(404).send({ error: 'version_not_found' })
-    const contractErr = await policySetContractError(fastify.db, params.zoneId, rows[0].manifest_json, rows[0].schema_version)
-    if (contractErr) return reply.code(422).send({ error: 'invalid_policy_contract', detail: contractErr })
+    const contract = await policySetContract(fastify.db, params.zoneId, rows[0].manifest_json, rows[0].schema_version)
+    if (contract.error) return reply.code(422).send({ error: 'invalid_policy_contract', detail: contract.error })
     const inputWarnings = validateSimulationInput(body.input, params.zoneId)
+    const execution = body.input
+      ? await executePolicySimulation(fastify, {
+        policy_set_id: params.id,
+        version_id: rows[0].id,
+        manifest_sha256: rows[0].manifest_sha256,
+        policies: contract.policies.map((policy) => ({ id: policy.id, content: policy.content })),
+        input: body.input,
+      })
+      : null
     return {
       dry_run: true,
       would_activate: inputWarnings.length === 0,
@@ -287,11 +302,14 @@ export const policySetsRoutes: FastifyPluginAsync = async (fastify) => {
       input_schema_version: OPA_INPUT_SCHEMA_VERSION,
       manifest_sha256: rows[0].manifest_sha256,
       policies: collectManifestIds(rows[0].manifest_json),
-      warnings: inputWarnings,
-      explanation: {
+      warnings: [...inputWarnings, ...(execution?.warnings ?? [])],
+      explanation: execution?.explanation ?? {
         evaluation: 'not_executed',
-        reason: 'simulation validates rollout contract and input shape without mutating active policy bindings',
+        reason: body.input
+          ? 'STS simulation is not configured; rollout contract and input shape were validated without mutating active policy bindings'
+          : 'simulation validates rollout contract and input shape without mutating active policy bindings',
       },
+      result: execution?.result ?? null,
     }
   })
 
@@ -317,6 +335,25 @@ interface PolicyVersionRow {
 
 type PolicyManifest = Array<{ policy_version_id?: string }>
 
+interface PolicySetContract {
+  policies: PolicyVersionRow[]
+  error: string | null
+}
+
+interface PolicySimulationRequest {
+  policy_set_id: string
+  version_id: string
+  manifest_sha256: string
+  policies: Array<{ id: string; content: string }>
+  input: Record<string, unknown>
+}
+
+interface PolicySimulationExecution {
+  warnings: string[]
+  explanation: Record<string, unknown>
+  result: Record<string, unknown> | null
+}
+
 function collectManifestIds(manifest: string | PolicyManifest): string[] {
   const list = Array.isArray(manifest) ? manifest : parseManifest(manifest)
   return list
@@ -335,17 +372,26 @@ async function policySetContractError(
   manifestJSON: string | PolicyManifest,
   schemaVersion: string,
 ): Promise<string | null> {
+  return (await policySetContract(db, zoneId, manifestJSON, schemaVersion)).error
+}
+
+async function policySetContract(
+  db: Queryable,
+  zoneId: string,
+  manifestJSON: string | PolicyManifest,
+  schemaVersion: string,
+): Promise<PolicySetContract> {
   const schemaErr = validatePolicySchemaVersion(schemaVersion)
-  if (schemaErr) return schemaErr
+  if (schemaErr) return { policies: [], error: schemaErr }
   const manifest = Array.isArray(manifestJSON) ? manifestJSON : parseManifest(manifestJSON)
   const rawIds = collectManifestIds(manifest)
-  if (rawIds.length === 0) return 'policy set manifest must reference at least one policy version'
+  if (rawIds.length === 0) return { policies: [], error: 'policy set manifest must reference at least one policy version' }
   if (rawIds.length > MANIFEST_MAX_ENTRIES) {
-    return `policy set manifest exceeds maximum of ${MANIFEST_MAX_ENTRIES} entries`
+    return { policies: [], error: `policy set manifest exceeds maximum of ${MANIFEST_MAX_ENTRIES} entries` }
   }
   const ids = Array.from(new Set(rawIds))
   if (ids.length !== rawIds.length) {
-    return 'policy set manifest contains duplicate policy_version_id entries'
+    return { policies: [], error: 'policy set manifest contains duplicate policy_version_id entries' }
   }
   const { rows } = await db.query<PolicyVersionRow>(
     `SELECT pv.id, pv.content, pv.schema_version, p.zone_id
@@ -354,25 +400,25 @@ async function policySetContractError(
      WHERE pv.id = ANY($1::text[])`,
     [ids],
   )
-  if (rows.length !== ids.length) return 'policy set manifest references missing policy versions'
+  if (rows.length !== ids.length) return { policies: [], error: 'policy set manifest references missing policy versions' }
   for (const row of rows) {
     if (row.zone_id !== zoneId) {
-      return `policy version ${row.id} belongs to a different zone`
+      return { policies: [], error: `policy version ${row.id} belongs to a different zone` }
     }
     if (row.schema_version !== schemaVersion) {
-      return `policy version ${row.id} schema ${row.schema_version} does not match policy set schema ${schemaVersion}`
+      return { policies: [], error: `policy version ${row.id} schema ${row.schema_version} does not match policy set schema ${schemaVersion}` }
     }
     const versionErr = validatePolicySchemaVersion(row.schema_version)
-    if (versionErr) return `policy version ${row.id} failed schema validation: ${versionErr}`
+    if (versionErr) return { policies: [], error: `policy version ${row.id} failed schema validation: ${versionErr}` }
     const err = validateAuthzPolicy(String(row.content))
     if (err === 'must_use_package_caracal_authz') {
-      return `policy version ${row.id} must use package caracal.authz`
+      return { policies: [], error: `policy version ${row.id} must use package caracal.authz` }
     }
     if (err === 'must_define_result_rule') {
-      return `policy version ${row.id} must emit data.caracal.authz.result`
+      return { policies: [], error: `policy version ${row.id} must emit data.caracal.authz.result` }
     }
     if (err) {
-      return `policy version ${row.id} failed validation: ${err}`
+      return { policies: [], error: `policy version ${row.id} failed validation: ${err}` }
     }
   }
   const publicHits = await publicAppsReferencedByContents(
@@ -381,9 +427,63 @@ async function policySetContractError(
     rows.map((r) => String(r.content)),
   )
   if (publicHits.length > 0) {
-    return `policy references public application(s): ${publicHits.join(', ')}`
+    return { policies: [], error: `policy references public application(s): ${publicHits.join(', ')}` }
   }
-  return null
+  return { policies: rows, error: null }
+}
+
+async function executePolicySimulation(
+  fastify: FastifyInstance,
+  request: PolicySimulationRequest,
+): Promise<PolicySimulationExecution | null> {
+  if (!fastify.cfg?.gatewayStsHmacKey) return null
+  const body = Buffer.from(JSON.stringify(request), 'utf8')
+  const requestId = uuidv7()
+  const timestamp = Math.floor(Date.now() / 1000)
+  let response: Response
+  try {
+    response = await fetch(new URL('/internal/policy/simulate', fastify.cfg.stsUrl), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        [GATEWAY_TIMESTAMP_HEADER]: String(timestamp),
+        [GATEWAY_REQUEST_HEADER]: requestId,
+        [GATEWAY_SIGNATURE_HEADER]: signGatewayExchange(fastify.cfg.gatewayStsHmacKey, timestamp, requestId, body),
+      },
+      body,
+    })
+  } catch (err) {
+    return {
+      warnings: [`sts_simulation_unreachable:${err instanceof Error ? err.message : String(err)}`],
+      explanation: {
+        evaluation: 'failed',
+        reason: 'STS simulation endpoint is unreachable',
+      },
+      result: null,
+    }
+  }
+  const payload = await response.json() as Record<string, unknown>
+  if (!response.ok) {
+    return {
+      warnings: [`sts_simulation_failed:${String(payload.error ?? response.status)}`],
+      explanation: {
+        evaluation: 'failed',
+        reason: payload.detail ?? payload.error ?? 'STS simulation failed',
+      },
+      result: null,
+    }
+  }
+  return {
+    warnings: [],
+    explanation: {
+      evaluation: 'executed',
+      decision: payload.result && typeof payload.result === 'object' ? (payload.result as Record<string, unknown>).decision : undefined,
+      policy_set_version_id: payload.version_id,
+      manifest_sha256: payload.manifest_sha256,
+      reason: 'OPA evaluated the supplied input through the STS runtime engine without mutating active policy bindings',
+    },
+    result: payload.result && typeof payload.result === 'object' ? payload.result as Record<string, unknown> : null,
+  }
 }
 
 function validateSimulationInput(input: Record<string, unknown> | undefined, zoneId: string): string[] {

@@ -182,8 +182,17 @@ export interface PolicySetSimulation {
   warnings: string[]
   explanation: {
     evaluation: string
+    decision?: string
+    policy_set_version_id?: string
+    manifest_sha256?: string
     reason: string
   }
+  result: {
+    decision: 'allow' | 'deny'
+    determining_policies: JsonObject[]
+    evaluation_status: string
+    diagnostics: JsonObject[]
+  } | null
 }
 
 export interface Grant {

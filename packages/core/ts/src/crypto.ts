@@ -87,3 +87,12 @@ function canonicalizeStream(stream: string, values: Record<string, StreamValue>)
 export function signStream(key: Buffer, stream: string, values: Record<string, StreamValue>): string {
   return createHmac('sha256', key).update(canonicalizeStream(stream, values)).digest('hex');
 }
+
+export const GATEWAY_TIMESTAMP_HEADER = 'X-Caracal-Gateway-Timestamp';
+export const GATEWAY_REQUEST_HEADER = 'X-Caracal-Gateway-Request';
+export const GATEWAY_SIGNATURE_HEADER = 'X-Caracal-Gateway-Signature';
+
+export function signGatewayExchange(key: Buffer, timestampUnix: number, requestId: string, body: Buffer | string): string {
+  const digest = createHash('sha256').update(body).digest('hex');
+  return createHmac('sha256', key).update(`${timestampUnix}\n${requestId}\n${digest}`).digest('hex');
+}
