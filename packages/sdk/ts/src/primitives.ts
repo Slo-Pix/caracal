@@ -70,6 +70,7 @@ export interface DelegateInput {
   coordinator: CoordinatorClient;
   toAgentSessionId: string;
   toApplicationId: string;
+  resourceId?: string;
   scopes: string[];
   constraints?: DelegationConstraints;
   ttlSeconds?: number;
@@ -90,6 +91,7 @@ export async function delegate<T>(
     sourceSessionId: ctx.agentSessionId,
     targetSessionId: input.toAgentSessionId,
     receiverApplicationId: input.toApplicationId,
+    resourceId: input.resourceId,
     scopes: input.scopes,
     constraints: input.constraints,
     ttlSeconds: input.ttlSeconds,
@@ -108,6 +110,7 @@ export interface DelegateToSpawnInput {
   zoneId: string;
   applicationId: string;
   subjectToken: string;
+  resourceId?: string;
   scopes: string[];
   constraints?: DelegationConstraints;
   delegationTtlSeconds?: number;
@@ -152,6 +155,7 @@ export async function delegateToSpawn<T>(
       sourceSessionId: parent.agentSessionId,
       targetSessionId: spawnRes.agent_session_id,
       receiverApplicationId: input.applicationId,
+      resourceId: input.resourceId,
       scopes: input.scopes,
       constraints: input.constraints,
       ttlSeconds: input.delegationTtlSeconds,

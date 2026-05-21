@@ -20,6 +20,8 @@ type Options struct {
 	Audience             string
 	ZoneID               string
 	RequiredScopes       []string
+	RequiredTargets      []string
+	RequiredUse          string
 	RequireAgent         bool
 	RequireDelegation    bool
 	RequireChainContains []string
@@ -68,11 +70,17 @@ func Authenticate(token string, opts Options) (identity.Claims, *AuthError) {
 	if token == "" {
 		return identity.Claims{}, &AuthError{Code: ErrMissingToken, Description: "Missing bearer token"}
 	}
+	requiredUse := opts.RequiredUse
+	if requiredUse == "" {
+		requiredUse = "per_call"
+	}
 	cfg := identity.Config{
 		Issuer:               opts.Issuer,
 		Audience:             opts.Audience,
 		ZoneID:               opts.ZoneID,
 		RequiredScopes:       opts.RequiredScopes,
+		RequiredTargets:      opts.RequiredTargets,
+		RequiredUse:          requiredUse,
 		RequireAgent:         opts.RequireAgent,
 		RequireDelegation:    opts.RequireDelegation,
 		RequireChainContains: opts.RequireChainContains,
