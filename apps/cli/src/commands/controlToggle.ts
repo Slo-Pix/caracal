@@ -1,18 +1,20 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// `caracal-cli control mount|enable|disable|unmount|status`: manages the engine-owned Control automation service.
+// Interactive Control lifecycle commands for the engine-owned automation service.
 
 import {
   applyControlLifecycleAction,
+  authorizeControlManagementAccess,
   controlServiceStatus,
   type ControlLifecycleAction,
   type ControlLifecycleResult,
   type ControlServiceStatus,
 } from '@caracalai/engine'
+import { createInterface } from 'node:readline'
 import type { CliConfig } from '../config.ts'
 import { printError, printInfo, printStep, printSuccess, style } from '../style.ts'
-import { printJSON, showHelp } from './shared.ts'
+import { fail, printJSON, showHelp } from './shared.ts'
 import { composeEnv, resolvePaths } from './stack.ts'
 
 const LIFECYCLE_ACTIONS = new Set<ControlLifecycleAction>(['mount', 'enable', 'disable', 'unmount'])
@@ -35,7 +37,7 @@ function controlHelp(): never {
     '  revoke    Delete a Control API credential',
     '',
     'Flags:',
-    '  --json    Emit structured JSON for enable, disable, or status',
+    '  --json    Emit structured JSON for status after interactive authorization',
     '',
   ])
 }
@@ -85,12 +87,52 @@ function formatEndpoint(enabled: boolean, invokeUrl: string): string {
   return enabled ? style.code(invokeUrl) : `${style.label('not exposed')} ${style.code(invokeUrl)}`
 }
 
-export async function controlToggleCommand(argv: string[], cfg?: CliConfig): Promise<void> {
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise((resolveAnswer) => {
+    let settled = false
+    const finish = (value: string) => {
+      if (settled) return
+      settled = true
+      rl.close()
+      resolveAnswer(value)
+    }
+    rl.question(question, (answer) => finish(answer.trim()))
+    rl.once('close', () => finish(''))
+  })
+}
+
+async function confirmLifecycleAction(action: ControlLifecycleAction): Promise<void> {
+  process.stdout.write(
+    [
+      style.warn(`Control ${action} changes the managed Control API runtime.`),
+      style.label(`Type "control ${action}" to confirm:`),
+      '',
+    ].join('\n'),
+  )
+  const answer = await prompt(style.prompt('> '))
+  if (answer !== `control ${action}`) {
+    printError('Control lifecycle action aborted.')
+    process.exit(1)
+  }
+}
+
+export async function controlToggleCommand(argv: string[], _cfg?: CliConfig): Promise<void> {
   const [sub, ...rest] = argv
   if (!sub || sub === '--help' || sub === '-h') controlHelp()
   const { json } = parseToggleFlags(rest)
+  try {
+    authorizeControlManagementAccess()
+  } catch (err) {
+    fail(err)
+  }
   if (LIFECYCLE_ACTIONS.has(sub as ControlLifecycleAction)) {
     const action = sub as ControlLifecycleAction
+    if (json) {
+      printError('--json is available only for control status; lifecycle changes are interactive only.')
+      process.exit(1)
+    }
+    await confirmLifecycleAction(action)
     const paths = resolvePaths()
     if (!json) printStep(`control ${action}: applying managed lifecycle action`)
     const result = await applyControlLifecycleAction({

@@ -6,6 +6,7 @@
 import type { AdminClient, Zone } from '@caracalai/admin'
 import {
   applyControlLifecycleAction,
+  authorizeControlManagementAccess,
   buildRunEnv,
   checkMcpGovernance,
   controlKeyCreate,
@@ -219,10 +220,10 @@ class ControlMenuView implements View {
   constructor(ctx: Ctx) {
     this.ctx = ctx
     this.items = [
-      { key: 'm', label: 'mount runtime', build: () => this.lifecycleView('mount') },
-      { key: 'e', label: 'enable endpoint', build: () => this.lifecycleView('enable') },
-      { key: 'd', label: 'disable endpoint', build: () => this.lifecycleView('disable') },
-      { key: 'u', label: 'unmount runtime', build: () => this.unmountConfirm() },
+      { key: 'm', label: 'mount runtime', build: () => this.lifecycleConfirm('mount') },
+      { key: 'e', label: 'enable endpoint', build: () => this.lifecycleConfirm('enable') },
+      { key: 'd', label: 'disable endpoint', build: () => this.lifecycleConfirm('disable') },
+      { key: 'u', label: 'unmount runtime', build: () => this.lifecycleConfirm('unmount') },
       { key: 's', label: 'management status', build: () => this.statusView() },
       { key: 'l', label: 'list keys',  build: () => this.listView() },
       { key: 'g', label: 'get key', build: () => this.getForm() },
@@ -270,6 +271,7 @@ class ControlMenuView implements View {
       title: `control / ${action}`,
       action,
       run: async (onLine) => {
+        authorizeControlManagementAccess()
         const paths = resolveStackPaths({ mode: resolveControlStackMode() })
         return applyControlLifecycleAction({ paths, action, env: controlComposeEnv(paths), onLine })
       },
@@ -279,16 +281,19 @@ class ControlMenuView implements View {
   private statusView(): View {
     return new ControlStatusView({
       title: 'control / status',
-      load: () => controlServiceStatus(),
+      load: async () => {
+        authorizeControlManagementAccess()
+        return controlServiceStatus()
+      },
     })
   }
 
-  private unmountConfirm(): View {
+  private lifecycleConfirm(action: ControlLifecycleAction): View {
     return new ConfirmView({
-      message: 'Unmount Control runtime and remove its local container?',
+      message: `Confirm Control ${action} through the managed engine lifecycle?`,
       onConfirm: async (app) => {
         app.pop()
-        app.push(this.lifecycleView('unmount'))
+        app.push(this.lifecycleView(action))
       },
     })
   }

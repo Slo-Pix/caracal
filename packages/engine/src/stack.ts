@@ -6,6 +6,7 @@
 import { rmSync, statSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { runExec } from './run.js'
+import { authorizeControlManagementAccess } from './controlAccess.js'
 import {
   controlRuntimeSettings,
   controlStateFile,
@@ -265,6 +266,7 @@ function controlResult(
 }
 
 export async function applyControlLifecycleAction(opts: ControlLifecycleOpts): Promise<ControlLifecycleResult> {
+  authorizeControlManagementAccess()
   const settings = controlRuntimeSettings()
   const current = readControlState()
   if (opts.action === 'disable' && !current) {
@@ -378,6 +380,7 @@ function enabledControlStatus(state: ControlRuntimeState, probe: ProbeResult, ho
 }
 
 export async function controlServiceStatus(opts: ControlServiceStatusOpts = {}): Promise<ControlServiceStatus> {
+  authorizeControlManagementAccess()
   const state = readControlState(opts.home)
   if (!state) return disabledControlStatus(opts.home)
   if (!state.enabled) {
