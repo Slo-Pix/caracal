@@ -4,11 +4,29 @@ description: How Caracal's services, data stores, event streams, and cryptograph
 pageType: landing
 ---
 
-Caracal is a distributed authorization system built around one product promise: run agents through Caracal, give them scoped access to tools and providers, and get enforceable audit and revocation without exposing provider secrets.
+Caracal is a distributed authority plane built around one product promise: run agents through Caracal, issue only the execution authority they need, and get enforceable audit and revocation without exposing provider secrets.
 
-The architecture optimizes for the Gateway-first path. Public STS issues Caracal access tokens; the internal broker path resolves provider-native credentials only for service-authenticated Gateway or certified adapters; the Gateway verifies, brokers, forwards, and audits action execution.
+The architecture optimizes for the Gateway-first path. Public STS issues Caracal mandates; the internal broker path resolves provider-native credentials only for service-authenticated Gateway or contract-complete adapters; the Gateway verifies, brokers, forwards, and audits action execution.
 
-The system is composed of five runtime services, two shared data stores, nine Redis event streams, and a set of per-zone cryptographic keys. Each page in this section explains one structural dimension of the system.
+The reference stack is split into five runtime services because each one owns a trust boundary: STS issues authority, Gateway enforces it at execution time, Coordinator owns agent runs and delegation, Audit writes evidence, and API manages configuration. Local users still operate it as one stack through `caracal up`; production operators expose only the Gateway publicly and keep the rest on a private network.
+
+This section is the operator and contributor reference. It explains the internal split without requiring that split to become the product mental model.
+
+## Authority-plane primitives
+
+The architecture is intentionally built around a small set of durable primitives. Product docs lead with agent app, agent run, mandate, resource, and delegated permission; the table below shows the precise reference model behind those names.
+
+| Primitive | Owner | Enforcement role |
+| --- | --- | --- |
+| Principal | API / STS | Authenticated application or workload requesting authority |
+| Execution session | STS / Coordinator | Runtime state that binds identity, agent execution, TTL, and revocation anchors |
+| Mandate | STS | Short-lived ES256-signed assertion of allowed authority |
+| Resource | API / Gateway | Stable authority target with scopes and optional routing/credential metadata |
+| Delegation edge | Coordinator / STS | Typed narrowing from one execution session to another |
+| Policy decision | STS / OPA | Per-resource allow/deny contract before mandate issuance |
+| Audit event | STS / Gateway / Audit | Durable evidence of decision, execution result, and revocation context |
+
+Packages, connectors, adapters, and provider integrations are secondary. They are accepted into the architecture only when they preserve these primitives without creating a broader authority path.
 
 ## Section map
 
@@ -26,15 +44,21 @@ The system is composed of five runtime services, two shared data stores, nine Re
 
 **Gateway-first enforcement.** New integrations should send tool/provider calls through the Gateway. Public STS evaluates OPA and signs a scoped Caracal access token before the agent's action reaches any upstream resource. The Gateway enforces this at the boundary: a request without a valid token cannot reach the upstream. There is no post-hoc audit-only mode.
 
-**Credential brokering is internal.** Agent-facing STS exchange never returns provider-native credentials. Provider OAuth tokens, API keys, and future workload credentials are resolved only through internal service-authenticated broker paths for Gateway or certified adapters.
+**Credential brokering is internal.** Agent-facing STS exchange never returns provider-native credentials. Provider OAuth tokens, API keys, and future workload credentials are resolved only through internal service-authenticated broker paths for Gateway or adapters that satisfy the full enforcement contract.
 
 **One policy evaluation per resource.** OPA is called once per requested resource, not once per exchange. A request for three resources produces three independent evaluations and three independent audit events. This makes per-resource denial granular and its audit trail unambiguous.
 
 **Append-only tamper-evident audit.** Every OPA evaluation — allow or deny — is recorded in an HMAC-chained append-only Postgres table via a Redis stream. Neither the STS nor the Audit service can UPDATE or DELETE audit rows; the Postgres role for the Audit service has INSERT and SELECT permissions only.
 
-**Action-result audit.** Gateway-proxied calls emit execution audit with request ID, resource, upstream host, auth mode, status, latency, result class, response byte count, and revocation interruption state. Direct verifiers and adapters must emit equivalent result audit if they are used as production execution boundaries.
+**Action-result audit.** Gateway-proxied calls emit execution audit with request ID, resource, upstream host, auth mode, status, latency, result class, response byte count, and revocation interruption state. Connector-verified services and adapters must emit equivalent result audit if they are used as production execution boundaries.
 
 **Zone isolation.** Every tenant-level object (application, resource, policy, session, signing key) belongs to exactly one zone. Zone signing keys are derived per-zone and are never shared. A token issued in zone A cannot be verified in zone B.
+
+**Same-zone authority first.** Delegation, mandate issuance, graph traversal, and revocation are same-zone contracts. Cross-zone federation is not a current runtime feature and should not be introduced through SDK conveniences, adapter metadata, or policy templates until same-zone delegation is operationally excellent.
+
+**Protocol humility.** HTTP, REST, and MCP-over-HTTP fit the Gateway enforcement model well. Non-HTTP protocols, provider SDKs, queues, and custom transports require explicit adapters that verify mandates, check revocation, preserve trace context, and emit action-result audit. Do not market a protocol as production-supported unless that enforcement contract is implemented end to end.
+
+**Reality labels.** Architecture docs distinguish implemented behavior, supported patterns, example-only patterns, and future direction. Gateway-mediated HTTP is implemented default behavior. Connector-verified services and application-managed provider calls are supported patterns with different enforcement guarantees. Demo app integrations are example-only unless they state a production enforcement contract. Native broker plugins are future direction until a runtime plugin contract exists.
 
 **Transactional event publishing.** The Coordinator and API write events to the `caracal_outbox` table inside the same database transaction as the state change that produced them. A background publisher reads the outbox and publishes to Redis streams. This eliminates dual-write races between state and events.
 

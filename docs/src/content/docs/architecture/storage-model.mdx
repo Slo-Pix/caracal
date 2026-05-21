@@ -76,16 +76,17 @@ The Audit service's retention job drops partitions older than `AUDIT_RETENTION_D
 
 ## Row Level Security
 
-RLS is enabled on all 22 zone-scoped tables. The policy on each table is:
+RLS is enabled on all 22 zone-scoped tables. The fail-closed policy on each table is:
 
 ```sql
 CREATE POLICY zone_isolation ON {table}
   USING (zone_id = current_setting('caracal.zone_id', true)
-         OR current_setting('caracal.zone_id', true) IS NULL
-         OR current_setting('caracal.zone_id', true) = '');
+         OR current_setting('caracal.zone_id', true) = '*');
 ```
 
-When a connection sets `SET LOCAL caracal.zone_id = '{zone_id}'` at the start of a transaction, the database filters every query to that zone automatically. When the setting is absent or empty, all rows are visible (used by admin and maintenance operations). This provides a defense-in-depth layer: even if application code omits a `WHERE zone_id = ?` clause, the database enforces isolation.
+When a connection sets `SET LOCAL caracal.zone_id = '{zone_id}'` at the start of a transaction, the database filters every query to that zone automatically. When the setting is absent or empty, the policy denies access. The only cross-zone bypass is the explicit `'*'` sentinel used by trusted control-plane and maintenance code.
+
+The wildcard mode is privileged. API admin audit records include `payload_json.rls_bypass = true`, `rls_mode = "control_plane_wildcard"`, and `rls_zone_guc = "*"`, so operators can distinguish ordinary zone-scoped access from intentional cross-zone administration.
 
 Tables with RLS: `providers`, `applications`, `sessions`, `secrets`, `delegated_grants`, `policies`, `policy_sets`, `policy_set_bindings`, `resources`, `audit_events`, `agent_sessions`, `invitations`, `teams`, `delegation_edges`, `agent_services`, `agent_invocations`, `gateway_resource_bindings`, `resource_rate_limits`, `step_up_challenges`, `admin_audit_events`, `admin_tokens`, `delegation_graph_epochs`.
 

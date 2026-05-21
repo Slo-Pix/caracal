@@ -186,11 +186,12 @@ All `DATABASE_URL` connection strings must include SSL mode. Use `sslmode=verify
 
 ### Database access controls
 
-Caracal does not use PostgreSQL row-level security or column-level encryption (except for provider credentials and zone signing keys). Unrestricted database access bypasses all application-layer controls. Apply the principle of least privilege:
+Caracal uses PostgreSQL row-level security on zone-scoped tables as a defense-in-depth boundary, and encrypts provider credentials and zone signing keys at rest. Trusted control-plane connections intentionally set the privileged `caracal.zone_id = '*'` mode for cross-zone administration, so unrestricted database access still bypasses application-layer controls. Apply the principle of least privilege:
 
 - Create a dedicated database user for each service.
 - Grant only the tables and operations each service requires.
 - Restrict network access to the database to the Caracal service network.
+- Monitor `admin_audit_events.payload_json.rls_bypass = true`; those records identify privileged control-plane operations that used the wildcard RLS mode.
 
 ---
 

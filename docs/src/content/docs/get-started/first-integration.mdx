@@ -111,7 +111,7 @@ app.post("/tool", (req, res) => {
 });
 ```
 
-The middleware extracts the agent's Caracal token from the `Authorization` header and W3C baggage, then binds the `CaracalContext` to the request. Use this direct-verifier path only for services you own and can operate with the same revocation and audit contract as the Gateway.
+The middleware extracts the agent's Caracal token from the `Authorization` header and W3C baggage, then binds the `CaracalContext` to the request. Use this connector-verified path only for services you own and can operate with the same revocation and audit contract as the Gateway.
 
 ## Python
 
@@ -278,7 +278,7 @@ If policy denies access, the STS returns HTTP 403 and the SDK throws an error. N
 
 ## Prefer Gateway before direct verification
 
-The Gateway path is the product default because it keeps provider secrets out of agent code, centralizes revocation, and records action-result audit. Use SDK middleware or connector packages as direct verifiers only when the resource is yours and can enforce signature checks, replay protection, revocation, and result audit itself. Use certified adapters for provider SDKs or protocols the Gateway cannot proxy.
+The Gateway path is the product default because it keeps provider secrets out of agent code, centralizes revocation, and records action-result audit. Use SDK middleware or connector packages only when the resource is yours and can enforce signature checks, replay protection, revocation, and result audit itself. Use adapter paths for provider SDKs or protocols the Gateway cannot proxy only when the adapter preserves the same enforcement contract.
 
 ## Next step
 

@@ -4,7 +4,9 @@ description: The five core services, optional control surface, shared Postgres a
 pageType: architecture
 ---
 
-Caracal runs five core application services plus Postgres and Redis. One-shot initialization containers provision Redis streams and credentials, then exit. The Coordinator container also starts its Go relay sidecar. All ports are bound to localhost in development; production deployments place services behind network policies appropriate to the deployment target.
+Caracal runs five core application services plus Postgres and Redis. This page is the operator topology reference; the getting-started path still presents the system as one local stack managed by `caracal up`.
+
+One-shot initialization containers provision Redis streams and credentials, then exit. The Coordinator container also starts its Go relay sidecar. All ports are bound to localhost in development; production deployments place services behind network policies appropriate to the deployment target.
 
 ## Services
 
@@ -41,7 +43,7 @@ The STS is the sole issuer of mandates. It receives RFC 8693 token exchange requ
 | Port | 8081 |
 | Image | `caracal/gateway:dev` |
 
-The Gateway is the ingress point for all agent requests. On each inbound request it exchanges the agent's ambient mandate with the STS for a per-call token, verifies the response, checks the JTI replay cache, and forwards the request to the upstream with the appropriate authorization header. The upstream never sees the agent's ambient mandate.
+The Gateway is the ingress point for agent calls to Gateway-routable resources. On each inbound request it exchanges the agent's session-scoped mandate with the STS for a per-call mandate, verifies the response, checks the JTI replay cache, and forwards the request to the upstream with the appropriate authorization header. The upstream never sees the session-scoped mandate.
 
 **Endpoints:**
 
