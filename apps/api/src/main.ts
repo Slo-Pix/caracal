@@ -40,6 +40,7 @@ const db = newDB({
   connectionTimeoutMs: cfg.db.connectionTimeoutMs,
   idleTimeoutMs: cfg.db.idleTimeoutMs,
   applicationName: cfg.workerId,
+  onZoneGUCError: (err) => log('error', 'zone_guc_set_failed', { error: err instanceof Error ? err.message : String(err) }),
 })
 const redis = newRedis(cfg.redisUrl)
 

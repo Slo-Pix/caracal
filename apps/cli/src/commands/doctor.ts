@@ -115,6 +115,7 @@ export async function doctorCommand(argv: string[], cfg?: CliConfig): Promise<vo
   const { flags } = parseArgs(argv)
   const json = flagBool(flags, 'json')
   const extended = flagBool(flags, 'extended')
+  const ready = flagBool(flags, 'ready')
   try {
     const ctx = buildAdminClient(cfg)
     const { client } = ctx
@@ -186,8 +187,14 @@ export async function doctorCommand(argv: string[], cfg?: CliConfig): Promise<vo
       ])
     }
 
-    if (json) return printJSON(checks)
-    return printTable(checks, ['check', 'status', 'detail'])
+    const allOk = checks.every((c) => c.status === 'ok')
+    if (json) {
+      printJSON(ready ? { ready: allOk, checks } : checks)
+    } else {
+      printTable(checks, ['check', 'status', 'detail'])
+    }
+    if (!allOk) process.exit(1)
+    return
   } catch (err) {
     fail(err)
   }
@@ -196,13 +203,15 @@ export async function doctorCommand(argv: string[], cfg?: CliConfig): Promise<vo
 function help(): never {
   return showHelp(
     [
-      'Usage: caracal doctor [--zone <id>] [--extended] [--json]',
+      'Usage: caracal doctor [--zone <id>] [--extended] [--ready] [--json]',
       '',
       'Checks control-plane readiness. --extended also probes service readiness and operator metrics.',
+      'Exit code is 0 only when every check is ok; otherwise 1. Use --ready in orchestrator gates.',
       '',
       'Flags:',
       '  --zone <id>             Zone selector (or CARACAL_ZONE_ID)',
       '  --extended              Probe API, STS, Gateway, Audit, and Coordinator readiness and metrics',
+      '  --ready                 With --json, wrap output as { ready, checks } for machine consumers',
       '  --json                  Emit machine-readable output',
       '  --help, -h              Show this help',
       '',

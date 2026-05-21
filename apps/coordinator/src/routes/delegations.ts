@@ -309,6 +309,77 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  fastify.get('/zones/:zoneId/agents/:sessionId/effective-authority', async (req, reply) => {
+    const params = parseParams(ZoneSessionParams, req, reply)
+    if (!params) return
+    const { zoneId, sessionId } = params
+    const parents = await activeParentDelegations(fastify.db, zoneId, sessionId)
+    if (parents.length === 0) {
+      return {
+        agent_session_id: sessionId,
+        inbound_edges: [],
+        effective_scopes: [],
+        effective_resources: [],
+        effective_max_hops: 0,
+        effective_ttl_seconds: null,
+        earliest_expires_at: null,
+      }
+    }
+    let scopes: Set<string> | null = null
+    const resourceIds = new Set<string>()
+    const resourceIdentifiers = new Set<string>()
+    let resourceConstrained = false
+    let maxHops = Number.POSITIVE_INFINITY
+    let ttlSeconds: number | null = null
+    let earliestExpiry = new Date(parents[0].expires_at).getTime()
+    const considered: string[] = []
+    for (const parent of parents) {
+      considered.push(parent.id)
+      const parsedConstraints = normalizedConstraints(parent.constraints_json, undefined, undefined)
+      if (!parsedConstraints.ok) continue
+      const c = parsedConstraints.constraints
+      const parentScopes = new Set<string>(parent.scopes)
+      if (scopes === null) {
+        scopes = parentScopes
+      } else {
+        const intersected = new Set<string>()
+        for (const s of scopes) {
+          if (parentScopes.has(s)) intersected.add(s)
+        }
+        scopes = intersected
+      }
+      if (parent.resource_id) {
+        resourceIds.add(parent.resource_id)
+        resourceConstrained = true
+      }
+      if (parent.resource_identifier) {
+        resourceIdentifiers.add(parent.resource_identifier)
+      }
+      if (c.resources && c.resources.length > 0) {
+        for (const r of c.resources) resourceIdentifiers.add(r)
+        resourceConstrained = true
+      }
+      const hops = c.max_hops ?? 1
+      if (hops < maxHops) maxHops = hops
+      if (c.ttl_seconds !== undefined) {
+        ttlSeconds = ttlSeconds === null ? c.ttl_seconds : Math.min(ttlSeconds, c.ttl_seconds)
+      }
+      const expires = new Date(parent.expires_at).getTime()
+      if (expires < earliestExpiry) earliestExpiry = expires
+    }
+    return {
+      agent_session_id: sessionId,
+      inbound_edges: considered,
+      effective_scopes: scopes ? [...scopes].sort() : [],
+      effective_resource_ids: [...resourceIds].sort(),
+      effective_resources: [...resourceIdentifiers].sort(),
+      effective_resource_constrained: resourceConstrained,
+      effective_max_hops: maxHops === Number.POSITIVE_INFINITY ? null : maxHops,
+      effective_ttl_seconds: ttlSeconds,
+      earliest_expires_at: new Date(earliestExpiry).toISOString(),
+    }
+  })
+
   fastify.patch('/zones/:zoneId/delegations/:id/revoke', async (req, reply) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
