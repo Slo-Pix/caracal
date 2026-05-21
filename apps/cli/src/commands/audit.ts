@@ -97,6 +97,11 @@ export async function explainCommand(argv: string[], cfg?: CliConfig): Promise<v
       process.stdout.write(`occurred_at ${row.occurred_at}\n`)
       process.stdout.write(`request_id  ${row.request_id ?? '-'}\n`)
       process.stdout.write(`policy_set  ${row.policy_set_id ?? '-'} version=${row.policy_set_version_id ?? '-'} sha=${row.manifest_sha ?? '-'}\n`)
+      const authority = authorityLines(row.metadata_json)
+      if (authority.length > 0) {
+        process.stdout.write('authority:\n')
+        process.stdout.write(authority.join('\n') + '\n')
+      }
       if (row.determining_policies_json && row.determining_policies_json.length > 0) {
         process.stdout.write('determining_policies:\n')
         process.stdout.write(JSON.stringify(row.determining_policies_json, null, 2) + '\n')
@@ -114,4 +119,65 @@ export async function explainCommand(argv: string[], cfg?: CliConfig): Promise<v
   } catch (err) {
     fail(err)
   }
+}
+
+function authorityLines(meta: Record<string, unknown> | null): string[] {
+  if (!meta) return []
+  const application = stringField(meta, 'application_id') ?? stringField(meta, 'client_id')
+  const authoritySession = stringField(meta, 'root_sid') ?? stringField(meta, 'session_id') ?? stringField(meta, 'sid')
+  const agentRun = stringField(meta, 'agent_session_id')
+  const delegatedPermission = stringField(meta, 'delegation_edge_id')
+  const resource = stringField(meta, 'resource')
+  const scopes = stringList(meta, 'requested_scopes') ?? stringList(meta, 'scopes')
+  const authMode = stringField(meta, 'auth_mode')
+  const provider = stringField(meta, 'provider_id')
+  const grant = stringField(meta, 'grant_id')
+  const chain = delegationChain(meta)
+  if (![application, authoritySession, agentRun, delegatedPermission, resource, scopes?.join(' '), authMode, provider, grant, chain].some(Boolean)) {
+    return []
+  }
+  const lines = [
+    `  application            ${application ?? '-'}`,
+    `  authority_session      ${authoritySession ?? '-'}`,
+    `  agent_run              ${agentRun ?? '-'}`,
+    `  delegated_permission   ${delegatedPermission ?? '-'}`,
+    `  resource               ${resource ?? '-'}`,
+    `  scopes                 ${scopes?.join(' ') ?? '-'}`,
+  ]
+  if (authMode || provider || grant) {
+    lines.push(`  provider               ${provider ?? '-'} grant=${grant ?? '-'} auth=${authMode ?? '-'}`)
+  }
+  if (chain) {
+    lines.push(`  chain                  ${chain}`)
+  }
+  return lines
+}
+
+function stringField(meta: Record<string, unknown>, key: string): string | undefined {
+  const value = meta[key]
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+function stringList(meta: Record<string, unknown>, key: string): string[] | undefined {
+  const value = meta[key]
+  if (Array.isArray(value)) {
+    const out = value.filter((item): item is string => typeof item === 'string' && item !== '')
+    return out.length > 0 ? out : undefined
+  }
+  if (typeof value === 'string' && value !== '') return value.split(/\s+/).filter(Boolean)
+  return undefined
+}
+
+function delegationChain(meta: Record<string, unknown>): string | undefined {
+  const raw = meta.delegation_chain
+  if (!Array.isArray(raw)) return undefined
+  const parts = raw.flatMap((hop) => {
+    if (!hop || typeof hop !== 'object') return []
+    const item = hop as Record<string, unknown>
+    const app = stringField(item, 'application_id')
+    const agent = stringField(item, 'agent_session_id')
+    if (!app && !agent) return []
+    return [`${app ?? '-'}:${agent ?? '-'}`]
+  })
+  return parts.length > 0 ? parts.join(' -> ') : undefined
 }

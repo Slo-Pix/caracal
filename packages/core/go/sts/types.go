@@ -15,6 +15,8 @@ type UpstreamDirective struct {
 	AuthHeader             string `json:"auth_header,omitempty"`
 	AuthScheme             string `json:"auth_scheme,omitempty"`
 	ProviderToken          string `json:"provider_token,omitempty"`
+	ProviderID             string `json:"provider_id,omitempty"`
+	GrantID                string `json:"grant_id,omitempty"`
 	ForwardCaracalIdentity bool   `json:"forward_caracal_identity,omitempty"`
 	ExpiresAt              int64  `json:"expires_at,omitempty"`
 }
