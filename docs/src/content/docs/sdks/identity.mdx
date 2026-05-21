@@ -30,6 +30,8 @@ interface JwtConfig {
   audience: string;                     // Must be present in the 'aud' claim
   zoneId?: string;                      // If set, 'zone_id' claim must match
   requiredScopes?: string[];            // All listed scopes must be in the 'scope' claim
+  requiredTargets?: string[];           // All listed resources must be in the 'target' claim
+  requiredUse?: string;                 // If set, 'use' claim must match
   requireAgent?: boolean;               // Reject tokens without 'agent_session_id'
   requireDelegation?: boolean;          // Reject tokens without 'delegation_edge_id'
   requireChainContains?: string[];      // All IDs must appear in 'delegation_chain'
@@ -45,7 +47,13 @@ interface Claims {
   zoneId: string;
   clientId: string;                     // Application ID
   sid: string;                          // Session ID (revocation key)
+  rootSid?: string;                     // Authority root, if present
+  use: string;                          // Token use, such as 'per_call'
+  jti: string;                          // Token ID
+  issuedAt: number;                     // NumericDate from 'iat'
+  expiresAt: number;                    // NumericDate from 'exp'
   scope: string;                        // Space-separated OAuth scopes
+  targetResources?: string[];           // Resource identifiers from the 'target' claim
   agentSessionId?: string;
   delegationEdgeId?: string;
   sourceSessionId?: string;
@@ -128,6 +136,8 @@ class JwtConfig:
     audience: str
     expected_zone_id: str | None = None
     required_scopes: list[str] = field(default_factory=list)
+    required_targets: list[str] = field(default_factory=list)
+    required_use: str | None = None
     require_agent: bool = False
     require_delegation: bool = False
     require_chain_contains: list[str] = field(default_factory=list)
@@ -143,7 +153,13 @@ class Claims:
     zone_id: str
     client_id: str
     sid: str
+    use: str
+    jti: str
     scope: str
+    issued_at: int
+    expires_at: int
+    target_resources: list[str] = field(default_factory=list)
+    root_sid: str | None = None
     agent_session_id: str | None = None
     delegation_edge_id: str | None = None
     source_session_id: str | None = None
@@ -205,6 +221,8 @@ type Config struct {
     Audience             string
     ZoneID               string
     RequiredScopes       []string
+    RequiredTargets      []string
+    RequiredUse          string
     RequireAgent         bool
     RequireDelegation    bool
     RequireChainContains []string
@@ -222,7 +240,13 @@ type Claims struct {
     ZoneID           string
     ClientID         string
     Sid              string
+    RootSid          string
+    Use              string
+    JTI              string
+    IssuedAt         int64
+    ExpiresAt        int64
     Scope            string
+    TargetResources  []string
     AgentSessionID   string
     DelegationEdgeID string
     SourceSessionID  string

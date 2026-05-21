@@ -49,6 +49,8 @@ claims = await auth(token)
 | `audience` | Yes | Expected JWT `aud` claim |
 | `revocations` | Yes | Revocation store checked on every call |
 | `required_scopes` | No | All listed scopes must be present |
+| `required_targets` | No | All listed resource identifiers must be present in the `target` claim |
+| `required_use` | No | Token `use` claim; defaults to `per_call` |
 | `expected_zone_id` | No | Reject tokens from other zones |
 | `require_agent` | No | Reject tokens without `agent_session_id` |
 | `require_delegation` | No | Reject tokens without `delegation_edge_id` |

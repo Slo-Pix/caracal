@@ -27,8 +27,8 @@ Verification steps (in order):
 1. Validate `token` as a non-empty string.
 2. Fetch zone JWKS and verify ES256 signature.
 3. Check `iss`, `aud`, `exp`, and optionally `zone_id`.
-4. Check `deps.revocations.isRevoked(claims.sid)`.
-5. Enforce `requiredScopes`, `requireAgent`, `requireDelegation`, `requireChainContains`, `maxHopCount`.
+4. Check all authority revocation anchors: `sid`, `root_sid`, `agent_session_id`, and `delegation_edge_id`.
+5. Enforce per-call token use by default, plus `requiredScopes`, `requiredTargets`, `requireAgent`, `requireDelegation`, `requireChainContains`, `maxHopCount`, and active-execution expiry.
 
 Never throws. Always returns an `AuthResult`.
 
@@ -40,6 +40,8 @@ interface AuthDeps {
   audience: string;                     // Must match 'aud' claim
   zoneId?: string;                      // If set, 'zone_id' must match
   requiredScopes?: string[];
+  requiredTargets?: string[];
+  requiredUse?: string;                 // Default: 'per_call'
   requireAgent?: boolean;
   requireDelegation?: boolean;
   requireChainContains?: string[];
@@ -121,6 +123,8 @@ async def authenticate(
     require_delegation: bool = False,
     require_chain_contains: list[str] | None = None,
     max_hop_count: int | None = None,
+    required_targets: list[str] | None = None,
+    required_use: str | None = "per_call",
 ) -> AuthResult: ...
 ```
 

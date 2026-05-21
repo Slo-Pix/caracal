@@ -30,6 +30,8 @@ type Options struct {
     Audience             string
     ZoneID               string
     RequiredScopes       []string
+    RequiredTargets      []string
+    RequiredUse          string
     RequireAgent         bool
     RequireDelegation    bool
     RequireChainContains []string
@@ -44,6 +46,8 @@ type Options struct {
 | `Audience` | Must appear in the `aud` claim |
 | `ZoneID` | If non-empty, `zone_id` claim must match |
 | `RequiredScopes` | All listed scopes must be present in the `scope` claim |
+| `RequiredTargets` | All listed resource identifiers must be present in the `target` claim |
+| `RequiredUse` | Token `use` claim; defaults to `per_call` |
 | `RequireAgent` | Reject tokens without `agent_session_id` |
 | `RequireDelegation` | Reject tokens without `delegation_edge_id` |
 | `RequireChainContains` | All listed application IDs must appear in the delegation chain |
