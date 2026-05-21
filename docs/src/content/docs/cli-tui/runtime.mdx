@@ -1,6 +1,6 @@
 ---
 title: Runtime Commands
-description: caracal run and credential read — inject resource mandates into subprocesses and print tokens for manual use.
+description: caracal run and credential read — inject resource mandates into subprocesses and print mandates for manual use.
 pageType: reference
 ---
 
@@ -10,7 +10,7 @@ Runtime commands bind Caracal mandates to processes. They require `caracal.toml`
 
 ## `caracal run`
 
-Inject resource tokens into a subprocess's environment and run it.
+Inject resource mandates into a subprocess's environment and run it.
 
 ```bash
 caracal run -- <command> [args...]
@@ -22,7 +22,7 @@ The `--` separator is optional but recommended when `<command>` accepts flags th
 
 1. Loads `caracal.toml`. Exits with an error if the file is not found.
 2. Checks MCP governance rules (see below).
-3. For each entry in `credentials[]`, exchanges the application's client credentials for a resource token at the STS with a 60-minute TTL.
+3. For each entry in `credentials[]`, exchanges the application's client credentials for a resource mandate at the STS with a 15-minute TTL.
 4. For each entry in `optional_credentials[]`, attempts the same exchange but logs a warning on failure rather than exiting.
 5. Spawns the subprocess with the tokens injected as named environment variables.
 6. Forwards stdin, stdout, and stderr to the subprocess unchanged.

@@ -4,7 +4,7 @@ description: caracal.toml — full schema, lookup order, environment variable ov
 pageType: config
 ---
 
-`caracal.toml` is the configuration file for the `caracal run` and `caracal credential read` commands. It stores the application credentials (zone, application, and client secret) used for token exchange, and declares which resource tokens to inject into subprocess environments.
+`caracal.toml` is the configuration file for the `caracal run` and `caracal credential read` commands. It stores the application credentials (zone, application, and client secret) used for token exchange, and declares which resource mandates to inject into subprocess environments.
 
 The control-plane admin commands (`zone`, `app`, `resource`, etc.) do not require `caracal.toml` — they use environment variables directly.
 
@@ -39,7 +39,7 @@ app_client_secret = "secret_xyz"               # Client secret
 # Optional: behavior on required credential failures (default: false)
 continue_on_failure = false
 
-# Declare resource tokens to inject into subprocesses
+# Declare resource mandates to inject into subprocesses
 [[credentials]]
 env      = "RESOURCE_TOKEN"          # Environment variable name in the subprocess
 resource = "resource://my-api"       # Resource identifier to exchange for a token
@@ -75,7 +75,7 @@ mode = "block"    # "block" = exit 1 if MCP server detected, "log" = warn and co
 
 ### `[[credentials]]`
 
-Declares a required resource token. Every credential in this array is exchanged before the subprocess is spawned. If any exchange fails and `continue_on_failure` is `false`, the subprocess is not started.
+Declares a required resource mandate. Every credential in this array is exchanged before the subprocess is spawned. If any exchange fails and `continue_on_failure` is `false`, the subprocess is not started.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
@@ -84,7 +84,7 @@ Declares a required resource token. Every credential in this array is exchanged 
 
 ### `[[optional_credentials]]`
 
-Declares an optional resource token. Exchange failures produce a warning but do not block the subprocess.
+Declares an optional resource mandate. Exchange failures produce a warning but do not block the subprocess.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |

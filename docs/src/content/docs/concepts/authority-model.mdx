@@ -21,7 +21,7 @@ Each token exchange request carries:
 
 - The **principal**: the application making the request
 - One or more **resources** the agent wants access to
-- Optionally: a **subject token** to chain from ambient to per-call scope, a **delegation edge ID** to present delegated authority, and a **challenge response** to satisfy a step-up
+- Optionally: a **session mandate** in the RFC `subject_token` parameter to chain from session to resource scope, a **delegation edge ID** to present delegated authority, and a **challenge response** to satisfy a step-up
 
 The STS evaluates the active policy set against each requested resource independently, making one OPA call per resource. Resources can be allowed and denied in the same exchange. The STS issues a mandate covering only the allowed subset and records a deny audit event for the rest.
 
@@ -109,7 +109,7 @@ Pre-execution enforcement at the STS is the primary gate. Two additional layers 
 
 **The Gateway** validates every inbound request:
 - Verifies the ES256 signature against the zone's JWKS endpoint
-- Checks the JTI against the replay cache — each per-call token is accepted exactly once
+- Checks the JTI against the replay cache — each resource mandate is accepted exactly once
 - Confirms the requested resource appears in the mandate's `target` claim
 - Checks the session ID against the revocation cache; if the session was revoked mid-stream, the response is truncated at the next 4 KB chunk boundary and a `X-Caracal-Revoked` trailer is set
 

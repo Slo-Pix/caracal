@@ -1,6 +1,6 @@
 ---
 title: Implement Multi-Agent Delegation
-description: Open child agent sessions, attach scope and TTL caveats, traverse the delegation graph, and trigger cascade revocation using the SDK and CLI.
+description: Open child agent sessions, attach typed constraints, traverse the delegation graph, and trigger cascade revocation using the SDK and CLI.
 pageType: workflow
 ---
 
@@ -140,7 +140,7 @@ err = client.Spawn(ctx, func(ctx context.Context) error {
 })
 ```
 
-## Attach caveats to a delegation edge
+## Attach constraints to a delegation edge
 
 `DelegationConstraints` / `constraints_json` narrows what the target can do:
 
