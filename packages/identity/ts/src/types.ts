@@ -8,6 +8,8 @@
 // that would have been blocked at spawn time cannot pass a permissive resource
 // server.
 export const DEFAULT_MAX_HOP_COUNT = 10
+export const MANDATE_USE_SESSION = 'session'
+export const MANDATE_USE_RESOURCE = 'resource'
 
 export interface JwtConfig {
   issuer: string

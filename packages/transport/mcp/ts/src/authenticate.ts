@@ -11,6 +11,7 @@ import {
   ScopeInsufficientError,
   TokenInvalidError,
   ZoneInvalidError,
+  MANDATE_USE_RESOURCE,
   verify,
   type JwtConfig,
 } from '@caracalai/identity'
@@ -36,7 +37,7 @@ export async function authenticate(token: string, deps: AuthDeps): Promise<AuthR
 
   try {
     const { revocations, ...jwtConfig } = deps
-    const claims = await verify(token, { ...jwtConfig, requiredUse: jwtConfig.requiredUse ?? 'per_call' })
+    const claims = await verify(token, { ...jwtConfig, requiredUse: jwtConfig.requiredUse ?? MANDATE_USE_RESOURCE })
     if (!revocations || typeof revocations.isRevoked !== 'function') {
       return { ok: false, error: { code: 'invalid_token', description: 'Revocation store required' } }
     }

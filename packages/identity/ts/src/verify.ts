@@ -6,7 +6,7 @@
 import { jwtVerify } from 'jose'
 import { CaracalError, hasScope } from '@caracalai/core'
 import { getKeySet } from './jwks.js'
-import { DEFAULT_MAX_HOP_COUNT, type ChainHop, type Claims, type JwtConfig } from './types.js'
+import { DEFAULT_MAX_HOP_COUNT, MANDATE_USE_RESOURCE, MANDATE_USE_SESSION, type ChainHop, type Claims, type JwtConfig } from './types.js'
 
 const REQUIRED_CLAIMS = ['exp', 'iat', 'jti', 'sub', 'client_id', 'sid', 'use']
 
@@ -143,6 +143,7 @@ export async function verify(token: string, config: JwtConfig): Promise<Claims> 
   const sid = requiredString(payload, 'sid')
   const rootSid = optionalString(payload, 'root_sid')
   const use = requiredString(payload, 'use')
+  if (use !== MANDATE_USE_SESSION && use !== MANDATE_USE_RESOURCE) throw new TokenInvalidError('Token use validation failed')
   const issuedAt = requiredInteger(payload, 'iat')
   const expiresAt = requiredInteger(payload, 'exp')
   const scope = (payload['scope'] as string | undefined) ?? ''
