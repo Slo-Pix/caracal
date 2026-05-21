@@ -4,7 +4,7 @@ description: API reference for the Caracal OAuth token-exchange packages across 
 pageType: reference
 ---
 
-The OAuth packages implement RFC 8693 token exchange. They exchange a long-lived ambient token, client secret, or delegated context for a short-lived per-resource mandate, cache the result by the full exchange context, and surface step-up challenges as typed errors where the language surface supports it. The main SDKs use these packages internally; install them directly only when building custom exchange logic or tools that call STS directly.
+The OAuth packages implement RFC 8693 token exchange. They exchange a long-lived session mandate, client secret, or delegated context for a short-lived per-resource mandate, cache the result by the full exchange context, and surface step-up challenges as typed errors where the language surface supports it. The main SDKs use these packages internally; install them directly only when building custom exchange logic or tools that call STS directly.
 
 ## Install
 
@@ -37,7 +37,7 @@ new OAuthClient(
 
 ### `exchange(subjectToken, resource, opts?)`
 
-Exchanges `subjectToken` for a per-call mandate scoped to `resource`. Returns a cached response if a valid, non-expired token exists for the same exchange context.
+Exchanges `subjectToken` for a resource mandate scoped to `resource`. Returns a cached response if a valid, non-expired token exists for the same exchange context.
 
 ```typescript
 async exchange(

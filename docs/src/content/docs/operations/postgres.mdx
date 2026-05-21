@@ -40,7 +40,7 @@ Tracks all active user and application sessions. Indexed on `(zone_id, subject_i
 
 ### `delegation_edges`
 
-One row per directed delegation authority edge. Includes `edge_version` for optimistic locking and `constraints_json` for caveat enforcement. Indexed on source, target, resource, and expiry.
+One row per directed delegation authority edge. Includes `edge_version` for optimistic locking and `constraints_json` for typed constraint enforcement. Indexed on source, target, resource, and expiry.
 
 ### `policy_versions`
 
