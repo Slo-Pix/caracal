@@ -1,0 +1,218 @@
+---
+title: Alerting Recipes
+description: PromQL recipes for the production alerts that matter most — policy compile errors, audit DLQ, audit tamper evidence, audit lag, gateway denial spikes, gateway STS exchange errors.
+pageType: reference
+---
+
+This page lists the alerts every Caracal deployment should run in production. Each recipe is written against metric names actually exposed by Caracal services on `/metrics`; the full metric reference is on [Observability and Health](./observability/). Thresholds are starting points — tune to your traffic.
+
+The optional Helm chart ships a matching `PrometheusRule` template (`alertRules.enabled`) that encodes most of these recipes with configurable thresholds. The recipes here let platform teams reproduce or extend that ruleset in their own monitoring stack.
+
+## Severity guidance
+
+| Severity | Use for | Page |
+| --- | --- | --- |
+| `critical` | Security or correctness loss, control-plane down | Yes |
+| `warning` | Sustained degradation, growing backlog | Working hours |
+| `info` | Trend signals, capacity heads-up | Dashboard only |
+
+---
+
+## Policy and authority
+
+### STS OPA compile errors
+
+A non-zero compile counter means a recently activated policy bundle is broken. STS fails closed for affected loads.
+
+```
+increase(caracal_sts_opa_compile_errors_total[5m]) > 0
+```
+
+- Severity: `critical`.
+- First action: `caracal policy-set list` and roll back to the last known-good version.
+- See [Policy Deployment Runbook](./policy-deployment/).
+
+### STS policy bundle stale
+
+Policy invalidation or PostgreSQL polling may be delayed.
+
+```
+caracal_sts_opa_max_policy_age_seconds > 600
+```
+
+- Severity: `warning`.
+- First action: check the `caracal.policy.invalidate` Redis stream and STS readiness.
+
+### STS OPA evaluation errors
+
+Runtime evaluation failures (not compile failures) indicate broken Rego paths under live input.
+
+```
+increase(caracal_sts_opa_eval_errors_total[5m]) > 0
+```
+
+- Severity: `warning`.
+- First action: `caracal audit tail --decision deny --limit 50` then `caracal explain <request-id>`.
+
+### Gateway denial spike
+
+A sustained denial-rate jump usually means a policy or binding change shipped that is stricter than intended.
+
+```
+sum(rate(caracal_gateway_requests_denied_total[5m]))
+  / clamp_min(sum(rate(caracal_gateway_requests_total[5m])), 1)
+  > 0.25
+```
+
+- Severity: `warning`.
+- First action: inspect denial breakdowns by reason
+  (`caracal_gateway_denials_binding_total`,
+  `caracal_gateway_denials_signature_total`,
+  `caracal_gateway_denials_revoked_total`, …).
+
+### Gateway binding denial
+
+A spike in binding-missing denials usually indicates route configuration drift.
+
+```
+increase(caracal_gateway_denials_binding_total[5m]) > 0
+```
+
+- Severity: `warning`.
+- First action: check the binding in the affected zone with `caracal binding list`.
+
+### Gateway revocation denial spike
+
+Sustained increases in revoked-session denials may indicate either a security event or a stale client.
+
+```
+increase(caracal_gateway_denials_revoked_total[5m]) > 50
+```
+
+- Severity: `warning` at 50, `critical` if combined with audit tamper evidence.
+
+### Gateway ↔ STS exchange errors
+
+Protected requests cannot be served when Gateway cannot reach STS for token exchange.
+
+```
+increase(caracal_gateway_sts_exchange_errors_total[5m]) > 0
+```
+
+- Severity: `critical` when sustained more than two minutes.
+- First action: check STS `/ready`, Gateway↔STS HMAC, route bindings.
+
+---
+
+## Audit integrity
+
+### Audit dead-letter queue non-empty
+
+Events sitting in the DLQ are evidence at risk of being lost.
+
+```
+caracal_audit_dlq_size > 0
+caracal_audit_dlq_oldest_age_seconds > 900
+```
+
+- Severity: `critical` when either holds for more than five minutes.
+- First action: inspect DLQ reason; do not flush. Replay through approved tooling only.
+
+### Audit tamper evidence
+
+Any tamper signal must be treated as P1.
+
+```
+increase(caracal_audit_tamper_mismatch_total[5m])
+  + increase(caracal_audit_tamper_chain_breaks_total[5m])
+  + increase(caracal_audit_tamper_hmac_failures_total[5m])
+  > 0
+```
+
+- Severity: `critical`.
+- First action: preserve evidence, freeze destructive retention; see [Incident Response](./incident-response/).
+
+### Audit producer HMAC failures
+
+Stream-level HMAC failures indicate a misconfigured producer or a wire tamper attempt.
+
+```
+increase(caracal_audit_hmac_failures_total[5m]) > 0
+```
+
+- Severity: `warning` for sporadic, `critical` if combined with tamper evidence.
+
+### Audit consumer lag
+
+```
+caracal_audit_consumer_lag > 1000
+caracal_audit_consumer_pel_oldest_seconds > 300
+```
+
+- Severity: `warning` at the thresholds above, `critical` if sustained more than ten minutes.
+
+### Audit export failures
+
+Export to archive storage protects audit beyond Postgres retention.
+
+```
+increase(caracal_audit_export_errors_total[15m]) > 0
+```
+
+- Severity: `warning`.
+
+### STS audit sink errors
+
+STS audit events failing to publish indicate Redis Streams or Audit consumer degradation.
+
+```
+increase(caracal_sts_audit_sink_errors_total[5m]) > 0
+```
+
+- Severity: `warning`.
+
+### STS audit dropped
+
+A non-zero drop counter means audit evidence has been lost. Should be zero in production.
+
+```
+increase(caracal_sts_audit_dropped_total[5m]) > 0
+```
+
+- Severity: `critical`.
+
+---
+
+## Runtime health
+
+### JWKS invalid keys
+
+Bad keys in JWKS would normally fail closed; the counter spotlights the misconfig.
+
+```
+increase(caracal_sts_jwks_invalid_keys_total[5m]) > 0
+```
+
+- Severity: `warning`.
+
+### Service not ready
+
+Pair with the standard `kube-prometheus` / Prom `up` job for each Caracal service.
+
+```
+max_over_time(up{job=~"caracal-(api|sts|gateway|coordinator|audit)"}[1m]) < 1
+```
+
+- Severity: `critical`.
+
+---
+
+## Wiring into Prometheus
+
+The recipes above use only metrics exposed by Caracal services on `/metrics`. Two paths to ship them:
+
+- Enable the Helm chart's `alertRules.enabled` value to install the default `PrometheusRule` resource. Thresholds are exposed under `alertRules.*` in `values.yaml`.
+- Or copy the PromQL into your team's existing rule pipeline (Argo, Flux, Terraform) and bind to your own routing tree (PagerDuty, OpsGenie, Slack).
+
+Use [Observability and Health](./observability/) as the authoritative metric reference; this page only lists the recipes that should always be on.
+

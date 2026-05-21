@@ -45,7 +45,7 @@ caracal status --ready
 caracal status --ready --json
 ```
 
-By default, sends `GET /health` to each service in parallel with a 1500 ms timeout. Use `--ready` to send `GET /ready`, which checks dependencies and service-specific readiness such as policy consumers, Gateway bindings, audit replay, Postgres, and Redis.
+By default, sends `GET /health` to each service in parallel with a 1500 ms timeout. Use `--ready` to send `GET /ready`, which checks dependencies and service-specific readiness such as policy consumers, Gateway bindings, audit replay, Postgres, and Redis. When a readiness endpoint returns structured JSON, the `detail` column includes the reason so operators can distinguish a network outage from a dependency or replay condition.
 
 | Service | Default port | Health URL | Readiness URL |
 | --- | --- | --- | --- |
@@ -58,11 +58,13 @@ By default, sends `GET /health` to each service in parallel with a 1500 ms timeo
 Example output:
 
 ```
-api            3000  health  ok      200
-sts            8080  health  ok      200
-gateway        8081  health  down    timeout
-audit          9090  health  ok      200
-coordinator    4000  health  ok      200
+service      port   mode    status  detail
+-------      ----   ----    ------  ------
+api          3000   ready   ok      200
+sts          8080   ready   down    503 stream_consumers_not_ready
+gateway      8081   ready   ok      200
+audit        9090   ready   ok      200
+coordinator  4000   ready   ok      200
 ```
 
 Exit code is `0` if all probes respond successfully, `1` if any is down or unreachable. Use readiness mode in scripts that need dependency-aware startup:

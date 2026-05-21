@@ -1,0 +1,105 @@
+---
+title: Five-Minute Setup
+description: The shortest verifiable path from a fresh checkout to an agent running through Caracal with policy, audit, and revocation in place.
+pageType: workflow
+---
+
+This page is the shortest verifiable path from a fresh checkout to an agent run that goes through the Gateway, hits a tool/provider, and leaves audit behind. Each step has one command and one verification.
+
+If a step fails, stop and run `caracal doctor --extended` before continuing.
+
+## Prerequisites
+
+- Caracal CLI installed — see [Installation](./installation/).
+- Docker (for the bundled stack) or a reachable cluster Helm install.
+- A shell with the three required secrets exported. Generate them once:
+
+  ```bash
+  export CARACAL_ZONE_KEK=$(openssl rand -hex 32)
+  export CARACAL_AUDIT_HMAC_KEY=$(openssl rand -hex 32)
+  export CARACAL_STREAMS_HMAC_KEY=$(openssl rand -hex 32)
+  ```
+
+## 1. Start the stack
+
+```bash
+caracal up
+```
+
+Verification:
+
+```bash
+caracal status --ready
+```
+
+The command must exit `0`. If it does not, run `caracal doctor --extended --json` and address the first failing dependency before continuing.
+
+## 2. Provision a Gateway-protected resource
+
+```bash
+caracal protect http \
+  --resource-id "demo-api" \
+  --upstream-url "https://httpbin.org" \
+  --write-config ./caracal.toml
+```
+
+This single command creates the zone, application, resource, policy, policy set, activates the policy, issues a grant, and writes a `caracal.toml` containing the application id and one-time client secret. Save the secret immediately — it is shown once.
+
+Verification:
+
+```bash
+caracal policy-set list
+caracal binding list
+```
+
+Both must return at least one row. The active policy version id is the one shipped by `caracal protect http`.
+
+## 3. Exchange a session mandate
+
+```bash
+caracal run -- env | grep CARACAL_
+```
+
+`caracal run` reads `caracal.toml`, exchanges the application client secret for a short-lived **mandate**, and injects the bearer into the child environment. The mandate is what the SDK and downstream tools present to the Gateway.
+
+Verification: the printed environment must include `CARACAL_SUBJECT_TOKEN`, `CARACAL_GATEWAY_URL`, and `CARACAL_ZONE_ID`.
+
+## 4. Call the protected resource through the Gateway
+
+```bash
+caracal run -- curl -s \
+  -H "Authorization: Bearer $CARACAL_SUBJECT_TOKEN" \
+  "$CARACAL_GATEWAY_URL/demo-api/get"
+```
+
+Verification: HTTP 200 from the upstream. If the Gateway denies the call, the response includes a deny reason and an `X-Request-Id` value to feed into `caracal explain`.
+
+## 5. Confirm the audit trail
+
+```bash
+caracal audit tail --limit 5
+```
+
+The last row must reference the resource (`demo-api`), the agent run, and an `allow` decision. Pick a `request_id` and run:
+
+```bash
+caracal explain <request_id>
+```
+
+The explanation reproduces the policy decision, the determining policies, and the upstream call result.
+
+## You are done
+
+You have:
+
+- An active stack with three readiness checks green.
+- One zone, one application, one resource, one active policy set.
+- A working agent run path through the Gateway.
+- Audit evidence and a `request_id` you can trace end-to-end.
+
+Continue with:
+
+- [First Integration](./first-integration/) — wire your real agent through the SDK.
+- [Activate a Policy Set](../guides/activate-policy-set/) — author and ship your first policy change.
+- [Policy Deployment Runbook](../operations/policy-deployment/) — the production sequence for policy changes.
+- [Alerting Recipes](../operations/alerts/) — the alerts to enable before going live.

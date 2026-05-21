@@ -1,0 +1,124 @@
+---
+title: Policy Deployment Runbook
+description: End-to-end production workflow for shipping a policy change safely — author, version, simulate, activate, verify, roll back.
+pageType: workflow
+---
+
+This runbook is for platform teams operating Caracal in production. It is the smallest set of steps that ships a policy change without breaking traffic and without leaving the system in a state operators cannot reason about.
+
+Authoring lives in [Author a Rego Policy](../guides/author-policy/). Activation mechanics live in [Activate a Policy Set](../guides/activate-policy-set/). This page is the operational sequence platform teams should follow every time.
+
+## Prerequisites
+
+- `CARACAL_ADMIN_TOKEN` and `CARACAL_ZONE_ID` exported.
+- A reviewed and merged Rego file in the change-control repository.
+- A green CI run that includes `opa test` against the policy fixtures.
+- A maintenance or change window appropriate for your environment.
+
+## The standard sequence
+
+Every production change should follow these stages, in order:
+
+1. Create a new policy version.
+2. Simulate the version against fixtures or replayed audit events.
+3. Activate the version in the zone.
+4. Verify with live traffic for a short bake window.
+5. Be ready to roll back to the previous active version.
+
+Skipping any stage is a known way to ship denial-rate spikes or unintended grants.
+
+### 1. Create the version
+
+```bash
+caracal policy version create \
+  --policy-id "pol-abc123" \
+  --file ./policy.rego \
+  --message "tighten finance.read scope"
+```
+
+The command prints the new `version_id`. Save it in the change record.
+
+### 2. Simulate
+
+Simulate against a representative fixture set. The fixture set should include at least one allow and one deny that matter to the current zone.
+
+```bash
+caracal policy-set simulate \
+  --policy-set-id "pset-finance" \
+  --version-id "<version_id>" \
+  --fixtures ./fixtures/
+```
+
+Run-blocking conditions:
+
+- Any unexpected `deny` for a fixture marked `allow`.
+- Any unexpected `allow` for a fixture marked `deny`.
+- Any OPA compile error.
+
+If any blocking condition fires, stop. Do not activate.
+
+### 3. Activate
+
+```bash
+caracal policy-set activate \
+  --policy-set-id "pset-finance" \
+  --version-id "<version_id>"
+```
+
+STS reloads bundles within one poll cycle. The `caracal.policy.invalidate` stream usually makes the change visible within seconds.
+
+### 4. Verify
+
+Run all four in the bake window:
+
+```bash
+caracal policy-set list --zone "$CARACAL_ZONE_ID"
+caracal status --ready
+caracal audit tail --decision deny --limit 50
+```
+
+Then watch the Prometheus alerts from [Alerting Recipes](./alerts/) for at least ten minutes:
+
+- `caracal_sts_opa_compile_errors_total` must stay flat at zero.
+- Denial rate (`caracal_sts_decisions_total{decision="deny"}`) must not exceed the change window's expected envelope.
+- STS p99 latency must not regress.
+
+### 5. Roll back
+
+Roll back the moment the bake window shows any of the failure conditions above. There is no penalty for rolling back a clean activation.
+
+```bash
+caracal policy-set activate \
+  --policy-set-id "pset-finance" \
+  --version-id "<previous_version_id>"
+```
+
+Then re-run step 4 to confirm the rollback took effect.
+
+## Failure modes during rollout
+
+| Symptom | Most likely cause | Safe response |
+| --- | --- | --- |
+| `caracal_sts_opa_compile_errors_total` increases after activate | Broken Rego shipped despite CI | Roll back to previous version_id. Open a postmortem item for the gap that let it through. |
+| Denial-rate spike in the first minutes | Policy is stricter than intended | Roll back; rerun simulate with the missing fixtures. |
+| Some STS pods serve the old bundle for more than 60s | OPA poll cycle or stream invalidation delayed | Restart the affected STS pod; check the `caracal.policy.invalidate` stream lag in [Alerting Recipes](./alerts/). |
+| Activate fails with version not found | Version was created for a different policy or zone | Recreate the version in the correct policy; do not re-issue the activate against a stale id. |
+
+## Change-record fields
+
+The runbook is fully auditable when the change record includes:
+
+- The `version_id` activated.
+- The `previous_active_version_id` from `policy-set list` before activation.
+- Output of the simulate run.
+- The `request_id` of a known-allow and a known-deny taken from `caracal audit tail` after activation.
+
+These five fields are enough to reconstruct a deployment and reason about its effect during a future incident.
+
+## Related
+
+- [Activate a Policy Set](../guides/activate-policy-set/) — the underlying CLI mechanics.
+- [Author a Rego Policy](../guides/author-policy/) — how the input is structured.
+- [Alerting Recipes](./alerts/) — the alerts to watch during the bake window.
+- [Failure Modes and Recovery](./failure-modes/) — the broader operator matrix.
+- [Incident Response](./incident-response/) — what to do when verification fails.

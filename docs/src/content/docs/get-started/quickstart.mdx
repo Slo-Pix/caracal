@@ -82,18 +82,22 @@ caracal status
 You should see all five application services reporting healthy:
 
 ```
-api            3000  ✓ ok      200
-sts            8080  ✓ ok      200
-gateway        8081  ✓ ok      200
-audit          9090  ✓ ok      200
-coordinator    4000  ✓ ok      200
+service      port   mode    status  detail
+-------      ----   ----    ------  ------
+api          3000   health  ✓ ok    200
+sts          8080   health  ✓ ok    200
+gateway      8081   health  ✓ ok    200
+audit        9090   health  ✓ ok    200
+coordinator  4000   health  ✓ ok    200
 ```
 
-If a service is not healthy within two minutes, check its logs:
+Then run dependency-aware readiness:
 
 ```sh
-docker logs caracal-sts-1 --tail 50
+caracal status --ready
 ```
+
+Readiness checks include Postgres, Redis, STS reachability, Gateway bindings, audit replay, and stream consumers. If a service is not ready, the `detail` column includes the failing reason, for example `503 postgres_unreachable` or `503 stream_consumers_not_ready`. Keep that reason with any support or incident notes before checking logs.
 
 ## Step 4: Protect one HTTP resource
 
@@ -132,10 +136,10 @@ The Gateway application identity is same-zone service identity used for internal
 Run the readiness doctor if the credential step below fails:
 
 ```sh
-caracal doctor
+caracal doctor --extended
 ```
 
-It checks API reachability, admin authentication, selected zone, resource registration, active policy sets, grants, and audit queryability.
+It checks API reachability, admin authentication, selected zone, resource registration, active policy sets, grants, audit queryability, service readiness, and operator metrics. Use `--json` when you want to attach the output to an incident record or CI gate.
 
 ## Step 5: Verify scoped access
 
