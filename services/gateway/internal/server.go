@@ -17,6 +17,8 @@ import (
 	"github.com/garudex-labs/caracal/packages/core/go/audit"
 	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
 	"github.com/garudex-labs/caracal/packages/core/go/logging"
+	coremetrics "github.com/garudex-labs/caracal/packages/core/go/metrics"
+	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
@@ -113,9 +115,10 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/ready", s.handleReady)
 	mux.HandleFunc("/metrics", s.handleMetrics)
+	mux.HandleFunc("/metrics.json", s.handleMetricsJSON)
 	mux.Handle("/", p)
 
-	handler := requestIDMiddleware(mux)
+	handler := telemetry.HTTPHandler("caracal.gateway.http", requestIDMiddleware(mux))
 
 	srv := &http.Server{
 		Addr:              ":" + s.cfg.Port,
@@ -205,14 +208,42 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	s.refreshMetricGauges()
+	snap := s.metrics.Snapshot()
+	w.Header().Set("Content-Type", coremetrics.ContentType)
+	_, _ = w.Write([]byte(coremetrics.Render([]coremetrics.Sample{
+		{Name: "caracal_gateway_requests_total", Help: "Gateway requests received", Type: coremetrics.Counter, Value: float64(snap.RequestsTotal)},
+		{Name: "caracal_gateway_requests_allowed_total", Help: "Gateway requests allowed upstream", Type: coremetrics.Counter, Value: float64(snap.RequestsAllowed)},
+		{Name: "caracal_gateway_requests_denied_total", Help: "Gateway requests denied before upstream dispatch", Type: coremetrics.Counter, Value: float64(snap.RequestsDenied)},
+		{Name: "caracal_gateway_denials_missing_auth_total", Help: "Gateway denials caused by missing bearer credentials", Type: coremetrics.Counter, Value: float64(snap.DenialsMissingAuth)},
+		{Name: "caracal_gateway_denials_bad_bearer_total", Help: "Gateway denials caused by malformed bearer credentials", Type: coremetrics.Counter, Value: float64(snap.DenialsBadBearer)},
+		{Name: "caracal_gateway_denials_expiring_total", Help: "Gateway denials caused by nearly expired mandates", Type: coremetrics.Counter, Value: float64(snap.DenialsExpiring)},
+		{Name: "caracal_gateway_denials_bad_routing_total", Help: "Gateway denials caused by invalid route targets", Type: coremetrics.Counter, Value: float64(snap.DenialsBadRouting)},
+		{Name: "caracal_gateway_denials_path_traversal_total", Help: "Gateway denials caused by unsafe upstream paths", Type: coremetrics.Counter, Value: float64(snap.DenialsPathTrav)},
+		{Name: "caracal_gateway_denials_signature_total", Help: "Gateway denials caused by invalid JWT signatures", Type: coremetrics.Counter, Value: float64(snap.DenialsSignature)},
+		{Name: "caracal_gateway_denials_jti_replay_total", Help: "Gateway denials caused by replayed token identifiers", Type: coremetrics.Counter, Value: float64(snap.DenialsJTIReplay)},
+		{Name: "caracal_gateway_denials_revoked_total", Help: "Gateway denials caused by revoked sessions or delegations", Type: coremetrics.Counter, Value: float64(snap.DenialsRevoked)},
+		{Name: "caracal_gateway_denials_binding_total", Help: "Gateway denials caused by missing Gateway bindings", Type: coremetrics.Counter, Value: float64(snap.DenialsBinding)},
+		{Name: "caracal_gateway_sts_exchange_errors_total", Help: "Gateway STS token exchange failures", Type: coremetrics.Counter, Value: float64(snap.STSExchangeErrors)},
+		{Name: "caracal_gateway_upstream_errors_total", Help: "Gateway upstream request failures", Type: coremetrics.Counter, Value: float64(snap.UpstreamErrors)},
+		{Name: "caracal_gateway_bindings_loaded", Help: "Gateway resource bindings loaded in memory", Type: coremetrics.Gauge, Value: float64(snap.BindingsLoaded)},
+		{Name: "caracal_gateway_revocations_active", Help: "Gateway revocation anchors loaded in memory", Type: coremetrics.Gauge, Value: float64(snap.RevocationsActive)},
+	})))
+}
+
+func (s *Server) handleMetricsJSON(w http.ResponseWriter, _ *http.Request) {
+	s.refreshMetricGauges()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(s.metrics.Snapshot()) //nolint:errcheck
+}
+
+func (s *Server) refreshMetricGauges() {
 	if s.bindings != nil {
 		s.metrics.BindingsLoaded.Store(uint64(s.bindings.Size()))
 	}
 	if s.revocations != nil {
 		s.metrics.RevocationsActive.Store(uint64(s.revocations.Size()))
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.metrics.Snapshot()) //nolint:errcheck
 }
 
 // requestIDMiddleware ensures every request has a server-assigned UUID in its context

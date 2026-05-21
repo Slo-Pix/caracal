@@ -18,6 +18,8 @@ import (
 	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
 	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
 	"github.com/garudex-labs/caracal/packages/core/go/logging"
+	coremetrics "github.com/garudex-labs/caracal/packages/core/go/metrics"
+	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 )
@@ -114,10 +116,11 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /ready", s.handleReady)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
+	mux.HandleFunc("GET /metrics.json", s.handleMetricsJSON)
 
 	srv := &http.Server{
 		Addr:              ":" + s.cfg.Port,
-		Handler:           mux,
+		Handler:           telemetry.HTTPHandler("caracal.sts.http", mux),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -241,6 +244,30 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	sts := s.metrics.Snapshot()
+	opa := s.opa.MetricsSnapshot()
+	auditDropped := s.auditBuffer.Dropped()
+	w.Header().Set("Content-Type", coremetrics.ContentType)
+	_, _ = w.Write([]byte(coremetrics.Render([]coremetrics.Sample{
+		{Name: "caracal_sts_graph_traversals_total", Help: "STS delegation graph traversals performed", Type: coremetrics.Counter, Value: float64(sts.GraphTraversals)},
+		{Name: "caracal_sts_graph_traversal_errors_total", Help: "STS delegation graph traversal failures", Type: coremetrics.Counter, Value: float64(sts.GraphTraversalErrors)},
+		{Name: "caracal_sts_audit_dropped_total", Help: "STS audit events dropped before persistence", Type: coremetrics.Counter, Value: float64(sts.AuditDropped + auditDropped)},
+		{Name: "caracal_sts_audit_replay_pending", Help: "STS audit events pending replay", Type: coremetrics.Gauge, Value: float64(sts.AuditReplayPending)},
+		{Name: "caracal_sts_audit_replay_replayed_total", Help: "STS audit events replayed after sink recovery", Type: coremetrics.Counter, Value: float64(sts.AuditReplayReplayed)},
+		{Name: "caracal_sts_audit_sink_errors_total", Help: "STS audit sink publish errors", Type: coremetrics.Counter, Value: float64(sts.AuditSinkErrors)},
+		{Name: "caracal_sts_jwks_invalid_keys_total", Help: "STS signing keys skipped because JWKS validation failed", Type: coremetrics.Counter, Value: float64(sts.JWKSInvalidKeys)},
+		{Name: "caracal_sts_opa_eval_total", Help: "STS OPA policy evaluations", Type: coremetrics.Counter, Value: float64(opa.EvalTotal)},
+		{Name: "caracal_sts_opa_eval_errors_total", Help: "STS OPA policy evaluation errors", Type: coremetrics.Counter, Value: float64(opa.EvalErrors)},
+		{Name: "caracal_sts_opa_eval_duration_seconds_total", Help: "STS cumulative OPA policy evaluation duration", Type: coremetrics.Counter, Value: float64(opa.EvalDurationNs) / float64(time.Second)},
+		{Name: "caracal_sts_opa_compile_total", Help: "STS OPA policy compilations", Type: coremetrics.Counter, Value: float64(opa.CompileTotal)},
+		{Name: "caracal_sts_opa_compile_errors_total", Help: "STS OPA policy compilation errors", Type: coremetrics.Counter, Value: float64(opa.CompileErrors)},
+		{Name: "caracal_sts_opa_compile_duration_seconds_total", Help: "STS cumulative OPA policy compilation duration", Type: coremetrics.Counter, Value: float64(opa.CompileDurationNs) / float64(time.Second)},
+		{Name: "caracal_sts_opa_max_policy_age_seconds", Help: "STS maximum age of a loaded OPA policy bundle", Type: coremetrics.Gauge, Value: opa.MaxPolicyAgeSeconds},
+		{Name: "caracal_sts_opa_poll_interval_seconds", Help: "STS OPA PostgreSQL safety poll interval", Type: coremetrics.Gauge, Value: opa.PollIntervalSeconds},
+	})))
+}
+
+func (s *Server) handleMetricsJSON(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 		"sts":           s.metrics.Snapshot(),
