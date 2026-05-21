@@ -22,6 +22,8 @@ const executors: Record<string, Executor> = {
   down: (argv) => downCommand([...argv]),
   status: () => statusCommand(),
   purge: (argv) => purgeCommand([...argv]),
+  doctor: (argv) => { cliDispatch(['doctor', ...argv]) },
+  protect: (argv) => { cliDispatch(['protect', ...argv]) },
   cli: (argv) => { cliDispatch([...argv]) },
   tui: (argv) => { tuiDispatch([...argv]) },
 }

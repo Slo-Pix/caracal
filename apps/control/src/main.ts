@@ -3,7 +3,7 @@
 //
 // Control service entry point: launches the managed Control HTTP surface with an internal endpoint gate.
 
-import { assertPublishedSafe, createLogger } from '@caracalai/core'
+import { assertPublishedSafe, createLogger, initNodeTelemetry } from '@caracalai/core'
 import { loadConfig } from './config.js'
 import { buildServer } from './server.js'
 
@@ -26,6 +26,7 @@ async function main(): Promise<void> {
   }
 
   const log = createLogger('control', cfg.logLevel as 'info')
+  const shutdownTelemetry = initNodeTelemetry('caracal-control', { error: (msg, meta) => log.error(msg, meta) })
   const { app, close } = await buildServer(cfg, log)
 
   let shuttingDown = false
@@ -35,6 +36,7 @@ async function main(): Promise<void> {
     log.info('shutdown requested', { signal })
     try {
       await close()
+      await shutdownTelemetry()
     } catch (err) {
       log.error('graceful shutdown failed', { err: String(err) })
     }

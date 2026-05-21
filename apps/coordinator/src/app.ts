@@ -9,7 +9,7 @@ import pino from 'pino'
 import type { Pool } from 'pg'
 import type { Redis as RedisClient } from 'ioredis'
 import { ZodError } from 'zod'
-import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics, buildPinoRedactPaths, withTimeout } from '@caracalai/core'
+import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout } from '@caracalai/core'
 import { agentsRoutes } from './routes/agents.js'
 import { agentServicesRoutes } from './routes/agent-services.js'
 import { delegationsRoutes } from './routes/delegations.js'
@@ -97,6 +97,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: CoordinatorDeps) 
   })
   app.decorate('db', db)
   app.decorate('redis', redis)
+  instrumentFastifyApp(app, 'caracal-coordinator')
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof ZodError) {
       reply
