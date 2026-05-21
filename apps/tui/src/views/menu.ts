@@ -338,20 +338,17 @@ class ControlMenuView implements View {
       title: 'control key create',
       fields: [
         { key: 'name', label: 'name', kind: 'text', required: true },
-        { key: 'client_secret', label: 'client_secret', kind: 'secret' },
         { key: 'audience', label: 'audience', kind: 'text', hint: 'default: caracal-control' },
       ],
       onSubmit: async (v, app) => {
         const result = await controlKeyCreate(client, zoneId, {
           name: v.name!,
-          clientSecret: v.client_secret || undefined,
           audience: v.audience || undefined,
         })
         app.pop()
         app.push(new DetailView({
           title: `control / ${result.application.id}`,
           load: async () => ({
-            id: result.application.id,
             name: result.application.name,
             client_id: result.application.id,
             client_secret: result.clientSecret,
@@ -360,7 +357,6 @@ class ControlMenuView implements View {
             traits: result.application.traits,
             note: 'store client_secret now — it cannot be retrieved later',
           }),
-          mask: maskSecretField,
         }))
       },
     })
@@ -370,7 +366,7 @@ class ControlMenuView implements View {
     const { client, zoneId } = this.ctx
     return new FormView({
       title: 'control key get',
-      fields: [{ key: 'id', label: 'application id', kind: 'text', required: true }],
+      fields: [{ key: 'id', label: 'client_id', kind: 'text', required: true }],
       onSubmit: async (v, app) => {
         app.pop()
         app.push(new DetailView({
@@ -385,18 +381,17 @@ class ControlMenuView implements View {
     const { client, zoneId } = this.ctx
     return new FormView({
       title: 'control key rotate',
-      fields: [{ key: 'id', label: 'application id', kind: 'text', required: true }],
+      fields: [{ key: 'id', label: 'client_id', kind: 'text', required: true }],
       onSubmit: async (v, app) => {
         const result = await controlKeyRotate(client, zoneId, v.id!)
         app.pop()
         app.push(new DetailView({
           title: `control / ${result.application.id}`,
           load: async () => ({
-            id: result.application.id,
+            client_id: result.application.id,
             client_secret: result.clientSecret,
             note: 'store client_secret now — it cannot be retrieved later',
           }),
-          mask: maskSecretField,
         }))
       },
     })
@@ -406,7 +401,7 @@ class ControlMenuView implements View {
     const { client, zoneId } = this.ctx
     return new FormView({
       title: 'control key revoke',
-      fields: [{ key: 'id', label: 'application id', kind: 'text', required: true }],
+      fields: [{ key: 'id', label: 'client_id', kind: 'text', required: true }],
       onSubmit: async (v, app) => {
         await controlKeyRevoke(client, zoneId, v.id!)
         app.pop()

@@ -12,7 +12,6 @@ export const DEFAULT_CONTROL_AUDIENCE = 'caracal-control'
 
 export interface ControlKeyCreateInput {
   name: string
-  clientSecret?: string
   audience?: string
 }
 
@@ -27,6 +26,14 @@ export interface ControlKeyRotateResult {
   clientSecret: string
 }
 
+export interface ControlKeyRecord {
+  name: string
+  client_id: string
+  credential_type: Application['credential_type']
+  traits: string[]
+  created_at: string
+}
+
 function generateClientSecret(): string {
   return `cs_${randomBytes(32).toString('base64url')}`
 }
@@ -37,6 +44,16 @@ function hasControlTrait(app: Application): boolean {
 
 export function controlScopes(): string[] {
   return [...new Set(describeRemoteSurface().map((row) => row.scope))].sort()
+}
+
+export function controlKeyRecord(app: Application): ControlKeyRecord {
+  return {
+    name: app.name,
+    client_id: app.id,
+    credential_type: app.credential_type,
+    traits: app.traits,
+    created_at: app.created_at,
+  }
 }
 
 export async function ensureControlResource(
@@ -61,17 +78,21 @@ export async function ensureControlResource(
   return client.resources.patch(zoneId, current.id, { scopes: nextScopes })
 }
 
-export async function controlKeyList(client: AdminClient, zoneId: string): Promise<Application[]> {
+export async function controlKeyList(client: AdminClient, zoneId: string): Promise<ControlKeyRecord[]> {
   const apps = await client.applications.list(zoneId)
-  return apps.filter(hasControlTrait)
+  return apps.filter(hasControlTrait).map(controlKeyRecord)
 }
 
-export async function controlKeyGet(client: AdminClient, zoneId: string, id: string): Promise<Application> {
+async function requireControlApplication(client: AdminClient, zoneId: string, id: string): Promise<Application> {
   const app = await client.applications.get(zoneId, id)
   if (!hasControlTrait(app)) {
     throw new Error(`application ${id} is not a control API key (missing trait ${CONTROL_INVOKE_TRAIT})`)
   }
   return app
+}
+
+export async function controlKeyGet(client: AdminClient, zoneId: string, id: string): Promise<ControlKeyRecord> {
+  return controlKeyRecord(await requireControlApplication(client, zoneId, id))
 }
 
 export async function controlKeyCreate(
@@ -80,7 +101,7 @@ export async function controlKeyCreate(
   input: ControlKeyCreateInput,
 ): Promise<ControlKeyCreateResult> {
   const resource = await ensureControlResource(client, zoneId, input.audience)
-  const clientSecret = input.clientSecret ?? generateClientSecret()
+  const clientSecret = generateClientSecret()
   const application = await client.applications.create(zoneId, {
     name: input.name,
     registration_method: 'managed',
@@ -97,7 +118,7 @@ export async function controlKeyRotate(
   zoneId: string,
   id: string,
 ): Promise<ControlKeyRotateResult> {
-  await controlKeyGet(client, zoneId, id)
+  await requireControlApplication(client, zoneId, id)
   await ensureControlResource(client, zoneId)
   const clientSecret = generateClientSecret()
   const application = await client.applications.patch(zoneId, id, { client_secret: clientSecret })
@@ -105,6 +126,6 @@ export async function controlKeyRotate(
 }
 
 export async function controlKeyRevoke(client: AdminClient, zoneId: string, id: string): Promise<void> {
-  await controlKeyGet(client, zoneId, id)
+  await requireControlApplication(client, zoneId, id)
   await client.applications.delete(zoneId, id)
 }

@@ -49,7 +49,7 @@ export async function controlCommand(argv: string[], cfg?: CliConfig): Promise<v
             const zoneId = requireZone(ctx, flags)
             const rows = await controlKeyList(client, zoneId)
             if (json) return printJSON(rows)
-            return printTable(rows, ['id', 'name', 'credential_type', 'traits', 'created_at'])
+            return printTable(rows, ['client_id', 'name', 'credential_type', 'traits', 'created_at'])
           }
           case 'get': {
             const zoneId = requireZone(ctx, flags)
@@ -60,14 +60,13 @@ export async function controlCommand(argv: string[], cfg?: CliConfig): Promise<v
           case 'create': {
             const zoneId = requireZone(ctx, flags)
             const name = flagString(flags, 'name')
-            if (!name) return usage('control key create --name <n> [--client-secret <s>] [--zone …]')
+            if (!name) return usage('control key create --name <n> [--zone …]')
+            if ('client-secret' in flags) throw new Error('control key client_secret is generated automatically; --client-secret is not supported')
             const result = await controlKeyCreate(client, zoneId, {
               name,
-              clientSecret: flagString(flags, 'client-secret'),
               audience: flagString(flags, 'audience'),
             })
             printJSON({
-              id: result.application.id,
               name: result.application.name,
               client_id: result.application.id,
               client_secret: result.clientSecret,
@@ -93,7 +92,7 @@ export async function controlCommand(argv: string[], cfg?: CliConfig): Promise<v
         if (!id) return usage('control rotate <id> [--zone …]')
         const result = await controlKeyRotate(client, zoneId, id)
         printJSON({
-          id: result.application.id,
+          client_id: result.application.id,
           client_secret: result.clientSecret,
           note: 'store client_secret now — it cannot be retrieved later',
         })
@@ -134,7 +133,6 @@ function help(): never {
       '  key list                   List control API credentials in a zone',
       '  key get <id>               Show one control API credential',
       '  key create --name <n>      Mint a new control API credential',
-      '    --client-secret <s>        Use a pre-shared secret instead of generating one',
       '    --audience <aud>           Control token audience resource (default caracal-control)',
       '  rotate <id>                Rotate the client secret for a control API credential',
       '  revoke <id>                Delete a control API credential (invalidates it immediately)',
