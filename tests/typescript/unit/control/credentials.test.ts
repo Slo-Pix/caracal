@@ -45,7 +45,7 @@ describe('control credentials', () => {
   it('creates the control resource before creating a control key', async () => {
     const c = client()
 
-    const result = await controlKeyCreate(c, 'z1', { name: 'robot', clientSecret: 'secret' })
+    const result = await controlKeyCreate(c, 'z1', { name: 'robot' })
 
     expect(c.resources.create).toHaveBeenCalledWith('z1', expect.objectContaining({
       identifier: 'caracal-control',
@@ -53,10 +53,11 @@ describe('control credentials', () => {
     }))
     expect(c.applications.create).toHaveBeenCalledWith('z1', expect.objectContaining({
       name: 'robot',
-      client_secret: 'secret',
+      client_secret: expect.stringMatching(/^cs_[A-Za-z0-9_-]+$/),
       traits: ['control:invoke'],
     }))
     expect(result.resource.identifier).toBe('caracal-control')
+    expect(result.clientSecret).toMatch(/^cs_[A-Za-z0-9_-]+$/)
   })
 
   it('patches an existing control resource with missing scopes', async () => {

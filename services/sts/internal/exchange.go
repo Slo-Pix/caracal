@@ -217,6 +217,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 	grantedResourceRows := map[string]*Resource{}
 	var pendingChallenge *challengeState
 	stepUpType := ""
+	controlKeyExchange := false
 
 	for _, identifier := range req.Resources {
 		resource, dbErr := s.db.GetResourceByIdentifier(ctx, zoneID, identifier)
@@ -263,6 +264,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 			}
 			grantedResources = append(grantedResources, resource.Identifier)
 			grantedResourceRows[resource.Identifier] = resource
+			controlKeyExchange = true
 			continue
 		}
 
@@ -413,7 +415,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 	// bootstrap of an application principal) are ambient session tokens so they
 	// can be re-presented to STS for narrowing.
 	use := UsePerCall
-	if req.SubjectToken == "" {
+	if req.SubjectToken == "" && !controlKeyExchange {
 		use = UseAmbient
 	}
 

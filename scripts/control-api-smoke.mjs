@@ -24,7 +24,7 @@ function showHelp() {
   process.stdout.write([
     'Usage: pnpm control:smoke [--zone-url URL] [--control-url URL]',
     '',
-    'Prompts for a real zone id, Control key client id, and Control key client secret.',
+    'Prompts for a real zone id, Control key client id, and Control key client secret unless ZONE_ID, APP_CLIENT_ID, and APP_CLIENT_SECRET are set.',
     'Then it mints a Control token and invokes zone list through the Control API.',
     '',
     'Create credentials first from TUI: Control -> create key.',
@@ -175,16 +175,18 @@ async function main() {
   await requireReady(controlUrl)
   process.stdout.write('Control endpoint gate is open.\n\n')
 
-  const rl = createInterface({ input, output })
-  let zoneId = ''
-  let clientId = ''
-  try {
-    zoneId = await ask(rl, 'Zone ID', process.env.ZONE_ID)
-    clientId = await ask(rl, 'Control key client_id', process.env.APP_CLIENT_ID)
-  } finally {
-    rl.close()
+  let zoneId = process.env.ZONE_ID ?? ''
+  let clientId = process.env.APP_CLIENT_ID ?? ''
+  if (!zoneId || !clientId) {
+    const rl = createInterface({ input, output })
+    try {
+      zoneId = await ask(rl, 'Zone ID', zoneId)
+      clientId = await ask(rl, 'Control key client_id', clientId)
+    } finally {
+      rl.close()
+    }
   }
-  const clientSecret = await askSecret('Control key client_secret', process.env.APP_CLIENT_SECRET)
+  const clientSecret = process.env.APP_CLIENT_SECRET ?? await askSecret('Control key client_secret shown once after create')
 
   if (!zoneId || !clientId || !clientSecret) {
     throw new Error('Zone ID, client_id, and client_secret are required.')
