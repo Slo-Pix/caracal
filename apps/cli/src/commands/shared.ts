@@ -116,10 +116,37 @@ export function unknownVerb(group: string, verb: string | undefined, help: () =>
   process.exit(1)
 }
 
+function remediationHint(status: number): string | undefined {
+  if (status === 401) {
+    return 'Check CARACAL_ADMIN_TOKEN, or the app_client_secret in caracal.toml. Multi-agent commands require CARACAL_COORDINATOR_TOKEN.'
+  }
+  if (status === 403) {
+    return 'Current credentials lack the required scope or zone access. Verify the zone selector and the token issuer.'
+  }
+  if (status === 404) {
+    return 'Target not found. Run caracal zone list / caracal app list / caracal resource list to confirm the id.'
+  }
+  if (status === 409) {
+    return 'Conflict — the object changed concurrently. Re-fetch with caracal <noun> get <id> and retry.'
+  }
+  if (status === 422) {
+    return 'Validation failed. Inspect the body below and correct the offending fields.'
+  }
+  if (status === 429) {
+    return 'Rate limited. Back off and retry; check operator metrics with caracal doctor --extended.'
+  }
+  if (status >= 500) {
+    return 'Server error. Probe service readiness with caracal doctor --extended; then check service logs.'
+  }
+  return undefined
+}
+
 export function fail(err: unknown): never {
   if (isReplExit(err)) throw err
   if (err instanceof AdminApiError) {
     printError(`${err.code} (HTTP ${err.status})`)
+    const hint = remediationHint(err.status)
+    if (hint) process.stderr.write(`  → ${hint}\n`)
     if (err.body && typeof err.body === 'object') {
       process.stderr.write(scrubTokens(JSON.stringify(err.body, null, 2)) + '\n')
     } else if (err.body) {

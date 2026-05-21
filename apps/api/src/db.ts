@@ -20,6 +20,7 @@ export interface DBOptions {
   connectionTimeoutMs?: number
   idleTimeoutMs?: number
   applicationName?: string
+  onZoneGUCError?: (err: unknown) => void
 }
 
 export function newDB(options: DBOptions): DB {
@@ -34,7 +35,11 @@ export function newDB(options: DBOptions): DB {
     options: `-c statement_timeout=${stmt} -c idle_in_transaction_session_timeout=${idleTx}`,
   })
   pool.on('connect', (client) => {
-    client.query("SELECT set_config('caracal.zone_id', '*', false)").catch(() => {})
+    client.query("SELECT set_config('caracal.zone_id', '*', false)").catch((err: unknown) => {
+      if (options.onZoneGUCError) {
+        options.onZoneGUCError(err)
+      }
+    })
   })
   return pool
 }

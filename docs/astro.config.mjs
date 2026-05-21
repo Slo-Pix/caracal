@@ -294,6 +294,8 @@ export default defineConfig({
             { label: 'Glossary', link: '/reference/glossary/' },
             { label: 'Error Reference', link: '/reference/errors/' },
             { label: 'Configuration Reference', link: '/reference/configuration/' },
+            { label: 'Defaults and Limits', link: '/reference/defaults-and-limits/' },
+            { label: 'CLI Exit Codes', link: '/reference/cli-exit-codes/' },
             { label: 'Compatibility Matrix', link: '/reference/compatibility/' },
             { label: 'Interoperability Contracts', link: '/reference/interoperability-contracts/' },
           ],
