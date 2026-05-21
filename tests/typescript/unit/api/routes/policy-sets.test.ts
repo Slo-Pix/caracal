@@ -112,6 +112,61 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/simulate', () => {
     expect(db.connect).not.toHaveBeenCalled()
   })
 
+  it('executes supplied input through STS when internal simulation is configured', async () => {
+    const { app, db } = buildRouteApp(policySetsRoutes)
+    app.decorate('cfg', {
+      stsUrl: 'http://sts.local',
+      gatewayStsHmacKey: Buffer.alloc(32, 1),
+    } as never)
+    const manifest = [{ policy_version_id: 'pv-1' }]
+    db.query
+      .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: manifest, manifest_sha256: 'sha-1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: 'package caracal.authz\nresult := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}', zone_id: 'z1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      policy_set_id: 'ps-1',
+      version_id: 'psv-1',
+      manifest_sha256: 'sha-1',
+      result: {
+        decision: 'allow',
+        evaluation_status: 'complete',
+        determining_policies: [],
+        diagnostics: [],
+      },
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/policy-sets/ps-1/simulate',
+      payload: {
+        version_id: 'psv-1',
+        input: {
+          schema_version: '2026-05-20',
+          principal: { zone_id: 'z1' },
+          resource: { identifier: 'resource://calendar' },
+          action: { id: 'token_exchange' },
+          context: {},
+        },
+      },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toMatchObject({
+      explanation: { evaluation: 'executed', decision: 'allow' },
+      result: { decision: 'allow', evaluation_status: 'complete' },
+    })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(String(url)).toBe('http://sts.local/internal/policy/simulate')
+    expect((init as RequestInit).headers).toMatchObject({
+      'content-type': 'application/json',
+      'X-Caracal-Gateway-Timestamp': expect.any(String),
+      'X-Caracal-Gateway-Request': expect.any(String),
+      'X-Caracal-Gateway-Signature': expect.any(String),
+    })
+    fetchMock.mockRestore()
+  })
+
   it('rejects schema-mismatched policy versions', async () => {
     const { app, db } = buildRouteApp(policySetsRoutes)
     db.query
