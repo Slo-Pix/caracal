@@ -153,11 +153,25 @@ caracal zone create --name dev        # provision a zone (returns id)
 caracal app  create --name cli        # provision an application (returns client_secret)
 # write ~/.config/caracal/caracal.toml with zone_id, application_id, app_client_secret, zone_url
 caracal status                        # probe all services
+caracal status --ready                # dependency-aware readiness probe
 caracal down                          # stop; add -v to remove volumes
 caracal purge                         # interactive cleanup (containers, volumes, config, runtime, caches)
 ```
 
 > The installer pins the CLI to one release. `caracal up` pulls matching container images from `ghcr.io/garudex-labs/caracal-*:<tag>`. Override per invocation with `CARACAL_VERSION=vYYYY.MM.DD caracal up` to run an older or newer release stack from the same CLI.
+
+### Enterprise evaluation
+
+For Kubernetes evaluation, use the reference Helm chart in `infra/helm/caracal`. It keeps Postgres, Redis, ingress, TLS, and secret-manager ownership with the platform team while deploying Caracal services with readiness probes, resource requests/limits, HPA/PDB defaults, NetworkPolicy, and optional ServiceMonitor resources.
+
+```bash
+helm upgrade --install caracal ./infra/helm/caracal \
+  --namespace caracal \
+  --create-namespace \
+  --set secrets.runtimeSecretName=caracal-runtime
+```
+
+The chart is a reference deployment for enterprise evaluation and GitOps adaptation, not a replacement for `caracal up`. See [Kubernetes with Helm](docs/src/content/docs/operations/kubernetes-helm.mdx) for the required runtime Secret and operational boundaries.
 
 <details>
 <summary><strong>CLI</strong></summary>
