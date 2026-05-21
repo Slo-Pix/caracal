@@ -79,6 +79,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
 
   app.decorate('db', db)
   app.decorate('redis', redis)
+  app.decorate('cfg', cfg)
   instrumentFastifyApp(app, 'caracal-api')
 
   app.addHook('onRequest', async (req) => {

@@ -38,6 +38,7 @@ resolveFileSecrets([
   'ZONE_KEK',
   'STREAMS_HMAC_KEY',
   'AUDIT_HMAC_KEY',
+  'GATEWAY_STS_HMAC_KEY',
 ])
 
 export interface Config {
@@ -45,6 +46,8 @@ export interface Config {
   host: string
   databaseUrl: string
   redisUrl: string
+  stsUrl: string
+  gatewayStsHmacKey: Buffer | null
   logLevel: string
   bootstrapAdminToken: string | null
   shutdownGraceMs: number
@@ -79,11 +82,19 @@ function deriveWorkerId(): string {
 }
 
 export function loadConfig(): Config {
+  const gatewayStsHmacKey = process.env.GATEWAY_STS_HMAC_KEY
+    ? Buffer.from(process.env.GATEWAY_STS_HMAC_KEY, 'hex')
+    : null
+  if (gatewayStsHmacKey && gatewayStsHmacKey.length < 32) {
+    throw new Error('GATEWAY_STS_HMAC_KEY must be hex-encoded with at least 32 bytes')
+  }
   return {
     port: intEnv('PORT', 3000, 1),
     host: getenv('HOST', process.env.CARACAL_MODE === 'rc' || process.env.CARACAL_MODE === 'stable' ? '0.0.0.0' : '127.0.0.1'),
     databaseUrl: mustGetenv('DATABASE_URL'),
     redisUrl: mustGetenv('REDIS_URL'),
+    stsUrl: getenv('STS_URL', 'http://localhost:8080'),
+    gatewayStsHmacKey,
     logLevel: getenv('LOG_LEVEL', 'info'),
     bootstrapAdminToken: process.env.CARACAL_ADMIN_TOKEN ?? null,
     shutdownGraceMs: intEnv('SHUTDOWN_GRACE_MS', 15_000, 1),

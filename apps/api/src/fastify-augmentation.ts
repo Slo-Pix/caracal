@@ -6,11 +6,13 @@
 
 import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
+import type { Config } from './config.js'
 
 declare module 'fastify' {
   interface FastifyInstance {
     db: DB
     redis: RedisClient
+    cfg?: Config
   }
 }
 
