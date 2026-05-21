@@ -87,15 +87,9 @@ With the current (old) KEK still in environment, run the re-encryption operation
 
 Update `ZONE_KEK` in your secrets manager, then restart STS and API replicas in sequence. Monitor `/ready` on each replica before proceeding to the next.
 
-**Step 4 — Rotate all zone signing keys:**
+**Step 4 — Replace affected zone signing material through a controlled operation:**
 
-After the KEK is updated, rotate every zone's signing key to ensure no long-lived key material signed with the old KEK remains:
-
-```bash
-for ZONE_ID in $(caracal zone list --json | jq -r '.[].id'); do
-  caracal zone rotate-key --zone "$ZONE_ID"
-done
-```
+Self-service zone signing-key rotation is not packaged as a CLI/API operation in the OSS control plane. If signing material may have been exposed, perform the database-backed signing-key replacement through your deployment automation or incident runbook, then invalidate STS key caches and verify JWKS for every affected zone before restoring traffic.
 
 **Step 5 — Revoke all active sessions:**
 

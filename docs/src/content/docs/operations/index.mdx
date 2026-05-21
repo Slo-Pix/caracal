@@ -4,7 +4,7 @@ description: Deploy, configure, monitor, and maintain Caracal in production envi
 pageType: landing
 ---
 
-This section covers everything needed to run Caracal reliably in production: deployment topology, service configuration, database and Redis management, TLS, key management, observability, audit retention, and incident response.
+This section covers everything needed to run Caracal reliably in production: deployment topology, service configuration, database and Redis management, TLS, key management, capacity planning, observability, audit retention, and incident response.
 
 ## What you are operating
 
@@ -33,6 +33,7 @@ Each service writes to Postgres under a dedicated role with minimum necessary pe
 | [Redis Streams](./redis/) | Stream provisioning, consumer groups, persistence config, retention |
 | [TLS and Production Hardening](./tls-hardening/) | TLS certificate setup, INSECURE flags, SSRF defenses, production constraints |
 | [Key Management and Rotation](./key-management/) | ZONE_KEK, zone signing keys, JWKS, rotation procedure |
+| [Scale and Capacity Guidance](./scale-capacity/) | Sizing formulas, benchmark procedure, HPA signals, SLO examples |
 | [Observability and Health](./observability/) | `/health`, `/ready`, `/metrics` endpoints and what each check covers |
 | [Backup and Retention](./backup-retention/) | Audit partition lifecycle, S3 Parquet export, tamper detection |
 | [Incident Response](./incident-response/) | Revocation playbook, key compromise, audit alerts, escalation |

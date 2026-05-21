@@ -280,4 +280,4 @@ The top-level organizational boundary in Caracal. Each zone has its own signing 
 
 ## Zone signing key
 
-The ECDSA P-256 private key used to sign all mandates for a zone. Stored encrypted in the `secrets` table (encrypted with the zone's KEK). Cached in-memory by the STS for 15 minutes. Rotated via `caracal zone rotate-key`. During the 24-hour grace period after rotation, the STS accepts mandates signed by either the active key or its predecessor.
+The ECDSA P-256 private key used to sign all mandates for a zone. Stored encrypted in the `secrets` table with the zone KEK and cached in-memory by STS for 15 minutes. STS JWKS publication supports the active key and the previous key during a rotation grace window; self-service signing-key rotation is not packaged as an OSS CLI/API operation yet.
