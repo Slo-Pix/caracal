@@ -2,7 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Unit tests for CaracalContext ambient context and envelope conversion.
+Unit tests for CaracalContext bound context and envelope conversion.
 """
 
 from __future__ import annotations

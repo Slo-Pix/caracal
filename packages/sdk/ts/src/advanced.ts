@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Advanced surface: low-level primitives, codec, ambient context plumbing,
+ * Advanced surface: low-level primitives, codec, bound context plumbing,
  * and the raw coordinator client. Most integrators only need the default
  * "@caracalai/sdk" entrypoint; reach for these when building a transport
  * adapter or framework integration.

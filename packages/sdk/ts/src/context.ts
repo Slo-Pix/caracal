@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * CaracalContext: ambient identity and delegation context propagated across async boundaries.
+ * CaracalContext: bound identity and delegation context propagated across async boundaries.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";

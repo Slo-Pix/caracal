@@ -2,7 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-CaracalContext: ambient identity and delegation context via contextvars.
+CaracalContext: bound identity and delegation context via contextvars.
 """
 
 from __future__ import annotations
