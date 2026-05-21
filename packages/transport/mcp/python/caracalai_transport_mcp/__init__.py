@@ -3,7 +3,7 @@
 #
 # caracalai_transport_mcp — framework-neutral MCP auth surface.
 
-from .authenticate import authenticate, extract_bearer
+from .authenticate import authenticate, check_active_authority, extract_bearer
 from .types import AuthError, AuthResult, ErrorCode, Principal
 
 __all__ = [
@@ -12,5 +12,6 @@ __all__ = [
     "ErrorCode",
     "Principal",
     "authenticate",
+    "check_active_authority",
     "extract_bearer",
 ]

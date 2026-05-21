@@ -468,9 +468,8 @@ func joinURLPath(upstreamPath, requestPath string) string {
 
 // copyResponse streams the upstream response back to the client, flushing on every chunk
 // so SSE consumers see real-time data without server-side buffering. Between chunks it
-// consults revocations: if the session id bound to the token is revoked mid-stream the
-// upstream body is closed and the response is truncated so leaked tokens cannot
-// keep streaming indefinitely after revocation.
+// consults revocations: if any authority anchor bound to the token is revoked
+// mid-stream, the upstream body is closed and the response is truncated.
 type responseCopyResult struct {
 	Bytes   int64
 	Revoked bool
@@ -503,9 +502,8 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revoca
 }
 
 // streamCopy reads from src in small chunks and flushes after every successful write.
-// On every chunk boundary it re-checks the revocation cache for sid and aborts the
-// stream if the session has been revoked while data is in flight. Returns true when
-// the stream was truncated due to revocation so the caller can emit the
+// On every chunk boundary it re-checks all authority revocation anchors. Returns
+// true when the stream was truncated due to revocation so the caller can emit the
 // X-Caracal-Revoked trailer.
 func streamCopy(w io.Writer, src io.ReadCloser, flusher http.Flusher, revocations revocationChecker, ids tokenRevocationIDs) (int64, bool) {
 	buf := make([]byte, 4*1024)

@@ -65,6 +65,41 @@ func (revokedRoot) IsRevoked(sid string) bool {
 	return sid == "root-revoked"
 }
 
+type streamingRootRevoked struct {
+	allowRevocations
+	revoked *atomic.Bool
+}
+
+func (s streamingRootRevoked) IsRevoked(sid string) bool {
+	return sid == "root-stream" && s.revoked.Load()
+}
+
+type revokingChunkReader struct {
+	chunks  []string
+	index   int
+	revoked *atomic.Bool
+}
+
+func (r *revokingChunkReader) Read(p []byte) (int, error) {
+	if r.index >= len(r.chunks) {
+		return 0, io.EOF
+	}
+	n := copy(p, r.chunks[r.index])
+	r.index++
+	if r.index == 1 {
+		r.revoked.Store(true)
+	}
+	return n, nil
+}
+
+func (*revokingChunkReader) Close() error {
+	return nil
+}
+
+type testFlusher struct{}
+
+func (testFlusher) Flush() {}
+
 type recordAudit struct {
 	events []audit.Event
 }
@@ -876,6 +911,22 @@ func TestProxySSEStreamsAndFlushes(t *testing.T) {
 	case <-gotChunk:
 	case <-time.After(2 * time.Second):
 		t.Fatal("first SSE chunk not received within 2s — flushing broken")
+	}
+}
+
+func TestStreamCopyStopsOnRootRevocationDuringExecution(t *testing.T) {
+	revoked := &atomic.Bool{}
+	src := &revokingChunkReader{
+		chunks:  []string{"first\n", "second\n"},
+		revoked: revoked,
+	}
+	var out strings.Builder
+	n, hit := streamCopy(&out, src, testFlusher{}, streamingRootRevoked{revoked: revoked}, tokenRevocationIDs{RootSID: "root-stream"})
+	if !hit {
+		t.Fatal("expected stream to stop after root revocation")
+	}
+	if n != int64(len("first\n")) || out.String() != "first\n" {
+		t.Fatalf("stream should only include pre-revocation bytes, n=%d body=%q", n, out.String())
 	}
 }
 
