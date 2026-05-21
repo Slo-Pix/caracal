@@ -169,7 +169,7 @@ token = await client.exchange(
 )
 ```
 
-The Python client validates successful STS responses before caching them. Cache keys include subject token, actor token, session and delegation context, scopes, TTL, and client authentication context. The default cache is in-memory and process-local.
+The Python client validates successful STS responses before caching them. Cache keys include the session mandate, actor token, session and delegation context, scopes, TTL, and client authentication context. The default cache is in-memory and process-local.
 
 Close the underlying HTTP client when the OAuth client owns it:
 

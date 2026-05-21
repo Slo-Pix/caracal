@@ -11,7 +11,7 @@ The Security Token Service (STS) issues short-lived ES256-signed mandates via RF
 **Content-Type:** `application/x-www-form-urlencoded`  
 **Max body size:** 64 KB
 
-Exchanges an ambient session token (or acts as an application credential) for a short-lived per-resource mandate. The `resource` parameter is repeatable — include it multiple times to request a single mandate covering multiple resources.
+Exchanges a session mandate (or acts as an application credential) for a short-lived resource mandate. The `resource` parameter is repeatable — include it multiple times to request a single mandate covering multiple resources.
 
 ### Request fields
 
@@ -21,7 +21,7 @@ Exchanges an ambient session token (or acts as an application credential) for a 
 | `zone_id` | string | Yes | Zone identifier |
 | `application_id` | string | Yes | Authenticated application ID |
 | `resource` | string | Yes (1+) | Resource identifier; repeat the parameter for multiple resources |
-| `subject_token` | string | Cond. | Ambient JWT from a prior token exchange; omit for pure application-credential exchanges |
+| `subject_token` | string | Cond. | Session mandate from a prior token exchange; omit for pure application-credential exchanges |
 | `subject_token_type` | string | No | `urn:ietf:params:oauth:token-type:access_token` when `subject_token` present |
 | `actor_token` | string | No | JWT identifying the calling actor when distinct from the subject |
 | `scope` | string | No | Space-separated scopes to request; must be subset of the resource's declared scopes |
@@ -33,7 +33,7 @@ Exchanges an ambient session token (or acts as an application credential) for a 
 | `delegation_edge_id` | string | No | Delegation edge ID; required when operating under a delegated authority |
 | `challenge_id` | string | No | Step-up challenge ID from a prior `interaction_required` response |
 | `challenge_response` | string | No | Base64url-encoded 32-byte secret that satisfies the challenge |
-| `ttl_seconds` | integer | No | Requested mandate lifetime in seconds; clamped to ≤ 900 for per-call, ≤ 3600 for ambient |
+| `ttl_seconds` | integer | No | Requested mandate lifetime in seconds; clamped to ≤ 900 for resource, ≤ 3600 for session |
 
 ### Validation steps
 
@@ -41,8 +41,8 @@ The STS performs these checks in order. The first failure terminates the request
 
 1. **Client authentication** — Verifies `client_secret` (scrypt hash match) or `client_assertion`. Public clients are not supported. Authenticated Gateway broker exchanges use the internal Gateway-to-STS service signature and must carry a `subject_token`.
 2. **Resource validation** — For each resource: verifies existence in zone, validates requested scopes, checks rate limits, verifies grant requirements.
-3. **Subject token validation** — If `subject_token` present: verifies ES256 signature against zone JWKS, checks issuer, audience, `zone_id` claim, and that `use` equals `"ambient"`. Verifies session record is active.
-4. **Actor token validation** — If `actor_token` present: same JWT checks as subject token. Verifies actor and subject are distinct principals.
+3. **Session mandate validation** — If `subject_token` present: verifies ES256 signature against zone JWKS, checks issuer, audience, `zone_id` claim, and that `use` equals `"session"`. Verifies session record is active.
+4. **Actor token validation** — If `actor_token` present: same JWT checks as the session mandate. Verifies actor and subject are distinct principals.
 5. **Agent session ownership** — If `agent_session_id` present without `delegation_edge_id`: verifies agent session is active and owned by the authenticated application.
 6. **Delegation edge validation** — If `delegation_edge_id` present: verifies edge is active; checks target session matches `agent_session_id`; validates delegation constraints (scope budget, TTL, max hops); traverses the delegation graph to verify path integrity and absence of cycles; re-validates all edges on the path.
 7. **OPA policy evaluation** — Evaluates the zone's compiled Rego policy bundle. Returns `403 policy_eval_failed` if evaluation status is not `"complete"` or decision is `"deny"`.
@@ -98,7 +98,7 @@ The issued mandate contains:
   "client_id": "app1",
   "scope": "read write",
   "sid": "session-id",
-  "use": "per_call",
+  "use": "resource",
   "sub_type": "user",
   "target": ["resource://my-mcp-server"],
   "agent_session_id": "agent-id",
@@ -122,7 +122,7 @@ Claims for agent session and delegation are present only when those parameters w
 | --- | --- | --- |
 | `invalid_token` | 400 | Malformed request — missing `resource`, invalid `ttl_seconds`, or `resource` repeatable parameter absent |
 | `access_denied` | 401 | Invalid `client_secret` or `client_assertion`; public client attempted |
-| `invalid_token` | 401 | `subject_token` or `actor_token` signature invalid, expired, or zone mismatch; `use` claim not `"ambient"`; subject and actor are the same principal |
+| `invalid_token` | 401 | `subject_token` or `actor_token` signature invalid, expired, or zone mismatch; `use` claim not `"session"`; subject and actor are the same principal |
 | `access_denied` | 401 | Step-up challenge response invalid, expired, or does not match the request's resource set |
 | `access_denied` | 401 | Too many failed challenge attempts (throttled) |
 | `access_denied` | 403 | Session inactive or expired; session subject mismatch; agent session not owned by caller |

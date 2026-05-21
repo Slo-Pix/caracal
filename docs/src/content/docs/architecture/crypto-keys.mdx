@@ -89,7 +89,7 @@ Payload:   { "iss": "...", "sub": "...", "aud": [...], "exp": ..., "jti": "...",
 Signature: ECDSA-P256-SHA256(header.payload, private_key)
 ```
 
-Verifiers fetch the zone JWKS, locate the key matching the `kid` header, and verify the signature. No other algorithm is accepted. The `subject_token` input to the exchange endpoint must itself be a valid ES256 JWT with `use = "ambient"` — per-call tokens cannot be used as input to a new exchange (RFC 8693 subject-confusion mitigation).
+Verifiers fetch the zone JWKS, locate the key matching the `kid` header, and verify the signature. No other algorithm is accepted. The `subject_token` input to the exchange endpoint must itself be a valid ES256 JWT with `use = "session"` — resource mandates cannot be used as input to a new exchange (RFC 8693 subject-confusion mitigation).
 
 ---
 

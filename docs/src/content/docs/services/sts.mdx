@@ -17,7 +17,7 @@ The Security Token Service (STS) is the authorization core of Caracal. It is the
 The STS owns:
 
 - **Token issuance** — signs ES256 JWTs using per-zone ECDSA P-256 private keys.
-- **Token exchange** — RFC 8693 flow: validates a subject token, evaluates policy, issues a narrowed per-call mandate.
+- **Token exchange** — RFC 8693 flow: validates a session mandate carried in `subject_token`, evaluates policy, issues a narrowed resource mandate.
 - **OPA policy evaluation** — compiles per-zone Rego bundles; evaluates on every exchange.
 - **Zone key management** — decrypts zone signing keys from PostgreSQL using the zone KEK; caches decrypted keys in-process.
 - **JWKS endpoint** — serves zone public keys for downstream JWT verification.
@@ -33,14 +33,14 @@ The STS does **not** manage application or zone configuration (API), proxy reque
 **Endpoint:** `POST /oauth/2/token`  
 **Content-Type:** `application/x-www-form-urlencoded`
 
-The STS implements RFC 8693 (OAuth 2.0 Token Exchange). The client presents a subject token (ambient JWT) alongside the application's client credentials and the target resource. The STS validates the subject token, compiles and evaluates the zone's OPA policy, and — if allowed — issues a new JWT narrowed to the requested resource.
+The STS implements RFC 8693 (OAuth 2.0 Token Exchange). The client presents a session mandate in the RFC `subject_token` parameter alongside the application's client credentials and the target resource. The STS validates the session mandate, compiles and evaluates the zone's OPA policy, and — if allowed — issues a new JWT narrowed to the requested resource.
 
 **Required parameters:**
 
 | Parameter | Description |
 | --- | --- |
 | `grant_type` | `urn:ietf:params:oauth:grant-type:token-exchange` |
-| `subject_token` | Caller's ambient JWT |
+| `subject_token` | Caller's session mandate |
 | `subject_token_type` | `urn:ietf:params:oauth:token-type:jwt` |
 | `resource` | Target resource identifier (repeatable) |
 | `zone_id` | Zone the exchange is scoped to |
@@ -87,9 +87,9 @@ The STS implements RFC 8693 (OAuth 2.0 Token Exchange). The client presents a su
 
 The STS issues two distinct token classes:
 
-**Ambient tokens** (60-minute TTL): Issued at login or session creation. Presented as the `subject_token` in subsequent exchanges. Not scoped to a specific resource.
+**Session mandates** (60-minute TTL): Issued at session creation. Presented through the RFC `subject_token` parameter in subsequent exchanges. Not scoped to a specific resource.
 
-**Per-call mandates** (15-minute TTL): Issued by exchange. Narrowed to specific resources and scopes. Cannot be used again as a `subject_token` — this prevents subject-confusion attacks where a per-call token from one resource is re-exchanged to access a different resource.
+**Resource mandates** (15-minute TTL): Issued by exchange. Narrowed to specific resources and scopes. Cannot be used again as a `subject_token` — this prevents subject-confusion attacks where a resource mandate from one resource is re-exchanged to access a different resource.
 
 ### JWT structure
 
@@ -125,7 +125,7 @@ The STS runs an embedded OPA engine, not an external OPA sidecar. Policy state i
 - `input.application_id` — the requesting application
 - `input.resources` — array of requested resource identifiers
 - `input.scopes` — requested scopes
-- `input.claims` — claims from the subject token
+- `input.claims` — claims from the session mandate
 - `input.agent_session_id`, `input.delegation_edge_id` — if present
 
 **Decision:** Policies must emit a `result` object with `decision`, `evaluation_status`, `determining_policies`, and `diagnostics` fields. If the result's `decision` is `deny`, the exchange is rejected with 401.
