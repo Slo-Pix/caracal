@@ -120,6 +120,7 @@ describe('transport-mcp authentication', () => {
       root_sid: 'root-1',
       delegation_chain: [{ application_id: 'app-parent' }],
       hop_count: 2,
+      target: ['resource://api'],
     })
     revocations.isRevoked.mockResolvedValue(false)
 
@@ -128,6 +129,7 @@ describe('transport-mcp authentication', () => {
       audience,
       zoneId: 'zone-1',
       requiredScopes: ['mcp:call'],
+      requiredTargets: ['resource://api'],
       requireAgent: true,
       requireDelegation: true,
       requireChainContains: ['app-parent'],
@@ -224,6 +226,8 @@ describe('transport-mcp authentication', () => {
 
   it.each([
     ['missing required scope', { requiredScopes: ['admin:call'] }, {}, 'insufficient_scope', 'Missing scope: admin:call'],
+    ['missing required target', { requiredTargets: ['resource://tools/calendar'] }, { target: ['resource://tools/files'] }, 'invalid_token', 'Token validation failed'],
+    ['ambient token use', {}, { use: 'ambient' }, 'invalid_token', 'Token validation failed'],
     ['agent identity required', { requireAgent: true }, {}, 'agent_required', 'Agent identity required'],
     ['delegation required', { requireDelegation: true }, {}, 'delegation_required', 'Delegation required'],
     ['delegation chain mismatch', { requireChainContains: ['app-parent'] }, { delegation_chain: [{ application_id: 'app-child' }] }, 'chain_mismatch', 'Delegation chain missing application: app-parent'],

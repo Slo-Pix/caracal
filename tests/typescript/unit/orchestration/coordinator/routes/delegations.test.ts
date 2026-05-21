@@ -8,7 +8,7 @@ import Fastify from 'fastify'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { delegationsRoutes } from '../../../../../../apps/coordinator/src/routes/delegations.js'
 
-function buildApp() {
+function buildApp(scopes = ['coordinator.admin']) {
   const app = Fastify({ logger: false })
   const db = {
     query: vi.fn(),
@@ -23,7 +23,7 @@ function buildApp() {
       ?? 'test-client'
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
       zoneId: (req.params as Record<string, string>)?.zoneId ?? 'z1',
-      scopes: ['coordinator.admin'],
+      scopes,
       subject: 'test',
       clientId,
       sessionId: 'sid-test',
@@ -88,6 +88,21 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
     expect(db.connect).not.toHaveBeenCalled()
   })
 
+  it('requires elevated permission for broad resource-null delegation', async () => {
+    const { app, db } = buildApp(['coordinator.delegate_from:issuer-1', 'coordinator.delegate_to:receiver-1'])
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: delegationBody,
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'broad_delegation_permission_required' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
   it('rejects delegation max_hops above supported graph depth', async () => {
     const { app, db } = buildApp()
 
@@ -128,6 +143,7 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
           { id: 'src-1', application_id: 'issuer-1' },
           { id: 'dst-1', application_id: 'receiver-1' },
         ] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
         .mockResolvedValueOnce({ rows: [] }),
       release: vi.fn(),
@@ -235,6 +251,10 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
           { id: 'src-1', application_id: 'issuer-1' },
           { id: 'dst-1', application_id: 'receiver-1' },
         ] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'res-1', identifier: 'calendar', application_id: 'issuer-1', scopes: ['read', 'write'] },
+        ] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{ id: 'edge-sdk' }] })
         .mockResolvedValueOnce({ rows: [{ epoch: '1' }] })
@@ -264,5 +284,88 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
     const insertCall = client.query.mock.calls.find((call) => String(call[0]).includes('INSERT INTO delegation_edges'))
     const values = insertCall?.[1] as unknown[]
     expect(values[8]).toMatchObject({ resources: ['calendar'], max_depth: 2, max_hops: 2, ttl_seconds: 30 })
+  })
+
+  it('rejects child delegation that widens parent authority', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'src-1', application_id: 'issuer-1' },
+          { id: 'dst-1', application_id: 'receiver-1' },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'res-2', identifier: 'files', application_id: 'issuer-1', scopes: ['read'] },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          {
+            id: 'parent-edge',
+            resource_id: null,
+            resource_identifier: null,
+            scopes: ['read'],
+            constraints_json: { resources: ['calendar'], max_hops: 2 },
+            expires_at: '2027-03-16T00:00:00.000Z',
+          },
+        ] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: {
+        ...delegationBody,
+        constraints: { resources: ['files'], max_hops: 1 },
+      },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'delegation_exceeds_parent_authority' })
+  })
+})
+
+describe('GET /v1/zones/:zoneId/delegations/:id/impact', () => {
+  it('returns revocation blast radius for an active delegation edge', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'edge-1',
+          source_session_id: 'agent-1',
+          target_session_id: 'agent-2',
+          depth: 1,
+          subject_session_id: 'sid-2',
+        },
+        {
+          id: 'edge-2',
+          source_session_id: 'agent-2',
+          target_session_id: 'agent-3',
+          depth: 2,
+          subject_session_id: 'sid-3',
+        },
+      ],
+    })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/delegations/edge-1/impact',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toMatchObject({
+      edge_id: 'edge-1',
+      affected_agents: ['agent-2', 'agent-3'],
+      affected_subject_sessions: ['sid-2', 'sid-3'],
+      affected_edges: [
+        { id: 'edge-1', source_session_id: 'agent-1', target_session_id: 'agent-2', depth: 1 },
+        { id: 'edge-2', source_session_id: 'agent-2', target_session_id: 'agent-3', depth: 2 },
+      ],
+    })
   })
 })

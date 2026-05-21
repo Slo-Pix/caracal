@@ -46,9 +46,10 @@ async function mintToken(
       sid: 'sid-1',
       root_sid: 'root-1',
       use: 'per_call',
-    jti: 'jti-1',
-    scope: scopes,
-    iat: now,
+      jti: 'jti-1',
+      scope: scopes,
+      target: ['resource://api'],
+      iat: now,
     exp: now + 300,
     ...claims,
   }))
@@ -90,6 +91,7 @@ describe('verify', () => {
     expect(claims.rootSid).toBe('root-1')
     expect(claims.issuedAt).toBeGreaterThan(0)
     expect(claims.expiresAt).toBeGreaterThan(claims.issuedAt)
+    expect(claims.targetResources).toEqual(['resource://api'])
     expect(claims.agentSessionId).toBe('agent-1')
     expect(claims.delegationEdgeId).toBe('edge-1')
     expect(claims.sourceSessionId).toBe('src-1')
@@ -141,6 +143,13 @@ describe('verify', () => {
     await expect(
       verify(token, { issuer, audience: 'resource://api', requiredScopes: ['admin'] }),
     ).rejects.toMatchObject({ name: 'ScopeInsufficientError', missingScope: 'admin' })
+  })
+
+  it('throws TokenInvalidError for a missing required target resource', async () => {
+    const { token, issuer } = await mintToken({ target: ['resource://tools/files'] })
+    await expect(
+      verify(token, { issuer, audience: 'resource://api', requiredTargets: ['resource://tools/calendar'] }),
+    ).rejects.toBeInstanceOf(TokenInvalidError)
   })
 
   it('throws AgentIdentityRequiredError when agent is required but absent', async () => {
