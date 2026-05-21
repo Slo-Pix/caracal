@@ -90,7 +90,6 @@ export class Authenticator {
   private async keySet(zoneId: string, force: boolean): Promise<JWTVerifyGetKey> {
     const cached = this.zones.get(zoneId)
     if (cached && !force) return cached.keySet
-    if (cached && Date.now() - cached.loadedAt < this.refreshFloorMs) return cached.keySet
     const set = await fetchJwks(this.opts, zoneId)
     this.zones.set(zoneId, { keySet: set, loadedAt: Date.now() })
     return set

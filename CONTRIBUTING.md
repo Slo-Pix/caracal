@@ -75,7 +75,7 @@ The control service reads its admin token from `infra/secrets/files/caracalAdmin
 
 If you created `infra/docker/local.env` for operator overrides, pass it after `dev.env` so local entries win.
 
-Clients authenticate by exchanging the Control key credentials for a token whose resource matches the control audience (`caracal-control` by default). Create the key from TUI → Control → create key, then run the smoke test and paste the zone id, client id, and client secret when prompted.
+Clients authenticate by exchanging the Control key credentials for a token whose resource matches the control audience (`caracal-control` by default). Create the key from TUI → Control → create key; Caracal generates `client_secret` and shows it once in the create result. Store it, then run the smoke test and paste the zone id, client id, and client secret when prompted.
 
 ```bash
 pnpm control:smoke
