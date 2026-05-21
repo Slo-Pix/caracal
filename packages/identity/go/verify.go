@@ -198,7 +198,7 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 	if !ok {
 		return Claims{}, ErrTokenInvalid
 	}
-	rootSid, ok := optionalString(mapClaims, "root_sid")
+	rootSid, ok := requiredString(mapClaims, "root_sid")
 	if !ok {
 		return Claims{}, ErrTokenInvalid
 	}
@@ -208,6 +208,10 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 	}
 	use, ok := requiredString(mapClaims, "use")
 	if !ok || (use != MandateUseSession && use != MandateUseResource) || (cfg.RequiredUse != "" && use != cfg.RequiredUse) {
+		return Claims{}, ErrTokenInvalid
+	}
+	subType, ok := requiredString(mapClaims, "sub_type")
+	if !ok || (subType != SubjectTypeUser && subType != SubjectTypeApplication) {
 		return Claims{}, ErrTokenInvalid
 	}
 	issuedAt, ok := requiredInt64(mapClaims, "iat")
@@ -299,6 +303,7 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 		Sid:              sid,
 		RootSid:          rootSid,
 		Use:              use,
+		SubType:          subType,
 		JTI:              jti,
 		IssuedAt:         issuedAt,
 		ExpiresAt:        expiresAt,

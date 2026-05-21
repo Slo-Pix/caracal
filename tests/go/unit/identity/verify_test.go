@@ -45,7 +45,9 @@ func mintToken(t *testing.T, extra jwt.MapClaims) (string, string, func()) {
 		"zone_id":   "zone-1",
 		"client_id": "app-1",
 		"sid":       "sid-1",
+		"root_sid":  "root-1",
 		"use":       "resource",
+		"sub_type":  "user",
 		"jti":       "jti-1",
 		"scope":     "read write",
 		"iat":       now.Unix(),
@@ -102,7 +104,7 @@ func TestVerifyAcceptsValidTokenAndExtractsClaims(t *testing.T) {
 	if claims.Sub != "user-1" || claims.ZoneID != "zone-1" || claims.ClientID != "app-1" || claims.Sid != "sid-1" {
 		t.Fatalf("wrong basic claims: %+v", claims)
 	}
-	if claims.RootSid != "root-1" || claims.IssuedAt == 0 || claims.ExpiresAt <= claims.IssuedAt {
+	if claims.RootSid != "root-1" || claims.SubType != "user" || claims.IssuedAt == 0 || claims.ExpiresAt <= claims.IssuedAt {
 		t.Fatalf("wrong authority timing claims: %+v", claims)
 	}
 	if claims.AgentSessionID != "agent-1" || claims.DelegationEdgeID != "edge-1" {
@@ -156,6 +158,26 @@ func TestVerifyRejectsMissingExpiration(t *testing.T) {
 
 func TestVerifyRejectsMissingSessionID(t *testing.T) {
 	token, issuer, closeServer := mintToken(t, jwt.MapClaims{"sid": ""})
+	defer closeServer()
+
+	_, err := identity.Verify(token, identity.Config{Issuer: issuer, Audience: "resource://api"})
+	if err != identity.ErrTokenInvalid {
+		t.Fatalf("expected ErrTokenInvalid, got %v", err)
+	}
+}
+
+func TestVerifyRejectsMissingRootSessionID(t *testing.T) {
+	token, issuer, closeServer := mintToken(t, jwt.MapClaims{"root_sid": ""})
+	defer closeServer()
+
+	_, err := identity.Verify(token, identity.Config{Issuer: issuer, Audience: "resource://api"})
+	if err != identity.ErrTokenInvalid {
+		t.Fatalf("expected ErrTokenInvalid, got %v", err)
+	}
+}
+
+func TestVerifyRejectsMissingSubjectType(t *testing.T) {
+	token, issuer, closeServer := mintToken(t, jwt.MapClaims{"sub_type": ""})
 	defer closeServer()
 
 	_, err := identity.Verify(token, identity.Config{Issuer: issuer, Audience: "resource://api"})
