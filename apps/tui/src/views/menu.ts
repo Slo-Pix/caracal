@@ -222,13 +222,24 @@ class ControlMenuView implements View {
     this.ctx = ctx
   }
 
+  async init(app: App): Promise<void> {
+    try {
+      authorizeControlManagementAccess()
+      const paths = resolveStackPaths({ mode: resolveControlStackMode() })
+      await controlServiceStatus({ paths, env: controlComposeEnv(paths), timeoutMs: 300 })
+      app.invalidate()
+    } catch (err) {
+      app.setStatus(`control status: ${explainError(err)}`, 'error')
+    }
+  }
+
   private items(): { key: string; label: string; build: () => View }[] {
     const state = this.controlState()
     const mounted = state?.mounted === true
     const enabled = state?.enabled === true
     return [
       { key: 'm', label: mounted ? 'unmount runtime' : 'mount runtime', build: () => this.lifecycleConfirm(mounted ? 'unmount' : 'mount') },
-      { key: 'e', label: enabled ? 'disable endpoint' : 'enable endpoint', build: () => this.lifecycleConfirm(enabled ? 'disable' : 'enable') },
+      { key: 'e', label: !mounted ? 'enable endpoint (mount first)' : enabled ? 'disable endpoint' : 'enable endpoint', build: () => mounted ? this.lifecycleConfirm(enabled ? 'disable' : 'enable') : this.statusView() },
       { key: 's', label: 'management status', build: () => this.statusView() },
       { key: 'l', label: 'list keys',  build: () => this.listView() },
       { key: 'g', label: 'get key', build: () => this.getForm() },
@@ -299,7 +310,8 @@ class ControlMenuView implements View {
       title: 'control / status',
       load: async () => {
         authorizeControlManagementAccess()
-        return controlServiceStatus()
+        const paths = resolveStackPaths({ mode: resolveControlStackMode() })
+        return controlServiceStatus({ paths, env: controlComposeEnv(paths) })
       },
     })
   }
@@ -483,9 +495,16 @@ class ControlLifecycleView implements View {
 
   hints(): string[] { return ['esc:back'] }
 
+  private progress(): string {
+    if (this.action === 'enable') return 'opening endpoint gate'
+    if (this.action === 'disable') return 'closing endpoint gate'
+    if (this.action === 'unmount') return 'detaching Control runtime'
+    return 'loading Control runtime'
+  }
+
   async init(app: App): Promise<void> {
     this.app = app
-    app.setStatus(`control ${this.action}: working...`)
+    app.setStatus(`control ${this.action}: ${this.progress()}`)
     app.invalidate()
     try {
       const result = await this.runAction(() => {
@@ -510,19 +529,13 @@ class ControlLifecycleView implements View {
 
   render(_ctx: ViewContext): string[] {
     if (this.loading) {
-      const progress = this.action === 'enable'
-        ? 'opening endpoint gate'
-        : this.action === 'disable'
-          ? 'blocking endpoint gate'
-          : this.action === 'unmount'
-            ? 'removing managed runtime'
-            : 'preparing managed runtime'
+      const progress = this.progress()
       return [
         '',
         ' ' + ui.title(`Control ${this.action}`),
-        ' ' + ui.muted('Applying lifecycle action...'),
+        ' ' + ui.muted(progress),
         '',
-        ` ${ui.muted('status')} ${ui.info(progress)}`,
+        ` ${ui.muted('state')} ${ui.info('in progress')}`,
       ]
     }
     if (this.error) return ['', ' ' + ui.error('error: ') + this.error]
@@ -545,7 +558,8 @@ function controlStateText(state: ControlServiceStatus['state']): string {
 }
 
 function controlServiceText(service: ControlServiceStatus['service'] | ControlLifecycleResult['service']): string {
-  if (service === 'ok' || service === 'running' || service === 'prepared') return ui.success(service)
+  if (service === 'ok' || service === 'running') return ui.success(service)
+  if (service === 'gated') return ui.warn(service)
   if (service === 'down') return ui.error(service)
   return ui.muted(service)
 }

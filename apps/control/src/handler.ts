@@ -9,6 +9,7 @@ import { Authenticator, AuthError } from './auth.js'
 import { newRequestId, type EventSink } from './audit.js'
 import type { Replay } from './replay.js'
 import type { RateLimiter } from './ratelimit.js'
+import type { ControlGate } from './gate.js'
 
 const MAX_BODY_BYTES = 64 * 1024
 
@@ -30,6 +31,7 @@ export interface InvokeDeps {
   routeRateLimit: RouteRateLimit
   sink: EventSink
   ctx: DispatchContext
+  gate: ControlGate
 }
 
 export function registerInvokeRoute(app: FastifyInstance, deps: InvokeDeps): void {
@@ -42,6 +44,13 @@ export function registerInvokeRoute(app: FastifyInstance, deps: InvokeDeps): voi
 async function handle(req: FastifyRequest, reply: FastifyReply, deps: InvokeDeps): Promise<void> {
   const requestId = newRequestId()
   reply.header('x-request-id', requestId)
+  if (!deps.gate.enabled()) {
+    await deps.sink.emit({
+      at: new Date(), subject: 'anonymous', jti: '',
+      decision: 'deny', reason: 'control disabled', requestId,
+    })
+    return reply.code(503).send({ error: 'control disabled' })
+  }
 
   let claims
   try {

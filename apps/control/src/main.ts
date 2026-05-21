@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Control service entry point: launches the managed Control HTTP surface only when explicitly enabled.
+// Control service entry point: launches the managed Control HTTP surface with an internal endpoint gate.
 
 import { assertPublishedSafe, createLogger } from '@caracalai/core'
 import { loadConfig } from './config.js'
@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const enabled = process.env.CARACAL_CONTROL_ENABLED
   const bootLog = createLogger('control', (process.env.LOG_LEVEL as 'info') ?? 'info')
   if (enabled !== 'true') {
-    bootLog.info('control surface disabled; enable through caracal-cli or the TUI Control menu', { enabled: enabled ?? '' })
+    bootLog.info('control runtime not mounted; mount through caracal-cli or the TUI Control menu', { enabled: enabled ?? '' })
     return
   }
 
