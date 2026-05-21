@@ -12,7 +12,7 @@ import { startServiceLeaseSweeper } from './jobs/service-lease-sweeper.js'
 import { startDeadlineEnforcer } from './jobs/deadline-enforcer.js'
 import { startRetentionCleaner } from './jobs/retention-cleaner.js'
 import { cfg } from './config.js'
-import { assertPublishedSafe, createLogger, ShutdownRegistry, withTimeout } from '@caracalai/core'
+import { assertPublishedSafe, createLogger, initNodeTelemetry, ShutdownRegistry, withTimeout } from '@caracalai/core'
 
 assertPublishedSafe()
 
@@ -20,6 +20,7 @@ const bootstrapLog = createLogger('coordinator-bootstrap', (cfg.logLevel ?? 'inf
 const log = (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void => {
   bootstrapLog[level](msg, meta)
 }
+const shutdownTelemetry = initNodeTelemetry('caracal-coordinator', { error: (msg, meta) => log('error', msg, meta) })
 
 process.on('unhandledRejection', (reason) => {
   log('error', 'unhandledRejection', { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) })
@@ -39,6 +40,7 @@ const shutdown = new ShutdownRegistry({
 })
 shutdown.register('redis', () => closeRedis(redis))
 shutdown.register('postgres', () => db.end())
+shutdown.register('telemetry', shutdownTelemetry)
 shutdown.install()
 
 try {

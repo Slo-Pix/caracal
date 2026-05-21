@@ -18,6 +18,9 @@ import { auditCommand, explainCommand } from './commands/audit.ts'
 import { agentCommand, delegationCommand } from './commands/agent.ts'
 import { completionCommand } from './commands/completion.ts'
 import { controlCommand } from './commands/control.ts'
+import { doctorCommand } from './commands/doctor.ts'
+import { manifestCommand } from './commands/manifest.ts'
+import { protectCommand } from './commands/protect.ts'
 import { checkMcpGovernance } from './mcp.ts'
 import { printError } from './style.ts'
 import { CARACAL_MODE, CARACAL_SHA, CARACAL_VERSION } from './runtime/version.gen.ts'
@@ -52,6 +55,9 @@ const executors: Record<string, Executor> = {
   agent: (argv, cfg) => agentCommand([...argv], cfg),
   delegation: (argv, cfg) => delegationCommand([...argv], cfg),
   control: (argv, cfg) => controlCommand([...argv], cfg),
+  doctor: (argv, cfg) => doctorCommand([...argv], cfg),
+  manifest: (argv, cfg) => manifestCommand([...argv], cfg),
+  protect: (argv, cfg) => protectCommand([...argv], cfg),
   completion: (argv) => completionCommand([...argv]),
 }
 

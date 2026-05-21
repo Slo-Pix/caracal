@@ -15,7 +15,7 @@ import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
-import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, withTimeout } from '@caracalai/core'
+import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout } from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
 import { resourcesRoutes } from './routes/resources.js'
@@ -79,6 +79,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
 
   app.decorate('db', db)
   app.decorate('redis', redis)
+  instrumentFastifyApp(app, 'caracal-api')
 
   app.addHook('onRequest', async (req) => {
     const h = req.headers['traceparent']

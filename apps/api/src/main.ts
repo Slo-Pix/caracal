@@ -11,7 +11,7 @@ import { startDCRGC } from './jobs/dcr-gc.js'
 import { startSessionsReaper } from './jobs/sessions-reaper.js'
 import { OutboxDispatcher } from './outbox.js'
 import { seedBootstrapAdminToken } from './auth.js'
-import { assertPublishedSafe, createLogger, ShutdownRegistry, withTimeout } from '@caracalai/core'
+import { assertPublishedSafe, createLogger, initNodeTelemetry, ShutdownRegistry, withTimeout } from '@caracalai/core'
 
 assertPublishedSafe()
 
@@ -21,6 +21,7 @@ const bootstrapLog = createLogger('api-bootstrap', cfg.logLevel as 'debug' | 'in
 const log = (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>): void => {
   bootstrapLog[level](msg, meta)
 }
+const shutdownTelemetry = initNodeTelemetry('caracal-api', { error: (msg, meta) => log('error', msg, meta) })
 
 process.on('unhandledRejection', (reason) => {
   log('error', 'unhandledRejection', { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) })
@@ -48,6 +49,7 @@ const shutdown = new ShutdownRegistry({
 })
 shutdown.register('redis', async () => { await redis.quit() })
 shutdown.register('postgres', () => db.end())
+shutdown.register('telemetry', shutdownTelemetry)
 shutdown.install()
 
 try {
