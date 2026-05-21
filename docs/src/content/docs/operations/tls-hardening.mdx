@@ -4,7 +4,7 @@ description: Gateway TLS configuration, runtime-mode safety checks, SSRF defense
 pageType: config
 ---
 
-The Gateway is the Caracal service intended to sit on the protected resource boundary. It verifies inbound mandates, exchanges a fresh per-call mandate, blocks unsafe upstream targets, and can serve HTTPS directly when certificate files are configured.
+The Gateway is the Caracal service intended to sit on the protected resource boundary. It verifies inbound mandates, exchanges a fresh resource mandate, blocks unsafe upstream targets, and can serve HTTPS directly when certificate files are configured.
 
 Use `CARACAL_MODE=stable` for stable deployments, `CARACAL_MODE=rc` for rc deployments, and `CARACAL_MODE=dev` for development. rc and stable enable safety checks in service code; they do not replace network-level hardening, TLS termination, secret management, or private service networking.
 

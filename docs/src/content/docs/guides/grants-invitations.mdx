@@ -65,7 +65,7 @@ caracal grant get grant-ghi789
 caracal grant revoke grant-ghi789
 ```
 
-Revoking a grant does not immediately terminate active sessions or revoke already-issued mandates. The 15-minute per-call TTL on issued mandates means the effect fully propagates within that window. Future token exchanges fail at policy evaluation once the grant is gone.
+Revoking a grant does not immediately terminate active sessions or revoke already-issued mandates. The 15-minute resource TTL on issued mandates means the effect fully propagates within that window. Future token exchanges fail at policy evaluation once the grant is gone.
 
 ## Invitations
 

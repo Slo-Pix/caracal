@@ -63,7 +63,7 @@ curl http://localhost:8081/metrics | jq '.revocations_active, .denials_revoked'
 
 `revocations_active` should reflect the revoked session. `denials_revoked` should increment if the session's mandates are still being presented.
 
-**Important timing note:** Per-call mandates have a 15-minute TTL. A mandate issued before revocation and still within its TTL will be rejected by the Gateway (which checks the revocation store on every request) but will be accepted by any service that does not run a `RedisRevocationConsumer`. Services behind the Gateway are protected immediately. Services accessed directly (bypassing the Gateway) accept revoked mandates until their TTL expires unless they subscribe to the revocation stream.
+**Important timing note:** Resource mandates have a 15-minute TTL. A mandate issued before revocation and still within its TTL will be rejected by the Gateway (which checks the revocation store on every request) but will be accepted by any service that does not run a `RedisRevocationConsumer`. Services behind the Gateway are protected immediately. Services accessed directly (bypassing the Gateway) accept revoked mandates until their TTL expires unless they subscribe to the revocation stream.
 
 ---
 
@@ -164,7 +164,7 @@ Audit chain tampering is a security event requiring forensic investigation. Do n
 
 **Detection:** `GET http://localhost:8080/ready` returns 503, or all token exchanges are failing.
 
-**Impact:** No new mandates can be issued. Existing mandates with remaining TTL continue to work for their lifetime (up to 15 minutes for per-call mandates, up to 1 hour for ambient mandates).
+**Impact:** No new mandates can be issued. Existing mandates with remaining TTL continue to work for their lifetime (up to 15 minutes for resource mandates, up to 1 hour for session mandates).
 
 **Step 1 — Check STS logs:**
 

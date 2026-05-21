@@ -25,7 +25,7 @@ pip install caracalai-sdk
 | `CARACAL_COORDINATOR_URL` | Yes | Base URL of the Coordinator service (e.g., `http://localhost:4000`) |
 | `CARACAL_ZONE_ID` | Yes | Zone identifier |
 | `CARACAL_APPLICATION_ID` | Yes | Registered application ID |
-| `CARACAL_SUBJECT_TOKEN` | Yes | Ambient bearer token for this application |
+| `CARACAL_SUBJECT_TOKEN` | Yes | Session bearer token for this application |
 | `CARACAL_GATEWAY_URL` | No | Gateway base URL for resource-routed calls |
 | `CARACAL_RESOURCES` | No | Comma-separated bindings: `resourceId=upstreamPrefix,other=prefix` |
 
@@ -84,7 +84,7 @@ async with caracal.spawn(
     ...
 ```
 
-## Access ambient context
+## Access session context
 
 Inside a `spawn()` block, `caracal.current()` returns the live context:
 
