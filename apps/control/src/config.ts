@@ -21,6 +21,7 @@ export interface Config {
   rateWindowSec: number
   replayTtlSec: number
   logLevel: string
+  gateFile: string | undefined
 }
 
 function readMode(): 'dev' | 'rc' | 'stable' {
@@ -68,5 +69,6 @@ export function loadConfig(): Config {
     rateWindowSec: intEnv('CONTROL_RATE_WINDOW_SEC', 60, 1),
     replayTtlSec: intEnv('CONTROL_REPLAY_TTL_SEC', 3600, 1),
     logLevel: getenv('LOG_LEVEL', 'info'),
+    gateFile: process.env.CONTROL_GATE_FILE || undefined,
   }
 }

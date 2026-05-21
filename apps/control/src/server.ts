@@ -14,6 +14,7 @@ import type { Config } from './config.js'
 import { registerInvokeRoute } from './handler.js'
 import { RateLimiter } from './ratelimit.js'
 import { MemoryReplay, RedisReplay, type Replay } from './replay.js'
+import { fileGate } from './gate.js'
 
 export interface ServerDeps {
   app: FastifyInstance
@@ -49,6 +50,7 @@ export async function buildServer(cfg: Config, log: Logger): Promise<ServerDeps>
   const rateWindowMs = cfg.rateWindowSec * 1000
   const rate = new RateLimiter(cfg.rateCapacity, rateWindowMs)
   const admin = new AdminClient({ apiUrl: cfg.apiUrl, adminToken: cfg.apiToken })
+  const gate = fileGate(cfg.gateFile)
 
   const app = Fastify({
     logger: { level: cfg.logLevel },
@@ -58,6 +60,7 @@ export async function buildServer(cfg: Config, log: Logger): Promise<ServerDeps>
 
   app.get('/health', async (_req, reply) => reply.code(200).send())
   app.get('/ready', async (_req, reply) => {
+    if (!gate.enabled()) return reply.code(503).send({ error: 'control disabled' })
     try {
       await replay.ping()
       return reply.code(200).send()
@@ -80,6 +83,7 @@ export async function buildServer(cfg: Config, log: Logger): Promise<ServerDeps>
     routeRateLimit: { max: cfg.rateCapacity, timeWindow: rateWindowMs },
     sink: auditSink,
     ctx: { admin },
+    gate,
   })
 
   return {

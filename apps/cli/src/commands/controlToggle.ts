@@ -73,7 +73,7 @@ function printControlStatus(status: ControlServiceStatus): void {
   const state = formatState(status.state)
   const service = status.service === 'ok'
     ? style.success(status.service)
-    : status.service === 'stopped' || status.service === 'unmounted'
+    : status.service === 'gated' || status.service === 'unmounted'
       ? style.label(status.service)
       : style.error(status.service)
   printInfo(`Control: ${state}; service: ${service}; detail: ${style.label(status.detail)}`)
@@ -117,6 +117,13 @@ async function confirmLifecycleAction(action: ControlLifecycleAction): Promise<v
   }
 }
 
+function lifecycleProgress(action: ControlLifecycleAction): string {
+  if (action === 'enable') return 'opening endpoint gate'
+  if (action === 'disable') return 'closing endpoint gate'
+  if (action === 'unmount') return 'detaching Control runtime'
+  return 'loading Control runtime'
+}
+
 export async function controlToggleCommand(argv: string[], _cfg?: CliConfig): Promise<void> {
   const [sub, ...rest] = argv
   if (!sub || sub === '--help' || sub === '-h') controlHelp()
@@ -134,7 +141,7 @@ export async function controlToggleCommand(argv: string[], _cfg?: CliConfig): Pr
     }
     await confirmLifecycleAction(action)
     const paths = resolvePaths()
-    if (!json) printStep(`control ${action}: applying managed lifecycle action`)
+    if (!json) printStep(`control ${action}: ${lifecycleProgress(action)}`)
     const result = await applyControlLifecycleAction({
       paths,
       action,
@@ -146,7 +153,8 @@ export async function controlToggleCommand(argv: string[], _cfg?: CliConfig): Pr
     return
   }
   if (sub === 'status') {
-    const status = await controlServiceStatus()
+    const paths = resolvePaths()
+    const status = await controlServiceStatus({ paths, env: composeEnv(paths) })
     if (json) return printJSON(status)
     printControlStatus(status)
     return
