@@ -25,7 +25,12 @@ Use the local stack for development and evaluation:
 
 ```bash
 caracal up
-caracal protect http --resource resource://local-tool --upstream http://host.docker.internal:8787 --write-config
+caracal protect http \
+  --identifier resource://local-tool \
+  --upstream-url http://host.docker.internal:8787 \
+  --scopes tool:read \
+  --user local-user \
+  --write-config caracal.toml
 caracal doctor
 ```
 

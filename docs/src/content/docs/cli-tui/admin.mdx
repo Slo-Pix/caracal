@@ -1,12 +1,36 @@
 ---
 title: Admin Commands
-description: Complete reference for zone, app, resource, provider, policy, policy-set, grant, and session commands — flags, API calls, and output formats.
+description: Complete reference for zone, app, resource, provider, policy, policy-set, grant, session, and manifest commands — flags, API calls, and output formats.
 pageType: reference
 ---
 
-Admin commands manage all control-plane entities. Every command in this section requires `CARACAL_ADMIN_TOKEN`. Zone-scoped commands (everything except `zone list`, `zone get`, `zone create`) also require a zone ID, resolved in order: `--zone` flag → `CARACAL_ZONE_ID` environment variable → `zone_id` in `caracal.toml`.
+Admin commands manage control-plane entities and ecosystem contracts. Control-plane commands require `CARACAL_ADMIN_TOKEN`. Offline commands such as `manifest validate` do not call the API. Zone-scoped commands require a zone ID, resolved in order: `--zone` flag → `CARACAL_ZONE_ID` environment variable → `zone_id` in `caracal.toml`.
 
 All commands accept `--json` to emit structured JSON and `--help` for command-specific help.
+
+---
+
+## Manifest commands — `caracal manifest`
+
+`manifest validate` checks public extension manifests offline before a provider, exporter, policy pack, verifier, upstream, or connector is published.
+
+```bash
+caracal manifest validate --file gateway-upstream.json
+caracal manifest validate --file provider-plugin.json --kind provider-credential-plugin --json
+```
+
+Supported kinds:
+
+| Kind | Contract |
+| --- | --- |
+| `gateway-upstream` | Gateway-compatible upstream manifest |
+| `provider-credential-plugin` | Provider credential plugin manifest |
+| `audit-exporter` | Audit exporter manifest |
+| `policy-pack` | Policy pack manifest |
+| `resource-verifier` | Resource verifier manifest |
+| `agent-connector` | Agent framework connector manifest |
+
+The validator enforces interoperability-critical invariants: provider credentials must remain Gateway-only, resource verifiers must check target/scope/use and revocation anchors, connectors must label enforcement mode, and audit/exporter manifests must preserve replay and redaction requirements.
 
 ---
 

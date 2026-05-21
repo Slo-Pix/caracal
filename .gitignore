@@ -8,6 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 .turbo/
 .nx/
+.vite/
+.vitest/
 
 # Build outputs
 dist/
@@ -15,11 +17,14 @@ build/
 coverage/
 coverage.xml
 *.tsbuildinfo
+*.lcov
+.nyc_output/
 
 # Environment files
 .env
 .env.*
 !.env.example
+!.env.*.example
 infra/docker/local.env
 .direnv/
 .envrc
@@ -27,11 +32,14 @@ infra/docker/local.env
 # IDE / OS
 .DS_Store
 Thumbs.db
+.Trash-*/
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
+*.orig
+*.rej
 
 # Python
 __pycache__/
@@ -78,8 +86,18 @@ vendor/
 .cache/
 tmp/
 temp/
+logs/
+*.log
+*.tmp
+*.temp
+*.bak
+*.pid
+*.seed
+.caracal/
+.caracal.toml*
 
 caracal.toml
+
 # Generated runtime bundles
 packages/engine/src/embedded.ts
 apps/cli/src/runtime/version.gen.ts

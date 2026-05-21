@@ -209,6 +209,15 @@ Extension manifests are offline compatibility declarations. They do not grant ru
 
 Extension authors should publish manifests with conformance fixture references. Core runtime support for a plugin or connector should not be added until the manifest can be validated offline.
 
+Validate manifests before publishing or installing them:
+
+```bash
+caracal manifest validate --file gateway-upstream.json
+caracal manifest validate --file provider-plugin.json --kind provider-credential-plugin --json
+```
+
+The validator checks the schema version and the interoperability invariants that matter most for ecosystem safety: provider credential exposure, verifier claim and revocation enforcement, action-result audit support, W3C context propagation, redaction rules, replay support, and connector enforcement labels.
+
 ## Extension boundary rules
 
 These rules keep Caracal interoperable:
