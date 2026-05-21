@@ -228,6 +228,10 @@ async def verify_config(token: str, config: JwtConfig) -> Claims:
     delegation_path = _string_list(decoded, "delegation_path")
     graph_epoch = _optional_int(decoded, "delegation_graph_epoch")
     scope = _required_str(decoded, "scope") if "scope" in decoded else ""
+    target_resources = _string_list(decoded, "target")
+    for target in config.required_targets:
+        if target not in target_resources:
+            raise TokenInvalidError("Token target resource validation failed")
 
     return Claims(
         sub=_required_str(decoded, "sub"),
@@ -240,6 +244,7 @@ async def verify_config(token: str, config: JwtConfig) -> Claims:
         issued_at=_required_int(decoded, "iat"),
         expires_at=_required_int(decoded, "exp"),
         scope=scope,
+        target_resources=target_resources,
         agent_session_id=agent_session_id,
         delegation_edge_id=delegation_edge_id,
         source_session_id=_optional_str(decoded, "source_session_id"),

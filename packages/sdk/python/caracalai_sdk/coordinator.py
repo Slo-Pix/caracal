@@ -43,20 +43,32 @@ class CoordinatorClient:
 @dataclass
 class DelegationConstraints:
     resources: list[str] | None = None
-    actions: list[str] | None = None
     max_depth: int | None = None
+    max_hops: int | None = None
+    ttl_seconds: int | None = None
+    budget: int | None = None
+    policy_approved: bool | None = None
     expires_at: str | None = None
+    broad_reason: str | None = None
 
     def to_wire(self) -> JsonObject:
         out: JsonObject = {}
         if self.resources is not None:
             out["resources"] = self.resources
-        if self.actions is not None:
-            out["actions"] = self.actions
         if self.max_depth is not None:
             out["max_depth"] = self.max_depth
+        if self.max_hops is not None:
+            out["max_hops"] = self.max_hops
+        if self.ttl_seconds is not None:
+            out["ttl_seconds"] = self.ttl_seconds
+        if self.budget is not None:
+            out["budget"] = self.budget
+        if self.policy_approved is not None:
+            out["policy_approved"] = self.policy_approved
         if self.expires_at is not None:
             out["expires_at"] = self.expires_at
+        if self.broad_reason is not None:
+            out["broad_reason"] = self.broad_reason
         return out
 
 
@@ -85,6 +97,7 @@ class DelegationRequest:
     target_session_id: str
     receiver_application_id: str
     scopes: list[str]
+    resource_id: str | None = None
     constraints: DelegationConstraints | None = None
     ttl_seconds: int | None = None
 
@@ -163,6 +176,8 @@ async def create_delegation(
         "receiver_application_id": req.receiver_application_id,
         "scopes": req.scopes,
     }
+    if req.resource_id is not None:
+        body["resource_id"] = req.resource_id
     if req.constraints is not None:
         body["constraints"] = req.constraints.to_wire()
     if req.ttl_seconds:

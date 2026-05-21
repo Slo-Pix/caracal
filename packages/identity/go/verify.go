@@ -223,6 +223,19 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 			return Claims{}, &ScopeMissingError{Scope: required}
 		}
 	}
+	targetResources := readStringSlice(mapClaims["target"])
+	for _, target := range cfg.RequiredTargets {
+		found := false
+		for _, resource := range targetResources {
+			if resource == target {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Claims{}, ErrTokenInvalid
+		}
+	}
 
 	agentSessionID, ok := optionalString(mapClaims, "agent_session_id")
 	if !ok {
@@ -290,6 +303,7 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 		IssuedAt:         issuedAt,
 		ExpiresAt:        expiresAt,
 		Scope:            scope,
+		TargetResources:  targetResources,
 		AgentSessionID:   agentSessionID,
 		DelegationEdgeID: delegationEdgeID,
 		SourceSessionID:  sourceSessionID,
