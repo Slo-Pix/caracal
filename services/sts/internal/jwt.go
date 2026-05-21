@@ -119,12 +119,12 @@ type ChainHop struct {
 	DelegationEdgeID string `json:"delegation_edge_id,omitempty"`
 }
 
-// Token use classes. Ambient tokens represent a session and may be re-presented to STS
-// as subject_token; per-call tokens are narrowed to a specific resource set and must
-// never be reused as subject_token (RFC 8693 subject-confusion mitigation).
+// Mandate use classes. Session mandates represent an execution session and may be
+// re-presented to STS as subject_token; resource mandates are narrowed to a specific
+// resource set and must never be reused as subject_token.
 const (
-	UseAmbient = "ambient"
-	UsePerCall = "per_call"
+	UseSession  = "session"
+	UseResource = "resource"
 )
 
 // Subject classes. Disambiguates whether sub identifies a human user or an
@@ -191,17 +191,17 @@ func issueToken(ctx context.Context, params IssueParams, keys *KeyCache, issuerU
 	jtiStr := jti.String()
 	use := params.Use
 	if use == "" {
-		use = UsePerCall
+		use = UseResource
 	}
 	subType := params.SubType
 	if subType == "" {
 		subType = SubTypeApplication
 	}
-	// Audience is class-disjoint: ambient tokens carry only the issuer (so they
-	// can be re-presented as subject_token), per-call tokens carry only their
+	// Audience is class-disjoint: session mandates carry only the issuer (so they
+	// can be re-presented as subject_token), resource mandates carry only their
 	// target resources (so they cannot bootstrap further exchanges).
 	var audience []string
-	if use == UseAmbient {
+	if use == UseSession {
 		audience = []string{issuerURL}
 	} else {
 		audience = append(audience, params.Resources...)

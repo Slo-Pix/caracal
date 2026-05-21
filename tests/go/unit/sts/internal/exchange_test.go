@@ -75,17 +75,17 @@ func TestScopesAllowed(t *testing.T) {
 }
 
 func TestTokenTTL(t *testing.T) {
-	if got, err := tokenTTL(0, false); err != nil || got != ttlPerCallSDK {
+	if got, err := tokenTTL(0, false); err != nil || got != ttlResourceMandate {
 		t.Errorf("want default TTL, got %v err=%v", got, err)
 	}
 	if got, err := tokenTTL(60, false); err != nil || got != time.Minute {
 		t.Errorf("want 1m TTL, got %v err=%v", got, err)
 	}
-	if _, err := tokenTTL(int(ttlPerCallSDK.Seconds())+1, false); err == nil {
+	if _, err := tokenTTL(int(ttlResourceMandate.Seconds())+1, false); err == nil {
 		t.Error("want error when TTL exceeds cap")
 	}
-	if got, err := tokenTTL(int(ttlAmbient.Seconds()), true); err != nil || got != ttlAmbient {
-		t.Errorf("want ambient TTL, got %v err=%v", got, err)
+	if got, err := tokenTTL(int(ttlSessionMandate.Seconds()), true); err != nil || got != ttlSessionMandate {
+		t.Errorf("want session mandate TTL, got %v err=%v", got, err)
 	}
 	if _, err := tokenTTL(-1, false); err == nil {
 		t.Error("want error for negative TTL")
@@ -93,26 +93,26 @@ func TestTokenTTL(t *testing.T) {
 }
 
 func TestRootSessionIDTracksAuthorityRoot(t *testing.T) {
-	if got := rootSessionID(nil, "ambient-1", UseAmbient); got != "ambient-1" {
-		t.Fatalf("ambient root should be its own sid, got %q", got)
+	if got := rootSessionID(nil, "session-1", UseSession); got != "session-1" {
+		t.Fatalf("session mandate root should be its own sid, got %q", got)
 	}
-	claims := map[string]any{"sid": "ambient-1"}
-	if got := rootSessionID(claims, "per-call-1", UsePerCall); got != "ambient-1" {
-		t.Fatalf("per-call root should default to parent sid, got %q", got)
+	claims := map[string]any{"sid": "session-1"}
+	if got := rootSessionID(claims, "resource-1", UseResource); got != "session-1" {
+		t.Fatalf("resource mandate root should default to parent sid, got %q", got)
 	}
 	claims["root_sid"] = "root-1"
-	if got := rootSessionID(claims, "per-call-1", UsePerCall); got != "root-1" {
-		t.Fatalf("per-call root should preserve inherited root, got %q", got)
+	if got := rootSessionID(claims, "resource-1", UseResource); got != "root-1" {
+		t.Fatalf("resource mandate root should preserve inherited root, got %q", got)
 	}
 }
 
 func TestParentSessionIDOnlyForDerivedTokens(t *testing.T) {
-	if got := parentSessionID("ambient-1", UseAmbient); got != nil {
-		t.Fatalf("ambient sessions must not have a parent, got %q", *got)
+	if got := parentSessionID("session-1", UseSession); got != nil {
+		t.Fatalf("session mandates must not have a parent, got %q", *got)
 	}
-	got := parentSessionID("ambient-1", UsePerCall)
-	if got == nil || *got != "ambient-1" {
-		t.Fatalf("per-call sessions must link to parent ambient session, got %#v", got)
+	got := parentSessionID("session-1", UseResource)
+	if got == nil || *got != "session-1" {
+		t.Fatalf("resource mandates must link to parent session mandate, got %#v", got)
 	}
 }
 
@@ -342,7 +342,7 @@ func TestAuthenticateAppAllowsSignedGatewayExchangeWithoutClientSecret(t *testin
 	app, zoneID, err := srv.authenticateApp(context.Background(), TokenExchangeRequest{
 		ZoneID:               "zone1",
 		ApplicationID:        "app1",
-		SubjectToken:         "ambient-token",
+		SubjectToken:         "session-mandate",
 		GatewayAuthenticated: true,
 	})
 	if err != nil || app.ID != "app1" || zoneID != "zone1" {
@@ -362,7 +362,7 @@ func TestAuthenticateAppRejectsGatewayBootstrapWithoutSubjectToken(t *testing.T)
 		ApplicationID:        "app1",
 		GatewayAuthenticated: true,
 	}); err == nil {
-		t.Fatalf("gateway-authenticated exchanges must not bootstrap ambient tokens")
+		t.Fatalf("gateway-authenticated exchanges must not bootstrap session mandates")
 	}
 }
 

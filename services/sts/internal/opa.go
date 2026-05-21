@@ -124,6 +124,9 @@ func (e *OPAEngine) Evaluate(ctx context.Context, input OPAInput) (*OPAResult, e
 	defer func() { e.metrics.EvalNanos.Add(uint64(time.Since(started).Nanoseconds())) }()
 	if input.SchemaVersion == "" {
 		input.SchemaVersion = opaInputSchemaVersion
+	} else if input.SchemaVersion != opaInputSchemaVersion {
+		e.metrics.EvalErrors.Add(1)
+		return nil, fmt.Errorf("unsupported opa input schema_version %s", input.SchemaVersion)
 	}
 	e.mu.RLock()
 	state, ok := e.zones[input.Principal.ZoneID]
@@ -172,8 +175,8 @@ func validateOPAResult(result OPAResult) error {
 	default:
 		return fmt.Errorf("opa result decision must be allow or deny")
 	}
-	if strings.TrimSpace(result.EvaluationStatus) == "" {
-		return fmt.Errorf("opa result evaluation_status is required")
+	if strings.TrimSpace(result.EvaluationStatus) != "complete" {
+		return fmt.Errorf("opa result evaluation_status must be complete")
 	}
 	return nil
 }

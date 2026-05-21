@@ -24,14 +24,14 @@ import (
 )
 
 const (
-	// ttlPerCallSDK caps the lifetime of every per-call exchange. The gateway
+	// ttlResourceMandate caps the lifetime of every resource-bound exchange. The gateway
 	// re-exchanges on each request, so streams longer than this lifetime
 	// (LLM completions, SSE, websockets) cannot rotate mid-stream. Callers
-	// initiating long streams must treat ttlPerCallSDK as the contract upper
+	// initiating long streams must treat ttlResourceMandate as the contract upper
 	// bound: streams running past it should expect upstream-side disconnect
 	// or a fresh exchange and reconnect orchestrated by the SDK.
-	ttlPerCallSDK          = 15 * time.Minute
-	ttlAmbient             = 60 * time.Minute
+	ttlResourceMandate     = 15 * time.Minute
+	ttlSessionMandate      = 60 * time.Minute
 	gatewayExchangeSkew    = 60 * time.Second
 	controlInvokeTrait     = "control:invoke"
 	defaultControlAudience = "caracal-control"
@@ -422,12 +422,12 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 	if sessionType == "user" {
 		subType = SubTypeUser
 	}
-	// Per-call by default. Tokens minted without a subject_token (first-mile
-	// bootstrap of an application principal) are ambient session tokens so they
-	// can be re-presented to STS for narrowing.
-	use := UsePerCall
+	// Resource mandates are the default enforcement credential. Exchanges minted
+	// without a subject_token bootstrap a session mandate so the application can
+	// re-present it to STS for resource-scoped narrowing.
+	use := UseResource
 	if req.SubjectToken == "" && !controlKeyExchange {
-		use = UseAmbient
+		use = UseSession
 	}
 
 	sess := &Session{
@@ -637,7 +637,7 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 }
 
 // validateSubjectToken verifies an inbound STS-issued token: ES256 signature, this STS
-// as issuer, the issuer audience, a matching zone_id, and use=ambient. Per-call tokens
+// as issuer, the issuer audience, a matching zone_id, and use=session. Resource mandates
 // are deliberately rejected here (RFC 8693 §2.1 subject-confusion mitigation): a token
 // already narrowed to resources A,B must not bootstrap the minting of one for resource C.
 func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID string) (map[string]any, error) {
@@ -662,8 +662,8 @@ func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID stri
 	if claimString(mc, "zone_id") != zoneID {
 		return nil, errors.New("token zone mismatch")
 	}
-	if claimString(mc, "use") != UseAmbient {
-		return nil, errors.New("subject_token must be an ambient session token")
+	if claimString(mc, "use") != UseSession {
+		return nil, errors.New("subject_token must be a session mandate")
 	}
 	return mc, nil
 }
@@ -695,14 +695,14 @@ func (s *Server) validateTokenSession(ctx context.Context, zoneID, appID, sessio
 }
 
 func parentSessionID(sessionID string, use string) *string {
-	if use != UsePerCall || sessionID == "" {
+	if use != UseResource || sessionID == "" {
 		return nil
 	}
 	return &sessionID
 }
 
 func rootSessionID(claims map[string]any, sid string, use string) string {
-	if use == UseAmbient {
+	if use == UseSession {
 		return sid
 	}
 	if root := claimString(claims, "root_sid"); root != "" {
@@ -1133,17 +1133,17 @@ func activeAgentSession(session *AgentSession, zoneID string, now time.Time) boo
 	return session.SpawnedAt.Add(time.Duration(session.TTLSeconds) * time.Second).After(now)
 }
 
-func tokenTTL(ttlSeconds int, ambientAllowed bool) (time.Duration, error) {
+func tokenTTL(ttlSeconds int, sessionMandateAllowed bool) (time.Duration, error) {
 	if ttlSeconds == 0 {
-		return ttlPerCallSDK, nil
+		return ttlResourceMandate, nil
 	}
 	if ttlSeconds < 0 {
 		return 0, fmt.Errorf("ttl_seconds must be positive")
 	}
 	ttl := time.Duration(ttlSeconds) * time.Second
-	limit := ttlPerCallSDK
-	if ambientAllowed {
-		limit = ttlAmbient
+	limit := ttlResourceMandate
+	if sessionMandateAllowed {
+		limit = ttlSessionMandate
 	}
 	if ttl > limit {
 		return 0, fmt.Errorf("ttl_seconds exceeds token TTL cap")
