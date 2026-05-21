@@ -119,19 +119,34 @@ export interface ProbeResult extends ServiceProbe {
   detail: string
 }
 
-export const DEFAULT_SERVICE_PROBES: ServiceProbe[] = [
-  { name: 'api', url: 'http://localhost:3000/health', port: 3000 },
-  { name: 'sts', url: 'http://localhost:8080/health', port: 8080 },
-  { name: 'gateway', url: 'http://localhost:8081/health', port: 8081 },
-  { name: 'audit', url: 'http://localhost:9090/health', port: 9090 },
-  { name: 'coordinator', url: 'http://localhost:4000/health', port: 4000 },
+export type ProbeKind = 'health' | 'ready'
+
+const DEFAULT_SERVICE_PORTS: Array<{ name: string; port: number }> = [
+  { name: 'api', port: 3000 },
+  { name: 'sts', port: 8080 },
+  { name: 'gateway', port: 8081 },
+  { name: 'audit', port: 9090 },
+  { name: 'coordinator', port: 4000 },
 ]
 
-export function defaultServiceProbes(home?: string): ServiceProbe[] {
-  const probes = [...DEFAULT_SERVICE_PROBES]
+export const DEFAULT_SERVICE_PROBES: ServiceProbe[] = DEFAULT_SERVICE_PORTS.map((svc) => ({
+  ...svc,
+  url: `http://localhost:${svc.port}/health`,
+}))
+
+export function defaultServiceProbes(home?: string, kind: ProbeKind = 'health'): ServiceProbe[] {
+  const path = kind === 'ready' ? 'ready' : 'health'
+  const probes = DEFAULT_SERVICE_PORTS.map((svc) => ({
+    ...svc,
+    url: `http://localhost:${svc.port}/${path}`,
+  }))
   const control = readControlState(home)
   if (control?.enabled) {
-    probes.push({ name: control.service, url: control.healthUrl, port: control.port })
+    probes.push({
+      name: control.service,
+      url: kind === 'ready' ? control.readyUrl : control.healthUrl,
+      port: control.port,
+    })
   }
   return probes
 }

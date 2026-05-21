@@ -235,7 +235,7 @@ export class AdminClient {
     addVersion: (zoneId: string, id: string, content: string, schemaVersion?: string) =>
       this.request<PolicyVersion>(`/v1/zones/${zoneId}/policies/${id}/versions`, {
         method: 'POST',
-        body: { content, schema_version: schemaVersion ?? '2026-03-16' },
+        body: { content, schema_version: schemaVersion ?? '2026-05-20' },
       }),
     delete: (zoneId: string, id: string) =>
       this.request<void>(`/v1/zones/${zoneId}/policies/${id}`, { method: 'DELETE', expectEmpty: true }),

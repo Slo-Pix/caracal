@@ -20,7 +20,7 @@ installCrashHandlers('caracal')
 const executors: Record<string, Executor> = {
   up: (argv) => upCommand([...argv]),
   down: (argv) => downCommand([...argv]),
-  status: () => statusCommand(),
+  status: (argv) => statusCommand([...argv]),
   purge: (argv) => purgeCommand([...argv]),
   doctor: (argv) => { cliDispatch(['doctor', ...argv]) },
   protect: (argv) => { cliDispatch(['protect', ...argv]) },

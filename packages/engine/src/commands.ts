@@ -33,7 +33,7 @@ export interface CommandDescriptor {
 }
 
 const READ_VERBS = new Set([
-  'list', 'get', 'tree', 'children', 'tail', 'inbound', 'outbound', 'traverse', 'read', 'use',
+  'list', 'get', 'tree', 'children', 'tail', 'inbound', 'outbound', 'traverse', 'read', 'use', 'simulate',
 ]);
 
 const DELETE_VERBS = new Set(['delete', 'terminate', 'revoke', 'purge']);
@@ -55,7 +55,17 @@ export function scopeName(desc: CommandDescriptor, sub: string): string {
 export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   { name: 'up', group: 'stack', summary: 'Build and start the local stack' },
   { name: 'down', group: 'stack', summary: 'Stop the stack; use -v to remove volumes' },
-  { name: 'status', group: 'stack', summary: 'Check service health' },
+  {
+    name: 'status',
+    group: 'stack',
+    summary: 'Check service health',
+    flags: {
+      '': [
+        { name: '--ready', summary: 'Probe dependency readiness instead of liveness' },
+        { name: '--json', summary: 'Emit machine-readable result' },
+      ],
+    },
+  },
   {
     name: 'purge',
     group: 'stack',
@@ -68,7 +78,17 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     summary: 'Provision a Gateway-first local protected resource',
     subcommands: ['http'],
   },
-  { name: 'doctor', group: 'admin', summary: 'Check local control-plane readiness' },
+  {
+    name: 'doctor',
+    group: 'admin',
+    summary: 'Check local control-plane readiness',
+    flags: {
+      '': [
+        { name: '--extended', summary: 'Probe service readiness and operator metrics' },
+        { name: '--json', summary: 'Emit machine-readable result' },
+      ],
+    },
+  },
   { name: 'cli', group: 'shell', summary: 'Open the Caracal command shell' },
   { name: 'tui', group: 'shell', summary: 'Launch the Caracal TUI' },
 ]);
@@ -232,11 +252,16 @@ export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
 
   {
     name: 'policy-set', group: 'admin', summary: 'Manage policy sets',
-    subcommands: ['list', 'get', 'create', 'version', 'activate', 'delete'], requiresZone: true,
+    subcommands: ['list', 'get', 'create', 'version', 'activate', 'simulate', 'delete'], requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Policy set name' },
         { name: '--description', summary: 'Description' },
+      ],
+      simulate: [
+        { name: '--version', summary: 'Policy set version ID' },
+        { name: '--input', summary: 'Inline OPA input fixture JSON' },
+        { name: '--input-file', summary: 'OPA input fixture file' },
       ],
     },
   },
