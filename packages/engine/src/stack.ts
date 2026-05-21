@@ -6,7 +6,15 @@
 import { rmSync, statSync, existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { runExec } from './run.js'
-import { isControlEnabled } from './controlState.js'
+import {
+  controlRuntimeSettings,
+  controlStateFile,
+  isControlEnabled,
+  readControlState,
+  setControlEnabled,
+  setControlMounted,
+  type ControlRuntimeState,
+} from './controlState.js'
 
 export interface StackPaths {
   composeFile: string
@@ -27,8 +35,8 @@ export interface StackComposeHandle {
   exitCode: Promise<number>
 }
 
-function composeArgv(paths: StackPaths, args: string[]): string[] {
-  const profile = isControlEnabled() ? ['--profile', 'control'] : []
+function composeArgv(paths: StackPaths, args: string[], includeControlProfile = isControlEnabled()): string[] {
+  const profile = includeControlProfile ? ['--profile', 'control'] : []
   const envFlags = paths.envFiles.flatMap((f) => existsSync(f) ? ['--env-file', f] : [])
   return ['docker', 'compose', ...envFlags, '-f', paths.composeFile, ...profile, ...args]
 }
@@ -82,14 +90,11 @@ export const DEFAULT_SERVICE_PROBES: ServiceProbe[] = [
   { name: 'coordinator', url: 'http://localhost:4000/health', port: 4000 },
 ]
 
-// Returns probes for the active deployment surface. Includes the optional control
-// service only when it has been turned on via `caracal control enable` so the default
-// `up`/`status` flow stays unchanged.
 export function defaultServiceProbes(home?: string): ServiceProbe[] {
   const probes = [...DEFAULT_SERVICE_PROBES]
-  if (isControlEnabled(home)) {
-    const port = Number(process.env.CONTROL_PORT ?? 8087)
-    probes.push({ name: 'control', url: `http://localhost:${port}/health`, port })
+  const control = readControlState(home)
+  if (control) {
+    probes.push({ name: control.service, url: control.healthUrl, port: control.port })
   }
   return probes
 }
@@ -126,16 +131,252 @@ export interface ComposeRunOpts {
   args: string[]
   env?: Record<string, string | undefined>
   onLine?: (line: string, stream: 'stdout' | 'stderr') => void
+  includeControlProfile?: boolean
 }
 
 export function composeRun(opts: ComposeRunOpts): StackComposeHandle {
   const handle = runExec({
-    argv: composeArgv(opts.paths, opts.args),
+    argv: composeArgv(opts.paths, opts.args, opts.includeControlProfile ?? isControlEnabled()),
     env: opts.env,
     cwd: opts.paths.cwd,
     onLine: opts.onLine,
   })
   return { dispose: handle.dispose, exitCode: handle.exitCode }
+}
+
+export interface ControlServiceStateOpts {
+  paths: StackPaths
+  enabled: boolean
+  env?: Record<string, string | undefined>
+  onLine?: (line: string, stream: 'stdout' | 'stderr') => void
+}
+
+export type ControlLifecycleAction = 'mount' | 'enable' | 'disable' | 'unmount'
+export type ControlLifecycleState = 'enabled' | 'disabled' | 'unmounted'
+export type ControlServiceRuntime = 'running' | 'stopped' | 'prepared' | 'removed' | 'unmounted'
+
+export interface ControlLifecycleOpts {
+  paths: StackPaths
+  action: ControlLifecycleAction
+  env?: Record<string, string | undefined>
+  onLine?: (line: string, stream: 'stdout' | 'stderr') => void
+}
+
+export interface ControlLifecycleResult {
+  action: ControlLifecycleAction
+  state: ControlLifecycleState
+  service: ControlServiceRuntime
+  mounted: boolean
+  enabled: boolean
+  marker: string
+  endpoint: string
+  healthUrl: string
+  readyUrl: string
+  invokeUrl: string
+  profile: string
+  lifecycle: string
+  optimization: string
+  summary: string
+}
+
+export type ControlServiceStateResult = ControlLifecycleResult
+
+function controlActionArgs(mode: StackPaths['mode'], action: ControlLifecycleAction): string[] | undefined {
+  if (action === 'mount') return ['up', '--no-start', ...(mode === 'dev' ? ['--build'] : []), 'control']
+  if (action === 'enable') return ['up', '-d', ...(mode === 'dev' ? ['--build'] : []), 'control']
+  if (action === 'disable') return ['stop', 'control']
+  if (action === 'unmount') return ['rm', '-sf', 'control']
+  return undefined
+}
+
+function controlLifecycleText(action: ControlLifecycleAction, state: ControlLifecycleState): Pick<ControlLifecycleResult, 'lifecycle' | 'optimization' | 'summary'> {
+  if (state === 'enabled') {
+    return {
+      lifecycle: 'mounted and enabled',
+      optimization: 'uses the existing stack services; no dedicated persistent volume is created',
+      summary: action === 'enable' ? 'Control endpoint is running and ready for authenticated automation.' : 'Control endpoint is enabled.',
+    }
+  }
+  if (state === 'disabled') {
+    return {
+      lifecycle: 'mounted but disabled',
+      optimization: 'runtime is retained for fast enable; no Control endpoint is exposed',
+      summary: action === 'mount'
+        ? 'Control runtime is prepared and can be enabled quickly.'
+        : 'Control endpoint is stopped while the mounted runtime is retained.',
+    }
+  }
+  return {
+    lifecycle: 'unmounted',
+    optimization: 'control container is removed; no control background process is kept running',
+    summary: action === 'unmount'
+      ? 'Control runtime has been removed for long-term idle state.'
+      : 'Control runtime is not mounted.',
+  }
+}
+
+function controlResult(
+  action: ControlLifecycleAction,
+  state: ControlLifecycleState,
+  service: ControlServiceRuntime,
+  runtime: ReturnType<typeof controlRuntimeSettings> | ControlRuntimeState,
+): ControlLifecycleResult {
+  const text = controlLifecycleText(action, state)
+  return {
+    action,
+    state,
+    service,
+    mounted: state !== 'unmounted',
+    enabled: state === 'enabled',
+    marker: controlStateFile(),
+    endpoint: runtime.endpoint,
+    healthUrl: runtime.healthUrl,
+    readyUrl: runtime.readyUrl,
+    invokeUrl: runtime.invokeUrl,
+    profile: runtime.profile,
+    ...text,
+  }
+}
+
+export async function applyControlLifecycleAction(opts: ControlLifecycleOpts): Promise<ControlLifecycleResult> {
+  const settings = controlRuntimeSettings()
+  const current = readControlState()
+  if (opts.action === 'disable' && !current) {
+    return controlResult(opts.action, 'unmounted', 'unmounted', settings)
+  }
+  const args = controlActionArgs(opts.paths.mode, opts.action)
+  if (!args) throw new Error(`unsupported control lifecycle action: ${opts.action}`)
+  const sink = opts.onLine ?? (() => {})
+  if (opts.action !== 'disable' || current) {
+    const code = await composeRun({
+      paths: opts.paths,
+      args,
+      env: opts.env,
+      onLine: sink,
+      includeControlProfile: true,
+    }).exitCode
+    if (code !== 0) {
+      throw new Error(`control ${opts.action} failed with exit code ${code}`)
+    }
+  }
+  if (opts.action === 'unmount') {
+    setControlMounted(false, false)
+    return controlResult(opts.action, 'unmounted', 'removed', settings)
+  }
+  if (opts.action === 'mount') {
+    const state = setControlMounted(true, false) ?? settings
+    return controlResult(opts.action, 'disabled', 'prepared', state)
+  }
+  const state = setControlEnabled(opts.action === 'enable') ?? settings
+  return controlResult(
+    opts.action,
+    opts.action === 'enable' ? 'enabled' : 'disabled',
+    opts.action === 'enable' ? 'running' : 'stopped',
+    state,
+  )
+}
+
+export async function applyControlServiceState(opts: ControlServiceStateOpts): Promise<ControlServiceStateResult> {
+  return applyControlLifecycleAction({
+    paths: opts.paths,
+    action: opts.enabled ? 'enable' : 'disable',
+    env: opts.env,
+    onLine: opts.onLine,
+  })
+}
+
+export interface ControlServiceStatusOpts {
+  home?: string
+  timeoutMs?: number
+}
+
+export interface ControlServiceStatus {
+  state: ControlLifecycleState
+  service: 'ok' | 'down' | 'stopped' | 'unmounted'
+  mounted: boolean
+  enabled: boolean
+  marker: string
+  endpoint: string
+  healthUrl: string
+  readyUrl: string
+  invokeUrl: string
+  profile: string
+  detail: string
+  lifecycle: string
+  optimization: string
+}
+
+function disabledControlStatus(home?: string): ControlServiceStatus {
+  const settings = controlRuntimeSettings()
+  return {
+    state: 'unmounted',
+    service: 'unmounted',
+    mounted: false,
+    enabled: false,
+    marker: controlStateFile(home),
+    endpoint: settings.endpoint,
+    healthUrl: settings.healthUrl,
+    readyUrl: settings.readyUrl,
+    invokeUrl: settings.invokeUrl,
+    profile: settings.profile,
+    detail: 'not mounted',
+    lifecycle: 'unmounted',
+    optimization: 'control container is removed; no control background process is kept running',
+  }
+}
+
+function enabledControlStatus(state: ControlRuntimeState, probe: ProbeResult, home?: string): ControlServiceStatus {
+  if (!state.enabled) {
+    return {
+      state: 'disabled',
+      service: 'stopped',
+      mounted: true,
+      enabled: false,
+      marker: controlStateFile(home),
+      endpoint: state.endpoint,
+      healthUrl: state.healthUrl,
+      readyUrl: state.readyUrl,
+      invokeUrl: state.invokeUrl,
+      profile: state.profile,
+      detail: 'endpoint disabled',
+      lifecycle: 'mounted but disabled',
+      optimization: 'runtime is retained for fast enable; no Control endpoint is exposed',
+    }
+  }
+  return {
+    state: 'enabled',
+    service: probe.ok ? 'ok' : 'down',
+    mounted: true,
+    enabled: true,
+    marker: controlStateFile(home),
+    endpoint: state.endpoint,
+    healthUrl: state.healthUrl,
+    readyUrl: state.readyUrl,
+    invokeUrl: state.invokeUrl,
+    profile: state.profile,
+    detail: probe.detail,
+    lifecycle: 'mounted and enabled',
+    optimization: 'uses the existing stack services; no dedicated persistent volume is created',
+  }
+}
+
+export async function controlServiceStatus(opts: ControlServiceStatusOpts = {}): Promise<ControlServiceStatus> {
+  const state = readControlState(opts.home)
+  if (!state) return disabledControlStatus(opts.home)
+  if (!state.enabled) {
+    return enabledControlStatus(state, {
+      name: state.service,
+      url: state.healthUrl,
+      port: state.port,
+      ok: false,
+      detail: 'endpoint disabled',
+    }, opts.home)
+  }
+  const [probe] = await stackStatus({
+    probes: [{ name: state.service, url: state.healthUrl, port: state.port }],
+    timeoutMs: opts.timeoutMs,
+  })
+  return enabledControlStatus(state, probe!, opts.home)
 }
 
 const CARACAL_IMAGE_PREFIXES = [

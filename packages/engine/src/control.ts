@@ -4,18 +4,22 @@
 // Control API credential lifecycle helpers: list, create, rotate, and revoke OAuth apps with the `control:invoke` trait.
 
 import { randomBytes } from 'node:crypto'
-import type { AdminClient, Application } from '@caracalai/admin'
+import type { AdminClient, Application, Resource } from '@caracalai/admin'
+import { describeRemoteSurface } from './dispatch.js'
 
 export const CONTROL_INVOKE_TRAIT = 'control:invoke'
+export const DEFAULT_CONTROL_AUDIENCE = 'caracal-control'
 
 export interface ControlKeyCreateInput {
   name: string
   clientSecret?: string
+  audience?: string
 }
 
 export interface ControlKeyCreateResult {
   application: Application
   clientSecret: string
+  resource: Resource
 }
 
 export interface ControlKeyRotateResult {
@@ -29,6 +33,32 @@ function generateClientSecret(): string {
 
 function hasControlTrait(app: Application): boolean {
   return Array.isArray(app.traits) && app.traits.includes(CONTROL_INVOKE_TRAIT)
+}
+
+export function controlScopes(): string[] {
+  return [...new Set(describeRemoteSurface().map((row) => row.scope))].sort()
+}
+
+export async function ensureControlResource(
+  client: AdminClient,
+  zoneId: string,
+  audience = process.env.CONTROL_AUDIENCE ?? DEFAULT_CONTROL_AUDIENCE,
+): Promise<Resource> {
+  const scopes = controlScopes()
+  const resources = await client.resources.list(zoneId)
+  const current = resources.find((resource) => resource.identifier === audience)
+  if (!current) {
+    return client.resources.create(zoneId, {
+      name: 'Control API',
+      identifier: audience,
+      scopes,
+    })
+  }
+  const nextScopes = [...new Set([...current.scopes, ...scopes])].sort()
+  if (nextScopes.length === current.scopes.length && nextScopes.every((scope, index) => scope === [...current.scopes].sort()[index])) {
+    return current
+  }
+  return client.resources.patch(zoneId, current.id, { scopes: nextScopes })
 }
 
 export async function controlKeyList(client: AdminClient, zoneId: string): Promise<Application[]> {
@@ -49,6 +79,7 @@ export async function controlKeyCreate(
   zoneId: string,
   input: ControlKeyCreateInput,
 ): Promise<ControlKeyCreateResult> {
+  const resource = await ensureControlResource(client, zoneId, input.audience)
   const clientSecret = input.clientSecret ?? generateClientSecret()
   const application = await client.applications.create(zoneId, {
     name: input.name,
@@ -58,7 +89,7 @@ export async function controlKeyCreate(
     traits: [CONTROL_INVOKE_TRAIT],
     consent: false,
   })
-  return { application, clientSecret }
+  return { application, clientSecret, resource }
 }
 
 export async function controlKeyRotate(
@@ -67,6 +98,7 @@ export async function controlKeyRotate(
   id: string,
 ): Promise<ControlKeyRotateResult> {
   await controlKeyGet(client, zoneId, id)
+  await ensureControlResource(client, zoneId)
   const clientSecret = generateClientSecret()
   const application = await client.applications.patch(zoneId, id, { client_secret: clientSecret })
   return { application, clientSecret }

@@ -67,8 +67,8 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   {
     name: 'control',
     group: 'stack',
-    summary: 'Toggle the optional Control automation service',
-    subcommands: ['enable', 'disable', 'status'],
+    summary: 'Manage the optional engine-owned Control automation service',
+    subcommands: ['mount', 'enable', 'disable', 'unmount', 'status', 'key', 'rotate', 'revoke'],
   },
 ]);
 
@@ -242,10 +242,13 @@ export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   { name: 'delegation', group: 'multiagent', summary: 'Manage delegation edges', subcommands: ['inbound', 'outbound', 'traverse', 'revoke'], requiresZone: true },
 
   {
-    name: 'control', group: 'admin', summary: 'Manage control API credentials',
-    subcommands: ['key', 'rotate', 'revoke'], requiresZone: true, hidden: true,
+    name: 'control', group: 'admin', summary: 'Manage the optional engine-owned Control automation service',
+    subcommands: ['mount', 'enable', 'disable', 'unmount', 'status', 'key', 'rotate', 'revoke'], hidden: true,
     flags: {
-      key: [{ name: '--name', summary: 'Credential display name' }],
+      key: [
+        { name: '--name', summary: 'Credential display name' },
+        { name: '--audience', summary: 'Control resource audience' },
+      ],
       rotate: [{ name: '--client-secret', summary: 'New client secret' }],
     },
   },
