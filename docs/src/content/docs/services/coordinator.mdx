@@ -170,7 +170,7 @@ The Coordinator runs five background workers alongside the HTTP server:
 9. Register signal handlers (SIGTERM, SIGINT).
 10. Listen on `0.0.0.0:4000`.
 
-The Coordinator does not run database migrations. All schema changes are managed by the Control-Plane API.
+The Coordinator does not run database migrations. Schema changes are applied before service startup through the Compose `dbMigrate` service or the Helm migration Job.
 
 ---
 

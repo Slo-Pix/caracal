@@ -24,7 +24,7 @@ Caracal uses Redis Streams as its event bus. State changes that need to propagat
 
 ## Stream provisioning
 
-At startup the Redis container entrypoint runs `provision-streams.sh` after Redis accepts commands. The Helm deployment uses the same script as the Redis bootstrap path before application services consume streams. For each stream and consumer group:
+At startup the Compose Redis container entrypoint runs `provision-streams.sh` after Redis accepts commands. Kubernetes deployments use platform-owned Redis, so operators should run the same script, or an equivalent Redis bootstrap job, before application services consume streams. For each stream and consumer group:
 
 ```bash
 redis-cli XGROUP CREATE "${stream}" "${group}" '$' MKSTREAM

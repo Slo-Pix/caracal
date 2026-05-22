@@ -31,7 +31,7 @@ Optional runtime components:
 
 All services connect to the same PostgreSQL database and Redis instance. Schema ownership is strict — services only write to their own tables and read from others' when needed:
 
-**PostgreSQL** — primary durable store for all control and data-plane state. The Control-Plane API runs migrations on startup under an advisory lock; no other service runs migrations.
+**PostgreSQL** — primary durable store for all control and data-plane state. Schema migrations run before application startup through the Compose `dbMigrate` service or the Helm migration Job.
 
 **Redis** — used for three distinct purposes:
 - **Streams** — asynchronous event bus between services (transactional outbox pattern).
