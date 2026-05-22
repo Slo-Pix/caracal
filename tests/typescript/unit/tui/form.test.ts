@@ -108,7 +108,7 @@ describe('FormView validation', () => {
 })
 
 describe('FormView secret', () => {
-  it('masks by default and reveals on ctrl-r', async () => {
+  it('masks by default and reveals with right arrow', async () => {
     const view = new FormView({
       title: 't',
       fields: [{ key: 's', label: 's', kind: 'secret', default: 'topsecret' }],
@@ -118,7 +118,7 @@ describe('FormView secret', () => {
     let lines = view.render(ctx).join('\n')
     expect(lines).toContain('••••')
     expect(lines).not.toContain('topsecret')
-    await view.onKey('\u0012', ctx)
+    await view.onKey('right', ctx)
     lines = view.render(ctx).join('\n')
     expect(lines).toContain('topsecret')
   })
@@ -138,7 +138,7 @@ describe('FormView list field', () => {
 })
 
 describe('FormView picker fields', () => {
-  it('opens focused field picker with ctrl-p and lets it set the value', async () => {
+  it('opens focused field picker with right arrow and lets it set the value', async () => {
     const pick = vi.fn((_app: App, setValue: (value: string) => void) => {
       setValue('picked-id')
     })
@@ -148,10 +148,10 @@ describe('FormView picker fields', () => {
       onSubmit: async () => {},
     })
     const app = fakeApp()
-    await view.onKey('\u0010', { app, size: { rows: 10, cols: 80 }, status: '' })
+    await view.onKey('right', { app, size: { rows: 10, cols: 80 }, status: '' })
     expect(pick).toHaveBeenCalled()
     expect(view.values_().application_id).toBe('picked-id')
-    expect(view.hints()).toContain('ctrl-p:pick')
+    expect(view.hints()).toContain('→:pick')
   })
 })
 
