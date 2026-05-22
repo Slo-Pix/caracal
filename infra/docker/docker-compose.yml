@@ -67,6 +67,8 @@ secrets:
     file: ../secrets/files/redisPassword
   caracalAdminToken:
     file: ../secrets/files/caracalAdminToken
+  caracalCoordinatorToken:
+    file: ../secrets/files/caracalCoordinatorToken
   zoneKek:
     file: ../secrets/files/zoneKek
   auditHmacKey:
@@ -455,6 +457,8 @@ services:
         target: redisUrl
       - source: streamsHmacKey
         target: streamsHmacKey
+      - source: caracalCoordinatorToken
+        target: caracalCoordinatorToken
     environment:
       CARACAL_MODE: ${CARACAL_MODE:-dev}
       DATABASE_URL_FILE: /run/secrets/databaseUrl
@@ -462,6 +466,7 @@ services:
       STS_URL: http://sts:8080
       ISSUER_URL: ${CARACAL_STS_ISSUER_URL:-http://sts:8080}
       STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
+      CARACAL_COORDINATOR_TOKEN_FILE: /run/secrets/caracalCoordinatorToken
       AGENT_COORDINATOR_SCOPE: agent:lifecycle
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
