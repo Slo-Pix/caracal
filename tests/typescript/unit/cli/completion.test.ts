@@ -98,4 +98,9 @@ describe('completionCommand', () => {
     expect(SHELL_COMMANDS.some((c) => c.name === 'control')).toBe(false)
     expect(CLI_COMMANDS.some((c) => c.name === 'control')).toBe(true)
   })
+
+  it('keeps standalone run off the management CLI command list', () => {
+    expect(SHELL_COMMANDS.some((c) => c.name === 'run')).toBe(true)
+    expect(CLI_COMMANDS.some((c) => c.name === 'run')).toBe(false)
+  })
 })

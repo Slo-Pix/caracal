@@ -53,7 +53,7 @@ describe('complete', () => {
     expect(r.suggestions.map((s) => s.value)).toEqual(['create'])
   })
   it('returns flag completions when command has no subcommands', () => {
-    const r = complete(registry, 'run ', 4, ctx)
+    const r = complete(registry, 'doctor ', 7, ctx)
     const names = r.suggestions.map((s) => s.value)
     expect(names).toContain('--json')
     expect(names).toContain('--help')

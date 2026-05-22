@@ -104,6 +104,7 @@ describe('dispatch', () => {
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
     expect(out).toContain('zone')
     expect(out).toContain('control')
+    expect(out).not.toMatch(/\brun\b/)
     expect(out).not.toMatch(/\bdebug\b/)
     expect(out).not.toMatch(/\bmanifest\b/)
     expect(out).not.toMatch(/\bcompletion\b/)
