@@ -128,6 +128,15 @@ describe('AdminClient', () => {
     expect(url).toBe('http://api/v1/zones/z1/audit/by-request/req-9')
   })
 
+  it('hits the audit request explanation endpoint', async () => {
+    const f = fetchOk({ request_id: 'req-9', zone_id: 'z1', final_decision: 'allow', denied: [], events: [] })
+    const c = new AdminClient({ apiUrl: 'http://api', adminToken: 't', fetchImpl: f })
+    const trace = await c.audit.explain('z1', 'req-9')
+    expect(trace.final_decision).toBe('allow')
+    const [url] = (f as unknown as { mock: { calls: [string][] } }).mock.calls[0]
+    expect(url).toBe('http://api/v1/zones/z1/audit/by-request/req-9/explain')
+  })
+
   it('PATCH revoke sends method and parses body', async () => {
     const f = fetchOk({ revoked_edges: 3, affected_sessions: 2 })
     const c = new AdminClient({

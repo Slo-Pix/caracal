@@ -8,6 +8,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { auditCommand, explainCommand } from '../../../../apps/cli/src/commands/audit.ts'
+import { debugCommand } from '../../../../apps/cli/src/commands/debug.ts'
 import { zoneCommand } from '../../../../apps/cli/src/commands/zone.ts'
 import { agentCommand, delegationCommand } from '../../../../apps/cli/src/commands/agent.ts'
 import { policyCommand, policySetCommand } from '../../../../apps/cli/src/commands/policy.ts'
@@ -158,6 +159,48 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
   it('explain requires a request id', async () => {
     await expect(explainCommand([])).rejects.toThrow(/__exit:1/)
     expect(stderr).toHaveBeenCalled()
+  })
+
+  it('debug request prints a decision trace', async () => {
+    stubFetch((url) => {
+      expect(url).toBe('http://api/v1/zones/z1/audit/by-request/req-7/explain')
+      return {
+        request_id: 'req-7',
+        zone_id: 'z1',
+        final_decision: 'deny',
+        denied: [{
+          event_id: 'a9',
+          event_type: 'token.exchange',
+          evaluation_status: 'complete',
+          determining_policies: [{ policy_id: 'p1', effect: 'deny' }],
+          diagnostics: [{ rule: 'mfa_required', message: 'MFA step-up required' }],
+          metadata: { application_id: 'app-1' },
+        }],
+        events: [{
+          id: 'a9',
+          event_type: 'token.exchange',
+          decision: 'deny',
+          evaluation_status: 'complete',
+          occurred_at: '2026-01-01T00:00:00Z',
+          request_id: 'req-7',
+          policy_set_id: 'ps-1',
+          policy_set_version_id: 'psv-2',
+          manifest_sha: 'sha-3',
+          determining_policies_json: [{ policy_id: 'p1', effect: 'deny' }],
+          diagnostics_json: [{ rule: 'mfa_required', message: 'MFA step-up required' }],
+          metadata_json: { application_id: 'app-1' },
+        }],
+      }
+    })
+
+    await debugCommand(['request', 'req-7'])
+
+    const out = stdout.mock.calls.map((c) => c[0]).join('')
+    expect(out).toContain('final_decision deny')
+    expect(out).toContain('failure_reasons')
+    expect(out).toContain('rule=mfa_required')
+    expect(out).toContain('message=MFA step-up required')
+    expect(out).toContain('policy_set    ps-1 version=psv-2 sha=sha-3')
   })
 
   it('zone list pretty-prints a table', async () => {

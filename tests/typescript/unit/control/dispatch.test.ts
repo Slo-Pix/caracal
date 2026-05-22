@@ -73,6 +73,18 @@ describe('dispatch', () => {
     )
     expect(result).toEqual([])
   })
+
+  it('routes debug request with read scope', async () => {
+    const admin = {
+      audit: { explain: async (zoneId: string, requestId: string) => ({ zoneId, requestId }) },
+    } as unknown as AdminClient
+    const result = await dispatch(
+      { command: 'debug', subcommand: 'request', flags: { 'request-id': 'req-1' } },
+      principal(['control:debug:read']),
+      { admin },
+    )
+    expect(result).toEqual({ zoneId: 'z1', requestId: 'req-1' })
+  })
 })
 
 describe('describeRemoteSurface', () => {
@@ -94,5 +106,7 @@ describe('describeRemoteSurface', () => {
     expect(zoneCreate?.scope).toBe('control:zone:write')
     const zoneDelete = surface.find((r) => r.command === 'zone' && r.subcommand === 'delete')
     expect(zoneDelete?.scope).toBe('control:zone:delete')
+    const debugRequest = surface.find((r) => r.command === 'debug' && r.subcommand === 'request')
+    expect(debugRequest?.scope).toBe('control:debug:read')
   })
 })
