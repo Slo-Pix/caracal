@@ -4,7 +4,7 @@ description: A practical runbook for tracing Caracal decisions, authority flow, 
 pageType: workflow
 ---
 
-Use this page when a platform engineer or operator needs to explain why an agent could or could not act. The goal is to stay inside your own environment: CLI output, audit records, readiness reasons, metrics, and decoded token claims.
+Use this page when a platform engineer or operator needs to explain why an agent could or could not act. The goal is to stay inside your own environment: terminal interface output, audit records, readiness reasons, metrics, and decoded token claims.
 
 ## One-minute model
 
@@ -92,7 +92,7 @@ When a command or readiness probe fails, keep the structured reason in the incid
 | Surface | Fields |
 | --- | --- |
 | `/ready` responses | `reason`, `error`, `dependency`, `ready`, `draining` |
-| CLI API errors | HTTP status, error code, response body, remediation hint |
+| terminal interface API errors | HTTP status, error code, response body, remediation hint |
 | Audit event | `request_id`, `event_type`, `decision`, `evaluation_status`, `policy_set_id`, `policy_set_version_id`, `manifest_sha`, `diagnostics_json` |
 | Token inspection | `zone_id`, `target`, `scope`, `sid`, `agent_session_id`, `delegation_edge_id`, `exp`, `kid`, `jti` |
 | Metrics | Component-specific counters that changed during the incident window |

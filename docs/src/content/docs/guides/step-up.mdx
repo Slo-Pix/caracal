@@ -54,7 +54,7 @@ curl -X POST "$CARACAL_STS_URL/oauth/2/token" \
   --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
   --data-urlencode "zone_id=$CARACAL_ZONE_ID" \
   --data-urlencode "application_id=$CARACAL_APPLICATION_ID" \
-  --data-urlencode "client_secret=$CARACAL_APP_CLIENT_SECRET" \
+  --data-urlencode "client_secret=$CARACAL_APP_terminal interfaceENT_SECRET" \
   --data-urlencode "subject_token=$SUBJECT_TOKEN" \
   --data-urlencode "subject_token_type=urn:ietf:params:oauth:token-type:access_token" \
   --data-urlencode "resource=resource://payments" \

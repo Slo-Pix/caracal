@@ -18,11 +18,11 @@ Each guide covers one end-to-end workflow. Start from the guide that matches you
 | [Protect a FastMCP App](./protect-fastmcp/) | Attach `CaracalAuth` to a FastMCP server so every tool call is mandate-gated |
 | [Protect a Go net/http Service](./protect-nethttp/) | Wrap Go handlers with `mcpnethttp.Middleware` and read validated claims from context |
 | [Author a Rego Policy](./author-policy/) | Write a `caracal.authz` policy, understand the full input schema, and avoid forbidden builtins |
-| [Activate a Policy Set](./activate-policy-set/) | Create, version, bundle, and promote a policy set to active using the CLI |
+| [Activate a Policy Set](./activate-policy-set/) | Create, version, bundle, and promote a policy set to active using the terminal interface |
 | [Define Resources and Providers](./resources-providers/) | Register upstream resources, declare scopes, and attach credential providers |
 | [Issue Grants and Invitations](./grants-invitations/) | Bind applications and users to resource scopes; invite new zone members |
 | [Implement Multi-Agent Delegation](./delegation/) | Spawn child agents, attach typed constraints, read the delegation graph, and trigger cascade revocation |
-| [Tail and Query the Audit Stream](./audit-stream/) | Stream live decisions from the CLI and inspect full diagnostics per request |
+| [Tail and Query the Audit Stream](./audit-stream/) | Stream live decisions from the terminal interface and inspect full diagnostics per request |
 | [Run an Agent with `caracal run`](./runtime-run/) | Inject configured scoped tokens into a subprocess without writing SDK code |
 | [Step-Up Re-Authentication](./step-up/) | Handle `interaction_required`, satisfy the challenge, and retry token exchange through the STS |
 
@@ -30,4 +30,4 @@ Each guide covers one end-to-end workflow. Start from the guide that matches you
 
 - A running Caracal stack (`caracal up` or Docker Compose).
 - A zone with at least one registered application. On a fresh stack, run `caracal zone create --name <name>` then `caracal app create --zone <zone-id> --name <name>`, save the printed client secret, and author `caracal.toml` with `zone_url`, `zone_id`, `application_id`, and `app_client_secret`. See [Configuration File](../runtime-terminal/config-file/) for the full schema.
-- `CARACAL_ADMIN_TOKEN` set in your shell for CLI operations that mutate control-plane state.
+- `CARACAL_ADMIN_TOKEN` set in your shell for terminal interface operations that mutate control-plane state.

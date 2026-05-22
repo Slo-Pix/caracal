@@ -101,7 +101,7 @@ Consuming packages (`@caracalai/identity`, `caracalai_identity`, `github.com/gar
 
 STS generates a zone signing key automatically when a zone first needs one. JWKS publication supports the active key and the previous key, so the runtime can safely verify mandates during a signing-key grace window.
 
-Self-service zone signing-key rotation is not packaged as a CLI/API operation in the OSS control plane yet. If a signing key is suspected to be compromised, treat it as an incident: remove affected sessions, rotate the enclosing secret material through a controlled database operation, invalidate STS key caches, and verify JWKS before restoring traffic.
+Self-service zone signing-key rotation is not packaged as a terminal interface/API operation in the OSS control plane yet. If a signing key is suspected to be compromised, treat it as an incident: remove affected sessions, rotate the enclosing secret material through a controlled database operation, invalidate STS key caches, and verify JWKS before restoring traffic.
 
 **Verify the active key appears in JWKS:**
 

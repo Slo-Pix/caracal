@@ -10,7 +10,7 @@ Use this guide when you need a local script or agent process to receive a Gatewa
 
 ## Prerequisites
 
-- `caracal` CLI installed and the stack running.
+- `caracal` terminal interface installed and the stack running.
 - A `caracal.toml` file in the current project, `CARACAL_CONFIG`, or the XDG config path.
 - The application in `caracal.toml` has an active grant for each resource in `[[credentials]]`.
 
@@ -24,7 +24,7 @@ The double dash (`--`) separates `caracal run` options from the subprocess comma
 
 ### Required `caracal.toml` fields
 
-`caracal run` does not read `CARACAL_RESOURCE` or `CARACAL_CLIENT_SECRET`. It reads resource declarations from `caracal.toml`:
+`caracal run` does not read `CARACAL_RESOURCE` or `CARACAL_terminal interfaceENT_SECRET`. It reads resource declarations from `caracal.toml`:
 
 ```toml
 zone_url = "http://localhost:8080"
@@ -125,7 +125,7 @@ on_failure = "warn"
    ```bash
    test -f caracal.toml && printf "found ./caracal.toml\n"
    ```
-2. If the file lives elsewhere, point the CLI at it:
+2. If the file lives elsewhere, point the terminal interface at it:
    ```bash
    export CARACAL_CONFIG=/path/to/caracal.toml
    ```
