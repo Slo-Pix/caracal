@@ -41,10 +41,11 @@ Everything else — Gateway routes, provider configs, SDK context helpers, conne
 
 ## Reading order
 
-The concepts below build on each other. Read the [Authority Model](./authority-model/) first — it explains why the other concepts exist. Then read them in the order they appear in the sidebar.
+The concepts below build on each other. Read the [One-Minute Model](./model-overview/) first to see the whole system on one page, then [Authority Model](./authority-model/) for why the rest exists. Then read them in the order they appear in the sidebar.
 
 | Concept | One-line definition |
 | ------- | ------------------- |
+| [One-Minute Model](./model-overview/) | The whole system: seven nouns, three verbs, one decision point |
 | [Authority Model](./authority-model/) | The decision contract that governs every token exchange |
 | [Mandate](./mandate/) | The short-lived, signed credential issued after a policy allows exchange |
 | [Policy](./policy/) | The Rego document that decides whether exchange is permitted |
@@ -52,7 +53,7 @@ The concepts below build on each other. Read the [Authority Model](./authority-m
 | [Zone](./zone/) | The tenancy boundary that owns keys, policies, and resources |
 | [Resource and Grant](./resource-grant/) | What agents can access and who is permitted to access it |
 | [Delegation Graph](./delegation/) | How authority passes from one agent to another |
-| [Typed Delegation Constraints](./caveat/) | Limits attached to delegation edges |
+| [Typed Delegation Constraints](./constraint/) | Limits attached to delegation edges |
 | [Sessions and Revocation](./sessions-revocation/) | Agent session lifecycle and how authority is withdrawn |
 | [Audit Ledger](./audit-ledger/) | The tamper-evident record of every decision |
 | [Step-Up Challenge](./step-up/) | How policies require elevated proof before granting access |
