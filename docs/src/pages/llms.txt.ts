@@ -39,7 +39,7 @@ const sections: Record<string, string[]> = {
     'configuration/logging',
     'configuration/mcp',
   ],
-  'Runtime and Terminal Reference': ['runtime-terminal/overview', 'runtime-terminal/init', 'runtime-terminal/run', 'runtime-terminal/stack', 'runtime-terminal/audit', 'runtime-terminal/agent'],
+  'Runtime and Terminal Reference': ['runtime-terminal', 'runtime-terminal/config-file', 'runtime-terminal/runtime', 'runtime-terminal/stack', 'runtime-terminal/observability', 'runtime-terminal/agents'],
   'SDKs': ['sdk/typescript', 'sdk/python', 'sdk/go'],
   'AI Agents': ['ai/workflows', 'ai/mcp', 'ai/coordinator'],
   'Security': ['security/threat-model', 'security/hardening', 'security/disclosure'],

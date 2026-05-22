@@ -39,7 +39,7 @@ fi
 rm -f "${readyMark}"
 redis-server "${runConf}" "$@" &
 serverPid=$!
-export REDISterminal interface_AUTH="${REDIS_PASSWORD}"
+export REDISCLI_AUTH="${REDIS_PASSWORD}"
 
 shutdown() {
     kill "${serverPid}" 2>/dev/null || true

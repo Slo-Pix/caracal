@@ -20,9 +20,9 @@ if [ -z "$PASS" ]; then
   exit 1
 fi
 
-export REDISterminal interface_AUTH="$PASS"
+export REDISCLI_AUTH="$PASS"
 
-cli() { redis-cli -h "$HOST" -p "$PORT" --no-auth-warning "$@"; }
+redisCmd() { redis-cli -h "$HOST" -p "$PORT" --no-auth-warning "$@"; }
 
 STREAMS=(
   "caracal.audit.events"
@@ -49,7 +49,7 @@ EXPECTED_GROUPS=(
 
 echo "=== Streams exist ==="
 for s in "${STREAMS[@]}"; do
-  TYPE=$(cli TYPE "$s")
+  TYPE=$(redisCmd TYPE "$s")
   if [ "$TYPE" = "stream" ]; then
     echo "  $s OK"
   else
@@ -63,7 +63,7 @@ echo "=== Consumer groups exist ==="
 for entry in "${EXPECTED_GROUPS[@]}"; do
   STREAM="${entry%%:*}"
   GROUP="${entry##*:}"
-  FOUND=$(cli XINFO GROUPS "$STREAM" | grep -c "$GROUP" || true)
+  FOUND=$(redisCmd XINFO GROUPS "$STREAM" | grep -c "$GROUP" || true)
   if [ "$FOUND" -ge 1 ]; then
     echo "  $STREAM/$GROUP OK"
   else

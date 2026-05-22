@@ -23,16 +23,16 @@ if [ -z "${REDIS_PASSWORD}" ]; then
     exit 1
 fi
 
-export REDISterminal interface_AUTH="${REDIS_PASSWORD}"
+export REDISCLI_AUTH="${REDIS_PASSWORD}"
 
-cli() {
+redisCmd() {
     redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" --no-auth-warning "$@"
 }
 
 ensureGroup() {
     stream="$1"
     group="$2"
-    out=$(cli XGROUP CREATE "${stream}" "${group}" '$' MKSTREAM 2>&1) || true
+    out=$(redisCmd XGROUP CREATE "${stream}" "${group}" '$' MKSTREAM 2>&1) || true
     case "${out}" in
         ''|*BUSYGROUP*|*OK*) return 0 ;;
         *) echo "error: XGROUP CREATE ${stream} ${group} failed: ${out}" >&2; exit 1 ;;
@@ -45,7 +45,7 @@ ensureGroup() {
 checkMaxLen() {
     stream="$1"
     intended="$2"
-    info=$(cli XINFO STREAM "${stream}" 2>/dev/null) || return 0
+    info=$(redisCmd XINFO STREAM "${stream}" 2>/dev/null) || return 0
     actual=$(printf '%s\n' "${info}" | awk '/^length$/{getline; print; exit}')
     if [ -n "${actual}" ] && [ "${actual}" -gt "${intended}" ]; then
         echo "warn: ${stream} length ${actual} exceeds intended bound ${intended}" >&2
@@ -68,6 +68,6 @@ checkMaxLen caracal.policy.invalidate  10000
 checkMaxLen caracal.sessions.revoke    10000
 checkMaxLen caracal.keys.invalidate    10000
 
-cli XADD caracal.providers.ratelimit MAXLEN '~' 1 '*' init 1 >/dev/null
+redisCmd XADD caracal.providers.ratelimit MAXLEN '~' 1 '*' init 1 >/dev/null
 
 echo "redis streams provisioned"

@@ -11,7 +11,7 @@ const src = (path: string): string => fileURLToPath(new URL(path, import.meta.ur
 export default defineConfig({
   resolve: {
     alias: [
-      { find: /^@caracalai\/engine\/runtime$/, replacement: src('./packages/engine/src/runtimeConfig.ts') },
+      { find: /^@caracalai\/engine\/runtime-config$/, replacement: src('./packages/engine/src/runtimeConfig.ts') },
       { find: /^@caracalai\/engine\/commands$/, replacement: src('./packages/engine/src/commands.ts') },
       { find: /^@caracalai\/engine\/crash$/, replacement: src('./packages/engine/src/crash.ts') },
       { find: /^@caracalai\/engine\/scrubCwdEnv$/, replacement: src('./packages/engine/src/scrubCwdEnv.ts') },
