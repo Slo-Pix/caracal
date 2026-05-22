@@ -4,7 +4,7 @@
 // `caracal protect …` provisions the local Gateway-first golden path.
 
 import { randomBytes } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import type { AdminClient, Application, Grant, Policy, PolicyVersion, Resource, Zone } from '@caracalai/admin'
 import { DEFAULT_ZONE_URL, resolveServiceUrl } from '@caracalai/engine/cli'
 import type { CliConfig } from '../config.ts'
@@ -35,6 +35,7 @@ interface ProtectResult {
   policy_set: { id: string; active_version_id?: string | null }
   grant: Grant
   config: string
+  config_path?: string
 }
 
 function slugify(value: string): string {
@@ -224,8 +225,16 @@ async function provision(argv: string[], cfg?: CliConfig): Promise<ProtectResult
     '',
   ].join('\n')
 
-  const configPath = flagString(flags, 'write-config')
-  if (configPath) writeFileSync(configPath, config, { mode: 0o600 })
+  const printOnly = flagBool(flags, 'print-only')
+  const force = flagBool(flags, 'force')
+  const explicitPath = flagString(flags, 'write-config')
+  const configPath = printOnly ? undefined : (explicitPath ?? 'caracal.toml')
+  if (configPath) {
+    if (existsSync(configPath) && !force) {
+      throw new Error(`refusing to overwrite ${configPath}; pass --force to overwrite or --print-only to skip writing`)
+    }
+    writeFileSync(configPath, config, { mode: 0o600 })
+  }
 
   return {
     zone,
@@ -237,6 +246,7 @@ async function provision(argv: string[], cfg?: CliConfig): Promise<ProtectResult
     policy_set: { id: policySet.id, active_version_id: activated.version_id },
     grant,
     config,
+    config_path: configPath,
   }
 }
 
@@ -253,8 +263,12 @@ export async function protectCommand(argv: string[], cfg?: CliConfig): Promise<v
     printInfo(`resource: ${result.resource.identifier}`)
     printInfo(`policy set: ${result.policy_set.id}`)
     printInfo(`grant: ${result.grant.id}`)
-    printStep('Store this caracal.toml content; app_client_secret is shown once.')
-    process.stdout.write(result.config)
+    if (result.config_path) {
+      printSuccess(`wrote ${result.config_path} (mode 0600); app_client_secret is in the file and shown once`)
+    } else {
+      printStep('Store this caracal.toml content; app_client_secret is shown once.')
+      process.stdout.write(result.config)
+    }
   } catch (err) {
     fail(err)
   }
@@ -279,7 +293,9 @@ function help(): never {
       '  --resource-name <name>    Resource display name',
       '  --policy-name <name>      Policy name',
       '  --policy-set-name <name>  Policy set name',
-      '  --write-config <path>     Write generated caracal.toml with mode 0600',
+      '  --write-config <path>     Path for generated caracal.toml (default: caracal.toml in cwd, mode 0600)',
+      '  --print-only              Print caracal.toml to stdout instead of writing it',
+      '  --force                   Overwrite an existing config file',
       '  --json                    Emit machine-readable output',
       '  --help, -h                Show this help',
       '',

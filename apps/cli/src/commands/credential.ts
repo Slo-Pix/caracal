@@ -60,6 +60,10 @@ export async function credentialReadCommand(resource: string, cfg: CliConfig): P
   } catch (err) {
     const desc = scrubTokens(err instanceof Error ? err.message : String(err))
     process.stderr.write(JSON.stringify({ resource, reason: desc }) + '\n')
+    const requestIdMatch = desc.match(/request_id=([\w-]+)/)
+    if (requestIdMatch) {
+      process.stderr.write(`  → caracal debug request ${requestIdMatch[1]}\n`)
+    }
     process.exit(1)
   }
 }
