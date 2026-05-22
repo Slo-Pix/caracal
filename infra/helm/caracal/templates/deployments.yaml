@@ -2,22 +2,27 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Deployment templates for Caracal control-plane services.
+Workload templates for Caracal control-plane services.
 */}}
 
 {{- define "caracal.deployment" -}}
 {{- $root := index . "root" -}}
 {{- $name := index . "name" -}}
 {{- $service := index $root.Values.services $name -}}
+{{- $replayService := or (eq $name "sts") (eq $name "gateway") -}}
+{{- $statefulReplay := and $root.Values.replayPersistence.enabled $replayService -}}
 {{- if $service.enabled }}
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ ternary "StatefulSet" "Deployment" $statefulReplay }}
 metadata:
   name: {{ include "caracal.fullname" $root }}-{{ $name }}
   labels:
     {{- include "caracal.labels" $root | nindent 4 }}
     app.kubernetes.io/component: {{ $name }}
 spec:
+  {{- if $statefulReplay }}
+  serviceName: {{ include "caracal.fullname" $root }}-{{ $name }}
+  {{- end }}
   replicas: {{ $service.replicas }}
   selector:
     matchLabels:
@@ -37,6 +42,7 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "caracal.serviceAccountName" $root }}
+      automountServiceAccountToken: {{ $root.Values.serviceAccount.automountToken }}
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -103,7 +109,7 @@ spec:
             - name: runtime-secrets
               mountPath: /run/secrets
               readOnly: true
-            {{- if or (eq $name "sts") (eq $name "gateway") }}
+            {{- if $replayService }}
             - name: replay
               mountPath: /var/lib/caracal
             {{- end }}
@@ -130,10 +136,27 @@ spec:
       volumes:
         - name: runtime-secrets
           {{ include "caracal.secretVolume" $root | nindent 10 }}
-        {{- if or (eq $name "sts") (eq $name "gateway") }}
+        {{- if and $replayService (not $statefulReplay) }}
         - name: replay
           emptyDir: {}
         {{- end }}
+      {{- if $statefulReplay }}
+  volumeClaimTemplates:
+    - metadata:
+        name: replay
+        labels:
+          {{- include "caracal.labels" $root | nindent 10 }}
+          app.kubernetes.io/component: {{ $name }}
+      spec:
+        accessModes:
+          {{- toYaml $root.Values.replayPersistence.accessModes | nindent 10 }}
+        {{- if $root.Values.replayPersistence.storageClassName }}
+        storageClassName: {{ $root.Values.replayPersistence.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $root.Values.replayPersistence.size | quote }}
+      {{- end }}
 ---
 {{- end }}
 {{- end -}}

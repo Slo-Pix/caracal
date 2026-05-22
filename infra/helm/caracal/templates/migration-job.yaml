@@ -26,6 +26,7 @@ spec:
     spec:
       restartPolicy: OnFailure
       serviceAccountName: {{ include "caracal.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountToken }}
       containers:
         - name: migrate
           image: {{ include "caracal.image" (dict "root" . "image" "caracal-postgres") }}

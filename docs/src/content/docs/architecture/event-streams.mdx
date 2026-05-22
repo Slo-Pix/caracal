@@ -24,7 +24,7 @@ Caracal uses Redis Streams as its event bus. State changes that need to propagat
 
 ## Stream provisioning
 
-At startup the init container runs `provision-streams.sh` before any service starts. For each stream and consumer group:
+At startup the Redis container entrypoint runs `provision-streams.sh` after Redis accepts commands. The Helm deployment uses the same script as the Redis bootstrap path before application services consume streams. For each stream and consumer group:
 
 ```bash
 redis-cli XGROUP CREATE "${stream}" "${group}" '$' MKSTREAM
@@ -32,7 +32,7 @@ redis-cli XGROUP CREATE "${stream}" "${group}" '$' MKSTREAM
 
 `MKSTREAM` creates the stream if it does not exist. `$` positions the group cursor at the end of the stream — each group only receives messages published after it was created. The script is idempotent: `BUSYGROUP` errors (group already exists) are ignored.
 
-The init container exits with code 0 after all groups are created. Services wait for the init container's successful completion before starting.
+The script exits with code 0 after all groups are created and writes a readiness marker for the Redis healthcheck. Application services start only after Redis reports healthy.
 
 ---
 

@@ -6,7 +6,7 @@ pageType: architecture
 
 Caracal runs five core application services plus Postgres and Redis. This page is the operator topology reference; the getting-started path still presents the system as one local stack managed by `caracal up`.
 
-One-shot initialization containers provision Redis streams and credentials, then exit. The Coordinator container also starts its Go relay sidecar. All ports are bound to localhost in development; production deployments place services behind network policies appropriate to the deployment target.
+Redis stream groups are provisioned by the Redis bootstrap script before Redis reports ready, and database migrations run through a dedicated one-shot migration job before application traffic starts. The Coordinator container also starts its Go relay sidecar. All ports are bound to localhost in development; production deployments place services behind network policies appropriate to the deployment target.
 
 ## Services
 
@@ -136,32 +136,36 @@ Shared by all five services. Each service connects with a dedicated database rol
 
 Shared by all five services for streams, the JTI deduplication cache, and outbox publishing. All messages written to streams include an HMAC-SHA256 signature under `STREAMS_HMAC_KEY`. See [Event Streams and Outbox](./event-streams/) for the full stream inventory.
 
-### Init container
+### Bootstrap jobs
 
-Runs `provision-streams.sh` once. Creates all nine Redis consumer groups with `XGROUP CREATE … MKSTREAM`. Exits after completion and does not restart. Both Postgres and Redis must be healthy before the init container runs.
+The Redis bootstrap path runs `provision-streams.sh` once per Redis container start. It creates all nine Redis consumer groups with `XGROUP CREATE … MKSTREAM`, ignores existing groups, and writes a readiness marker consumed by the Redis healthcheck.
+
+The database migration path runs `caracal-migrate` as a one-shot Compose service or Helm migration Job. It records applied migration versions in `schema_migrations` and serializes concurrent runners with a Postgres advisory lock.
 
 ---
 
 ## Startup dependency order
 
 ```
-postgres ──────────────────────────────────────┐
-                                               ▼
-redis ──────────────────────────────────────► init (exits)
-                                               │
-                              ┌────────────────┤
-                              ▼                ▼
-                            STS             Audit
-                              │
-                         ┌────┤
-                         ▼    ▼
-                        API  Coordinator
-                         │
-                         ▼
-                       Gateway
+postgres ───────────────► dbMigrate (exits)
+   │                          │
+   └──────────────┬───────────┘
+                  ▼
+redis bootstrap ─► redis healthy
+                  │
+      ┌───────────┼───────────┐
+      ▼           ▼           ▼
+     STS        Audit        API
+      │                       │
+      └───────────┬───────────┘
+                  ▼
+             Coordinator
+                  │
+                  ▼
+                Gateway
 ```
 
-Each service waits for a `healthy` signal from its dependencies before starting. Gateway waits for both API and STS healthy. Coordinator waits for STS healthy. API waits for STS healthy. STS and Audit wait for init to complete successfully.
+Each service waits for a `healthy` signal from its dependencies before starting. Gateway waits for both API and STS healthy. Coordinator waits for STS healthy. API, STS, Audit, and Coordinator wait for database migrations and Redis readiness.
 
 ---
 
