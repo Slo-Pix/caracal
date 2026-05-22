@@ -17,7 +17,7 @@ const pageOrder = [
   'concepts/policy',
   'concepts/mandate',
   'concepts/intent',
-  'concepts/caveat',
+  'concepts/constraint',
   'concepts/delegation',
   'concepts/workspace',
   'concepts/ledger',

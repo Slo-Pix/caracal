@@ -119,6 +119,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { label: 'Overview', link: '/concepts/' },
+            { label: 'One-Minute Model', link: '/concepts/model-overview/' },
             { label: 'Authority Model', link: '/concepts/authority-model/' },
             { label: 'Mandate', link: '/concepts/mandate/' },
             { label: 'Policy', link: '/concepts/policy/' },
@@ -126,7 +127,7 @@ export default defineConfig({
             { label: 'Zone', link: '/concepts/zone/' },
             { label: 'Resource and Grant', link: '/concepts/resource-grant/' },
             { label: 'Delegation Graph', link: '/concepts/delegation/' },
-            { label: 'Caveats and Constraints', link: '/concepts/caveat/' },
+            { label: 'Delegation Constraints', link: '/concepts/constraint/' },
             { label: 'Sessions and Revocation', link: '/concepts/sessions-revocation/' },
             { label: 'Audit Ledger', link: '/concepts/audit-ledger/' },
             { label: 'Step-Up Challenge', link: '/concepts/step-up/' },

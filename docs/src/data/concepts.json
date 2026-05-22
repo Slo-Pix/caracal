@@ -19,7 +19,7 @@
       "issued-by": ["sts"],
       "bound-to": ["principal", "policy"],
       "governs": ["intent"],
-      "constrained-by": ["caveat"],
+      "constrained-by": ["constraint"],
       "scoped-to": ["zone"]
     }
   },
@@ -45,11 +45,11 @@
       "managed-by": ["coordinator"]
     }
   },
-  "caveat": {
-    "title": "Caveat",
-    "path": "/concepts/caveat/",
-    "description": "A constraint attached to a mandate to narrow its scope or TTL.",
-    "aliases": ["constraint", "attenuation"],
+  "constraint": {
+    "title": "Delegation Constraint",
+    "path": "/concepts/constraint/",
+    "description": "A typed restriction (resources, TTL, hops, budget) attached to a delegation edge.",
+    "aliases": ["caveat", "attenuation"],
     "relations": {
       "constrains": ["mandate"],
       "limits": ["intent"]
