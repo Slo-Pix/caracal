@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Standalone Windows TUI installer that downloads, verifies, and extracts Caracal release archives.
+# Standalone Windows Terminal installer that downloads, verifies, and extracts Caracal release archives.
 
 [CmdletBinding()]
 param(
@@ -79,7 +79,7 @@ try {
         $installedShell = $true
         Install-Archive -Kind 'shell' -BinName 'caracal'
     }
-    Install-Archive -Kind 'tui' -BinName 'caracal-tui'
+    Install-Archive -Kind 'terminal' -BinName 'caracal-terminal'
 } finally {
     Remove-Item -Recurse -Force $tmp.FullName -ErrorAction SilentlyContinue
 }
@@ -92,12 +92,12 @@ if (-not ($userPath -split ';' | Where-Object { $_ -ieq $InstallDir })) {
 
 Write-Host 'caracal-install: done. Next steps:'
 if ($installedShell) {
-    Write-Host '  caracal tui        # launch the interactive TUI through the shell'
+    Write-Host '  caracal terminal        # launch the interactive Terminal through the shell'
 }
-Write-Host '  caracal-tui        # launch the interactive TUI directly'
+Write-Host '  caracal-terminal        # launch the interactive Terminal directly'
 Write-Host 'caracal-install: CLI not installed; install it with install-cli.ps1 when needed'
 if ($installedShell) {
-    Write-Host "caracal-install: to uninstall, remove caracal.exe and caracal-tui.exe from $InstallDir and the user PATH entry."
+    Write-Host "caracal-install: to uninstall, remove caracal.exe and caracal-terminal.exe from $InstallDir and the user PATH entry."
 } else {
-    Write-Host "caracal-install: to uninstall, remove caracal-tui.exe from $InstallDir and the user PATH entry."
+    Write-Host "caracal-install: to uninstall, remove caracal-terminal.exe from $InstallDir and the user PATH entry."
 }

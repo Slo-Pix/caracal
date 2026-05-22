@@ -4,7 +4,7 @@ description: A FastAPI and LangGraph multi-agent swarm that processes a weekly i
 pageType: workflow
 ---
 
-The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, TUI, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
+The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, Terminal, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
 
 The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads — specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and application-level provider clients across REST, gRPC, MCP, and SSE fixtures.
 
@@ -82,18 +82,18 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### Start Caracal through TUI + control API
+### Start Caracal through Terminal + control API
 
-Install the released CLI and TUI, then start the Caracal stack:
+Install the released CLI and Terminal, then start the Caracal stack:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-cli.sh | sh
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-tui.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-terminal.sh | sh
 caracal up
-caracal-tui
+caracal-terminal
 ```
 
-In the TUI, open **Control**, confirm **enable endpoint**, then create or inspect:
+In the Terminal, open **Control**, confirm **enable endpoint**, then create or inspect:
 
 | Caracal object | Lynx value | Purpose |
 | --- | --- | --- |
@@ -101,8 +101,8 @@ In the TUI, open **Control**, confirm **enable endpoint**, then create or inspec
 | Control key | `lynx-control` | Real application credential used by Lynx as `application_id` + `app_client_secret` |
 | Resources | `lynx/<provider>` | One protected resource per provider in `config/company.yaml` |
 
-After creating the Lynx zone, control key, and resources in the TUI, write
-`~/.config/caracal/caracal.toml` from the TUI values. The generated config
+After creating the Lynx zone, control key, and resources in the Terminal, write
+`~/.config/caracal/caracal.toml` from the Terminal values. The generated config
 includes SDK resource bindings:
 
 ```toml
@@ -110,7 +110,7 @@ zone_url = "http://127.0.0.1:8080"
 sts_url = "http://127.0.0.1:8080"
 coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
-zone_id = "<zone id from TUI>"
+zone_id = "<zone id from Terminal>"
 application_id = "<control key client_id>"
 app_client_secret = "<control key client_secret>"
 
@@ -185,7 +185,7 @@ Open `http://localhost:8000`. The landing page shows the scenario summary.
 Navigate to `/setup` first: validate the OpenAI key, Caracal service URLs,
 `caracal.toml` resource bindings, gateway/coordinator health, and webhook
 secrets. Then open `/demo` to interact with the agent swarm while
-`caracal-tui` remains open for live session inspection.
+`caracal-terminal` remains open for live session inspection.
 
 ---
 
@@ -510,7 +510,7 @@ The browser demo uses the FastAPI control routes under `/api/run`:
 | `/api/run/{run_id}/graph` | `GET` | Returns graph nodes and edges for the topology view |
 
 Setup routes live under `/api/setup`: `GET /api/setup/validate` checks
-configuration after the user creates the TUI objects and writes
+configuration after the user creates the Terminal objects and writes
 `caracal.toml`.
 
 ---

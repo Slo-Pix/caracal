@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Standalone TUI installer that downloads, verifies, and extracts Caracal release archives.
+# Standalone Terminal installer that downloads, verifies, and extracts Caracal release archives.
 
 set -eu
 
@@ -17,12 +17,12 @@ err() {
 
 usage() {
     cat <<EOF
-caracal-install: download the Caracal TUI binaries from GitHub Releases.
+caracal-install: download the Caracal Terminal binaries from GitHub Releases.
 
 Usage:
-  install-tui.sh [--version vYYYY.MM.DD[.N]] [--install-dir PATH]
+  install-terminal.sh [--version vYYYY.MM.DD[.N]] [--install-dir PATH]
 
-Installs the thin 'caracal' shell and the 'caracal-tui' terminal UI binary.
+Installs the thin 'caracal' shell and the 'caracal-terminal' terminal UI binary.
 
 Environment overrides:
   CARACAL_VERSION       same as --version
@@ -78,7 +78,7 @@ case "${os}" in
     msys*|mingw*|cygwin*|windowsnt)
         os=windows
         ext=zip
-        [ "${arch}" = arm64 ] && err "Windows arm64 binaries are not published; use install-tui.ps1 on Windows"
+        [ "${arch}" = arm64 ] && err "Windows arm64 binaries are not published; use install-terminal.ps1 on Windows"
         require unzip
         ;;
     *) err "unsupported OS: ${os}" ;;
@@ -143,7 +143,7 @@ if hasArchive shell; then
     installedShell=1
     installArchive shell caracal
 fi
-installArchive tui caracal-tui
+installArchive terminal caracal-terminal
 
 case ":${PATH}:" in
     *":${INSTALL_DIR}:"*) ;;
@@ -170,14 +170,14 @@ checkShadow() {
 }
 
 [ "${installedShell}" = "1" ] && checkShadow caracal
-checkShadow caracal-tui
+checkShadow caracal-terminal
 
 printf 'caracal-install: done. Next steps:\n'
 printf '  installed release %s (mode: stable)\n' "${tag}"
 printf '  hash -r            # refresh your shell command cache\n'
-[ "${installedShell}" = "1" ] && printf '  caracal tui        # launch the interactive TUI through the shell\n'
-printf '  caracal-tui        # launch the interactive TUI directly\n'
+[ "${installedShell}" = "1" ] && printf '  caracal terminal        # launch the interactive Terminal through the shell\n'
+printf '  caracal-terminal        # launch the interactive Terminal directly\n'
 printf 'caracal-install: CLI not installed; install it with install-cli.sh when needed\n'
 printf 'caracal-install: to uninstall, remove'
 [ "${installedShell}" = "1" ] && printf ' %s/caracal' "${INSTALL_DIR}"
-printf ' %s/caracal-tui\n' "${INSTALL_DIR}"
+printf ' %s/caracal-terminal\n' "${INSTALL_DIR}"

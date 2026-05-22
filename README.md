@@ -31,7 +31,7 @@
 
 The default product path is intentionally small: register an **agent app**, run an **agent run**, request a short-lived **mandate**, call a **resource** through the **Gateway**, and inspect the resulting **audit** trail. The STS evaluates policy and issues Caracal access tokens, the Gateway enforces token validity and provider routing, the Coordinator tracks runtime and delegation state, and Audit records why access was allowed or denied and what happened upstream.
 
-Platform teams can evaluate Caracal locally with `caracal up` and check dependency-aware runtime readiness with `caracal status --ready`. Product management stays in optional interfaces: use `caracal cli` or `caracal-tui` for diagnostics, policy dry-runs, token inspection, audit search, and request explanation. Workload execution is separate: use top-level `caracal run -- <command>` when you want to launch a process with scoped resource tokens from `caracal.toml`.
+Platform teams can evaluate Caracal locally with `caracal up` and check dependency-aware runtime readiness with `caracal status --ready`. Product management stays in optional interfaces: use `caracal terminal` or `caracal-terminal` for diagnostics, policy dry-runs, token inspection, audit search, and request explanation. Workload execution is separate: use top-level `caracal run -- <command>` when you want to launch a process with scoped resource tokens from `caracal.toml`.
 
 -----
 
@@ -74,7 +74,7 @@ More coming soon
 
 ### Install
 
-The CLI and TUI use separate installers. Run both commands to install both tools, or run only the TUI installer when you want `caracal-tui` without `caracal-cli`.
+The CLI and Terminal use separate installers. Run both commands to install both tools, or run only the Terminal installer when you want `caracal-terminal` without `caracal-terminal`.
 
 > Pin a version: `--version vYYYY.MM.DD` on Unix or `-Version vYYYY.MM.DD` in PowerShell.  
 > Change install directory: `--install-dir /path` on Unix or `-InstallDir C:\path` in PowerShell.
@@ -86,8 +86,8 @@ The CLI and TUI use separate installers. Run both commands to install both tools
 # CLI
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-cli.sh | sh
 
-# TUI
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-tui.sh | sh
+# Terminal
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-terminal.sh | sh
 ```
 
 Installs to `~/.local/bin`. Override with `--install-dir /usr/local/bin` (may need `sudo`).
@@ -101,8 +101,8 @@ Installs to `~/.local/bin`. Override with `--install-dir /usr/local/bin` (may ne
 # CLI
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-cli.sh | sh
 
-# TUI
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-tui.sh | sh
+# Terminal
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-terminal.sh | sh
 ```
 
 If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
@@ -116,8 +116,8 @@ If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/car
 # CLI
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-cli.ps1 | iex
 
-# TUI
-iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-tui.ps1 | iex
+# Terminal
+iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-terminal.ps1 | iex
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\caracal`. Requires Docker Desktop with WSL2.
@@ -136,14 +136,14 @@ Archive names (replace `vYYYY.MM.DD` with the release tag):
 - `caracal-shell-darwin-amd64-vYYYY.MM.DD.tar.gz`
 - `caracal-shell-darwin-arm64-vYYYY.MM.DD.tar.gz`
 - `caracal-shell-windows-amd64-vYYYY.MM.DD.zip`
-- `caracal-cli-linux-amd64-vYYYY.MM.DD.tar.gz`
-- `caracal-cli-linux-arm64-vYYYY.MM.DD.tar.gz`
-- `caracal-cli-darwin-amd64-vYYYY.MM.DD.tar.gz`
-- `caracal-cli-darwin-arm64-vYYYY.MM.DD.tar.gz`
-- `caracal-cli-windows-amd64-vYYYY.MM.DD.zip`
-- `caracal-tui-...` (same five targets)
+- `caracal-terminal-linux-amd64-vYYYY.MM.DD.tar.gz`
+- `caracal-terminal-linux-arm64-vYYYY.MM.DD.tar.gz`
+- `caracal-terminal-darwin-amd64-vYYYY.MM.DD.tar.gz`
+- `caracal-terminal-darwin-arm64-vYYYY.MM.DD.tar.gz`
+- `caracal-terminal-windows-amd64-vYYYY.MM.DD.zip`
+- `caracal-terminal-...` (same five targets)
 
-Each archive contains a single executable (`caracal`, `caracal-cli`, or `caracal-tui`, with `.exe` on Windows).
+Each archive contains a single executable (`caracal`, `caracal-terminal`, or `caracal-terminal`, with `.exe` on Windows).
 
 </details>
 
@@ -151,7 +151,7 @@ Each archive contains a single executable (`caracal`, `caracal-cli`, or `caracal
 
 ```bash
 caracal up                            # start all services via Docker
-caracal cli config init               # provision a zone/app and write ~/.config/caracal/caracal.toml
+caracal terminal config init               # provision a zone/app and write ~/.config/caracal/caracal.toml
 caracal status                        # probe all services
 caracal status --ready                # dependency-aware readiness probe
 caracal down                          # stop; add -v to remove volumes
@@ -162,13 +162,13 @@ caracal purge                         # interactive cleanup (containers, volumes
 
 ### Run workloads with scoped tokens
 
-`caracal run` is a top-level execution command, not a CLI/TUI management command. It reads `caracal.toml`, exchanges the configured application credentials with STS for the resources listed in `credentials` and `optional_credentials`, injects only those token environment variables into the child process, and runs the command without a shell.
+`caracal run` is a top-level execution command, not a CLI/Terminal management command. It reads `caracal.toml`, exchanges the configured application credentials with STS for the resources listed in `credentials` and `optional_credentials`, injects only those token environment variables into the child process, and runs the command without a shell.
 
 ```bash
 caracal run -- node worker.js
 ```
 
-Use `caracal cli` or `caracal-tui` for management and inspection. Use `caracal run` only for launching a local workload that needs scoped, short-lived Caracal resource tokens.
+Use `caracal terminal` or `caracal-terminal` for management and inspection. Use `caracal run` only for launching a local workload that needs scoped, short-lived Caracal resource tokens.
 
 ### Enterprise evaluation
 
@@ -186,7 +186,7 @@ The chart is a reference deployment for enterprise evaluation, production adapta
 <details>
 <summary><strong>CLI</strong></summary>
 
-Management commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zone_id` in `caracal.toml` to target a zone. `caracal run` is not part of `caracal-cli`; run workloads through the top-level `caracal run -- <command>` path.
+Management commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zone_id` in `caracal.toml` to target a zone. `caracal run` is not part of `caracal-terminal`; run workloads through the top-level `caracal run -- <command>` path.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -199,14 +199,14 @@ Management commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zon
 </details>
 
 <details>
-<summary><strong>TUI</strong></summary>
+<summary><strong>Terminal</strong></summary>
 
 ```bash
 export CARACAL_ADMIN_TOKEN=<your-admin-token>   # printed by the installer; or read from $CARACAL_HOME/secrets/caracalAdminToken
-caracal-tui
+caracal-terminal
 ```
 
-Uses the same management environment variables as the CLI. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view. The TUI does not run workloads; launch token-injected processes with `caracal run -- <command>`.
+Uses the same management environment variables as the CLI. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view. The Terminal does not run workloads; launch token-injected processes with `caracal run -- <command>`.
 
 | Key | Action |
 |---|---|
@@ -235,7 +235,7 @@ Uses the same management environment variables as the CLI. `CARACAL_COORDINATOR_
 - Git 2.x
 - Go 1.26+ (only when changing Go services or shared Go packages)
 - Python 3.14+ (only when changing Python packages)
-- Bun (only when building distributable CLI/TUI binaries)
+- Bun (only when building distributable CLI/Terminal binaries)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.
 

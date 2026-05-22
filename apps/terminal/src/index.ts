@@ -13,7 +13,7 @@ import {
 import {
   resolveRuntimeConfigPath,
   type RuntimeConfig,
-} from '@caracalai/engine/runtime-config-config'
+} from '@caracalai/engine/runtime-config'
 import { installCrashHandlers } from '@caracalai/engine/crash'
 import { App } from './screen.ts'
 import { CARACAL_TERMINAL_MODE, CARACAL_TERMINAL_SHA, CARACAL_TERMINAL_VERSION } from './version.gen.ts'
