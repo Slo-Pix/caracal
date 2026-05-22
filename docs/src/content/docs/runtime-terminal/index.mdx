@@ -1,82 +1,52 @@
 ---
-title: Runtime and Terminal
-description: Complete reference for the caracal terminal interface and caracal-terminal terminal interface — stack management, admin operations, runtime token injection, and observability.
+title: Runtime and Terminal Management
+description: Complete reference for the Caracal runtime shell and terminal management interface.
 pageType: landing
 ---
 
-Caracal ships two terminal tools:
+Caracal ships two terminal-facing tools:
 
-- **`caracal`** — command-line interface for stack management, token injection, and administrative operations against the control-plane API.
-- **`caracal-terminal`** — interactive terminal UI for browsing zones, applications, resources, policies, sessions, agents, and audit events.
+- **`caracal`** — thin runtime shell for stack lifecycle, readiness checks, purging local state, token-injected process execution, and launching the management surface.
+- **`caracal-terminal`** — the terminal management interface for human operational workflows across zones, applications, resources, providers, policies, grants, sessions, agents, audit events, diagnostics, and Control API lifecycle.
 
-Both tools are compiled with Bun for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64). The runtime is self-contained — no separate Node.js installation is required.
+The runtime shell intentionally does not include product-management commands. Use `caracal terminal` or `caracal-terminal` for interactive management, and use the Control API for automation that must manage Caracal remotely.
+
+Both tools are compiled with Bun for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64). The runtime is self-contained; no separate Node.js installation is required.
 
 ---
 
 ## Authentication and endpoints
 
-Most `caracal` commands communicate with the control-plane API. Set these environment variables before using admin commands:
+The terminal management interface communicates with the control-plane API and discovers operator credentials from the same places as the engine:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `CARACAL_ADMIN_TOKEN` | — | Bearer token for all `/v1/*` admin API routes. Required for all admin and observability commands. |
-| `CARACAL_API_URL` | `http://localhost:3000` | Control-plane API base URL. In production, set this to your API service address. |
-| `CARACAL_ZONE_ID` | From `caracal.toml` | Default zone for zone-scoped commands. Override per command with `--zone`. |
-| `CARACAL_COORDINATOR_URL` | `http://localhost:4000` | Coordinator service URL. Required only for `agent` and `delegation` commands. |
-| `CARACAL_COORDINATOR_TOKEN` | — | JWT with scope `agent:lifecycle`. Required only for `agent` and `delegation` commands. |
-| `CARACAL_CONFIG` | Auto-resolved | Explicit path to `caracal.toml`. Overrides automatic discovery. |
+| `CARACAL_ADMIN_TOKEN` | Auto-discovered when possible | Bearer token for control-plane management routes. |
+| `CARACAL_API_URL` | `http://localhost:3000` in development | Control-plane API base URL. |
+| `CARACAL_ZONE_ID` | From `caracal.toml` or saved terminal state | Default zone for zone-scoped views. |
+| `CARACAL_COORDINATOR_URL` | `http://localhost:4000` in development | Coordinator service URL for agent and delegation views. |
+| `CARACAL_COORDINATOR_TOKEN` | — | JWT with `agent:lifecycle` authority for agent and delegation views. |
+| `CARACAL_CONFIG` | Auto-resolved | Explicit `caracal.toml` path. |
 
-`CARACAL_ADMIN_TOKEN` is discovered in order: the `CARACAL_ADMIN_TOKEN` environment variable → the path in `CARACAL_ADMIN_TOKEN_FILE` (if set) → the runtime secret file (auto-written by `caracal up`: `~/.local/share/caracal/secrets/caracalAdminToken` on Linux, `~/Library/Application Support/caracal/secrets/caracalAdminToken` on macOS) → `infra/secrets/files/caracalAdminToken` relative to `CARACAL_REPO_ROOT` (dev mode only). In the typical installed flow, `caracal up` writes the secret file and admin commands discover it automatically — no manual export required.
-
-In production (`NODE_ENV` is not `development`), `CARACAL_API_URL` and `CARACAL_COORDINATOR_URL` must be set explicitly. In development, localhost defaults are used.
+`CARACAL_ADMIN_TOKEN` is discovered in order: `CARACAL_ADMIN_TOKEN`, `CARACAL_ADMIN_TOKEN_FILE`, the runtime secret file written by `caracal up`, and `infra/secrets/files/caracalAdminToken` in development mode.
 
 ---
 
-## Global flags
+## Supported surfaces
 
-These flags are accepted by all commands:
-
-| Flag | Description |
-| --- | --- |
-| `--zone <id>` | Zone ID for zone-scoped commands. Overrides `CARACAL_ZONE_ID` and `caracal.toml`. |
-| `--json` | Emit JSON to stdout instead of a formatted table. Suitable for piping to `jq`. |
-| `--help`, `-h` | Print command help and exit. |
-
----
-
-## Command sections
-
-| Section | Commands | Purpose |
+| Area | Surface | Purpose |
 | --- | --- | --- |
-| [Stack](./stack/) | `up`, `down`, `status` | Start, stop, and probe the local stack |
-| [Runtime](./runtime/) | `run`, `credential read`, `credential inspect` | Inject mandates into subprocesses, print tokens, and inspect token claims |
-| [Admin](./admin/) | `zone`, `app`, `resource`, `provider`, `policy`, `policy-set`, `grant`, `session` | Manage all control-plane entities |
-| [Observability](./observability/) | `audit tail`, `explain`, `credential inspect` | Tail the audit stream, inspect policy decisions, render authority flow, and decode token claims |
-| [Agents and Delegation](./agents/) | `agent`, `delegation` | Inspect and control agent sessions and delegation edges |
-| [Configuration File](./config-file/) | `caracal.toml` | Config layout, lookup order, credential injection |
-| [Terminal Walkthrough](./terminal/) | `caracal-terminal` | Interactive terminal browser for all admin entities |
+| Stack lifecycle | `caracal up`, `caracal down`, `caracal status`, `caracal purge` | Start, stop, probe, and reset the local stack. |
+| Workload execution | `caracal run -- <command>` | Inject scoped resource tokens into subprocesses. |
+| Human management | `caracal terminal` or `caracal-terminal` | Manage Caracal entities interactively. |
+| Remote automation | Control API | Drive approved management actions through authenticated HTTP. |
+
+`caracal run` is a runtime execution command, not a management workflow. The terminal management interface does not run workloads; use the top-level runtime shell for token-injected processes.
 
 ---
 
-## Output format
+## Exit behavior
 
-By default, commands render a left-aligned ASCII table:
+Runtime shell commands write errors to stderr and exit `0` on success or `1` for validation, readiness, or API failures. `caracal run` returns the subprocess exit code after credentials are acquired.
 
-```
-id              name          registration_method
---              ----          -------------------
-app_abc123      My App        managed
-app_def456      Service Bot   dcr
-```
-
-- `null` values display as `-`.
-- Arrays display as comma-separated values.
-- Empty result sets display `(no rows)`.
-
-Pass `--json` to receive 2-space-indented JSON on stdout:
-
-```bash
-caracal zone list --json | jq '.[].id'
-```
-
-Errors are written to stderr. Exit code `0` indicates success; `1` indicates a terminal interface or API error.
+The terminal management interface requires a controlling TTY. In non-interactive environments it exits `1` and directs automation to the Control API or SDK.

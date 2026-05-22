@@ -1,43 +1,41 @@
 ---
-title: Stack Commands
-description: caracal up, down, and status — start, stop, and probe the local Caracal stack.
+title: Runtime Lifecycle
+description: Use caracal up, down, status, and purge to manage the local runtime stack.
 pageType: reference
 ---
 
-Stack commands manage the local Caracal stack. They delegate to `docker compose` and do not require `CARACAL_ADMIN_TOKEN`. In rc or stable mode, the compose file and env file are resolved automatically from the Caracal home — no flags needed. In dev mode, run via `pnpm caracal` from inside the repo, which sets `CARACAL_REPO_ROOT` automatically.
+Runtime lifecycle commands manage local infrastructure and do not perform product management. They delegate to Docker Compose, resolve release assets from the Caracal home, and preserve the terminal management interface as the single human management surface.
 
 ---
 
 ## `caracal up`
 
-Start the stack.
+Start the stack:
 
 ```bash
 caracal up
 ```
 
-Equivalent to `docker compose up -d`. In dev mode, passes `--build` to rebuild images before starting. In rc or stable mode, runs without `--build` and injects `CARACAL_VERSION` into the compose environment.
-
-Forwards all `docker compose` output to stdout and exits with the compose exit code.
+In development mode, the command rebuilds local images. In rc and stable modes, it uses the installed release compose assets and injects `CARACAL_VERSION`.
 
 ---
 
 ## `caracal down`
 
-Stop and remove stack containers.
+Stop stack containers:
 
 ```bash
-caracal down       # stop containers, preserve volumes
-caracal down -v    # stop containers and remove volumes (destroys all persisted data)
+caracal down
+caracal down -v
 ```
 
-`-v` is passed directly to `docker compose down`. Use it to reset the stack to a clean state between test runs or when rotating secrets.
+`-v` is passed to Docker Compose and removes persisted volumes.
 
 ---
 
 ## `caracal status`
 
-Probe all five services and report their liveness or readiness.
+Probe service liveness or dependency-aware readiness:
 
 ```bash
 caracal status
@@ -45,45 +43,16 @@ caracal status --ready
 caracal status --ready --json
 ```
 
-By default, sends `GET /health` to each service in parallel with a 1500 ms timeout. Use `--ready` to send `GET /ready`, which checks dependencies and service-specific readiness such as policy consumers, Gateway bindings, audit replay, Postgres, and Redis. When a readiness endpoint returns structured JSON, the `detail` column includes the reason so operators can distinguish a network outage from a dependency or replay condition.
-
-| Service | Default port | Health URL | Readiness URL |
-| --- | --- | --- | --- |
-| `api` | 3000 | `/health` | `/ready` |
-| `sts` | 8080 | `/health` | `/ready` |
-| `gateway` | 8081 | `/health` | `/ready` |
-| `audit` | 9090 | `/health` | `/ready` |
-| `coordinator` | 4000 | `/health` | `/ready` |
-
-Example output:
-
-```
-service      port   mode    status  detail
--------      ----   ----    ------  ------
-api          3000   ready   ok      200
-sts          8080   ready   down    503 stream_consumers_not_ready
-gateway      8081   ready   ok      200
-audit        9090   ready   ok      200
-coordinator  4000   ready   ok      200
-```
-
-Exit code is `0` if all probes respond successfully, `1` if any is down or unreachable. Use readiness mode in scripts that need dependency-aware startup:
-
-```bash
-caracal up
-until caracal status --ready; do sleep 1; done
-```
+Readiness checks include Postgres, Redis, STS reachability, Gateway bindings, audit replay, and stream consumers. The command exits `0` when every probe passes and `1` when any service is down, unreachable, or not ready.
 
 ---
 
-## Provisioning a zone and application
+## `caracal purge`
 
-The stack starts with an empty database. Use the admin commands to create a zone, register an application, capture the client secret, and author `caracal.toml`:
+Remove the local stack, runtime data, generated logs, cached release assets, and installed runtime state:
 
 ```bash
-caracal zone create --name local
-caracal app create --zone <zone-id> --name local-app
-# client secret is printed once; save it into caracal.toml
+caracal purge
 ```
 
-See the [Admin commands](./admin/) reference for full flags and the [Configuration File](./config-file/) page for the `caracal.toml` schema and discovery order.
+Use `purge` only when you intentionally want a clean local environment. Recreate zones, applications, policies, grants, and Control keys through the terminal management interface after the next `caracal up`.

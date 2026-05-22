@@ -1,216 +1,27 @@
 ---
-title: Agent and Delegation Commands
-description: Inspect, suspend, resume, and terminate agent sessions; traverse and revoke delegation edges — all coordinator-backed commands.
+title: Agents and Delegation
+description: Inspect and manage agent sessions and delegation edges through the terminal management interface.
 pageType: reference
 ---
 
-Agent and delegation commands communicate with the Coordinator service rather than the control-plane API. They require both `CARACAL_ADMIN_TOKEN` (for the API zone context) and `CARACAL_COORDINATOR_TOKEN` (a JWT with scope `agent:lifecycle` for the Coordinator).
-
-```bash
-export CARACAL_COORDINATOR_URL=http://localhost:4000
-export CARACAL_COORDINATOR_TOKEN=<coordinator-jwt>
-```
-
-If either variable is missing, all `agent` and `delegation` commands fail with an actionable error:
-
-```
-coordinator URL not set — export CARACAL_COORDINATOR_URL
-coordinator token not set — export CARACAL_COORDINATOR_TOKEN
-```
-
-All commands accept `--zone <id>`, `--json`, and `--help`.
+Agent and delegation operations are available from the terminal management interface. Set `CARACAL_COORDINATOR_URL` and `CARACAL_COORDINATOR_TOKEN` when the Coordinator is not using local development defaults.
 
 ---
 
-## Agent commands — `caracal agent`
+## Agent sessions
 
-### `caracal agent list`
-
-List all agent sessions in the zone.
-
-```bash
-caracal agent list
-caracal agent list --json
-```
-
-**Table columns:** `id`, `application_id`, `parent_id`, `status`, `depth`, `spawned_at`, `terminated_at`
-
-`status` values: `active`, `suspended`, `terminated`.
-
-`depth` is the session's position in the spawn hierarchy (root = 0). Maximum depth is 10.
+Use **Agents** to list sessions, inspect a session tree, suspend an active subtree, resume a suspended subtree, or terminate a session. Tree views show parent-child relationships so operators can understand which descendants inherit authority from the selected run.
 
 ---
 
-### `caracal agent get <id>`
+## Delegation edges
 
-Fetch a single agent session by ID.
+Use **Delegation** to inspect active, inbound, and outbound delegation edges. The detail view shows source and target sessions, resource and scope bounds, expiry, and traversal state.
 
-```bash
-caracal agent get agentsess_abc123
-```
+Revoking a delegation edge terminates its delegated authority immediately. Review outbound edges before terminating a session so dependent work can be stopped cleanly.
 
 ---
 
-### `caracal agent tree <id>`
+## Audit correlation
 
-List the direct child sessions of an agent session.
-
-```bash
-caracal agent tree agentsess_abc123
-```
-
-**Table columns:** `id`, `application_id`, `parent_id`, `status`, `depth`, `spawned_at`
-
-Use this to inspect the immediate children of a session. To walk the full tree, run `tree` recursively on each child's ID.
-
----
-
-### `caracal agent suspend <id>`
-
-Suspend an agent session. New token exchanges from this session are blocked until it is resumed.
-
-```bash
-caracal agent suspend agentsess_abc123
-```
-
-Suspension does not terminate the session or revoke existing mandates — in-flight requests with valid mandates complete normally. Future exchanges are blocked.
-
----
-
-### `caracal agent resume <id>`
-
-Resume a suspended agent session.
-
-```bash
-caracal agent resume agentsess_abc123
-```
-
----
-
-### `caracal agent terminate <id>`
-
-Permanently terminate an agent session. Terminated sessions cannot be resumed.
-
-```bash
-caracal agent terminate agentsess_abc123
-```
-
-Output: `terminated agentsess_abc123`
-
-Terminating a session also terminates all of its descendant sessions recursively and invalidates their delegation edges.
-
----
-
-## Delegation commands — `caracal delegation`
-
-Delegation edges form a directed graph of authority transfers between sessions. Each edge has a source session, a target session, a resource, and an expiry.
-
-### `caracal delegation active`
-
-List active delegation edges in the zone.
-
-```bash
-caracal delegation active
-```
-
-**Table columns:** `id`, `source_session_id`, `target_session_id`, `resource_id`, `status`, `expires_at`
-
-Use this as the starting point when auditing live delegated authority before drilling into a specific session or edge.
-
----
-
-### `caracal delegation inbound <session-id>`
-
-List delegation edges whose target is the given session.
-
-```bash
-caracal delegation inbound agentsess_abc123
-```
-
-**Table columns:** `id`, `source_session_id`, `target_session_id`, `resource_id`, `status`, `expires_at`
-
-`status` values: `active`, `revoked`.
-
-Inbound edges represent authority that other sessions have delegated to this session.
-
----
-
-### `caracal delegation outbound <session-id>`
-
-List delegation edges whose source is the given session.
-
-```bash
-caracal delegation outbound agentsess_abc123
-```
-
-**Table columns:** same as `inbound`
-
-Outbound edges represent authority this session has delegated to others.
-
----
-
-### `caracal delegation traverse <edge-id>`
-
-Walk the full delegation chain for an edge.
-
-```bash
-caracal delegation traverse deledge_def456
-```
-
-**Table columns:** `depth`, `id`, `source_session_id`, `target_session_id`
-
-Returns every edge in the chain from the root to the leaf, ordered by depth. Use this to audit the full authority path for a delegation.
-
----
-
-### `caracal delegation revoke <edge-id>`
-
-Revoke a delegation edge and all edges that depend on it.
-
-```bash
-caracal delegation revoke deledge_def456
-```
-
-Output:
-
-```json
-{"revoked_edges": 3, "affected_sessions": 2}
-```
-
-Revocation is cascading: revoking an edge also revokes all downstream edges that were derived from it. Mandates already issued before revocation remain valid until they expire (up to 15 minutes). Sessions that relied on the revoked edge cannot exchange for new mandates.
-
----
-
-## Common workflows
-
-**Investigate an agent that's behaving unexpectedly:**
-
-```bash
-# Find the agent session
-caracal agent list --json | jq '.[] | select(.status == "active")' 
-
-# Inspect its children
-caracal agent tree agentsess_abc123
-
-# Check what authority it has delegated
-caracal delegation outbound agentsess_abc123
-```
-
-**Emergency: revoke all authority for a compromised session:**
-
-```bash
-# Terminate the session (cascades to all children)
-caracal agent terminate agentsess_abc123
-
-# Revoke all outbound edges explicitly
-caracal delegation outbound agentsess_abc123 --json | \
-  jq -r '.[].id' | \
-  xargs -I{} caracal delegation revoke {}
-```
-
-**Audit a delegation chain end-to-end:**
-
-```bash
-# Get the edge ID from a token's delegationEdgeId claim or from outbound edges
-caracal delegation traverse deledge_def456
-```
+Agent and delegation identifiers also appear in audit events. Open the matching audit record when you need the policy decision, requested resource, provider mode, and diagnostics that caused an allow or deny.
