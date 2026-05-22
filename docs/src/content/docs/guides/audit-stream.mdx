@@ -1,10 +1,10 @@
 ---
 title: Tail and Query the Audit Stream
-description: Stream live audit events from the terminal interface, filter by decision or event type, and inspect full diagnostics for a specific request ID.
+description: Stream live audit events from the terminal management interface, filter by decision or event type, and inspect full diagnostics for a specific request ID.
 pageType: workflow
 ---
 
-Every OPA evaluation — allow and deny — is recorded in the audit log. The `caracal audit tail` command streams live events from the database. The `caracal explain` command shows the full diagnostics for a single request ID: which policies determined the decision, what diagnostics were returned, and what the full input object looked like.
+Every OPA evaluation — allow and deny — is recorded in the audit log. The the terminal management interface Audit view command streams live events from the database. The `the terminal management interface` command shows the full diagnostics for a single request ID: which policies determined the decision, what diagnostics were returned, and what the full input object looked like.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ Every OPA evaluation — allow and deny — is recorded in the audit log. The `c
 ## Stream live events
 
 ```bash
-caracal audit tail
+the terminal management interface Audit view
 ```
 
 Default output is a human-readable table. Events appear in near real time as token exchanges complete.
@@ -22,50 +22,50 @@ Default output is a human-readable table. Events appear in near real time as tok
 ### Output as JSON
 
 ```bash
-caracal audit tail --json
+the terminal management interface Audit view
 ```
 
 Each line is a JSON object. Pipe to `jq` for field extraction:
 
 ```bash
-caracal audit tail --json | jq '{id, decision, event_type, occurred_at}'
+the terminal management interface Audit view
 ```
 
 ### Filter by decision
 
 ```bash
 # Only denied exchanges
-caracal audit tail --decision deny
+the terminal management interface Audit view
 
 # Only allowed exchanges
-caracal audit tail --decision allow
+the terminal management interface Audit view
 ```
 
 ### Filter by event type
 
 ```bash
 # Only token exchange events
-caracal audit tail --event-type token_exchange
+the terminal management interface Audit view
 
 # Step-up related events
-caracal audit tail --event-type challenge_invalid
-caracal audit tail --event-type challenge_cooldown
+the terminal management interface Audit view
+the terminal management interface Audit view
 ```
 
 ### Filter by zone
 
 ```bash
-caracal audit tail --zone zone-abc123
+the terminal management interface Audit view
 ```
 
 ### Filter by time range
 
 ```bash
 # Events since a specific timestamp (ISO 8601)
-caracal audit tail --since 2026-05-11T08:00:00Z
+the terminal management interface Audit view
 
 # Events within a window
-caracal audit tail \
+the terminal management interface Audit view
   --since 2026-05-11T08:00:00Z \
   --until 2026-05-11T09:00:00Z
 ```
@@ -74,7 +74,7 @@ caracal audit tail \
 
 ```bash
 # Last 50 events (default: 100)
-caracal audit tail --limit 50
+the terminal management interface Audit view
 ```
 
 ### Filter by request ID
@@ -82,7 +82,7 @@ caracal audit tail --limit 50
 Every token exchange carries a `request_id` in the response and in the mandate's claim set. Correlate a specific exchange:
 
 ```bash
-caracal audit tail --request-id req-abc123
+the terminal management interface Audit view
 ```
 
 ## Inspect full diagnostics for a request
@@ -90,10 +90,7 @@ caracal audit tail --request-id req-abc123
 `explain` shows the complete audit record for one request: the principal, resource, decision, determining policies, policy-returned diagnostics, and metadata:
 
 ```bash
-caracal explain req-abc123
-```
-
-Example output:
+Open the terminal management interface and follow the matching view.
 
 ```
 Request:  req-abc123
@@ -117,7 +114,7 @@ Metadata:
 As JSON:
 
 ```bash
-caracal explain req-abc123 --json
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Audit event fields
@@ -142,35 +139,35 @@ caracal explain req-abc123 --json
 ### Find all denies for a specific application
 
 ```bash
-caracal audit tail --decision deny --json \
+the terminal management interface Audit view
   | jq 'select(.metadata.principal_id == "app-abc123")'
 ```
 
 ### Find exchanges that triggered step-up
 
 ```bash
-caracal audit tail --decision deny --json \
+the terminal management interface Audit view
   | jq 'select(.diagnostics[]?.step_up_required != null)'
 ```
 
 ### Check which policy version is making decisions
 
 ```bash
-caracal audit tail --limit 10 --json \
+the terminal management interface Audit view
   | jq '{policy_set_version_id, decision, determining_policies}'
 ```
 
 ### Find JTI collision events (replay attempts)
 
 ```bash
-caracal audit tail --event-type jti_collision --json
+the terminal management interface Audit view
 ```
 
 ## Audit chain integrity
 
 The audit log is HMAC-chained. Each event includes a `chain_hmac` that links it to the previous event. Tamper detection runs at Audit service startup and hourly thereafter. Any detected break is recorded in `audit_ingest_alerts`.
 
-The terminal interface does not expose chain validation directly. To verify the chain, query `audit_ingest_alerts` via the Audit service's API or the database directly.
+The terminal management interface does not expose chain validation directly. To verify the chain, query `audit_ingest_alerts` via the Audit service's API or the database directly.
 
 ## What to read next
 

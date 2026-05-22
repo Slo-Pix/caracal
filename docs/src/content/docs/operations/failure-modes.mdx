@@ -12,7 +12,7 @@ This matrix gives operators a direct path from symptom to safe recovery. It comp
 | --- | --- | --- | --- | --- |
 | STS unavailable | `caracal status --ready`, Gateway 502/504, STS `/ready` | New token exchanges fail; existing upstream calls may fail at Gateway exchange | Restore STS replicas, check Postgres/Redis reachability, confirm STS audit replay is ready | `the terminal management interface`; STS `/ready` 200; Gateway STS exchange errors stop increasing |
 | OPA compile failure | `caracal_sts_opa_compile_errors_total`, STS logs, policy activation history | Affected policy loads fail closed or keep last valid bundle depending on load path | Roll back to the last known-good policy-set version; validate policy source; reactivate | `policy-set simulate`; STS compile errors stop increasing; denied requests match expected policy |
-| No active policy set | STS deny audit, policy-set list shows no `active_version_id` | Token exchanges for that zone deny by design | Activate a validated baseline policy set | `the terminal management interface list`; successful allow/deny fixture exchanges |
+Open the terminal management interface and follow the matching view.
 | Gateway binding missing | `caracal_gateway_denials_binding_total`, Gateway 403 | Protected route denies before upstream dispatch | Create or correct resource binding and Gateway application; reload Gateway if required | Gateway `/ready`; denial counter stops increasing for expected route |
 | Redis memory full or unavailable | Redis alerts, service `/ready` failures, stream publish errors | Revocation, audit, outbox, and policy invalidation may lag or fail | Increase Redis memory, remove pressure safely, restore connectivity; do not flush streams unless restoring from an approved backup plan | API/STS/Gateway/Audit `/ready`; stream lag returns to normal |
 | Audit DLQ growth | `caracal_audit_dlq_size`, `caracal_audit_dlq_oldest_age_seconds` | Audit evidence delayed; events in DLQ require triage before replay | Inspect DLQ reason, fix producer HMAC/schema/storage issue, replay through approved tooling | DLQ size returns to zero; audit inserts increase; tamper metrics stay flat |
@@ -24,11 +24,11 @@ This matrix gives operators a direct path from symptom to safe recovery. It comp
 ## Diagnostic ladder
 
 1. Run `caracal status --ready` for local or evaluation stacks.
-2. Run `the terminal management interface --json` and keep the JSON output with the incident record.
+2. Run the terminal management interface Doctor view and keep the JSON output with the incident record.
 3. Check Prometheus alerts and service `/metrics` for the component listed in the matrix.
-4. Use `the terminal management interface tail --request-id <id>` and `the terminal management interface <request-id>` for request-specific denials.
-5. Use `the terminal management interface <request-id> --flow` when delegation, Gateway routing, or provider brokering makes the authority path hard to see.
-6. Use `the terminal management interface inspect <jwt>` to compare token `zone_id`, `target`, `scope`, session, delegation, expiry, key ID, and JTI with the audit event.
+4. Use the terminal management interface Audit view and the terminal management interface audit detail view for request-specific denials.
+5. Use the terminal management interface audit detail view when delegation, Gateway routing, or provider brokering makes the authority path hard to see.
+Open the terminal management interface and follow the matching view.
 7. Apply the smallest safe recovery, then verify through readiness, metrics, and one known allow/deny request.
 
 ## Unsafe actions

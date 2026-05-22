@@ -21,24 +21,24 @@ If delegation is involved, a delegated permission sits between the source run an
 | Question | Command | What it answers |
 | --- | --- | --- |
 | Is the stack ready? | `caracal status --ready` | Which service is not ready and the structured reason. |
-| Are dependencies and metrics healthy? | `the terminal management interface --json` | API auth, zone selection, resources, policy sets, grants, audit queryability, readiness, and metric summaries. |
-| What happened to one request? | `the terminal management interface <request_id>` | Policy decision, authority path, diagnostics, metadata, and supporting policy version. |
-| Can I visualize the authority path? | `the terminal management interface <request_id> --flow` | Mermaid flowchart for agent app, session, run, delegation, policy decision, resource, provider, and audit event. |
-| What does this token claim? | `the terminal management interface inspect <jwt>` | Unverified local decode of issuer, subject, zone, session, resource, scopes, expiry, algorithm, key ID, and JTI. |
-| Would this policy version activate safely? | `the terminal management interface simulate <set> --version <version> --input-file input.json` | Dry-run policy-set validation and optional runtime OPA decision without mutating the active set. |
+| Are dependencies and metrics healthy? | the terminal management interface Doctor view | API auth, zone selection, resources, policy sets, grants, audit queryability, readiness, and metric summaries. |
+| What happened to one request? | the terminal management interface audit detail view | Policy decision, authority path, diagnostics, metadata, and supporting policy version. |
+| Can I visualize the authority path? | the terminal management interface audit detail view | Mermaid flowchart for agent app, session, run, delegation, policy decision, resource, provider, and audit event. |
+Open the terminal management interface and follow the matching view.
+Open the terminal management interface and follow the matching view.
 
 ## Trace a denied request
 
 1. Find the request:
 
 ```bash
-the terminal management interface tail --decision deny --limit 50
+the terminal management interface Audit view
 ```
 
 2. Trace the decision:
 
 ```bash
-the terminal management interface req_abc123
+Use the terminal management interface audit detail view for the request.
 ```
 
 Use `--json` when attaching the full audit detail to an incident or automation workflow. The output includes the request ID, zone, decision, diagnostics, redacted metadata, and the audit events that support the answer.
@@ -46,7 +46,7 @@ Use `--json` when attaching the full audit detail to an incident or automation w
 3. Render the flow when the path is not obvious:
 
 ```bash
-the terminal management interface req_abc123 --flow > req_abc123.mmd
+Use the terminal management interface audit detail view for the request.
 ```
 
 The Mermaid graph is safe to attach to an incident ticket because it contains identifiers and decision metadata, not provider secrets or request bodies.
@@ -54,7 +54,7 @@ The Mermaid graph is safe to attach to an incident ticket because it contains id
 4. Decode the token if the failure reached a resource boundary:
 
 ```bash
-the terminal management interface inspect --file token.jwt
+Open the terminal management interface and follow the matching view.
 ```
 
 The inspection is deliberately marked `not_verified`; it decodes claims for triage but does not prove signature validity. Use it to compare `zone_id`, `target`, `scope`, `sid`, `agent_session_id`, `delegation_edge_id`, `exp`, `kid`, and `jti` against the audit event.
@@ -66,7 +66,7 @@ cat > input.json <<'JSON'
 {"schema_version":"2026-05-20","principal":{"zone_id":"zone_prod","id":"app_payments_agent"},"resource":{"identifier":"resource://payments","scopes":["payments:submit"]},"context":{"requested_scopes":["payments:submit"]}}
 JSON
 
-the terminal management interface simulate pset_prod \
+Open the terminal management interface and follow the matching view.
   --version psetv_candidate \
   --input-file input.json
 ```
@@ -78,10 +78,10 @@ Policy simulation is the dry-run path for policy rollouts. It validates the vers
 | Component | Owns | Start with | If unhealthy |
 | --- | --- | --- | --- |
 | API | Zones, apps, resources, providers, grants, policy objects, admin audit | `the terminal management interface`, API `/ready` | Check Postgres reachability, Redis reachability, admin token, zone selector, and validation body. |
-| STS | Token exchange, OPA evaluation, mandate signing, authorization audit | `the terminal management interface <request_id>`, STS `/ready`, `caracal_sts_opa_*` metrics | Check active policy set, policy compile errors, runtime OPA diagnostics, signing key/JWKS validity, Redis replay state, and audit replay health. |
-| Gateway | Token verification, replay/revocation checks, route lookup, provider brokering, action-result audit | Gateway `/ready`, `caracal_gateway_*` metrics, `the terminal management interface <request_id>` | Check resource upstream URL, Gateway application ID, provider grant, `target` claim, replay counters, revocation cache, STS reachability, and upstream errors. |
-| Coordinator | Agent runs, lifecycle state, delegation graph, outbox events | Coordinator `/ready`, `GET /stats`, `the terminal management interface get`, `the terminal management interface traverse` | Check Postgres, Redis, outbox dead/pending counts, session TTL, delegation source/target, and graph epoch. |
-| Audit | Event ingestion, tamper evidence, export, retention | `the terminal management interface tail`, Audit `/ready`, `caracal_audit_*` metrics | Check stream lag, DLQ size, HMAC failures, tamper counters, Postgres reachability, Redis pending entries, and object-store export errors. |
+| STS | Token exchange, OPA evaluation, mandate signing, authorization audit | the terminal management interface audit detail view, STS `/ready`, `caracal_sts_opa_*` metrics | Check active policy set, policy compile errors, runtime OPA diagnostics, signing key/JWKS validity, Redis replay state, and audit replay health. |
+| Gateway | Token verification, replay/revocation checks, route lookup, provider brokering, action-result audit | Gateway `/ready`, `caracal_gateway_*` metrics, the terminal management interface audit detail view | Check resource upstream URL, Gateway application ID, provider grant, `target` claim, replay counters, revocation cache, STS reachability, and upstream errors. |
+Open the terminal management interface and follow the matching view.
+| Audit | Event ingestion, tamper evidence, export, retention | the terminal management interface Audit view, Audit `/ready`, `caracal_audit_*` metrics | Check stream lag, DLQ size, HMAC failures, tamper counters, Postgres reachability, Redis pending entries, and object-store export errors. |
 | Redis | Streams, revocation propagation, replay state, invalidation | Service readiness, Redis `XINFO GROUPS` | Restore connectivity and memory headroom; do not flush streams without an approved replay or backup plan. |
 | PostgreSQL | Durable control-plane and audit state | Service readiness, database pool alerts | Resolve connection exhaustion, slow queries, migration state, and storage pressure. |
 
@@ -103,14 +103,14 @@ Use this checklist to prove where authority stopped:
 
 | Step | Evidence |
 | --- | --- |
-| Agent app exists | `the terminal management interface get <id>` or `application_id` in audit metadata |
-| Agent run exists and is active | `the terminal management interface get <agent_session_id>` or Coordinator stats |
-| Delegated permission is usable by the receiver | `the terminal management interface traverse <agent_session_id>` and matching `delegation_edge_id` |
-| Policy allowed the resource | `the terminal management interface <request_id>` shows the decision, event status, authority metadata, diagnostics, and determining policies in JSON output |
-| Mandate matches the intended resource | `the terminal management interface inspect` shows expected `target`, `scope`, `zone_id`, and expiry |
+Open the terminal management interface and follow the matching view.
+Open the terminal management interface and follow the matching view.
+Open the terminal management interface and follow the matching view.
+| Policy allowed the resource | the terminal management interface audit detail view shows the decision, event status, authority metadata, diagnostics, and determining policies in JSON output |
+Open the terminal management interface and follow the matching view.
 | Gateway can route the resource | Resource has `upstream_url` and `gateway_application_id`; Gateway `/ready` is 200 |
 | Provider credential stayed inside Gateway | Audit metadata shows provider and grant identifiers; token inspection does not show provider-native credentials |
-| Audit is durable | `the terminal management interface tail --request-id <id>` returns the decision and any action-result event |
+| Audit is durable | the terminal management interface Audit view returns the decision and any action-result event |
 
 ## What not to infer
 

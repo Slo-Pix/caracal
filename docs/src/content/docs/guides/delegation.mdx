@@ -1,6 +1,6 @@
 ---
 title: Implement Multi-Agent Delegation
-description: Open child agent sessions, attach typed constraints, traverse the delegation graph, and trigger cascade revocation using the SDK and terminal interface.
+description: Open child agent sessions, attach typed constraints, traverse the delegation graph, and trigger cascade revocation using the SDK and terminal management interface.
 pageType: workflow
 ---
 
@@ -157,25 +157,25 @@ err = client.Spawn(ctx, func(ctx context.Context) error {
 
 The STS validates all constraints on each exchange. A constraint violation fails the exchange before OPA is evaluated.
 
-## Read the delegation graph from the terminal interface
+## Read the delegation graph from the terminal management interface
 
 Inspect active sessions and their delegation edges:
 
 ```bash
 # List all active agent sessions in the zone
-caracal agent list --json
+Open the terminal management interface and follow the matching view.
 
 # Show the child sessions of a specific session
-caracal agent tree sess-abc123
+the terminal management interface tree sess-abc123
 
 # Show inbound edges (authority flowing IN to the session)
-caracal delegation inbound sess-abc123
+Open the terminal management interface and follow the matching view.
 
 # Show outbound edges (authority flowing OUT from the session)
-caracal delegation outbound sess-abc123
+Open the terminal management interface and follow the matching view.
 
 # Walk the full delegation chain from a specific edge
-caracal delegation traverse edge-def456
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Revoke a delegation edge
@@ -183,7 +183,7 @@ caracal delegation traverse edge-def456
 Revoking an edge cascades forward through the entire subgraph. All sessions that received authority through the revoked edge are terminated:
 
 ```bash
-caracal delegation revoke edge-def456
+Open the terminal management interface and follow the matching view.
 ```
 
 The Coordinator runs the cascade revocation CTE and publishes a `caracal.sessions.revoke` event for every affected session. The Gateway blocks requests from affected sessions within seconds.
@@ -191,7 +191,7 @@ The Coordinator runs the cascade revocation CTE and publishes a `caracal.session
 Terminate a specific agent session and all its descendants:
 
 ```bash
-caracal agent terminate sess-abc123
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Suspend and resume
@@ -199,8 +199,8 @@ caracal agent terminate sess-abc123
 Suspension affects the entire subtree. Active mandates for suspended sessions are still valid until their 15-minute TTL expires, but new exchanges are blocked:
 
 ```bash
-caracal agent suspend sess-abc123   # Block new exchanges for entire subtree
-caracal agent resume sess-abc123    # Re-enable the subtree
+Open the terminal management interface and follow the matching view.
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Verify a mandate includes the expected chain

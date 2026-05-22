@@ -14,7 +14,7 @@ A grant is the control-plane record that binds a principal (application or user)
 ## Create a grant
 
 ```bash
-caracal grant create \
+Open the terminal management interface and follow the matching view.
   --app app-abc123 \
   --resource res-def456 \
   --scopes "payment:read,payment:submit"
@@ -34,7 +34,7 @@ The `--app` flag takes an application ID. The grant authorizes that application 
 ### User grant
 
 ```bash
-caracal grant create \
+Open the terminal management interface and follow the matching view.
   --app app-abc123 \
   --user user-xyz789 \
   --resource res-def456 \
@@ -47,22 +47,22 @@ A user grant restricts the grant to exchanges where the subject matches `--user`
 
 ```bash
 # All grants in the zone
-caracal grant list
+Open the terminal management interface and follow the matching view.
 
 # As JSON (pipe to jq for filtering)
-caracal grant list --json | jq '.[] | select(.resource_id == "res-def456")'
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Inspect a grant
 
 ```bash
-caracal grant get grant-ghi789
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Revoke a grant
 
 ```bash
-caracal grant revoke grant-ghi789
+Open the terminal management interface and follow the matching view.
 ```
 
 Revoking a grant does not immediately terminate active sessions or revoke already-issued mandates. The 15-minute resource TTL on issued mandates means the effect fully propagates within that window. Future token exchanges fail at policy evaluation once the grant is gone.
@@ -96,14 +96,14 @@ caracal invitation revoke inv-mno345
 After issuing a grant, verify that an exchange succeeds with the application credentials in `caracal.toml`:
 
 ```bash
-caracal credential read resource://payments | caracal credential inspect -
+Open the terminal management interface and follow the matching view.
 ```
 
 If the exchange fails, check whether:
 
-1. The grant exists and covers the requested scopes: `caracal grant get <id>`
-2. The active policy allows the exchange: `caracal audit tail --limit 5 --json`
-3. The policy set is active: `caracal policy-set list`
+Open the terminal management interface and follow the matching view.
+2. The active policy allows the exchange: the terminal management interface Audit view
+Open the terminal management interface and follow the matching view.
 
 ## What to read next
 

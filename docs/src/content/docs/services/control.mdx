@@ -136,11 +136,11 @@ There is no `control:invoke` blanket scope. A token that needs both reads and wr
 
 The Runtime and Terminal consume the same `@caracalai/engine` package the Control service does:
 
-- terminal interface commands resolve descriptors from the engine catalog and call the engine's helpers directly.
+- terminal management interface commands resolve descriptors from the engine catalog and call the engine's helpers directly.
 - Terminal views call the same helpers from menu actions.
-- The authenticated interactive `caracal-terminal control ...` lifecycle flow and the Terminal Control menu use the same engine lifecycle helpers, so mounted state, enablement state, endpoint health, and cleanup behavior stay synchronized.
+- The authenticated interactive `caracal-terminal ...` lifecycle flow and the Terminal Control menu use the same engine lifecycle helpers, so mounted state, enablement state, endpoint health, and cleanup behavior stay synchronized.
 
-The Control service does not call the terminal interface binary or shell out. It calls `engine.dispatch` exactly the way runtime/terminal do — with a different `Principal`.
+The Control service does not call the terminal management interface binary or shell out. It calls `engine.dispatch` exactly the way runtime/terminal do — with a different `Principal`.
 
 **Terminal isolation.** The Terminal is a human-only surface. `apps/terminal/src/index.ts` refuses to start unless:
 
@@ -151,7 +151,7 @@ The Control service does not call the terminal interface binary or shell out. It
 
 Piping stdin to the Terminal, running it under `CI=true`, or spawning it via `child_process.fork` exits non-zero with an isolation error. Automation must use the Control API (or the SDK built on top of it). There is no `--script` or `--input-file` flag.
 
-**Control management access.** Lifecycle actions are accepted only from a controlling terminal with the local managed admin secret. terminal interface lifecycle changes require explicit typed confirmation, and Terminal lifecycle changes require confirmation in the Control menu. Thin scripts, direct Docker profile use, and non-interactive process execution are not valid Control management paths.
+**Control management access.** Lifecycle actions are accepted only from a controlling terminal with the local managed admin secret. terminal management interface lifecycle changes require explicit typed confirmation, and Terminal lifecycle changes require confirmation in the Control menu. Thin scripts, direct Docker profile use, and non-interactive process execution are not valid Control management paths.
 
 **Terminal control section.** The control-management menu entry is always visible. Operators can mount the runtime, enable or disable the endpoint, inspect lifecycle status, unmount long-term runtime components, and manage Control credentials without leaving the Terminal.
 
@@ -168,11 +168,11 @@ The base API, STS, Gateway, Audit, Coordinator, Redis, and Postgres services con
 
 | Interface | Action | Result |
 | --- | --- | --- |
-| terminal interface | Interactive `control mount` | Loads the Control runtime with the endpoint gate closed |
-| terminal interface | Interactive `control enable` | Opens the endpoint gate for authenticated automation |
-| terminal interface | Interactive `control disable` | Closes the endpoint gate while leaving the runtime loaded |
-| terminal interface | Interactive `control unmount` | Removes the Control runtime and clears lifecycle state |
-| terminal interface | Interactive `control status` | Shows mounted state, enabled state, endpoint, health, lifecycle, and optimization details |
+| terminal management interface | Interactive `control mount` | Loads the Control runtime with the endpoint gate closed |
+| terminal management interface | Interactive `control enable` | Opens the endpoint gate for authenticated automation |
+| terminal management interface | Interactive `control disable` | Closes the endpoint gate while leaving the runtime loaded |
+| terminal management interface | Interactive `control unmount` | Removes the Control runtime and clears lifecycle state |
+| terminal management interface | Interactive `control status` | Shows mounted state, enabled state, endpoint, health, lifecycle, and optimization details |
 | Terminal | Control → mount / enable / disable / unmount / status | Performs the same lifecycle actions through stable structured views |
 
 `caracal up` includes the Control runtime only when the engine-managed Control state requires it. A mounted-but-disabled runtime stays loaded and returns a disabled response on invoke/readiness while the gate is closed. Disabled or unmounted users do not need to know or operate Docker profiles directly.
@@ -200,15 +200,15 @@ The service refuses to start if any required variable is missing for the active 
 
 ## Operations
 
-**Mount.** Use the authenticated interactive terminal interface lifecycle flow or Terminal → Control → mount. The engine loads the optional runtime, records mounted state, and starts Control with the endpoint gate closed.
+**Mount.** Use the authenticated interactive terminal management interface lifecycle flow or Terminal → Control → mount. The engine loads the optional runtime, records mounted state, and starts Control with the endpoint gate closed.
 
-**Enable.** Use the authenticated interactive terminal interface lifecycle flow or Terminal → Control → enable. The engine opens the local gate file for the mounted runtime and records enabled state under the Caracal runtime home.
+**Enable.** Use the authenticated interactive terminal management interface lifecycle flow or Terminal → Control → enable. The engine opens the local gate file for the mounted runtime and records enabled state under the Caracal runtime home.
 
-**Status.** Use the authenticated interactive terminal interface lifecycle flow or Terminal → Control → status. The result includes endpoint URL, health, lifecycle, and cleanup state. Automation should query the Control API after an operator enables it.
+**Status.** Use the authenticated interactive terminal management interface lifecycle flow or Terminal → Control → status. The result includes endpoint URL, health, lifecycle, and cleanup state. Automation should query the Control API after an operator enables it.
 
-**Disable.** Use the authenticated interactive terminal interface lifecycle flow or Terminal → Control → disable. The engine closes the local gate file while keeping the mounted Control runtime loaded for fast re-enable.
+**Disable.** Use the authenticated interactive terminal management interface lifecycle flow or Terminal → Control → disable. The engine closes the local gate file while keeping the mounted Control runtime loaded for fast re-enable.
 
-**Unmount.** Use the authenticated interactive terminal interface lifecycle flow or Terminal → Control → unmount. The engine removes the Control container and clears persisted lifecycle state so future stack starts do not include Control.
+**Unmount.** Use the authenticated interactive terminal management interface lifecycle flow or Terminal → Control → unmount. The engine removes the Control container and clears persisted lifecycle state so future stack starts do not include Control.
 
 **Health.** `GET /health` always returns `200`. Use for liveness probes.
 

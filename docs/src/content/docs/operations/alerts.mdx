@@ -29,7 +29,7 @@ increase(caracal_sts_opa_compile_errors_total[5m]) > 0
 ```
 
 - Severity: `critical`.
-- First action: `the terminal management interface list` and roll back to the last known-good version.
+Open the terminal management interface and follow the matching view.
 - See [Policy Deployment Runbook](./policy-deployment/).
 
 ### STS policy bundle stale
@@ -52,7 +52,7 @@ increase(caracal_sts_opa_eval_errors_total[5m]) > 0
 ```
 
 - Severity: `warning`.
-- First action: `the terminal management interface tail --decision deny --limit 50` then `the terminal management interface <request-id>`.
+- First action: the terminal management interface Audit view then the terminal management interface audit detail view.
 
 ### Gateway denial spike
 

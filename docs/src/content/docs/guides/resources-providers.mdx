@@ -55,7 +55,7 @@ Do not place user IDs, request IDs, secrets, or one-off parameters in scopes. Us
 ## Register a resource
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "resource://inventory" \
   --scopes "inventory:read,inventory:write,inventory:admin" \
   --name "Inventory Service"
@@ -66,7 +66,7 @@ The `--identifier` value is the tool/provider resource name agents request acces
 To include an upstream URL for Gateway routing:
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "resource://inventory" \
   --scopes "inventory:read,inventory:write" \
   --name "Inventory Service" \
@@ -92,17 +92,17 @@ The Gateway uses the upstream URL to forward requests after verifying the Caraca
 
 ```bash
 # List all resources in the zone
-the terminal management interface list
+Open the terminal management interface and follow the matching view.
 
 # Get a specific resource
-the terminal management interface get res-abc123
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Update a resource
 
 ```bash
 # Add a scope and update the upstream URL
-the terminal management interface patch res-abc123 \
+Open the terminal management interface and follow the matching view.
   --scopes "inventory:read,inventory:write,inventory:export" \
   --upstream-url "http://inventory-v2:8080"
 ```
@@ -126,7 +126,7 @@ When the Gateway brokers a provider credential, action audit records the resourc
 ### API key provider
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "provider://inventory-apikey" \
   --name "Inventory API Key" \
   --kind apikey \
@@ -150,7 +150,7 @@ The `api_key` field matches the credential encryption regex (`/(secret|password|
 ### OAuth2 provider
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "provider://payments-oauth" \
   --name "Payments OAuth2" \
   --kind oauth2 \
@@ -173,7 +173,7 @@ the terminal management interface create \
 ### OIDC provider
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "provider://sso-oidc" \
   --kind oidc \
   --config @oidc-config.json
@@ -195,7 +195,7 @@ the terminal management interface create \
 The workload provider kind records metadata for mTLS or workload identity federation (e.g., AWS IAM roles for service accounts). The current OSS STS/Gateway path does not mint workload assertions from this registration; use it for inventory and future connector integration, not for automatic Gateway credential substitution.
 
 ```bash
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "provider://aws-workload" \
   --kind workload \
   --config @workload-config.json
@@ -206,7 +206,7 @@ the terminal management interface create \
 After creating the provider, attach it to the resource:
 
 ```bash
-the terminal management interface patch res-abc123 \
+Open the terminal management interface and follow the matching view.
   --provider prov-def456
 ```
 
@@ -216,7 +216,7 @@ Or set it at resource creation time with `--provider prov-def456`.
 
 ```bash
 # 1. Create the OAuth2 provider
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "provider://payments-oauth" \
   --name "Payments OAuth2" \
   --kind oauth2 \
@@ -224,7 +224,7 @@ the terminal management interface create \
 # → ID: prov-abc123
 
 # 2. Create the resource
-the terminal management interface create \
+Open the terminal management interface and follow the matching view.
   --identifier "resource://payments" \
   --scopes "payment:read,payment:submit,payment:void" \
   --name "Payments API" \
@@ -234,14 +234,14 @@ the terminal management interface create \
 # → ID: res-def456
 
 # 3. Verify
-the terminal management interface get res-def456
+Open the terminal management interface and follow the matching view.
 ```
 
 ## Delete a resource or provider
 
 ```bash
-the terminal management interface delete res-def456
-the terminal management interface delete prov-abc123
+Open the terminal management interface and follow the matching view.
+Open the terminal management interface and follow the matching view.
 ```
 
 Deleting a resource that has active grants or is referenced by running agent sessions does not revoke those sessions immediately. Policy evaluation will deny further exchanges once the resource is gone.

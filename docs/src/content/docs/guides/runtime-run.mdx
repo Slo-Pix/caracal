@@ -67,10 +67,10 @@ The injected token is an ES256-signed Caracal mandate scoped to the resource dec
 
 ## One-shot credential without running a subprocess
 
-`the terminal management interface read` prints a short-lived token for a resource to stdout. Use it in scripts that manage token injection themselves:
+Open the terminal management interface and follow the matching view.
 
 ```bash
-TOKEN=$(the terminal management interface read resource://payments)
+Open the terminal management interface and follow the matching view.
 curl -H "Authorization: Bearer $TOKEN" \
      -H "X-Caracal-Resource: resource://payments" \
      http://localhost:8081/status
@@ -142,7 +142,7 @@ The `env` field uses a blocked environment variable name. `caracal run` rejects 
 
 The STS rejected the requested token lifetime.
 
-`caracal run` requests 3600 seconds for application-credential startup. If your policy or service configuration sets a lower cap, reduce that cap intentionally or use `the terminal management interface read` for a 15-minute one-shot token.
+Open the terminal management interface and follow the matching view.
 
 ## Exit codes
 

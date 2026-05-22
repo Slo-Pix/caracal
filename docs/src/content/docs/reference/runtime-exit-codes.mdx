@@ -4,7 +4,7 @@ description: Exit statuses returned by `caracal`, `caracal-terminal`, and `carac
 pageType: reference
 ---
 
-Caracal terminal interface commands use a small exit-status surface: success is `0`, command or API failures are `1`, and wrapper commands may return the status of the process they launched. Use stderr and, where available, `--json` output to distinguish authentication, authorization, validation, not-found, conflict, rate-limit, and server errors.
+Caracal terminal management interface commands use a small exit-status surface: success is `0`, command or API failures are `1`, and wrapper commands may return the status of the process they launched. Use stderr and, where available, `--json` output to distinguish authentication, authorization, validation, not-found, conflict, rate-limit, and server errors.
 
 ## Convention
 
@@ -16,13 +16,13 @@ Caracal terminal interface commands use a small exit-status surface: success is 
 | `<child code>` | `caracal run`, `caracal up`, `caracal down`, and sibling dispatch return the child process or Docker Compose status after the subprocess starts. |
 | `128 + N` | A dispatched sibling process ended because of signal `N`. |
 
-`caracal doctor`, `caracal doctor --ready`, `caracal status`, and `caracal status --ready` exit `0` only when every probe passes. Any failed, down, or unreachable dependency exits `1`.
+`caracal status` and `caracal status --ready` exit `0` only when every probe passes. Any failed, down, or unreachable dependency exits `1`.
 
 ## API error handling
 
 Admin, runtime, and observability commands do not map HTTP statuses to separate exit codes. They exit `1` and print the API error code, HTTP status, remediation hint, and request ID when available.
 
-| HTTP status | Exit status | terminal interface output |
+| HTTP status | Exit status | terminal management interface output |
 | --- | --- | --- |
 | `401` | `1` | Check `CARACAL_ADMIN_TOKEN`, `app_client_secret`, or `CARACAL_COORDINATOR_TOKEN`. |
 | `403` | `1` | Current credentials lack the required scope or zone access. |
@@ -30,18 +30,18 @@ Admin, runtime, and observability commands do not map HTTP statuses to separate 
 | `409` | `1` | Re-fetch the object and retry the operation. |
 | `422` | `1` | Inspect the validation body and correct the submitted fields. |
 | `429` | `1` | Back off and retry; inspect service health if throttling persists. |
-| `5xx` | `1` | Probe readiness with `caracal doctor` and check service logs. |
+| `5xx` | `1` | Probe readiness with `the terminal management interface` and check service logs. |
 
 ## Examples
 
 ```bash
 # Gate a Helm post-install hook on full readiness:
-caracal doctor --ready --json > /tmp/doctor.json || exit 1
+caracal status --ready --json > /tmp/doctor.json || exit 1
 
 # Detect a missing zone in CI:
-if ! caracal zone get prod > /tmp/zone.json 2> /tmp/zone.err; then
+Open the terminal management interface and follow the matching view.
   if grep -q 'HTTP 404' /tmp/zone.err; then
-    caracal zone create --name prod
+Open the terminal management interface and follow the matching view.
   else
     cat /tmp/zone.err >&2
     exit 1
@@ -60,4 +60,4 @@ fi
 ## Notes
 
 - Usage errors and missing `caracal.toml` both exit `1`; the usage or configuration message on stderr identifies the cause.
-- `caracal credential inspect` is local-only and exits `1` for invalid input.
+Open the terminal management interface and follow the matching view.
