@@ -164,7 +164,7 @@ caracal purge                         # interactive cleanup (containers, volumes
 
 ### Enterprise evaluation
 
-For Kubernetes evaluation, use the reference Helm chart in `infra/helm/caracal`. It keeps Postgres, Redis, ingress, TLS, and secret-manager ownership with the platform team while deploying Caracal services with readiness probes, resource requests/limits, HPA/PDB defaults, NetworkPolicy, and optional ServiceMonitor resources.
+For Kubernetes evaluation and production adaptation, use the reference Helm chart in `infra/helm/caracal`. It keeps Postgres, Redis, ingress, TLS, and secret-manager ownership with the platform team while deploying Caracal services with readiness probes, resource requests/limits, HPA/PDB defaults, NetworkPolicy, persistent STS/Gateway replay storage, and optional ServiceMonitor resources.
 
 ```bash
 helm upgrade --install caracal ./infra/helm/caracal \
@@ -173,7 +173,7 @@ helm upgrade --install caracal ./infra/helm/caracal \
   --set secrets.runtimeSecretName=caracal-runtime
 ```
 
-The chart is a reference deployment for enterprise evaluation and GitOps adaptation, not a replacement for `caracal up`. See [Kubernetes with Helm](docs/src/content/docs/operations/kubernetes-helm.mdx) for the required runtime Secret and operational boundaries.
+The chart is a reference deployment for enterprise evaluation, production adaptation, and GitOps ownership, not a replacement for `caracal up`. See [Kubernetes with Helm](docs/src/content/docs/operations/kubernetes-helm.mdx) for the required runtime Secret and operational boundaries.
 
 <details>
 <summary><strong>CLI</strong></summary>

@@ -257,6 +257,7 @@ export default defineConfig({
             { label: 'Failure Modes and Recovery', link: '/operations/failure-modes/' },
             { label: 'Policy Deployment Runbook', link: '/operations/policy-deployment/' },
             { label: 'Backup and Retention', link: '/operations/backup-retention/' },
+            { label: 'Upgrade Procedure', link: '/operations/upgrade/' },
             { label: 'Incident Response', link: '/operations/incident-response/' },
           ],
         },

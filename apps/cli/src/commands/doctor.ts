@@ -15,6 +15,7 @@ import {
   printTable,
   showHelp,
 } from './shared.ts'
+import { runPreflightChecks } from './preflight.ts'
 
 interface DoctorCheck {
   check: string
@@ -134,6 +135,20 @@ export async function doctorCommand(argv: string[], cfg?: CliConfig): Promise<vo
   const json = flagBool(flags, 'json')
   const extended = flagBool(flags, 'extended')
   const ready = flagBool(flags, 'ready')
+  const preflight = flagBool(flags, 'preflight')
+
+  if (preflight) {
+    const checks = await runPreflightChecks()
+    const allOk = checks.every((c) => c.status === 'ok')
+    if (json) {
+      printJSON(ready ? { ready: allOk, checks } : checks)
+    } else {
+      printTable(checks, ['check', 'status', 'detail'])
+    }
+    if (!allOk) process.exit(1)
+    return
+  }
+
   try {
     const ctx = buildAdminClient(cfg)
     const { client } = ctx
@@ -221,14 +236,16 @@ export async function doctorCommand(argv: string[], cfg?: CliConfig): Promise<vo
 function help(): never {
   return showHelp(
     [
-      'Usage: caracal doctor [--zone <id>] [--extended] [--ready] [--json]',
+      'Usage: caracal doctor [--zone <id>] [--extended] [--ready] [--preflight] [--json]',
       '',
       'Checks control-plane readiness. --extended also probes service readiness and operator metrics.',
+      '--preflight validates env vars, key material, TLS files, and Postgres/Redis reachability without contacting the API.',
       'Exit code is 0 only when every check is ok; otherwise 1. Use --ready in orchestrator gates.',
       '',
       'Flags:',
       '  --zone <id>             Zone selector (or CARACAL_ZONE_ID)',
       '  --extended              Probe API, STS, Gateway, Audit, and Coordinator readiness and metrics',
+      '  --preflight             Validate local config (env, keys, TLS, Postgres/Redis reachability) before deploy',
       '  --ready                 With --json, wrap output as { ready, checks } for machine consumers',
       '  --json                  Emit machine-readable output',
       '  --help, -h              Show this help',
