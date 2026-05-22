@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Local config preflight checks: env vars, key material, TLS files, and Postgres/Redis reachability.
+// Local preflight checks shared by CLI and TUI diagnostics.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
