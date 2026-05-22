@@ -29,6 +29,8 @@ describe('complete', () => {
     const r = complete(registry, '', 0, ctx)
     const names = r.suggestions.map((s) => s.value)
     expect(names).toContain('zone')
+    expect(names).not.toContain('debug')
+    expect(names).not.toContain('manifest')
     expect(names).not.toContain('completion')
   })
   it('prefix-matches command names', () => {

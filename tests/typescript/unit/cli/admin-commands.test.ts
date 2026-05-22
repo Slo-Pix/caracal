@@ -232,33 +232,6 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
     expect(out).not.toContain('Usage: caracal agent')
   })
 
-  it('policy template list prints built-in templates', async () => {
-    const fetchMock = stubFetch((url) => {
-      expect(url).toBe('http://api/v1/policy-templates')
-      return [{ id: 'baseline-scopes', name: 'Baseline Scopes', description: 'Scope checks', content: 'package caracal.authz\nresult := {}' }]
-    })
-    await policyCommand(['template', 'list'])
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const out = stdout.mock.calls.map((c) => c[0]).join('')
-    expect(out).toContain('baseline-scopes')
-    expect(out).toContain('Scope checks')
-  })
-
-  it('policy sample-input prints a local fixture without admin API access', async () => {
-    delete process.env.CARACAL_ADMIN_TOKEN
-
-    await policyCommand(['sample-input', '--resource', 'resource://calendar', '--scopes', 'calendar:read,calendar:write', '--principal', 'user-1', '--zone', 'zone-1'])
-
-    const body = JSON.parse(stdout.mock.calls.map((c) => c[0]).join(''))
-    expect(body).toMatchObject({
-      schema_version: '2026-05-20',
-      principal: { id: 'user-1', zone_id: 'zone-1' },
-      resource: { identifier: 'resource://calendar', scopes: ['calendar:read', 'calendar:write'] },
-      action: { id: 'calendar:read' },
-      context: { requested_scopes: ['calendar:read', 'calendar:write'] },
-    })
-  })
-
   it('policy validate posts Rego to the validation endpoint', async () => {
     stubFetch((url, init) => {
       expect(url).toBe('http://api/v1/policies/validate')
@@ -279,6 +252,15 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
     await policyCommand(['validate', '--content', 'package caracal.authz\nresult := {}', '--schema-version', '2026-05-20'])
 
     expect(JSON.parse(stdout.mock.calls.map((c) => c[0]).join(''))).toMatchObject({ valid: true })
+  })
+
+  it('policy help exposes only production policy verbs', async () => {
+    await expect(policyCommand(['help'])).rejects.toThrow('__exit:0')
+    const out = stdout.mock.calls.map((c) => c[0]).join('')
+    expect(out).toContain('validate')
+    expect(out).toContain('version <id>')
+    expect(out).not.toContain('sample-input')
+    expect(out).not.toContain('template')
   })
 
   it('manifest validate accepts Gateway upstream manifests offline', async () => {
@@ -331,25 +313,6 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
       kind: 'provider-credential-plugin',
       errors: ['execution.credential_exposure must be gateway_only'],
     })
-  })
-
-  it('policy template use creates a policy from template content', async () => {
-    const fetchMock = stubFetch((url, init) => {
-      if (url === 'http://api/v1/policy-templates') {
-        return [{ id: 'baseline-scopes', name: 'Baseline Scopes', description: 'Scope checks', content: 'package caracal.authz\nresult := {}' }]
-      }
-      expect(url).toBe('http://api/v1/zones/z1/policies')
-      expect(init.method).toBe('POST')
-      expect(JSON.parse(String(init.body))).toMatchObject({
-        name: 'Agent Gateway Policy',
-        description: 'Scope checks',
-        content: 'package caracal.authz\nresult := {}',
-      })
-      return { id: 'policy-1', version: { id: 'version-1' } }
-    })
-    await policyCommand(['template', 'use', 'baseline-scopes', '--name', 'Agent Gateway Policy'])
-    expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(stdout.mock.calls.map((c) => c[0]).join('')).toContain('policy-1')
   })
 
   it('doctor reports selected-zone full system diagnostics', async () => {
