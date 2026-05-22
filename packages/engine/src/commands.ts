@@ -335,6 +335,7 @@ export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
         { name: '--flow', summary: 'Render the authority path as Mermaid' },
       ],
     },
+    scopes: { '': 'read' },
   },
 
   {

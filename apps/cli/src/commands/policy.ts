@@ -23,6 +23,9 @@ import {
 
 export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<void> {
   const [verb, ...rest] = argv
+  if (verb === undefined || verb === 'help' || verb === '--help' || verb === '-h') {
+    return policyHelp()
+  }
   const { positional, flags } = parseArgs(rest)
   const json = flagBool(flags, 'json')
 
@@ -84,10 +87,6 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
         printSuccess(`archived ${id}`)
         return
       }
-      case 'help':
-      case '--help':
-      case '-h':
-        return policyHelp()
       default:
         return unknownVerb('policy', verb, policyHelp)
     }
@@ -98,6 +97,9 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
 
 export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise<void> {
   const [verb, ...rest] = argv
+  if (verb === undefined || verb === 'help' || verb === '--help' || verb === '-h') {
+    return policySetHelp()
+  }
   const ctx = buildAdminClient(cfg)
   const { client } = ctx
   const { positional, flags } = parseArgs(rest)
@@ -161,10 +163,6 @@ export async function policySetCommand(argv: string[], cfg?: CliConfig): Promise
         printSuccess(`archived ${id}`)
         return
       }
-      case 'help':
-      case '--help':
-      case '-h':
-        return policySetHelp()
       default:
         return unknownVerb('policy-set', verb, policySetHelp)
     }
