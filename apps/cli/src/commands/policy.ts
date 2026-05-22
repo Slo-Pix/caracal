@@ -3,7 +3,6 @@
 //
 // `caracal policy …` and `caracal policy-set …` admin subcommands.
 
-import { randomBytes } from 'node:crypto'
 import type { CliConfig } from '../config.ts'
 import { printSuccess } from '../style.ts'
 import {
@@ -28,51 +27,6 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
   const json = flagBool(flags, 'json')
 
   try {
-    if (verb === 'sample-input') {
-      const resource = flagString(flags, 'resource')
-      const scopes = flagList(flags, 'scopes')
-      const principal = flagString(flags, 'principal')
-      const zoneId = flagString(flags, 'zone') ?? cfg?.zone_id ?? process.env.CARACAL_ZONE_ID
-      if (!resource || !scopes || scopes.length === 0 || !principal || !zoneId) {
-        return usage('policy sample-input --resource <id> --scopes a,b --principal <subject> --zone <id>')
-      }
-      const sessionId = flagString(flags, 'session') ?? `sid_${randomBytes(16).toString('hex')}`
-      return printJSON({
-        schema_version: '2026-05-20',
-        principal: {
-          type: 'user',
-          id: principal,
-          zone_id: zoneId,
-          credential_type: 'jwt',
-          capabilities: [],
-        },
-        resource: {
-          type: 'http',
-          id: flagString(flags, 'resource-id') ?? resource,
-          identifier: resource,
-          scopes,
-        },
-        action: {
-          id: scopes[0],
-        },
-        session: {
-          id: sessionId,
-        },
-        delegation_edge: null,
-        context: {
-          actor_claims: {
-            sub: principal,
-            zone_id: zoneId,
-            scope: scopes.join(' '),
-          },
-          subject_claims: {},
-          trace_id: randomBytes(16).toString('hex'),
-          session_id: sessionId,
-          challenge_resolved: false,
-          requested_scopes: scopes,
-        },
-      })
-    }
     const ctx = buildAdminClient(cfg)
     const { client } = ctx
     switch (verb) {
@@ -110,39 +64,6 @@ export async function policyCommand(argv: string[], cfg?: CliConfig): Promise<vo
         if (!file && !inline) return usage('policy validate --file <path>|--content <rego> [--schema-version …]')
         const content = readContent(file ? `@${file}` : inline)
         return printJSON(await client.policies.validate(content, flagString(flags, 'schema-version')))
-      }
-      case 'template': {
-        const templateVerb = positional[0]
-        const templateID = positional[1]
-        switch (templateVerb) {
-          case 'list': {
-            const rows = await client.policyTemplates.list()
-            if (json) return printJSON(rows)
-            return printTable(rows, ['id', 'name', 'description'])
-          }
-          case 'get': {
-            if (!templateID) return usage('policy template get <id> [--json]')
-            const template = await client.policyTemplates.get(templateID)
-            if (json) return printJSON(template)
-            process.stdout.write(template.content)
-            if (!template.content.endsWith('\n')) process.stdout.write('\n')
-            return
-          }
-          case 'use': {
-            const zoneId = requireZone(ctx, flags)
-            if (!templateID) return usage('policy template use <id> --name <policy-name> [--zone …]')
-            const template = await client.policyTemplates.get(templateID)
-            const name = flagString(flags, 'name') ?? template.name
-            return printJSON(await client.policies.create(zoneId, {
-              name,
-              content: template.content,
-              description: flagString(flags, 'description') ?? template.description,
-              owner_type: flagString(flags, 'owner-type'),
-            }))
-          }
-          default:
-            return usage('policy template list|get|use [id] [--name …] [--json]')
-        }
       }
       case 'version': {
         const zoneId = requireZone(ctx, flags)
@@ -269,18 +190,6 @@ function policyHelp(): never {
       '  validate                   Validate a Rego policy against the STS contract',
       '    --file <path>|--content <rego>  Policy content (required)',
       '    --schema-version <v>       Policy schema version (default: current)',
-      '  sample-input               Print a policy input fixture for local tests',
-      '    --resource <id>            Resource identifier (required)',
-      '    --scopes a,b               Requested scopes (required)',
-      '    --principal <id>           Principal/user ID (required)',
-      '    --zone <id>                Zone ID (required unless configured)',
-      '    --session <id>             Session ID (default: generated)',
-      '  template list              List built-in policy templates',
-      '  template get <id>          Print a template Rego body',
-      '  template use <id>          Create a policy from a template',
-      '    --name <n>                 Policy name (default: template name)',
-      '    --description <d>          Optional description',
-      '    --owner-type <t>           Owner type',
       '  version <id>               Add a new Rego version to an existing policy',
       '    --file <path>|--content <rego>  New Rego content (required)',
       '    --schema-version <v>       Policy schema version (default: 2026-05-20)',

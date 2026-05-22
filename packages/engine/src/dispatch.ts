@@ -244,6 +244,10 @@ const policyHandler = bySubcommand({
     owner_type: getStr(flags, 'owner-type'),
     shadow: getBool(flags, 'shadow'),
   } as never),
+  validate: ({ flags, ctx }) => ctx.admin.policies.validate(
+    mustStr(flags, 'content'),
+    getStr(flags, 'schema-version'),
+  ),
   version: ({ principal, flags, ctx }) => ctx.admin.policies.addVersion(
     requireZone(principal),
     mustStr(flags, 'id'),
@@ -261,12 +265,36 @@ const policySetHandler = bySubcommand({
     mustStr(flags, 'name'),
     getStr(flags, 'description'),
   ),
+  version: ({ principal, flags, ctx }) => {
+    const versions = getList(flags, 'policy-versions')
+    if (!versions || versions.length === 0) invalid('flag "policy-versions" is required')
+    return ctx.admin.policySets.addVersion(
+      requireZone(principal),
+      mustStr(flags, 'id'),
+      versions.map((policy_version_id) => ({ policy_version_id })),
+    )
+  },
   activate: ({ principal, flags, ctx }) => ctx.admin.policySets.activate(
     requireZone(principal),
     mustStr(flags, 'id'),
-    mustStr(flags, 'version-id'),
-    getStr(flags, 'shadow-version-id'),
+    mustStr(flags, 'version'),
+    getStr(flags, 'shadow'),
   ),
+  simulate: ({ principal, flags, ctx }) => {
+    const rawInput = getStr(flags, 'input')
+    let input: Record<string, unknown> | undefined
+    if (rawInput) {
+      const parsed = JSON.parse(rawInput) as unknown
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) invalid('flag "input" must be a JSON object')
+      input = parsed as Record<string, unknown>
+    }
+    return ctx.admin.policySets.simulate(
+      requireZone(principal),
+      mustStr(flags, 'id'),
+      mustStr(flags, 'version'),
+      input,
+    )
+  },
   delete: ({ principal, flags, ctx }) => ctx.admin.policySets.delete(requireZone(principal), mustStr(flags, 'id')),
 })
 
@@ -279,7 +307,6 @@ const grantHandler = bySubcommand({
     subject_id: getStr(flags, 'user'),
   } as never),
   revoke: ({ principal, flags, ctx }) => ctx.admin.grants.revoke(requireZone(principal), mustStr(flags, 'id')),
-  delete: ({ principal, flags, ctx }) => ctx.admin.grants.revoke(requireZone(principal), mustStr(flags, 'id')),
 })
 
 const sessionHandler = bySubcommand({
@@ -311,7 +338,6 @@ const debugHandler = bySubcommand({
 const agentHandler = bySubcommand({
   list: ({ principal, ctx }) => ctx.admin.agents.list(requireZone(principal)),
   get: ({ principal, flags, ctx }) => ctx.admin.agents.get(requireZone(principal), mustStr(flags, 'id')),
-  children: ({ principal, flags, ctx }) => ctx.admin.agents.children(requireZone(principal), mustStr(flags, 'id')),
   tree: ({ principal, flags, ctx }) => ctx.admin.agents.children(requireZone(principal), mustStr(flags, 'id')),
   suspend: ({ principal, flags, ctx }) => ctx.admin.agents.suspend(requireZone(principal), mustStr(flags, 'id')),
   resume: ({ principal, flags, ctx }) => ctx.admin.agents.resume(requireZone(principal), mustStr(flags, 'id')),
@@ -319,6 +345,7 @@ const agentHandler = bySubcommand({
 })
 
 const delegationHandler = bySubcommand({
+  active: ({ principal, ctx }) => ctx.admin.delegations.active(requireZone(principal)),
   inbound: ({ principal, flags, ctx }) => ctx.admin.delegations.inbound(requireZone(principal), mustStr(flags, 'session-id')),
   outbound: ({ principal, flags, ctx }) => ctx.admin.delegations.outbound(requireZone(principal), mustStr(flags, 'session-id')),
   traverse: ({ principal, flags, ctx }) => ctx.admin.delegations.traverse(requireZone(principal), mustStr(flags, 'id')),

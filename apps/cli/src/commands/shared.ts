@@ -160,7 +160,7 @@ export function fail(err: unknown): never {
     const requestId = extractRequestId(err.body)
     if (requestId) {
       process.stderr.write(`  → request_id: ${requestId}\n`)
-      process.stderr.write(`  → caracal debug request ${requestId}\n`)
+      process.stderr.write(`  → caracal explain ${requestId}\n`)
     }
     if (err.body && typeof err.body === 'object') {
       process.stderr.write(scrubTokens(JSON.stringify(err.body, null, 2)) + '\n')

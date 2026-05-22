@@ -52,8 +52,7 @@ export async function grantCommand(argv: string[], cfg?: CliConfig): Promise<voi
         }
         return printJSON(await client.grants.create(zoneId, { application_id, user_id, resource_id, scopes }))
       }
-      case 'revoke':
-      case 'delete': {
+      case 'revoke': {
         const zoneId = requireZone(ctx, flags)
         const id = positional[0]
         if (!id) return usage('grant revoke <id> [--zone …] [--dry-run]')
@@ -91,7 +90,7 @@ function help(): never {
       '    --user <id>             User/subject ID (required)',
       '    --resource <id>         Resource ID (required)',
       '    --scopes a,b            Comma-separated scopes (required)',
-      '  revoke <id>             Revoke a grant (alias: delete)',
+      '  revoke <id>             Revoke a grant',
       '    --dry-run               Show what would be revoked without doing it',
       '',
       'Flags:',

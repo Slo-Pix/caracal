@@ -62,7 +62,7 @@ export async function credentialReadCommand(resource: string, cfg: CliConfig): P
     process.stderr.write(JSON.stringify({ resource, reason: desc }) + '\n')
     const requestIdMatch = desc.match(/request_id=([\w-]+)/)
     if (requestIdMatch) {
-      process.stderr.write(`  → caracal debug request ${requestIdMatch[1]}\n`)
+      process.stderr.write(`  → caracal explain ${requestIdMatch[1]}\n`)
     }
     process.exit(1)
   }
