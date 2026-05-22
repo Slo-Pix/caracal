@@ -6,7 +6,7 @@ pageType: reference
 
 The Control service is the only network-reachable entry point for management automation. It is a small TypeScript service (`apps/control`) that wraps the same `@caracalai/engine` dispatch the Runtime and Console run in-process. Every surface — human (runtime/console) and machine (Control / SDK) — funnels through one function, so behaviour, validation, audit records, and scope enforcement cannot drift between them.
 
-The service is **unmounted by default** and managed through the runtime shell or terminal. Operators can mount it for long-term availability, enable the endpoint only when automation is needed, disable it for fast logical off, and unmount it when the service will not be used for a while. The engine persists structured lifecycle state and exposes the localhost management endpoint only while Control is enabled.
+The service is **unmounted by default** and managed through the Console. Operators can mount it for long-term availability, enable the endpoint only when automation is needed, disable it for fast logical off, and unmount it when the service will not be used for a while. The engine persists structured lifecycle state and exposes the localhost management endpoint only while Control is enabled.
 
 ---
 
@@ -81,7 +81,7 @@ interface Principal {
 | 8. Emit audit row to `caracal.audit.events` (allow or deny) | `audit.ts` | logged only |
 | 9. Return `{ ok: true, result }` | `handler.ts` | — |
 
-Audit is emitted on **every** terminal state (auth failure, replay, rate limit, dispatch denied, dispatch invalid, dispatch unsupported, allow). The audit row carries `request_id`, `decision`, `subject`, `jti`, `command`, `subcommand`, and `reason`, and — when `AUDIT_HMAC_KEY` is set — an HMAC-SHA256 signature over the canonical JSON payload.
+Audit is emitted on **every** Console state (auth failure, replay, rate limit, dispatch denied, dispatch invalid, dispatch unsupported, allow). The audit row carries `request_id`, `decision`, `subject`, `jti`, `command`, `subcommand`, and `reason`, and — when `AUDIT_HMAC_KEY` is set — an HMAC-SHA256 signature over the canonical JSON payload.
 
 Errors map as:
 
@@ -132,17 +132,17 @@ There is no `control:invoke` blanket scope. A token that needs both reads and wr
 
 ---
 
-## Runtime / terminal relationship
+## Runtime / Console relationship
 
 The Runtime and Console consume the same `@caracalai/engine` package the Control service does:
 
 - Console commands resolve descriptors from the engine catalog and call the engine's helpers directly.
-- Terminal views call the same helpers from menu actions.
+- Console views call the same helpers from menu actions.
 - The authenticated interactive `caracal-console ...` lifecycle flow and the Console Control menu use the same engine lifecycle helpers, so mounted state, enablement state, endpoint health, and cleanup behavior stay synchronized.
 
 The Control service does not call the Console binary or shell out. It calls `engine.dispatch` exactly the way runtime/console do — with a different `Principal`.
 
-**Terminal isolation.** The Console is a human-only surface. `apps/console/src/index.ts` refuses to start unless:
+**Console isolation.** The Console is a human-only surface. `apps/console/src/index.ts` refuses to start unless:
 
 - `process.stdin.isTTY` and `process.stdout.isTTY` are both true,
 - `process.send` is undefined (no IPC channel from a parent),
@@ -151,9 +151,9 @@ The Control service does not call the Console binary or shell out. It calls `eng
 
 Piping stdin to the Console, running it under `CI=true`, or spawning it via `child_process.fork` exits non-zero with an isolation error. Automation must use the Control API (or the SDK built on top of it). There is no `--script` or `--input-file` flag.
 
-**Control management access.** Lifecycle actions are accepted only from a controlling terminal with the local managed admin secret. Console lifecycle changes require explicit typed confirmation, and Terminal lifecycle changes require confirmation in the Control menu. Thin scripts, direct Docker profile use, and non-interactive process execution are not valid Control management paths.
+**Control management access.** Lifecycle actions are accepted only from a controlling Console with the local managed admin secret. Console lifecycle changes require explicit typed confirmation, and Console lifecycle changes require confirmation in the Control menu. Thin scripts, direct Docker profile use, and non-interactive process execution are not valid Control management paths.
 
-**Terminal control section.** The control-management menu entry is always visible. Operators can mount the runtime, enable or disable the endpoint, inspect lifecycle status, unmount long-term runtime components, and manage Control credentials without leaving the Console.
+**Console control section.** The control-management menu entry is always visible. Operators can mount the runtime, enable or disable the endpoint, inspect lifecycle status, unmount long-term runtime components, and manage Control credentials without leaving the Console.
 
 ---
 
@@ -173,7 +173,7 @@ The base API, STS, Gateway, Audit, Coordinator, Redis, and Postgres services con
 | Console | Interactive `control disable` | Closes the endpoint gate while leaving the runtime loaded |
 | Console | Interactive `control unmount` | Removes the Control runtime and clears lifecycle state |
 | Console | Interactive `control status` | Shows mounted state, enabled state, endpoint, health, lifecycle, and optimization details |
-| Terminal | Control → mount / enable / disable / unmount / status | Performs the same lifecycle actions through stable structured views |
+| Console | Control menu → mount / enable / disable / unmount / status | Performs the same lifecycle actions through stable structured views |
 
 `caracal up` includes the Control runtime only when the engine-managed Control state requires it. A mounted-but-disabled runtime stays loaded and returns a disabled response on invoke/readiness while the gate is closed. Disabled or unmounted users do not need to know or operate Docker profiles directly.
 
@@ -200,15 +200,15 @@ The service refuses to start if any required variable is missing for the active 
 
 ## Operations
 
-**Mount.** Use the authenticated interactive Console lifecycle flow or Terminal → Control → mount. The engine loads the optional runtime, records mounted state, and starts Control with the endpoint gate closed.
+**Mount.** Use the authenticated interactive Console lifecycle flow or Console Control menu → mount. The engine loads the optional runtime, records mounted state, and starts Control with the endpoint gate closed.
 
-**Enable.** Use the authenticated interactive Console lifecycle flow or Terminal → Control → enable. The engine opens the local gate file for the mounted runtime and records enabled state under the Caracal runtime home.
+**Enable.** Use the authenticated interactive Console lifecycle flow or Console Control menu → enable. The engine opens the local gate file for the mounted runtime and records enabled state under the Caracal runtime home.
 
-**Status.** Use the authenticated interactive Console lifecycle flow or Terminal → Control → status. The result includes endpoint URL, health, lifecycle, and cleanup state. Automation should query the Control API after an operator enables it.
+**Status.** Use the authenticated interactive Console lifecycle flow or Console Control menu → status. The result includes endpoint URL, health, lifecycle, and cleanup state. Automation should query the Control API after an operator enables it.
 
-**Disable.** Use the authenticated interactive Console lifecycle flow or Terminal → Control → disable. The engine closes the local gate file while keeping the mounted Control runtime loaded for fast re-enable.
+**Disable.** Use the authenticated interactive Console lifecycle flow or Console Control menu → disable. The engine closes the local gate file while keeping the mounted Control runtime loaded for fast re-enable.
 
-**Unmount.** Use the authenticated interactive Console lifecycle flow or Terminal → Control → unmount. The engine removes the Control container and clears persisted lifecycle state so future stack starts do not include Control.
+**Unmount.** Use the authenticated interactive Console lifecycle flow or Console Control menu → unmount. The engine removes the Control container and clears persisted lifecycle state so future stack starts do not include Control.
 
 **Health.** `GET /health` always returns `200`. Use for liveness probes.
 

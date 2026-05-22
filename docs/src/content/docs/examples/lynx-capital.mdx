@@ -4,7 +4,7 @@ description: A FastAPI and LangGraph multi-agent swarm that processes a weekly i
 pageType: workflow
 ---
 
-The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, Terminal, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
+The Lynx Capital example is a complete Python application at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, Console, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
 
 The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads — specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and application-level provider clients across REST, gRPC, MCP, and SSE fixtures.
 
@@ -82,7 +82,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-### Start Caracal through Terminal + control API
+### Start Caracal through Console + control API
 
 Install the released Runtime and Console, then start the Caracal stack:
 
@@ -110,7 +110,7 @@ zone_url = "http://127.0.0.1:8080"
 sts_url = "http://127.0.0.1:8080"
 coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
-zone_id = "<zone id from Terminal>"
+zone_id = "<zone id from Console>"
 application_id = "<control key client_id>"
 app_client_secret = "<control key client_secret>"
 

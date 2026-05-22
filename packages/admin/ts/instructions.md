@@ -10,7 +10,7 @@
 ## Required
 - Must use the platform `fetch` API.
 - Must surface non-2xx responses as `AdminApiError` with status, code, and body.
-- Must keep exported types stable for app, terminal, script, and test consumers.
+- Must keep exported types stable for app, Console, script, and test consumers.
 - Must remain framework-agnostic.
 
 ## Forbidden
@@ -20,4 +20,3 @@
 
 ## Validation
 - Validate with `pnpm --dir packages/admin/ts build` and `pnpm --dir packages/admin/ts test` when admin client code changes.
-

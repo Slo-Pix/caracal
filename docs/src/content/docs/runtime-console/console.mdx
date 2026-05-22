@@ -4,7 +4,7 @@ description: Navigate caracal-console — launch, screen layout, key bindings, v
 pageType: reference
 ---
 
-`caracal-console` is the Console for inspecting and managing Caracal entities without leaving the shell. It fetches from the control-plane API and renders into a full-screen terminal buffer with keyboard navigation.
+`caracal-console` is the Console for inspecting and managing Caracal entities without leaving the shell. It fetches from the control-plane API and renders into a full-screen Console buffer with keyboard navigation.
 
 ---
 
@@ -16,12 +16,12 @@ caracal-console
 
 **Requirements:**
 
-- A TTY terminal (`stdin` must be a TTY).
+- A TTY Console (`stdin` must be a TTY).
 - `CARACAL_ADMIN_TOKEN` set in the environment.
 - `CARACAL_API_URL` set in production (localhost default in development).
 - For agent and delegation views: `CARACAL_COORDINATOR_URL` and `CARACAL_COORDINATOR_TOKEN`.
 
-On startup, the Console enters full-screen alt buffer mode and hides the cursor. Press `q` or `ctrl-c` at any time to exit and restore the terminal.
+On startup, the Console enters full-screen alt buffer mode and hides the cursor. Press `q` or `ctrl-c` at any time to exit and restore the TTY.
 
 ---
 
@@ -41,7 +41,7 @@ On startup, the Console enters full-screen alt buffer mode and hides the cursor.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-The terminal is redrawn every 30 ms when content changes. Resize events (SIGWINCH) trigger an immediate redraw. The last column in every list view expands to fill the remaining terminal width.
+The Console is redrawn every 30 ms when content changes. Resize events (SIGWINCH) trigger an immediate redraw. The last column in every list view expands to fill the remaining Console width.
 
 ---
 

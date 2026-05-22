@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Exercises terminal installers against the release tag and verifies the resulting binary versions.
+# Exercises Console installers against the release tag and verifies the resulting binary versions.
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ readonly AREA="installers"
 readonly REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 readonly PLAT="$(hostPlatform)"
 
-validateShellTerminal() {
+validateShellConsole() {
   matchesOnly "install-console.sh" || return 0
   local dir; dir="$(mktemp -d)"
   if CARACAL_INSTALL_DIR="$dir/bin" runOrEcho bash "$REPO_ROOT/install-console.sh" --version "$CARACAL_RELEASE" >"$dir/out" 2>&1; then
@@ -63,5 +63,5 @@ validatePwshInstaller() {
   rm -rf "$dir"
 }
 
-validateShellTerminal
+validateShellConsole
 validatePwshInstaller "install-console.ps1" "caracal-console" "$CONSOLE_VER"

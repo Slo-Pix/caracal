@@ -72,7 +72,7 @@ pnpm caracal run -- node examples/agent.js
 
 The control service is an OAuth-protected HTTP API hosted by the engine for any external client (script, AI agent, workflow, or another instance of runtime/console) that needs to drive Caracal programmatically. It is unmounted by default.
 
-The control service reads its admin token from `infra/secrets/files/caracalAdminToken`, which is generated on the first `pnpm caracal up` or `pnpm secrets:init`. Control lifecycle management must run through the authenticated Control menu in the Console. Do not call the underlying Node entrypoints, thin scripts, or Docker profiles directly; lifecycle commands require a controlling terminal, the local managed admin secret, and explicit human confirmation before changing runtime state.
+The control service reads its admin token from `infra/secrets/files/caracalAdminToken`, which is generated on the first `pnpm caracal up` or `pnpm secrets:init`. Control lifecycle management must run through the authenticated Control menu in the Console. Do not call the underlying Node entrypoints, thin scripts, or Docker profiles directly; lifecycle commands require a controlling TTY, the local managed admin secret, and explicit human confirmation before changing runtime state.
 
 If you created `infra/docker/local.env` for operator overrides, pass it after `dev.env` so local entries win.
 

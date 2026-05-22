@@ -148,7 +148,7 @@ function makeManifest(options = {}) {
       dirty: Boolean(dirtyTree()),
     },
     registries: reg,
-    binaries: { shell: version, terminal: version },
+    binaries: { shell: version, console: version },
     containers: Object.fromEntries(containers.map((name) => [name, version])),
     images: Object.fromEntries(containers.map((name) => [name, `${reg.oci.replace(/\/$/, '')}/caracal-${name}:v${version}`])),
     npm,

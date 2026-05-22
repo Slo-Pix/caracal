@@ -4,12 +4,12 @@ description: Complete reference for the Caracal runtime shell and Console.
 pageType: landing
 ---
 
-Caracal ships two terminal-facing tools:
+Caracal ships two installed tools:
 
 - **`caracal`** — thin runtime shell for stack lifecycle, readiness checks, purging local state, token-injected process execution, and launching the management surface.
 - **`caracal-console`** — the Console for human operational workflows across zones, applications, resources, providers, policies, grants, sessions, agents, audit events, diagnostics, and Control API lifecycle.
 
-The runtime shell intentionally does not include product-management commands. Use `caracal terminal` or `caracal-console` for interactive management, and use the Control API for automation that must manage Caracal remotely.
+The runtime shell intentionally does not include product-management commands. Use `caracal console` or `caracal-console` for interactive management, and use the Control API for automation that must manage Caracal remotely.
 
 Both tools are compiled with Bun for Linux (x64, arm64), macOS (x64, arm64), and Windows (x64). The runtime is self-contained; no separate Node.js installation is required.
 
@@ -23,7 +23,7 @@ The Console communicates with the control-plane API and discovers operator crede
 | --- | --- | --- |
 | `CARACAL_ADMIN_TOKEN` | Auto-discovered when possible | Bearer token for control-plane management routes. |
 | `CARACAL_API_URL` | `http://localhost:3000` in development | Control-plane API base URL. |
-| `CARACAL_ZONE_ID` | From `caracal.toml` or saved terminal state | Default zone for zone-scoped views. |
+| `CARACAL_ZONE_ID` | From `caracal.toml` or saved Console state | Default zone for zone-scoped views. |
 | `CARACAL_COORDINATOR_URL` | `http://localhost:4000` in development | Coordinator service URL for agent and delegation views. |
 | `CARACAL_COORDINATOR_TOKEN` | — | JWT with `agent:lifecycle` authority for agent and delegation views. |
 | `CARACAL_CONFIG` | Auto-resolved | Explicit `caracal.toml` path. |
@@ -38,7 +38,7 @@ The Console communicates with the control-plane API and discovers operator crede
 | --- | --- | --- |
 | Stack lifecycle | `caracal up`, `caracal down`, `caracal status`, `caracal purge` | Start, stop, probe, and reset the local stack. |
 | Workload execution | `caracal run -- <command>` | Inject scoped resource tokens into subprocesses. |
-| Human management | `caracal terminal` or `caracal-console` | Manage Caracal entities interactively. |
+| Human management | `caracal console` or `caracal-console` | Manage Caracal entities interactively. |
 | Remote automation | Control API | Drive approved management actions through authenticated HTTP. |
 
 `caracal run` is a runtime execution command, not a management workflow. The Console does not run workloads; use the top-level runtime shell for token-injected processes.

@@ -13,22 +13,22 @@ pickItems() {
     local selected=()
     local tty_state=''
 
-    [[ -t 0 ]] || { echo "interactive terminal input is required" >&2; return 2; }
+    [[ -t 0 ]] || { echo "interactive Console input is required" >&2; return 2; }
 
     for ((i = 0; i < n; i++)); do selected[i]=0; done
 
     printf '\nUse Up/Down to move, Space to toggle, "a" to toggle all, Enter to confirm, Esc to cancel.\n\n' >&2
     tput civis 2>/dev/null || true
     tty_state="$(stty -g 2>/dev/null || true)"
-    restoreTerminal() {
+    restoreTty() {
         local rc=$?
         [[ -z "$tty_state" ]] || stty "$tty_state" 2>/dev/null || true
         tput cnorm 2>/dev/null || true
         trap - ERR INT TERM
         return "$rc"
     }
-    trap restoreTerminal ERR
-    trap 'restoreTerminal; exit 130' INT TERM
+    trap restoreTty ERR
+    trap 'restoreTty; exit 130' INT TERM
     stty -echo
 
     render() {
@@ -70,5 +70,5 @@ pickItems() {
     for ((i = 0; i < n; i++)); do
         [[ ${selected[i]} -eq 1 ]] && PICKED+=("${items[i]}")
     done
-    restoreTerminal
+    restoreTty
 }

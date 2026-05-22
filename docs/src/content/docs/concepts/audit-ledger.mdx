@@ -60,7 +60,7 @@ Redis stream: caracal.audit.events
 
 **Dead letter queue**: Events that the Audit service cannot process after retries are routed to `caracal.audit.events.dlq`, consumed by the `audit-dlq-observer` consumer group. The DLQ is monitored separately.
 
-**XACK semantics**: The Audit service sends `XACK` only after a terminal outcome — successful insert into PostgreSQL, or a detected benign duplicate. Transient errors cause the event to remain pending in the stream for retry.
+**XACK semantics**: The Audit service sends `XACK` only after a Console outcome — successful insert into PostgreSQL, or a detected benign duplicate. Transient errors cause the event to remain pending in the stream for retry.
 
 ## HMAC chain integrity
 

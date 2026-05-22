@@ -100,7 +100,7 @@ services:
       - DAC_READ_SEARCH
       - FOWNER
       - SETGID
-      - SETerminalD
+      - SETUID
     networks:
       - caracalData
     secrets:
@@ -540,6 +540,6 @@ volumes:
   gatewayReplay:
 
 # The control service is disabled by default and managed by the engine.
-# Use the authenticated interactive terminal Control menu
+# Use the authenticated interactive Console Control menu
 # so lifecycle state, endpoint status, and cleanup remain consistent.
 # Direct compose profile use does not enable the endpoint.

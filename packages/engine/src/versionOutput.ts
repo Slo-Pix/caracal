@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Structured terminal rendering for Caracal binary version metadata.
+// Structured Console rendering for Caracal binary version metadata.
 
 const RESET = '\x1b[0m'
 

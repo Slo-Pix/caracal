@@ -84,9 +84,9 @@ Only maintainers push stable tags. Do not push CalVer tags from feature branches
 
 ## Shell, Console, and Console binaries
 
-The shell (`caracal`), Console command binary (`caracal-console`), and Terminal (`caracal-console`) are compiled to self-contained binaries using `bun --compile`. Fifteen archives are produced per release (five targets × three binaries), each containing one executable:
+The shell (`caracal`) and Console (`caracal-console`) are compiled to self-contained binaries using `bun --compile`. Ten archives are produced per release (five targets x two binaries), each containing one executable:
 
-| Target | Shell archive | Console archive | Terminal archive |
+| Target | Shell archive | Console archive |
 | --- | --- | --- | --- |
 | `linux-amd64` | `caracal-shell-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` |
 | `linux-arm64` | `caracal-shell-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` |
@@ -104,13 +104,13 @@ The Runtime and Console have separate install targets:
 # Linux/macOS — Console
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
 
-# Linux/macOS — Terminal
+# Linux/macOS — Console
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
 
 # Windows — Console
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
 
-# Windows — Terminal
+# Windows — Console
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
 ```
 

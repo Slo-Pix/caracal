@@ -35,14 +35,14 @@ cp .env.example .env
 Open `.env` and set `OPENAI_API_KEY=sk-...`. Provider credentials are normal
 integration settings; Caracal credentials come from `caracal.toml`.
 
-### 3 — Start Caracal through Terminal + control API
+### 3 — Start Caracal through Console + control API
 
 Caracal (API + Coordinator + Gateway + STS + Redis) must be running before
 Lynx starts. Install the released runtime/console and bring up the stack the same way
 an end user would — **do not build from the caracal source tree**:
 
 ```bash
-# Install the runtime shell and terminal once (no sudo, lands in ~/.local/bin)
+# Install the runtime shell and Console once (no sudo, lands in ~/.local/bin)
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
 
@@ -62,7 +62,7 @@ Caracal application credential with the `control:invoke` trait; Lynx stores
 its `client_id` as `application_id` and its one-time `client_secret` as
 `app_client_secret` in `caracal.toml`.
 
-### 4 — Write `caracal.toml` from Terminal values
+### 4 — Write `caracal.toml` from Console values
 
 After creating the Lynx zone, control key, and resources in the Console, write
 `~/.config/caracal/caracal.toml`. The Python SDK reads this file directly, so
@@ -73,7 +73,7 @@ zone_url = "http://127.0.0.1:8080"
 sts_url = "http://127.0.0.1:8080"
 coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
-zone_id = "<zone id from Terminal>"
+zone_id = "<zone id from Console>"
 application_id = "<control key client_id>"
 app_client_secret = "<control key client_secret>"
 

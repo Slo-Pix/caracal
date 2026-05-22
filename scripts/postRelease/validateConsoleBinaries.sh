@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Downloads Terminal release archives, verifies SHA256, and runs --version on the host-platform binary.
+# Downloads Console release archives, verifies SHA256, and runs --version on the host-platform binary.
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,7 +10,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/lib/common.sh"
 
 readonly AREA="consoleBinaries"
-readonly KIND="terminal"
+readonly KIND="console"
 readonly BIN="caracal-console"
 readonly BASE="https://github.com/$CARACAL_REPO/releases/download/$CARACAL_RELEASE"
 readonly EXPECT="$CONSOLE_VER"

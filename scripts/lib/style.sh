@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Shared terminal style library sourced by every Caracal shell script.
+# Shared Console style library sourced by every Caracal shell script.
 
 __caracal_color_enabled() {
   if [ -n "${NO_COLOR-}" ] || [ -n "${CARACAL_NO_COLOR-}" ]; then return 1; fi

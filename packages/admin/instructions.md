@@ -9,7 +9,7 @@
 
 ## Required
 - Must keep implementation code inside language subdirectories.
-- Must keep admin clients framework-agnostic and reusable by terminal, scripts, and tests.
+- Must keep admin clients framework-agnostic and reusable by Console, scripts, and tests.
 
 ## Forbidden
 - Must not place source files at this level.
@@ -17,4 +17,3 @@
 
 ## Validation
 - Validate through the touched child package.
-

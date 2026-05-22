@@ -98,7 +98,7 @@ Service health values: `starting`, `healthy`, `degraded`, `unhealthy`.
 
 Invocations are idempotent on `(zone_id, service_id, idempotency_key)`. A duplicate enqueue returns the existing record. Status transitions: `pending` → `running` → `succeeded` | `failed` | `timed_out` | `canceled` | `dead`.
 
-`dead` is the terminal state for invocations that exhausted all retry attempts without a successful result.
+`dead` is the Console state for invocations that exhausted all retry attempts without a successful result.
 
 ### Delegations
 

@@ -81,13 +81,13 @@ def submit(
             except Exception as exc:
                 j.result = {"error": "job_failed", "message": str(exc)}
                 j.status = "failed"
-            terminal = dict(j.__dict__)
+            result = dict(j.__dict__)
         if webhook_event:
             deliver(provider, webhook_event, {
                 "job_id": job.job_id,
                 "action": action,
-                "status": terminal["status"],
-                "result": terminal["result"],
+                "status": result["status"],
+                "result": result["result"],
             })
 
     asyncio.get_event_loop().create_task(_complete())

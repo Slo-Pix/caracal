@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Shared doctor diagnostics for terminal operator health checks.
+// Shared doctor diagnostics for Console operator health checks.
 
 import type { Zone } from '@caracalai/admin'
 import { discoverCoordinatorToken } from '@caracalai/core'
@@ -351,7 +351,7 @@ async function runZoneChecks(checks: DoctorCheck[], ctx: AdminContext, zoneId: s
     'zones',
     `${zoneId} lookup`,
     async () => zoneLabel(await ctx.client.zones.get(zoneId)),
-    'Open `pnpm caracal terminal`, select Zones, and retry with a visible zone id.',
+    'Open `pnpm caracal console`, select Zones, and retry with a visible zone id.',
   )
   if (zoneCheck.status !== 'ok') return
 

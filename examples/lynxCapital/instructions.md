@@ -22,7 +22,7 @@
 - Must not hard-code company copy, product labels, providers, regions, scenarios, or theme values outside `config/company.yaml`.
 - Must not put mock-shaped code under `app/`.
 - Must not use Node, npm, Vite, React, or bundled frontend assets.
-- Must not leave spawned agents without a matching terminal lifecycle event.
+- Must not leave spawned agents without a matching Console lifecycle event.
 
 ## Validation
 - Validate with `pytest` from `examples/lynxCapital/` when the demo changes.

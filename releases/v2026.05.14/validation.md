@@ -10,12 +10,12 @@ title: v2026.05.14 Release Validation Report
 
 ## Compatibility matrix
 
-### Runtime / terminal binaries
+### Runtime / Console binaries
 
 | Artifact | Version |
 | --- | --- |
 | `shell` | 2026.05.14 |
-| `terminal` | 2026.05.14 |
+| `console` | 2026.05.14 |
 
 ### Container images (ghcr.io/garudex-labs)
 
@@ -1047,7 +1047,7 @@ title: v2026.05.14 Release Validation Report
 - [ ] Registry metadata reviewed
 - [ ] PyPI install matrix green
 - [ ] npm install matrix green
-- [ ] Runtime / terminal binaries verified on all platforms
+- [ ] Runtime / Console binaries verified on all platforms
 - [ ] Installers verified
 - [ ] Containers boot cleanly
 - [ ] Provenance verified

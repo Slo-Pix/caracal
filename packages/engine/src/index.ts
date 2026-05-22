@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// @caracalai/engine — shared execution engine for Caracal runtime and terminal management.
+// @caracalai/engine — shared execution engine for Caracal runtime and Console.
 
 export * from './shared.js'
 export * from './commands.js'

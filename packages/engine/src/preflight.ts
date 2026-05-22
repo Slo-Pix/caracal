@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Local preflight checks shared by terminal diagnostics and runtime automation.
+// Local preflight checks shared by Console diagnostics and runtime automation.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'

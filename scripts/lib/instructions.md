@@ -4,7 +4,7 @@
 - Covers shared shell helpers under `scripts/lib/`.
 
 ## Architecture Design
-- Helpers provide reusable terminal style and selection primitives for root automation scripts.
+- Helpers provide reusable Console style and selection primitives for root automation scripts.
 
 ## Required
 - Must keep helpers sourceable by POSIX-compatible shell scripts that opt into them.

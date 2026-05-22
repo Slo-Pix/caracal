@@ -22,7 +22,7 @@ verifyArchive() {
   local file="$1"
   matchesOnly "$file" || return 0
   if ! command -v gh >/dev/null 2>&1; then
-    logFinding "$AREA" "$file" "github" "gh" "-" "$SEV_INFO" "$STATUS_WARN" "gh CLI not available" "gh attestation verify $file"
+    logFinding "$AREA" "$file" "github" "gh" "-" "$SEV_INFO" "$STATUS_WARN" "gh not available" "gh attestation verify $file"
     return 0
   fi
   local dir; dir="$(mktemp -d)"
@@ -61,6 +61,6 @@ verifyImage() {
 
 for p in "${PLATS[@]}"; do
   verifyArchive "$(archiveFor shell "$p")"
-  verifyArchive "$(archiveFor terminal "$p")"
+  verifyArchive "$(archiveFor Console "$p")"
 done
 for (( i = 0; i < ${#CONTAINER_NAMES[@]}; i++ )); do verifyImage "${CONTAINER_NAMES[$i]}" "${CONTAINER_VERS[$i]}"; done

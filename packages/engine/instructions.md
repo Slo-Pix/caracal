@@ -13,10 +13,10 @@
 - Must keep streaming APIs callback-based and disposable.
 - Must generate embedded runtime assets before build and typecheck through existing scripts.
 - Must scrub token-bearing strings before exposing them to callers.
-- Must keep terminal-specific formatting outside this package.
+- Must keep Console-specific formatting outside this package.
 
 ## Forbidden
-- Must not parse argv, print to stdout/stderr, manipulate terminal state, or call `process.exit`.
+- Must not parse argv, print to stdout/stderr, manipulate Console state, or call `process.exit`.
 - Must not import from `apps/`.
 - Must not read disk or environment state except through explicit caller-provided options.
 - Must not embed credentials.

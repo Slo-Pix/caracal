@@ -60,7 +60,7 @@ export function authorizeControlManagementAccess(opts: ControlManagementAccessOp
     const stdinIsTTY = opts.stdinIsTTY ?? process.stdin.isTTY === true
     const stdoutIsTTY = opts.stdoutIsTTY ?? process.stdout.isTTY === true
     if (!stdinIsTTY || !stdoutIsTTY) {
-      throw new Error('Control management requires an authenticated interactive terminal session.')
+      throw new Error('Control management requires an authenticated interactive Console session.')
     }
   }
   const local = managedTokenSources(env)[0]

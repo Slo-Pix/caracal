@@ -4,7 +4,7 @@
   "publishedAt": "2026-05-14",
   "binaries": {
     "shell": "2026.05.14",
-    "terminal": "2026.05.14"
+    "console": "2026.05.14"
   },
   "containers": {
     "api": "2026.05.14",
