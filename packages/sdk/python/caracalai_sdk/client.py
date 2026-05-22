@@ -412,10 +412,10 @@ class Caracal:
 
     @classmethod
     def from_config(cls, path: str | os.PathLike[str] | None = None) -> Caracal:
-        """Build a Caracal client from a `caracal.toml` authored by the
-        operator after `caracal zone create` and `caracal app create`. The
-        config supplies zone, application, STS URL, client_secret, and
-        resource bindings; tokens are exchanged on demand."""
+        """Build a Caracal client from a `caracal.toml` authored from
+        terminal management interface values. The config supplies zone,
+        application, STS URL, client_secret, and resource bindings; tokens
+        are exchanged on demand."""
         import tomllib
         from pathlib import Path
 
@@ -423,8 +423,8 @@ class Caracal:
         if not cfg_path.exists():
             raise RuntimeError(
                 f"Caracal config not found at {cfg_path}; provision a zone "
-                "and application with `caracal zone create` / `caracal app "
-                "create` and author caracal.toml with the returned ids."
+                "and application in the terminal management interface and author "
+                "caracal.toml with the returned ids."
             )
         cfg = tomllib.loads(cfg_path.read_text())
 

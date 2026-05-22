@@ -10,7 +10,7 @@ applyTo: "{package.json,apps/runtime/**,apps/terminal/**,packages/engine/src/com
 - Product management commands must live only in the terminal management surface and its shared engine/admin helpers.
 - The terminal management interface must expose product capabilities with consistent names, lifecycle behavior, terminology, and engine integration.
 - The terminal launcher must remain optional; top-level help and dispatch must hide it when its binary or workspace shim is unavailable.
-- If the terminal interface is unavailable, the top-level shell must still expose lifecycle commands.
+- If the terminal management interface is unavailable, the top-level shell must still expose lifecycle commands.
 - Control API management is a terminal product-management surface; it must not be exposed as a top-level runtime command or recursively through remote Control dispatch.
 - Runtime lifecycle code must not require admin tokens, zone selection, product credentials, or Control credentials.
 - Command documentation must show runtime lifecycle examples through `caracal` and product-management examples through `caracal terminal` or `caracal-terminal`.

@@ -57,7 +57,7 @@ caracal up
 caracal-terminal
 ```
 
-The Terminal talks to the same control plane as the terminal interface. The control key is a real
+The terminal management interface talks to the same control plane as the Control API. The control key is a real
 Caracal application credential with the `control:invoke` trait; Lynx stores
 its `client_id` as `application_id` and its one-time `client_secret` as
 `app_client_secret` in `caracal.toml`.

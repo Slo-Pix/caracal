@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const enabled = process.env.CARACAL_CONTROL_ENABLED
   const bootLog = createLogger('control', (process.env.LOG_LEVEL as 'info') ?? 'info')
   if (enabled !== 'true') {
-    bootLog.info('control runtime not mounted; mount through caracal-terminal or the Terminal Control menu', { enabled: enabled ?? '' })
+    bootLog.info('control runtime not mounted; mount through the terminal management interface Control menu', { enabled: enabled ?? '' })
     return
   }
 

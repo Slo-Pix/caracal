@@ -12,7 +12,7 @@ import { printError, printInfo } from '../style.ts'
 const EXT = process.platform === 'win32' ? '.exe' : ''
 const TERMINAL_INSTALL_URL = 'https://github.com/Garudex-Labs/caracal/releases/latest/download/install-terminal.sh'
 const INSTALL_HINTS = {
-  terminal: `Install the terminal interface:  curl -fsSL ${TERMINAL_INSTALL_URL} | sh`,
+  terminal: `Install the terminal management interface:  curl -fsSL ${TERMINAL_INSTALL_URL} | sh`,
 } as const
 
 const WORKSPACE_SHIMS: Record<string, string> = {
