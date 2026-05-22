@@ -13,7 +13,7 @@ readonly AREA="shellBinaries"
 readonly KIND="shell"
 readonly BIN="caracal"
 readonly BASE="https://github.com/$CARACAL_REPO/releases/download/$CARACAL_RELEASE"
-readonly EXPECT="$CLI_VER"
+readonly EXPECT="$SHELL_VER"
 readonly PLATS=(linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64)
 
 validatePlat() {

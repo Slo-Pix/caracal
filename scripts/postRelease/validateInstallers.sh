@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Exercises CLI and Terminal installers against the release tag and verifies the resulting binary versions.
+# Exercises terminal installers against the release tag and verifies the resulting binary versions.
 
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,31 +13,7 @@ readonly AREA="installers"
 readonly REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 readonly PLAT="$(hostPlatform)"
 
-validateShellCli() {
-  matchesOnly "install-cli.sh" || return 0
-  local dir; dir="$(mktemp -d)"
-  if CARACAL_INSTALL_DIR="$dir/bin" runOrEcho bash "$REPO_ROOT/install-cli.sh" --version "$CARACAL_RELEASE" >"$dir/out" 2>&1; then
-    if [[ "$DRY_RUN" == "1" ]]; then
-      logFinding "$AREA" "install-cli.sh" "$PLAT" "shell" "-" "$SEV_INFO" "$STATUS_PASS" "dry-run: would run bash install-cli.sh --version $CARACAL_RELEASE" "bash install-cli.sh --version $CARACAL_RELEASE"
-    else
-      local cliBin="$dir/bin/caracal-terminal" evidence="installer placed caracal and caracal-terminal on PATH"
-      if [[ ! -x "$cliBin" ]]; then
-        cliBin="$dir/bin/caracal"
-        evidence="installer placed caracal on PATH"
-      fi
-      if "$cliBin" --version 2>/dev/null | grep -q "$CLI_VER"; then
-        logFinding "$AREA" "install-cli.sh" "$PLAT" "shell" "-" "$SEV_INFO" "$STATUS_PASS" "$evidence" "bash install-cli.sh --version $CARACAL_RELEASE"
-      else
-        logFinding "$AREA" "install-cli.sh" "$PLAT" "shell" "-" "$SEV_MAJOR" "$STATUS_FAIL" "installed binary --version did not match $CLI_VER" "bash install-cli.sh --version $CARACAL_RELEASE"
-      fi
-    fi
-  else
-    logFinding "$AREA" "install-cli.sh" "$PLAT" "shell" "-" "$SEV_BLOCKER" "$STATUS_FAIL" "$(head -c 400 "$dir/out")" "bash install-cli.sh --version $CARACAL_RELEASE"
-  fi
-  rm -rf "$dir"
-}
-
-validateShellTui() {
+validateShellTerminal() {
   matchesOnly "install-terminal.sh" || return 0
   local dir; dir="$(mktemp -d)"
   if CARACAL_INSTALL_DIR="$dir/bin" runOrEcho bash "$REPO_ROOT/install-terminal.sh" --version "$CARACAL_RELEASE" >"$dir/out" 2>&1; then
@@ -46,10 +22,10 @@ validateShellTui() {
     else
       local evidence="installer placed caracal-terminal on PATH"
       [[ -x "$dir/bin/caracal" ]] && evidence="installer placed caracal and caracal-terminal on PATH"
-      if "$dir/bin/caracal-terminal" --version 2>/dev/null | grep -q "$Terminal_VER"; then
+      if "$dir/bin/caracal-terminal" --version 2>/dev/null | grep -q "$TERMINAL_VER"; then
         logFinding "$AREA" "install-terminal.sh" "$PLAT" "shell" "-" "$SEV_INFO" "$STATUS_PASS" "$evidence" "bash install-terminal.sh --version $CARACAL_RELEASE"
       else
-        logFinding "$AREA" "install-terminal.sh" "$PLAT" "shell" "-" "$SEV_MAJOR" "$STATUS_FAIL" "installed binary --version did not match $Terminal_VER" "bash install-terminal.sh --version $CARACAL_RELEASE"
+        logFinding "$AREA" "install-terminal.sh" "$PLAT" "shell" "-" "$SEV_MAJOR" "$STATUS_FAIL" "installed binary --version did not match $TERMINAL_VER" "bash install-terminal.sh --version $CARACAL_RELEASE"
       fi
     fi
   else
@@ -76,10 +52,6 @@ validatePwshInstaller() {
   local dir; dir="$(mktemp -d)"
   if runOrEcho pwsh -NoProfile -File "$REPO_ROOT/$script" -Version "$CARACAL_RELEASE" -InstallDir "$dir/bin" >"$dir/out" 2>&1; then
     local binPath="$dir/bin/$bin.exe" evidence="PowerShell installer placed $bin on PATH"
-    if [[ "$script" == "install-cli.ps1" && ! -x "$binPath" ]]; then
-      binPath="$dir/bin/caracal.exe"
-      evidence="PowerShell installer placed caracal on PATH"
-    fi
     if "$binPath" --version 2>/dev/null | grep -q "$version"; then
       logFinding "$AREA" "$script" "$PLAT" "pwsh" "-" "$SEV_INFO" "$STATUS_PASS" "$evidence" "pwsh -File $script -Version $CARACAL_RELEASE"
     else
@@ -91,7 +63,5 @@ validatePwshInstaller() {
   rm -rf "$dir"
 }
 
-validateShellCli
-validateShellTui
-validatePwshInstaller "install-cli.ps1" "caracal-terminal" "$CLI_VER"
-validatePwshInstaller "install-terminal.ps1" "caracal-terminal" "$Terminal_VER"
+validateShellTerminal
+validatePwshInstaller "install-terminal.ps1" "caracal-terminal" "$TERMINAL_VER"

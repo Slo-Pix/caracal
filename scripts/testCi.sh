@@ -114,7 +114,7 @@ if $run_ts; then
     tests/typescript/fuzz/api \
     tests/typescript/integration/api
   ts_run apps/coordinator coordinator tests/typescript/unit/orchestration/coordinator
-  ts_run apps/runtime cli tests/typescript/unit/runtime
+  ts_run apps/runtime runtime tests/typescript/unit/runtime
   ts_run apps/terminal terminal tests/typescript/unit/terminal
   ts_run packages/core/ts core tests/typescript/unit/shared
   ts_run packages/admin/ts admin tests/typescript/unit/admin
