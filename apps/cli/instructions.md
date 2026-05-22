@@ -6,7 +6,7 @@
 ## Architecture Design
 - `bin/` owns executable entrypoints.
 - `src/commands/` owns argument parsing, command dispatch, output formatting, and exit-code mapping.
-- `@caracalai/engine` owns stack, runtime, run, credential, control, and process behavior.
+- `@caracalai/engine` owns stack, runtime, credential, control, process behavior, and the execution helpers used by top-level `caracal run`.
 - `@caracalai/admin` owns admin and coordinator HTTP calls.
 
 ## Required
@@ -25,4 +25,3 @@
 
 ## Validation
 - Validate with `pnpm --dir apps/cli typecheck` and `pnpm --dir apps/cli test` when CLI code changes.
-

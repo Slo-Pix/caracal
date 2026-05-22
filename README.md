@@ -31,7 +31,7 @@
 
 The default product path is intentionally small: register an **agent app**, run an **agent run**, request a short-lived **mandate**, call a **resource** through the **Gateway**, and inspect the resulting **audit** trail. The STS evaluates policy and issues Caracal access tokens, the Gateway enforces token validity and provider routing, the Coordinator tracks runtime and delegation state, and Audit records why access was allowed or denied and what happened upstream.
 
-Platform teams can evaluate Caracal locally with `caracal up` and check dependency-aware runtime readiness with `caracal status --ready`. Product management stays in optional interfaces: use `caracal cli` or `caracal-tui` for diagnostics, policy dry-runs, token inspection, audit search, and request explanation.
+Platform teams can evaluate Caracal locally with `caracal up` and check dependency-aware runtime readiness with `caracal status --ready`. Product management stays in optional interfaces: use `caracal cli` or `caracal-tui` for diagnostics, policy dry-runs, token inspection, audit search, and request explanation. Workload execution is separate: use top-level `caracal run -- <command>` when you want to launch a process with scoped resource tokens from `caracal.toml`.
 
 -----
 
@@ -151,8 +151,8 @@ Each archive contains a single executable (`caracal`, `caracal-cli`, or `caracal
 
 ```bash
 caracal up                            # start all services via Docker
-caracal zone create --name dev        # provision a zone (returns id)
-caracal app  create --name cli        # provision an application (returns client_secret)
+caracal cli zone create --name dev    # provision a zone (returns id)
+caracal cli app create --name runner  # provision an application (returns client_secret)
 # write ~/.config/caracal/caracal.toml with zone_id, application_id, app_client_secret, zone_url
 caracal status                        # probe all services
 caracal status --ready                # dependency-aware readiness probe
@@ -161,6 +161,16 @@ caracal purge                         # interactive cleanup (containers, volumes
 ```
 
 > The installer pins the CLI to one release. `caracal up` pulls matching container images from `ghcr.io/garudex-labs/caracal-*:<tag>`. Override per invocation with `CARACAL_VERSION=vYYYY.MM.DD caracal up` to run an older or newer release stack from the same CLI.
+
+### Run workloads with scoped tokens
+
+`caracal run` is a top-level execution command, not a CLI/TUI management command. It reads `caracal.toml`, exchanges the configured application credentials with STS for the resources listed in `credentials` and `optional_credentials`, injects only those token environment variables into the child process, and runs the command without a shell.
+
+```bash
+caracal run -- node worker.js
+```
+
+Use `caracal cli` or `caracal-tui` for management and inspection. Use `caracal run` only for launching a local workload that needs scoped, short-lived Caracal resource tokens.
 
 ### Enterprise evaluation
 
@@ -178,7 +188,7 @@ The chart is a reference deployment for enterprise evaluation, production adapta
 <details>
 <summary><strong>CLI</strong></summary>
 
-All commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zone_id` in `caracal.toml` to target a zone.
+Management commands require `CARACAL_ADMIN_TOKEN`. Use `--zone <id>` or set `zone_id` in `caracal.toml` to target a zone. `caracal run` is not part of `caracal-cli`; run workloads through the top-level `caracal run -- <command>` path.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -198,7 +208,7 @@ export CARACAL_ADMIN_TOKEN=<your-admin-token>   # printed by the installer; or r
 caracal-tui
 ```
 
-Uses the same environment variables as the CLI. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view.
+Uses the same management environment variables as the CLI. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view. The TUI does not run workloads; launch token-injected processes with `caracal run -- <command>`.
 
 | Key | Action |
 |---|---|

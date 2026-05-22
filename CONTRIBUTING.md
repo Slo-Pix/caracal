@@ -65,7 +65,15 @@ pnpm --dir apps/cli typecheck
 pnpm caracal tui
 ```
 
-CLI and TUI are exact alternatives over the same engine.
+CLI and TUI are management interfaces over the same engine. Keep administrative workflows available in both surfaces unless a feature is intentionally shell-only.
+
+#### Standalone execution
+
+`pnpm caracal run -- <command>` is separate from CLI/TUI management. It reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell. Keep this path for workload execution and automation that needs `RESOURCE_TOKEN`; do not expose it through `caracal-cli` or the TUI.
+
+```bash
+pnpm caracal run -- node examples/agent.js
+```
 
 #### Control API (optional)
 

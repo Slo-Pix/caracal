@@ -21,8 +21,7 @@
 - Must not write secrets, tokens, or refresh tokens to disk.
 - Must not pass user input to a shell.
 - Must not render unsanitized JWTs, Caracal tokens, or credentials in exceptions.
-- Must not expose any scripted-input, replay, or automation entry point: automation belongs to the CLI, Control API, or SDK.
+- Must not expose any scripted-input, replay, workload execution, or automation entry point: workload execution belongs to top-level `caracal run`, and remote automation belongs to the Control API or SDK.
 
 ## Validation
 - Validate with `pnpm --dir apps/tui typecheck` and `pnpm --dir apps/tui test` when TUI code changes.
-
