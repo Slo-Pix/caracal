@@ -5,6 +5,7 @@
 
 export * from './shared.js'
 export * from './commands.js'
+export * from './clientSecret.js'
 export * from './dispatch.js'
 export * from './coordinator.js'
 export * from './control.js'

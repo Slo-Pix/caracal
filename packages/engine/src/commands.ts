@@ -80,6 +80,27 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
 
 export const CLI_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   {
+    name: 'config',
+    group: 'runtime',
+    summary: 'Generate local caracal.toml runtime configuration',
+    subcommands: ['init'],
+    localOnly: true,
+    flags: {
+      init: [
+        { name: '--zone', summary: 'Use an existing zone id, overriding CARACAL_ZONE_ID' },
+        { name: '--zone-name', summary: 'Zone name when creating one' },
+        { name: '--zone-slug', summary: 'Zone slug when creating one' },
+        { name: '--app-name', summary: 'Application name' },
+        { name: '--client-secret', summary: 'Use a supplied client secret' },
+        { name: '--resource', summary: 'Add one credential resource' },
+        { name: '--env', summary: 'Environment variable for the credential' },
+        { name: '--path', summary: 'Output caracal.toml path, overriding CARACAL_CONFIG' },
+        { name: '--force', summary: 'Replace an existing config file' },
+        { name: '--json', summary: 'Emit machine-readable result' },
+      ],
+    },
+  },
+  {
     name: 'credential',
     group: 'runtime',
     summary: 'Read or inspect a resource credential',

@@ -3,8 +3,8 @@
 //
 // Control API credential lifecycle helpers for least-privilege Control API keys.
 
-import { randomBytes } from 'node:crypto'
 import type { AdminClient, Application, Resource } from '@caracalai/admin'
+import { generateClientSecret } from './clientSecret.js'
 import { describeRemoteSurface } from './dispatch.js'
 
 export const CONTROL_INVOKE_TRAIT = 'control:invoke'
@@ -56,10 +56,6 @@ export interface ControlKeyRecord {
   expires_at?: string
   restrictions: string[]
   created_at: string
-}
-
-function generateClientSecret(): string {
-  return `cs_${randomBytes(32).toString('base64url')}`
 }
 
 function hasControlTrait(app: Application): boolean {

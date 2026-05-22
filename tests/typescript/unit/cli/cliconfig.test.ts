@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_API_URL,
+  defaultCliConfigPath,
   ServiceUrlMissingError,
   resolveCliConfigPath,
   resolveServiceUrl,
@@ -71,6 +72,13 @@ describe('resolveCliConfigPath', () => {
     writeFileSync(xdgConfig, 'zone_id = "xdg"\n')
 
     expect(resolveCliConfigPath()).toBe(xdgConfig)
+  })
+
+  it('exposes the XDG config path for generators', () => {
+    const xdg = join(root, 'xdg')
+    process.env.XDG_CONFIG_HOME = xdg
+
+    expect(defaultCliConfigPath()).toBe(join(xdg, 'caracal', 'caracal.toml'))
   })
 
   it('returns undefined when no candidates exist', () => {
