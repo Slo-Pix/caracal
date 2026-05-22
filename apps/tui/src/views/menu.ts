@@ -15,8 +15,9 @@ import {
   controlKeyRevoke,
   controlKeyRotate,
   controlServiceStatus,
-  readControlState,
+  credentialInspect,
   credentialRead,
+  readControlState,
   resolveStackPaths,
   runExec,
   type ControlLifecycleAction,
@@ -130,13 +131,14 @@ const BASE_ENTRIES: Entry[] = [
   { key: '6', label: 'policy-set', group: 'admin', description: 'Manage policy sets', needsZone: true, open: policySetsView },
   { key: '7', label: 'grant',      group: 'admin', description: 'Manage grants', needsZone: true, open: grantsView },
   { key: '8', label: 'session',    group: 'admin', description: 'List sessions', needsZone: true, open: sessionsView },
+  { key: 'd', label: 'doctor',     group: 'admin', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
+  { key: 't', label: 'control',    group: 'admin', description: 'Manage the Control automation service', needsZone: true, open: controlEntry },
   { key: '9', label: 'audit',      group: 'observability', description: 'Search audit events', needsZone: true, open: auditView },
   { key: 'x', label: 'explain',    group: 'observability', description: 'Explain an audit request', needsZone: true, open: auditExplainEntry },
   { key: '0', label: 'agent',      group: 'multiagent', description: 'Manage agent sessions', needsZone: true, open: agentsView },
   { key: 'g', label: 'delegation', group: 'multiagent', description: 'Manage delegation edges', needsZone: true, open: delegationsView },
-  { key: 'c', label: 'credential', group: 'runtime', description: 'Read a resource credential', needsZone: false, open: credentialEntry },
+  { key: 'c', label: 'credential', group: 'runtime', description: 'Read or inspect a resource credential', needsZone: false, open: credentialEntry },
   { key: 'u', label: 'run',        group: 'runtime', description: 'Run a command with RESOURCE_TOKEN', needsZone: false, open: runEntry },
-  { key: 't', label: 'control',    group: 'admin', description: 'Manage control API credentials', needsZone: true, open: controlEntry },
 ]
 
 function menuEntries(): Entry[] {
@@ -157,26 +159,115 @@ function auditExplainEntry(ctx: Ctx): View {
   })
 }
 
-function credentialEntry(): View {
+function doctorEntry(ctx: Ctx): View {
   return new FormView({
-    title: 'credential read',
+    title: 'doctor',
     fields: [
-      { key: 'resource', label: 'resource', kind: 'text', required: true },
-      { key: 'ttl', label: 'ttl seconds', kind: 'text' },
+      { key: 'zone_id', label: 'zone_id', kind: 'text', default: ctx.zoneId, hint: 'blank checks all visible zones' },
     ],
     onSubmit: async (v, app) => {
-      const cfg = loadCliConfig()
-      if (!cfg) throw new Error('caracal.toml not found')
-      const ttl = v.ttl ? Number(v.ttl) : undefined
-      const token = await credentialRead({ cfg, resource: v.resource!, ttlSeconds: ttl })
+      const zoneId = v.zone_id || undefined
       app.pop()
       app.push(new DetailView({
-        title: `credential / ${v.resource}`,
-        load: async () => ({ resource: v.resource, access_token: token }),
+        title: 'doctor',
+        load: async () => {
+          const cfg = loadCliConfig()
+          const zones = zoneId ? [await ctx.client.zones.get(zoneId)] : await ctx.client.zones.list()
+          return {
+            zone_url: cfg?.zone_url,
+            api_url: process.env.CARACAL_API_URL ?? 'http://127.0.0.1:8080',
+            zone_scope: zoneId ? 'selected' : 'all',
+            zones: zones.map((zone) => ({
+              id: zone.id,
+              slug: zone.slug,
+              name: zone.name,
+              login_flow: zone.login_flow,
+              dcr_enabled: zone.dcr_enabled,
+              pkce_required: zone.pkce_required,
+            })),
+            status: 'ready',
+          }
+        },
         mask: maskSecretField,
       }))
     },
   })
+}
+
+function credentialEntry(): View {
+  return new CredentialMenuView()
+}
+
+class CredentialMenuView implements View {
+  readonly title = 'credential'
+  private cursor = 0
+  private readonly items = [
+    { key: 'r', label: 'read', build: () => this.readForm() },
+    { key: 'i', label: 'inspect', build: () => this.inspectForm() },
+  ]
+
+  hints(): string[] { return ['↑/↓:select', 'enter:open', 'esc:back'] }
+
+  render(): string[] {
+    const lines = ['', ' ' + ui.title('Credential'), '']
+    for (let i = 0; i < this.items.length; i++) {
+      const item = this.items[i]!
+      const mark = i === this.cursor ? ui.accent('>') : ' '
+      lines.push(` ${mark} ${ui.key(item.key)} ${item.label}`)
+    }
+    return lines
+  }
+
+  async onKey(key: Key, ctx: ViewContext): Promise<void> {
+    if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); return }
+    if (key === 'down' || key === 'j') { this.cursor = Math.min(this.items.length - 1, this.cursor + 1); return }
+    if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
+    const direct = this.items.findIndex((item) => item.key === key)
+    if (direct >= 0) { ctx.app.push(this.items[direct]!.build()); return }
+    if (key === 'enter') ctx.app.push(this.items[this.cursor]!.build())
+  }
+
+  private readForm(): View {
+    return new FormView({
+      title: 'credential read',
+      fields: [
+        { key: 'resource', label: 'resource', kind: 'text', required: true },
+      ],
+      onSubmit: async (v, app) => {
+        const cfg = loadCliConfig()
+        if (!cfg) throw new Error('caracal.toml not found')
+        const token = await credentialRead({ cfg, resource: v.resource! })
+        app.pop()
+        app.push(new DetailView({
+          title: `credential / ${v.resource}`,
+          load: async () => ({ resource: v.resource, access_token: token }),
+          mask: maskSecretField,
+        }))
+      },
+    })
+  }
+
+  private inspectForm(): View {
+    return new FormView({
+      title: 'credential inspect',
+      fields: [
+        { key: 'token', label: 'token', kind: 'secret' },
+        { key: 'file', label: 'file (ctrl-o)', kind: 'file' },
+      ],
+      onSubmit: async (v, app) => {
+        const sources = [v.token, v.file].filter((value) => value && value.length > 0)
+        if (sources.length !== 1) throw new Error('provide exactly one token source: token or file')
+        const token = v.file ? readFileSync(v.file, 'utf8') : v.token!
+        const result = credentialInspect(token)
+        app.pop()
+        app.push(new DetailView({
+          title: 'credential inspect',
+          load: async () => result,
+          mask: maskSecretField,
+        }))
+      },
+    })
+  }
 }
 
 function runEntry(): View {
@@ -241,7 +332,7 @@ class ControlMenuView implements View {
       { key: 'm', label: mounted ? 'unmount runtime' : 'mount runtime', build: () => this.lifecycleConfirm(mounted ? 'unmount' : 'mount') },
       { key: 'e', label: !mounted ? 'enable endpoint (mount first)' : enabled ? 'disable endpoint' : 'enable endpoint', build: () => mounted ? this.lifecycleConfirm(enabled ? 'disable' : 'enable') : this.statusView() },
       { key: 's', label: 'management status', build: () => this.statusView() },
-      { key: 'l', label: 'list keys',  build: () => this.listView() },
+      { key: 'l', label: 'list keys', build: () => this.listView() },
       { key: 'g', label: 'get key', build: () => this.getForm() },
       { key: 'c', label: 'create key', build: () => this.createForm() },
       { key: 'r', label: 'rotate key', build: () => this.rotateForm() },
@@ -355,8 +446,9 @@ class ControlMenuView implements View {
             resource: result.resource.identifier,
             scopes: result.resource.scopes,
             traits: result.application.traits,
-            note: 'store client_secret now — it cannot be retrieved later',
+            note: 'store client_secret now - it cannot be retrieved later',
           }),
+          mask: maskSecretField,
         }))
       },
     })
@@ -372,6 +464,7 @@ class ControlMenuView implements View {
         app.push(new DetailView({
           title: `control / ${v.id}`,
           load: () => controlKeyGet(client, zoneId, v.id!),
+          mask: maskSecretField,
         }))
       },
     })
@@ -390,8 +483,9 @@ class ControlMenuView implements View {
           load: async () => ({
             client_id: result.application.id,
             client_secret: result.clientSecret,
-            note: 'store client_secret now — it cannot be retrieved later',
+            note: 'store client_secret now - it cannot be retrieved later',
           }),
+          mask: maskSecretField,
         }))
       },
     })

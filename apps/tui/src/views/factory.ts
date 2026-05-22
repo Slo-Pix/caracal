@@ -56,6 +56,12 @@ function readFileOrInline(filePath: string, inline: string): string {
   return inline
 }
 
+function parseJsonObject(input: string): Record<string, unknown> {
+  const parsed = JSON.parse(input) as unknown
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('input must be a JSON object')
+  return parsed as Record<string, unknown>
+}
+
 function int(v: string | undefined): number | undefined {
   if (v === undefined || v.trim() === '') return undefined
   const n = Number.parseInt(v, 10)
@@ -275,6 +281,7 @@ export function resourcesView(ctx: Ctx): View {
             { key: 'scopes', label: 'scopes (csv)', kind: 'list', required: true },
             { key: 'name', label: 'name', kind: 'text' },
             { key: 'upstream_url', label: 'upstream_url', kind: 'text' },
+            { key: 'gateway_application_id', label: 'gateway_application_id', kind: 'text' },
             { key: 'prefix', label: 'prefix', kind: 'bool', default: 'false' },
             { key: 'credential_provider_id', label: 'provider', kind: 'text' },
           ],
@@ -284,6 +291,7 @@ export function resourcesView(ctx: Ctx): View {
               scopes: splitList(v.scopes ?? ''),
               name: v.name || undefined,
               upstream_url: v.upstream_url || undefined,
+              gateway_application_id: v.gateway_application_id || undefined,
               prefix: bool(v.prefix),
               credential_provider_id: v.credential_provider_id || undefined,
             })
@@ -300,6 +308,8 @@ export function resourcesView(ctx: Ctx): View {
               { key: 'name', label: 'name', kind: 'text', default: row.name ?? '' },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
               { key: 'upstream_url', label: 'upstream_url', kind: 'text', default: row.upstream_url ?? '' },
+              { key: 'gateway_application_id', label: 'gateway_application_id', kind: 'text', default: row.gateway_application_id ?? '' },
+              { key: 'credential_provider_id', label: 'provider', kind: 'text', default: row.credential_provider_id ?? '' },
               { key: 'prefix', label: 'prefix', kind: 'bool', default: String(row.prefix) },
               { key: 'scopes', label: 'scopes (csv)', kind: 'list', default: (row.scopes ?? []).join(',') },
             ],
@@ -308,6 +318,8 @@ export function resourcesView(ctx: Ctx): View {
                 name: v.name || undefined,
                 identifier: v.identifier || undefined,
                 upstream_url: v.upstream_url || undefined,
+                gateway_application_id: v.gateway_application_id || undefined,
+                credential_provider_id: v.credential_provider_id || undefined,
                 prefix: bool(v.prefix),
                 scopes: v.scopes ? splitList(v.scopes) : undefined,
               } as Partial<ResourceInput>)
@@ -353,6 +365,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'identifier', label: 'identifier', kind: 'text', required: true },
             { key: 'name', label: 'name', kind: 'text' },
             { key: 'kind', label: 'kind', kind: 'select', options: ['oauth2', 'oidc', 'apikey', 'workload'], default: 'oauth2' },
+            { key: 'client_id', label: 'client_id', kind: 'text' },
             { key: 'config_json', label: 'config_json', kind: 'multiline' },
             { key: 'owner_type', label: 'owner_type', kind: 'text' },
           ],
@@ -361,6 +374,7 @@ export function providersView(ctx: Ctx): View {
               identifier: v.identifier!,
               name: v.name || undefined,
               kind: (v.kind as 'oauth2' | 'oidc' | 'apikey' | 'workload') || undefined,
+              client_id: v.client_id || undefined,
               config_json: v.config_json ? JSON.parse(v.config_json) : undefined,
               owner_type: v.owner_type || undefined,
             })
@@ -377,6 +391,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'name', label: 'name', kind: 'text', default: row.name },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
               { key: 'kind', label: 'kind', kind: 'select', options: ['oauth2', 'oidc', 'apikey', 'workload'], default: row.kind ?? 'oauth2' },
+              { key: 'client_id', label: 'client_id', kind: 'text', default: row.client_id ?? '' },
               { key: 'config_json', label: 'config_json', kind: 'multiline', default: JSON.stringify(row.config_json ?? {}) },
               { key: 'owner_type', label: 'owner_type', kind: 'text', default: row.owner_type },
             ],
@@ -385,6 +400,7 @@ export function providersView(ctx: Ctx): View {
                 name: v.name || undefined,
                 identifier: v.identifier || undefined,
                 kind: (v.kind as 'oauth2' | 'oidc' | 'apikey' | 'workload') || undefined,
+                client_id: v.client_id || undefined,
                 config_json: v.config_json ? JSON.parse(v.config_json) : undefined,
                 owner_type: v.owner_type || undefined,
               } as Partial<ProviderInput>)
@@ -444,6 +460,23 @@ export function policiesView(ctx: Ctx): View {
               schema_version: v.schema_version || undefined,
             })
             await popAndReload(app, list as unknown as ListView<unknown>)
+          },
+        }),
+      },
+      {
+        key: 'c', label: 'validate', build: () => new FormView({
+          title: 'validate policy',
+          fields: [
+            { key: 'file', label: 'file (ctrl-o)', kind: 'file' },
+            { key: 'content', label: 'content', kind: 'multiline' },
+            { key: 'schema_version', label: 'schema_version', kind: 'text' },
+          ],
+          onSubmit: async (v, app) => {
+            const content = readFileOrInline(v.file ?? '', v.content ?? '')
+            if (!content) throw new Error('file or content required')
+            const result = await ctx.client.policies.validate(content, v.schema_version || undefined)
+            app.pop()
+            app.push(detail('policy validate', async () => result))
           },
         }),
       },
@@ -535,6 +568,30 @@ export function policySetsView(ctx: Ctx): View {
             onSubmit: async (v, app) => {
               await ctx.client.policySets.activate(ctx.zoneId, row.id, v.version_id!, v.shadow_version_id || undefined)
               await popAndReload(app, list as unknown as ListView<unknown>)
+            },
+          })
+        },
+      },
+      {
+        key: 's', label: 'simulate', build: (row) => {
+          if (!row) throw new Error('no row selected')
+          return new FormView({
+            title: `simulate ${row.name}`,
+            fields: [
+              { key: 'version_id', label: 'version_id', kind: 'text', required: true },
+              { key: 'input', label: 'input', kind: 'multiline' },
+              { key: 'input_file', label: 'input_file', kind: 'file' },
+            ],
+            onSubmit: async (v, app) => {
+              const inputValue = readFileOrInline(v.input_file ?? '', v.input ?? '')
+              const result = await ctx.client.policySets.simulate(
+                ctx.zoneId,
+                row.id,
+                v.version_id!,
+                inputValue ? parseJsonObject(inputValue) : undefined,
+              )
+              app.pop()
+              app.push(detail(`policy-set simulate / ${row.name}`, async () => result))
             },
           })
         },
@@ -654,7 +711,6 @@ class DelegationMenuView implements View {
     { key: 'i', label: 'inbound', build: () => this.edgeForm('inbound') },
     { key: 'o', label: 'outbound', build: () => this.edgeForm('outbound') },
     { key: 't', label: 'traverse', build: () => this.traverseForm() },
-    { key: 'b', label: 'blast radius', build: () => this.impactForm() },
     { key: 'r', label: 'revoke', build: () => this.revokeForm() },
   ]
 
@@ -699,18 +755,6 @@ class DelegationMenuView implements View {
       onSubmit: async (v, app) => {
         app.pop()
         app.push(delegationTraverseView(this.ctx, v.edge_id!))
-      },
-    })
-  }
-
-  private impactForm(): View {
-    return new FormView({
-      title: 'delegation impact',
-      fields: [{ key: 'edge_id', label: 'edge_id', kind: 'text', required: true }],
-      onSubmit: async (v, app) => {
-        const result = await this.ctx.client.delegations.impact(this.ctx.zoneId, v.edge_id!)
-        app.pop()
-        app.push(detail(`delegation impact / ${v.edge_id}`, async () => result))
       },
     })
   }
