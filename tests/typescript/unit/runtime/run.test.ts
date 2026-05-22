@@ -1,10 +1,10 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// CLI run command unit tests for credential injection and child process exit propagation.
+// Runtime run command unit tests for credential injection and child process exit propagation.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CliConfig } from '../../../../apps/cli/src/config.js'
+import type { RuntimeConfig } from '../../../../apps/runtime/src/config.js'
 
 const spawnMock = vi.hoisted(() => vi.fn())
 
@@ -12,9 +12,9 @@ vi.mock('node:child_process', () => ({
   spawn: spawnMock,
 }))
 
-import { runCommand } from '../../../../apps/cli/src/commands/run.js'
+import { runCommand } from '../../../../apps/runtime/src/commands/run.js'
 
-const cfg: CliConfig = {
+const cfg: RuntimeConfig = {
   zone_url: 'https://sts.example.com',
   app_client_id: 'zone1:app1',
   app_client_secret: 'secret',

@@ -4,9 +4,9 @@
 // Unit tests for the shared dispatcher kernel: whitelist enforcement, usage rendering, version handling.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { dispatch } from '../../../../apps/cli/src/dispatcher.ts'
-import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
-import { CLI_COMMANDS, SHELL_COMMANDS } from '../../../../packages/engine/src/commands.ts'
+import { dispatch } from '../../../../apps/runtime/src/dispatcher.ts'
+import { buildRegistry, type Executor } from '../../../../apps/runtime/src/registry.ts'
+import { MANAGEMENT_COMMANDS, SHELL_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 function makeOpts(run: Executor) {
   const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, run]))
@@ -87,19 +87,19 @@ describe('dispatch', () => {
     const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
     const registry = buildRegistry(SHELL_COMMANDS, executors)
     await expect(
-      dispatch({ binary: 'caracal cli', version: '0.0.0', mode: 'dev', registry }, ['--help']),
+      dispatch({ binary: 'caracal terminal', version: '0.0.0', mode: 'dev', registry }, ['--help']),
     ).rejects.toThrow('exit:0')
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
-    expect(out).toContain('Usage: caracal cli')
+    expect(out).toContain('Usage: caracal terminal')
   })
 
-  it('keeps CLI help limited to visible commands and global options', async () => {
+  it('keeps runtime help limited to visible commands and global options', async () => {
     exitSpy()
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
-    const executors = Object.fromEntries(CLI_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
-    const registry = buildRegistry(CLI_COMMANDS, executors)
+    const executors = Object.fromEntries(MANAGEMENT_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
+    const registry = buildRegistry(MANAGEMENT_COMMANDS, executors)
     await expect(
-      dispatch({ binary: 'caracal-cli', version: '0.0.0', mode: 'dev', registry }, ['--help']),
+      dispatch({ binary: 'caracal-terminal', version: '0.0.0', mode: 'dev', registry }, ['--help']),
     ).rejects.toThrow('exit:0')
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
     expect(out).toContain('zone')

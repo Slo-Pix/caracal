@@ -4,8 +4,8 @@
 // Unit tests for the runtime command registry: it must reject wiring drift between descriptors and executors.
 
 import { describe, it, expect } from 'vitest'
-import { buildRegistry, type Executor } from '../../../../apps/cli/src/registry.ts'
-import { SHELL_COMMANDS, CLI_COMMANDS } from '../../../../packages/engine/src/commands.ts'
+import { buildRegistry, type Executor } from '../../../../apps/runtime/src/registry.ts'
+import { SHELL_COMMANDS, MANAGEMENT_COMMANDS } from '../../../../packages/engine/src/commands.ts'
 
 const noop: Executor = () => undefined
 
@@ -18,7 +18,7 @@ describe('buildRegistry', () => {
   })
 
   it('throws when a descriptor has no executor', () => {
-    const executors: Record<string, Executor> = { up: noop, down: noop, status: noop, purge: noop, cli: noop }
+    const executors: Record<string, Executor> = { up: noop, down: noop, status: noop, purge: noop }
     expect(() => buildRegistry(SHELL_COMMANDS, executors)).toThrow(/missing executors/)
   })
 
@@ -28,8 +28,8 @@ describe('buildRegistry', () => {
     expect(() => buildRegistry(SHELL_COMMANDS, executors)).toThrow(/no descriptor/)
   })
 
-  it('requires CLI_COMMANDS to be fully wireable', () => {
-    const executors = Object.fromEntries(CLI_COMMANDS.map((c) => [c.name, noop]))
-    expect(() => buildRegistry(CLI_COMMANDS, executors)).not.toThrow()
+  it('requires MANAGEMENT_COMMANDS to be fully wireable', () => {
+    const executors = Object.fromEntries(MANAGEMENT_COMMANDS.map((c) => [c.name, noop]))
+    expect(() => buildRegistry(MANAGEMENT_COMMANDS, executors)).not.toThrow()
   })
 })

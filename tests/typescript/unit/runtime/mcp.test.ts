@@ -1,13 +1,13 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// CLI MCP governance unit tests for block and log modes.
+// Runtime MCP governance unit tests for block and log modes.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { checkMcpGovernance } from '../../../../apps/cli/src/mcp.js'
-import type { CliConfig } from '../../../../apps/cli/src/config.js'
+import { checkMcpGovernance } from '../../../../apps/runtime/src/mcp.js'
+import type { RuntimeConfig } from '../../../../apps/runtime/src/config.js'
 
-const baseConfig: CliConfig = {
+const baseConfig: RuntimeConfig = {
   zone_url: 'https://sts.example.com',
   app_client_id: 'zone1:app1',
   app_client_secret: 'secret',

@@ -68,7 +68,7 @@ describe('dispatch', () => {
   it('skips scope checks for local principals', async () => {
     const result = await dispatch(
       { command: 'zone', subcommand: 'list' },
-      { kind: 'local', subject: 'cli', scopes: [] },
+      { kind: 'local', subject: 'terminal', scopes: [] },
       ctx,
     )
     expect(result).toEqual([])

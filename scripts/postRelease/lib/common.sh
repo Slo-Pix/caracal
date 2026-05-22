@@ -49,7 +49,7 @@ NPM_VERS=()
 CONTAINER_NAMES=()
 CONTAINER_VERS=()
 CLI_VER=""
-TUI_VER=""
+Terminal_VER=""
 
 eval "$("$CARACAL_PYTHON" - "$MANIFEST" "$CARACAL_RELEASE" <<'PY'
 import json, shlex, sys
@@ -58,7 +58,7 @@ release = sys.argv[2]
 if m.get("release") != release:
     raise SystemExit(f"manifest release {m.get('release')!r} does not match {release!r}")
 print(f'CLI_VER={shlex.quote(m["binaries"]["cli"])}')
-print(f'TUI_VER={shlex.quote(m["binaries"]["tui"])}')
+print(f'Terminal_VER={shlex.quote(m["binaries"]["terminal"])}')
 for k, v in m["containers"].items():
     print(f'CONTAINER_NAMES+=({shlex.quote(k)})')
     print(f'CONTAINER_VERS+=({shlex.quote(v)})')

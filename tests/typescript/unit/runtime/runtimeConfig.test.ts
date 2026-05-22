@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Unit tests for cli config path precedence and production service URL strictness.
+// Unit tests for runtime config path precedence and production service URL strictness.
 
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,17 +9,17 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_API_URL,
-  defaultCliConfigPath,
+  defaultRuntimeConfigPath,
   ServiceUrlMissingError,
-  resolveCliConfigPath,
+  resolveRuntimeConfigPath,
   resolveServiceUrl,
-} from '../../../../packages/engine/src/cliconfig.ts'
+} from '../../../../packages/engine/src/runtimeConfig.ts'
 
 let root: string
 let cwdBefore: string
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), 'caracal-clicfg-'))
+  root = mkdtempSync(join(tmpdir(), 'caracal-terminalcfg-'))
   cwdBefore = process.cwd()
 })
 
@@ -34,13 +34,13 @@ afterEach(() => {
   delete process.env.NODE_ENV
 })
 
-describe('resolveCliConfigPath', () => {
+describe('resolveRuntimeConfigPath', () => {
   it('uses CARACAL_CONFIG first when present', () => {
     const explicit = join(root, 'explicit.toml')
     writeFileSync(explicit, 'zone_id = "z1"\n')
     process.env.CARACAL_CONFIG = explicit
 
-    expect(resolveCliConfigPath()).toBe(explicit)
+    expect(resolveRuntimeConfigPath()).toBe(explicit)
   })
 
   it('checks cwd before PWD and INIT_CWD', () => {
@@ -58,7 +58,7 @@ describe('resolveCliConfigPath', () => {
     writeFileSync(join(pwdDir, 'caracal.toml'), 'zone_id = "pwd"\n')
     writeFileSync(join(initDir, 'caracal.toml'), 'zone_id = "init"\n')
 
-    expect(resolveCliConfigPath()).toBe(join(cwdDir, 'caracal.toml'))
+    expect(resolveRuntimeConfigPath()).toBe(join(cwdDir, 'caracal.toml'))
   })
 
   it('falls back to XDG config path when project-level files are absent', () => {
@@ -71,14 +71,14 @@ describe('resolveCliConfigPath', () => {
     process.env.XDG_CONFIG_HOME = xdg
     writeFileSync(xdgConfig, 'zone_id = "xdg"\n')
 
-    expect(resolveCliConfigPath()).toBe(xdgConfig)
+    expect(resolveRuntimeConfigPath()).toBe(xdgConfig)
   })
 
   it('exposes the XDG config path for generators', () => {
     const xdg = join(root, 'xdg')
     process.env.XDG_CONFIG_HOME = xdg
 
-    expect(defaultCliConfigPath()).toBe(join(xdg, 'caracal', 'caracal.toml'))
+    expect(defaultRuntimeConfigPath()).toBe(join(xdg, 'caracal', 'caracal.toml'))
   })
 
   it('returns undefined when no candidates exist', () => {
@@ -86,7 +86,7 @@ describe('resolveCliConfigPath', () => {
     mkdirSync(cwdDir, { recursive: true })
     process.chdir(cwdDir)
 
-    expect(resolveCliConfigPath()).toBeUndefined()
+    expect(resolveRuntimeConfigPath()).toBeUndefined()
   })
 
   it('ignores missing explicit config and continues to project-level config', () => {
@@ -97,7 +97,7 @@ describe('resolveCliConfigPath', () => {
     const cwdConfig = join(cwdDir, 'caracal.toml')
     writeFileSync(cwdConfig, 'zone_id = "cwd"\n')
 
-    expect(resolveCliConfigPath()).toBe(cwdConfig)
+    expect(resolveRuntimeConfigPath()).toBe(cwdConfig)
   })
 })
 
@@ -115,7 +115,7 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 
-  it('treats unset NODE_ENV as development for local CLI and TUI runs', () => {
+  it('treats unset NODE_ENV as development for local runtime and terminal runs', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 

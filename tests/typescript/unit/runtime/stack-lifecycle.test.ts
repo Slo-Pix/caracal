@@ -246,13 +246,13 @@ describe('stack lifecycle compose commands', () => {
       paths: paths('stable', []),
       args: ['control'],
       env: { CARACAL_MODE: 'stable' },
-    })).toThrow(/managed only through caracal-cli control/)
+    })).toThrow(/managed only through caracal-terminal control/)
 
     expect(() => stackDown({
       paths: paths('stable', []),
       args: ['--profile', 'api,control'],
       env: { CARACAL_MODE: 'stable' },
-    })).toThrow(/managed only through caracal-cli control/)
+    })).toThrow(/managed only through caracal-terminal control/)
   })
 
   it('filters absent env files through the filesystem boundary', () => {

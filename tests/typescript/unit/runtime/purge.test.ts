@@ -28,15 +28,15 @@ vi.mock('../../../../packages/engine/dist/index.js', async (importOriginal) => {
   return { ...actual, ...engineMocks }
 })
 
-vi.mock('@caracalai/engine/cli', () => ({
-  resolveCliConfigPath: vi.fn(() => undefined),
+vi.mock('@caracalai/engine/runtime-config', () => ({
+  resolveRuntimeConfigPath: vi.fn(() => undefined),
 }))
 
-vi.mock('../../../../packages/engine/dist/cliconfig.js', () => ({
-  resolveCliConfigPath: vi.fn(() => undefined),
+vi.mock('../../../../packages/engine/dist/runtimeConfig.js', () => ({
+  resolveRuntimeConfigPath: vi.fn(() => undefined),
 }))
 
-import { purgeCommand } from '../../../../apps/cli/src/commands/purge.ts'
+import { purgeCommand } from '../../../../apps/runtime/src/commands/purge.ts'
 
 const ORIG_ENV = { ...process.env }
 
