@@ -10,7 +10,7 @@
 ## Required
 - Must use the platform `fetch` API.
 - Must surface non-2xx responses as `AdminApiError` with status, code, and body.
-- Must keep exported types stable for app, CLI, Terminal, script, and test consumers.
+- Must keep exported types stable for app, terminal, script, and test consumers.
 - Must remain framework-agnostic.
 
 ## Forbidden

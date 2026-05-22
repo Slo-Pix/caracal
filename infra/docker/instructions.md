@@ -11,7 +11,7 @@
 - Service Dockerfiles remain with their owning service or app unless shared Go-service packaging is required.
 
 ## Required
-- Must keep CLI-managed local images tagged as `localhost/caracal-*:${CARACAL_DEV_VERSION}` using `<base>-dev.sha<gitsha>`.
+- Must keep runtime-managed local images tagged as `localhost/caracal-*:${CARACAL_DEV_VERSION}` using `<base>-dev.sha<gitsha>`.
 - Must keep runtime images pinned to `v${CARACAL_VERSION}` through `CARACAL_REGISTRY`.
 - Must keep healthchecks on long-running services and gate startup with `service_healthy` or `service_completed_successfully`.
 - Must source secrets through Compose secrets, never inline environment literals.

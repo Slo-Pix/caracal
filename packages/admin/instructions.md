@@ -9,7 +9,7 @@
 
 ## Required
 - Must keep implementation code inside language subdirectories.
-- Must keep admin clients framework-agnostic and reusable by CLI, Terminal, scripts, and tests.
+- Must keep admin clients framework-agnostic and reusable by terminal, scripts, and tests.
 
 ## Forbidden
 - Must not place source files at this level.

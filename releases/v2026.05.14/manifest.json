@@ -3,7 +3,7 @@
   "mode": "stable",
   "publishedAt": "2026-05-14",
   "binaries": {
-    "cli": "2026.05.14",
+    "shell": "2026.05.14",
     "terminal": "2026.05.14"
   },
   "containers": {

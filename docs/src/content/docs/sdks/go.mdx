@@ -20,7 +20,7 @@ go get github.com/garudex-labs/caracal/packages/sdk/go
 | `CARACAL_ZONE_ID` | Yes | Zone identifier |
 | `CARACAL_APPLICATION_ID` | Yes | Registered application ID |
 | `CARACAL_SUBJECT_TOKEN` | Token mode | Session mandate |
-| `CARACAL_APP_CLIENT_SECRET` | Client-secret mode | Application secret used to refresh session mandates through STS |
+| `CARACAL_APP_terminal interfaceENT_SECRET` | Client-secret mode | Application secret used to refresh session mandates through STS |
 | `CARACAL_STS_URL` | Client-secret mode | STS base URL |
 | `CARACAL_APP_RESOURCES` | Client-secret mode if `CARACAL_RESOURCES` is unset | Comma-separated resource IDs for token exchange |
 | `CARACAL_GATEWAY_URL` | No | Gateway base URL for resource-routed calls |
@@ -56,7 +56,7 @@ type ResourceBinding struct {
 
 ### `FromEnv()`
 
-Reads all `CARACAL_*` environment variables and returns a `*Caracal`. Static-token mode uses `CARACAL_SUBJECT_TOKEN`; client-secret mode uses `CARACAL_APP_CLIENT_SECRET`, `CARACAL_STS_URL`, and resource IDs from `CARACAL_APP_RESOURCES` or `CARACAL_RESOURCES`.
+Reads all `CARACAL_*` environment variables and returns a `*Caracal`. Static-token mode uses `CARACAL_SUBJECT_TOKEN`; client-secret mode uses `CARACAL_APP_terminal interfaceENT_SECRET`, `CARACAL_STS_URL`, and resource IDs from `CARACAL_APP_RESOURCES` or `CARACAL_RESOURCES`.
 
 ```go
 func FromEnv() (*Caracal, error)

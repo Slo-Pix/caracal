@@ -9,7 +9,7 @@
 
 ## Required
 - Must keep each language implementation in its own child directory.
-- Must keep token exchange reusable by SDKs, transports, CLI/Terminal engine flows, and tests.
+- Must keep token exchange reusable by SDKs, transports, runtime/terminal engine flows, and tests.
 - Must keep token values in memory only.
 
 ## Forbidden

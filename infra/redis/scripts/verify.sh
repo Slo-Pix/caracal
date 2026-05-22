@@ -20,7 +20,7 @@ if [ -z "$PASS" ]; then
   exit 1
 fi
 
-export REDISCLI_AUTH="$PASS"
+export REDISterminal interface_AUTH="$PASS"
 
 cli() { redis-cli -h "$HOST" -p "$PORT" --no-auth-warning "$@"; }
 

@@ -23,7 +23,7 @@ if [ -z "${REDIS_PASSWORD}" ]; then
     exit 1
 fi
 
-export REDISCLI_AUTH="${REDIS_PASSWORD}"
+export REDISterminal interface_AUTH="${REDIS_PASSWORD}"
 
 cli() {
     redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" --no-auth-warning "$@"

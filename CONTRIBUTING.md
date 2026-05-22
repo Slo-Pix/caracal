@@ -36,7 +36,7 @@ pnpm install
 pnpm caracal up                     # Build and start the full stack
 
 # Essential Commands
-pnpm caracal --help                 # Show CLI help and available commands
+pnpm caracal --help                 # Show terminal interface help and available commands
 pnpm caracal status                 # Check health status of all services
 pnpm caracal down [--help]          # Stop the stack
 pnpm caracal purge                  # Remove stack, volumes, logs, cache, and installed data
@@ -52,7 +52,7 @@ pnpm unlink --global caracal  # Remove global symlink
 
 </details>
 
-#### CLI
+#### terminal interface
 
 ```bash
 pnpm caracal terminal
@@ -65,11 +65,11 @@ pnpm --dir apps/runtime typecheck
 pnpm caracal terminal
 ```
 
-CLI and Terminal are management interfaces over the same engine. Keep administrative workflows available in both surfaces unless a feature is intentionally shell-only.
+runtime shell and terminal are management interfaces over the same engine. Keep administrative workflows available in both surfaces unless a feature is intentionally shell-only.
 
 #### Standalone execution
 
-`pnpm caracal run -- <command>` is separate from CLI/Terminal management. It reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell. Keep this path for workload execution and automation that needs `RESOURCE_TOKEN`; do not expose it through `caracal-terminal` or the Terminal.
+`pnpm caracal run -- <command>` is separate from runtime/terminal management. It reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell. Keep this path for workload execution and automation that needs `RESOURCE_TOKEN`; do not expose it through `caracal-terminal` or the Terminal.
 
 ```bash
 pnpm caracal run -- node examples/agent.js
@@ -77,7 +77,7 @@ pnpm caracal run -- node examples/agent.js
 
 #### Control API (optional)
 
-The control service is an OAuth-protected HTTP API hosted by the engine for any external client (script, AI agent, workflow, or another instance of CLI/Terminal) that needs to drive Caracal programmatically. It is unmounted by default.
+The control service is an OAuth-protected HTTP API hosted by the engine for any external client (script, AI agent, workflow, or another instance of runtime/terminal) that needs to drive Caracal programmatically. It is unmounted by default.
 
 The control service reads its admin token from `infra/secrets/files/caracalAdminToken`, which is generated on the first `pnpm caracal up` or `pnpm secrets:init`. Lifecycle management must run through the authenticated, interactive `caracal-terminal control ...` flow or the Terminal Control menu. Do not call the underlying Node entrypoints, thin scripts, or Docker profiles directly; lifecycle commands require a controlling terminal, the local managed admin secret, and explicit human confirmation before changing runtime state.
 

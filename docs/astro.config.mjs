@@ -199,7 +199,7 @@ export default defineConfig({
           ],
         },
         {
-          label: 'CLI and Terminal',
+          label: 'Runtime and Terminal',
           collapsed: true,
           items: [
             { label: 'Overview', link: '/runtime-terminal/' },
@@ -301,7 +301,7 @@ export default defineConfig({
             { label: 'Error Reference', link: '/reference/errors/' },
             { label: 'Configuration Reference', link: '/reference/configuration/' },
             { label: 'Defaults and Limits', link: '/reference/defaults-and-limits/' },
-            { label: 'CLI Exit Codes', link: '/reference/runtime-exit-codes/' },
+            { label: 'Runtime Exit Codes', link: '/reference/runtime-exit-codes/' },
             { label: 'Compatibility Matrix', link: '/reference/compatibility/' },
             { label: 'Interoperability Contracts', link: '/reference/interoperability-contracts/' },
           ],

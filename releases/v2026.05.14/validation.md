@@ -10,11 +10,11 @@ title: v2026.05.14 Release Validation Report
 
 ## Compatibility matrix
 
-### CLI / Terminal binaries
+### Runtime / terminal binaries
 
 | Artifact | Version |
 | --- | --- |
-| `cli` | 2026.05.14 |
+| `shell` | 2026.05.14 |
 | `terminal` | 2026.05.14 |
 
 ### Container images (ghcr.io/garudex-labs)
@@ -65,7 +65,7 @@ title: v2026.05.14 Release Validation Report
 | Registry Metadata | 19 | 7 | 0 | 0 |
 | PyPI Install Matrix | 252 | 0 | 0 | 0 |
 | npm Install Matrix | 108 | 0 | 0 | 0 |
-| CLI Binaries | 25 | 0 | 0 | 0 |
+| Runtime Binaries | 25 | 0 | 0 | 0 |
 | Terminal Binaries | 25 | 0 | 0 | 0 |
 | Installers | 3 | 1 | 0 | 0 |
 | Container Stack | 7 | 0 | 0 | 0 |
@@ -862,7 +862,7 @@ title: v2026.05.14 Release Validation Report
 - **[info]** PASS — `@caracalai/revocation-redis` (linux-amd64/npm/node24): install + ESM import ok @ 0.1.2
   - Repro: `npm add @caracalai/revocation-redis@0.1.2`
 
-### CLI Binaries
+### Runtime Binaries
 
 - **[info]** PASS — `caracal-terminal-linux-amd64-v2026.05.14.tar.gz` (linux-amd64/github/-): checksum ok; not host-executable
   - Repro: `sha256 check`
@@ -1047,7 +1047,7 @@ title: v2026.05.14 Release Validation Report
 - [ ] Registry metadata reviewed
 - [ ] PyPI install matrix green
 - [ ] npm install matrix green
-- [ ] CLI / Terminal binaries verified on all platforms
+- [ ] Runtime / terminal binaries verified on all platforms
 - [ ] Installers verified
 - [ ] Containers boot cleanly
 - [ ] Provenance verified
