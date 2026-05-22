@@ -1,9 +1,9 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// CLI exit codes and canonical caracal.toml config exports.
+// Runtime exit codes and canonical caracal.toml config exports.
 
-export type { CliConfig } from '@caracalai/engine/cli'
+export type { RuntimeConfig } from '@caracalai/engine/runtime-config'
 
 export const EXIT_CODES = {
   ok: 0,

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Workspace entry: locates the repo root, stamps a dev CLI identity, then delegates to the workspace CLI.
+// Workspace entry: locates the repo root, stamps a dev runtime identity, then delegates to the workspace shell.
 
 import { execFileSync } from 'child_process'
 import { existsSync, readdirSync, statSync } from 'fs'
@@ -11,7 +11,7 @@ import { dirname, join } from 'path'
 function findRepoRoot(start) {
   let dir = start
   while (true) {
-    if (existsSync(join(dir, 'apps/cli/bin/caracal.mjs'))) return dir
+    if (existsSync(join(dir, 'apps/runtime/bin/caracal.mjs'))) return dir
     const parent = dirname(dir)
     if (parent === dir) return null
     dir = parent
@@ -24,7 +24,7 @@ const root = findRepoRoot(start)
 if (!root) {
   process.stderr.write(
     'caracal: this binary is the pnpm workspace shim and only runs inside the Caracal monorepo.\n' +
-      'If you installed the released CLI, remove the pnpm symlink so the installed binary wins:\n' +
+      'If you installed the released runtime shell, remove the pnpm symlink so the installed binary wins:\n' +
       '  pnpm rm -g caracal   # or: rm "$(pnpm bin -g)/caracal"\n',
   )
   process.exit(1)
@@ -73,7 +73,7 @@ if (tsBuilds.some((path) => !existsSync(join(root, path))) || staleBuilds.some((
 }
 
 try {
-  const sha = execFileSync('node', [join(root, 'apps/cli/scripts/stampDev.mjs')], {
+  const sha = execFileSync('node', [join(root, 'apps/runtime/scripts/stampDev.mjs')], {
     stdio: ['ignore', 'pipe', 'inherit'],
   })
     .toString()
@@ -84,7 +84,7 @@ try {
   process.exit(1)
 }
 
-import(join(root, 'apps/cli/bin/caracal.mjs')).catch((err) => {
+import(join(root, 'apps/runtime/bin/caracal.mjs')).catch((err) => {
   process.stderr.write(`caracal: ${err?.message ?? err}\n`)
   process.exit(1)
 })

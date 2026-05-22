@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Caracal CLI launcher: defers to the TypeScript entry under Node 24 native type stripping.
+// Caracal runtime launcher: defers to the TypeScript entry under Node 24 native type stripping.
 
 import('../src/shell.ts').catch((err) => {
   process.stderr.write(`caracal: ${err?.message ?? err}\n`)

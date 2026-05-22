@@ -1,19 +1,18 @@
 {
-  "name": "@caracalai/cli",
+  "name": "@caracalai/runtime",
   "version": "0.1.2",
   "private": true,
-  "description": "Caracal CLI: install, run, and manage the OSS agent identity stack.",
+  "description": "Caracal runtime shell for local stack lifecycle and workload execution.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/Garudex-Labs/caracal",
   "repository": {
     "type": "git",
     "url": "https://github.com/Garudex-Labs/caracal.git",
-    "directory": "apps/cli"
+    "directory": "apps/runtime"
   },
   "type": "module",
   "bin": {
-    "caracal": "./bin/caracal.mjs",
-    "caracal-cli": "./bin/caracal-cli.mjs"
+    "caracal": "./bin/caracal.mjs"
   },
   "files": [
     "bin",
@@ -31,22 +30,16 @@
     "build:shell:darwin-x64": "bun build --compile --target=bun-darwin-x64 src/shell.ts --outfile dist/caracal-darwin-x64",
     "build:shell:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 src/shell.ts --outfile dist/caracal-darwin-arm64",
     "build:shell:windows-x64": "bun build --compile --target=bun-windows-x64 src/shell.ts --outfile dist/caracal-windows-x64.exe",
-    "build:cli:linux-x64": "bun build --compile --target=bun-linux-x64 src/cli.ts --outfile dist/caracal-cli-linux-x64",
-    "build:cli:linux-arm64": "bun build --compile --target=bun-linux-arm64 src/cli.ts --outfile dist/caracal-cli-linux-arm64",
-    "build:cli:darwin-x64": "bun build --compile --target=bun-darwin-x64 src/cli.ts --outfile dist/caracal-cli-darwin-x64",
-    "build:cli:darwin-arm64": "bun build --compile --target=bun-darwin-arm64 src/cli.ts --outfile dist/caracal-cli-darwin-arm64",
-    "build:cli:windows-x64": "bun build --compile --target=bun-windows-x64 src/cli.ts --outfile dist/caracal-cli-windows-x64.exe",
-    "compile:all": "bun run build:shell:linux-x64 && bun run build:shell:linux-arm64 && bun run build:shell:darwin-x64 && bun run build:shell:darwin-arm64 && bun run build:shell:windows-x64 && bun run build:cli:linux-x64 && bun run build:cli:linux-arm64 && bun run build:cli:darwin-x64 && bun run build:cli:darwin-arm64 && bun run build:cli:windows-x64",
+    "compile:all": "bun run build:shell:linux-x64 && bun run build:shell:linux-arm64 && bun run build:shell:darwin-x64 && bun run build:shell:darwin-arm64 && bun run build:shell:windows-x64",
     "prebuild": "node scripts/stampDev.mjs",
     "build": "bun run compile:all",
     "build:release": "node scripts/stampRelease.mjs && pnpm --filter @caracalai/engine build && node scripts/buildLocalImages.mjs && bun run compile:all",
     "dev": "node bin/caracal.mjs",
     "pretypecheck": "node scripts/stampDev.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --root ../.. tests/typescript/unit/cli"
+    "test": "vitest run --root ../.. tests/typescript/unit/runtime"
   },
   "dependencies": {
-    "@caracalai/admin": "workspace:*",
     "@caracalai/core": "workspace:*",
     "@caracalai/engine": "workspace:*",
     "smol-toml": "^1.3.1"
