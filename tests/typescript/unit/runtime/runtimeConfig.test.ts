@@ -115,7 +115,7 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 
-  it('treats unset NODE_ENV as development for local runtime and terminal runs', () => {
+  it('treats unset NODE_ENV as development for local runtime and Console runs', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 

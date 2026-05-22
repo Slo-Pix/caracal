@@ -26,7 +26,7 @@ describe('runDeadlineSweep', () => {
     expect(client.query).toHaveBeenCalledWith('ROLLBACK')
   })
 
-  it('emits matching outbox events for retry and terminal transitions', async () => {
+  it('emits matching outbox events for retry and Console transitions', async () => {
     const rows = [
       { id: 'inv-1', zone_id: 'z1', service_id: 'svc-1', status: 'failed' },
       { id: 'inv-2', zone_id: 'z1', service_id: 'svc-2', status: 'timed_out' },

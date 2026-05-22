@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Retention cleaner unit tests covering lock gating and terminal row pruning.
+// Retention cleaner unit tests covering lock gating and Console row pruning.
 
 import { describe, expect, it, vi } from 'vitest'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
@@ -31,7 +31,7 @@ describe('runRetentionCleanup', () => {
     expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('DELETE FROM delegation_edges'), expect.anything())
   })
 
-  it('expires active edges, invalidates delegation caches, and prunes terminal rows', async () => {
+  it('expires active edges, invalidates delegation caches, and prunes Console rows', async () => {
     const client = clientWithRows([
       { rows: [] },
       { rows: [{ acquired: true }] },

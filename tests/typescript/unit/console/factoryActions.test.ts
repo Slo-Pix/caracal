@@ -185,7 +185,7 @@ describe('applications actions', () => {
     expect(keys).toEqual(['name', 'credential_type', 'consent'])
   })
 
-  it('D opens DCR FormView with terminal fields and calls applications.dcr', async () => {
+  it('D opens DCR FormView with Console fields and calls applications.dcr', async () => {
     const { client, ctx } = newCtx()
     const list = applicationsView(ctx as unknown as Parameters<typeof applicationsView>[0]) as ListView<unknown>
     setRows(list, [{ id: 'a1', name: 'app', registration_method: 'managed', credential_type: 'token', traits: [] }])

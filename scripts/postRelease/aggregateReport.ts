@@ -102,7 +102,7 @@ const compat = (() => {
     containerView[`${registry}/${imagePrefix}${svc}`] = `v${ver}`;
   }
   return [
-    sec("Runtime / terminal binaries", manifest.binaries),
+    sec("Runtime / Console binaries", manifest.binaries),
     sec(`Container images (${registry})`, containerView),
     sec("PyPI packages", manifest.pypi),
     sec("npm packages", manifest.npm),
@@ -169,7 +169,7 @@ ${topFixes || "_No failing findings._"}
 - [ ] Registry metadata reviewed
 - [ ] PyPI install matrix green
 - [ ] npm install matrix green
-- [ ] Runtime and terminal binaries verified on all platforms
+- [ ] Runtime and Console binaries verified on all platforms
 - [ ] Installers verified
 - [ ] Containers boot cleanly
 - [ ] Provenance verified

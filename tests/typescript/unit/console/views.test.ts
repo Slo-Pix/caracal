@@ -43,7 +43,7 @@ describe('AuditTailView', () => {
     expect(cursor).toBe(0)
   })
 
-  it('sanitizes API-sourced fields so injected escapes cannot reach the terminal', async () => {
+  it('sanitizes API-sourced fields so injected escapes cannot reach output', async () => {
     const { AuditTailView } = await import('../../../../apps/console/src/views/audit.ts')
     const fakeClient = { audit: { tail: vi.fn(), byRequest: vi.fn() } } as unknown as Parameters<typeof AuditTailView>[0]
     const view = new AuditTailView(fakeClient as never, 'zone-1')

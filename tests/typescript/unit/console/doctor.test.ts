@@ -50,7 +50,7 @@ function fakeApp(): App {
   return app
 }
 
-describe('doctor Terminal integration', () => {
+describe('doctor Console integration', () => {
   it('opens a live diagnostics screen from the main menu', async () => {
     const client = { zones: { list: vi.fn(async () => []) } } as unknown as AdminClient
     const menu = new MenuView(client, 'z1')

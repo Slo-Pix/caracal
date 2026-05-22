@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Unit tests for the sibling-binary executor used to dispatch `caracal terminal` to its installed binary.
+// Unit tests for the sibling-binary executor used to dispatch `caracal console` to its installed binary.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
@@ -43,13 +43,13 @@ describe('execSibling', () => {
 
   it('reports only interface commands with an available workspace shim', () => {
     const root = mkdtempSync(join(tmpdir(), 'caracal-root-'))
-    const terminal = join(root, 'apps', 'terminal', 'bin')
-    mkdirSync(terminal, { recursive: true })
+    const consoleBin = join(root, 'apps', 'console', 'bin')
+    mkdirSync(consoleBin, { recursive: true })
     process.env.CARACAL_REPO_ROOT = root
 
     expect(availableInterfaceCommands()).toEqual([])
 
-    writeFileSync(join(terminal, 'caracal-console.mjs'), '')
-    expect(availableInterfaceCommands()).toEqual(['terminal'])
+    writeFileSync(join(consoleBin, 'caracal-console.mjs'), '')
+    expect(availableInterfaceCommands()).toEqual(['console'])
   })
 })
