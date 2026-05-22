@@ -104,6 +104,12 @@ export const ENV_SCHEMA = {
     secret: true,
     file: 'caracalAdminToken',
   },
+  CARACAL_COORDINATOR_TOKEN: {
+    kind: 'secret',
+    description: 'Coordinator operator token for protected metrics endpoints.',
+    secret: true,
+    file: 'caracalCoordinatorToken',
+  },
   ZONE_KEK: {
     kind: 'secret',
     description: '32-byte zone key-encryption-key. Rotating destroys existing zones.',
