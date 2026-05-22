@@ -8,7 +8,7 @@ package internal
 import "testing"
 
 func TestIsControlKeyExchange(t *testing.T) {
-	app := &Application{ID: "app-1", Traits: []string{controlInvokeTrait}}
+	app := &Application{ID: "app-1", Traits: []string{controlInvokeTrait, controlScopeTrait + "control:zone:read"}}
 	req := TokenExchangeRequest{ApplicationID: "app-1"}
 	resource := &Resource{Identifier: defaultControlAudience}
 
@@ -23,10 +23,22 @@ func TestIsControlKeyExchange(t *testing.T) {
 		scopes   []string
 	}{
 		"missing trait": {
-			app:      &Application{ID: "app-1"},
+			app:      &Application{ID: "app-1", Traits: []string{controlScopeTrait + "control:zone:read"}},
 			req:      req,
 			resource: resource,
 			scopes:   []string{"control:zone:read"},
+		},
+		"missing scoped permission": {
+			app:      &Application{ID: "app-1", Traits: []string{controlInvokeTrait}},
+			req:      req,
+			resource: resource,
+			scopes:   []string{"control:zone:read"},
+		},
+		"ungranted scope": {
+			app:      app,
+			req:      req,
+			resource: resource,
+			scopes:   []string{"control:zone:delete"},
 		},
 		"wrong resource": {
 			app:      app,
@@ -58,5 +70,26 @@ func TestIsControlKeyExchange(t *testing.T) {
 				t.Fatalf("expected control key exchange to be denied")
 			}
 		})
+	}
+}
+
+func TestIsControlKeyExchangeRestrictions(t *testing.T) {
+	resource := &Resource{Identifier: defaultControlAudience}
+	scope := []string{"control:zone:read"}
+
+	if isControlKeyExchange(&Application{ID: "app-1", Traits: []string{
+		controlInvokeTrait,
+		controlScopeTrait + "control:zone:read",
+		controlMaxTTLTrait + "60",
+	}}, TokenExchangeRequest{ApplicationID: "app-1", TTLSeconds: 300}, resource, scope) {
+		t.Fatalf("expected ttl above key maximum to be denied")
+	}
+
+	if isControlKeyExchange(&Application{ID: "app-1", Traits: []string{
+		controlInvokeTrait,
+		controlScopeTrait + "control:zone:read",
+		controlExpiresTrait + "2000-01-01T00:00:00Z",
+	}}, TokenExchangeRequest{ApplicationID: "app-1"}, resource, scope) {
+		t.Fatalf("expected expired key to be denied")
 	}
 }

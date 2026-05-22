@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Control API credential lifecycle helpers: list, create, rotate, and revoke OAuth apps with the `control:invoke` trait.
+// Control API credential lifecycle helpers for least-privilege Control API keys.
 
 import { randomBytes } from 'node:crypto'
 import type { AdminClient, Application, Resource } from '@caracalai/admin'
@@ -9,16 +9,36 @@ import { describeRemoteSurface } from './dispatch.js'
 
 export const CONTROL_INVOKE_TRAIT = 'control:invoke'
 export const DEFAULT_CONTROL_AUDIENCE = 'caracal-control'
+export const CONTROL_SCOPE_TRAIT_PREFIX = 'control:scope:'
+export const CONTROL_MAX_TTL_TRAIT_PREFIX = 'control:max-ttl:'
+export const CONTROL_EXPIRES_TRAIT_PREFIX = 'control:expires:'
+
+export type ControlAction = 'read' | 'write' | 'delete'
+
+export interface ControlPermission {
+  command: string
+  subcommand: string
+  action: ControlAction
+  scope: string
+}
 
 export interface ControlKeyCreateInput {
   name: string
   audience?: string
+  scopes?: string[]
+  actions?: ControlAction[]
+  resources?: string[]
+  maxTtlSeconds?: number
+  expiresAt?: string
 }
 
 export interface ControlKeyCreateResult {
   application: Application
   clientSecret: string
   resource: Resource
+  allowedScopes: string[]
+  maxTtlSeconds?: number
+  expiresAt?: string
 }
 
 export interface ControlKeyRotateResult {
@@ -31,6 +51,10 @@ export interface ControlKeyRecord {
   client_id: string
   credential_type: Application['credential_type']
   traits: string[]
+  allowed_scopes: string[]
+  max_ttl_seconds?: number
+  expires_at?: string
+  restrictions: string[]
   created_at: string
 }
 
@@ -46,12 +70,28 @@ export function controlScopes(): string[] {
   return [...new Set(describeRemoteSurface().map((row) => row.scope))].sort()
 }
 
+export function controlPermissions(): ControlPermission[] {
+  return describeRemoteSurface()
+    .map((row) => ({
+      command: row.command,
+      subcommand: row.subcommand,
+      action: scopeAction(row.scope),
+      scope: row.scope,
+    }))
+    .sort((left, right) => left.scope.localeCompare(right.scope))
+}
+
 export function controlKeyRecord(app: Application): ControlKeyRecord {
+  const traits = app.traits ?? []
   return {
     name: app.name,
     client_id: app.id,
     credential_type: app.credential_type,
-    traits: app.traits,
+    traits,
+    allowed_scopes: controlScopeTraits(traits),
+    max_ttl_seconds: controlMaxTtlTrait(traits),
+    expires_at: controlExpiresTrait(traits),
+    restrictions: ['zone-bound', 'application-only', 'no-subject-token', 'no-delegation'],
     created_at: app.created_at,
   }
 }
@@ -101,16 +141,24 @@ export async function controlKeyCreate(
   input: ControlKeyCreateInput,
 ): Promise<ControlKeyCreateResult> {
   const resource = await ensureControlResource(client, zoneId, input.audience)
+  const allowedScopes = resolveAllowedScopes(input)
+  const maxTtlSeconds = validateMaxTtl(input.maxTtlSeconds)
+  const expiresAt = validateExpiresAt(input.expiresAt)
   const clientSecret = generateClientSecret()
   const application = await client.applications.create(zoneId, {
     name: input.name,
     registration_method: 'managed',
     credential_type: 'token',
     client_secret: clientSecret,
-    traits: [CONTROL_INVOKE_TRAIT],
+    traits: [
+      CONTROL_INVOKE_TRAIT,
+      ...allowedScopes.map((scope) => `${CONTROL_SCOPE_TRAIT_PREFIX}${scope}`),
+      ...(maxTtlSeconds ? [`${CONTROL_MAX_TTL_TRAIT_PREFIX}${maxTtlSeconds}`] : []),
+      ...(expiresAt ? [`${CONTROL_EXPIRES_TRAIT_PREFIX}${expiresAt}`] : []),
+    ],
     consent: false,
   })
-  return { application, clientSecret, resource }
+  return { application, clientSecret, resource, allowedScopes, maxTtlSeconds, expiresAt }
 }
 
 export async function controlKeyRotate(
@@ -128,4 +176,74 @@ export async function controlKeyRotate(
 export async function controlKeyRevoke(client: AdminClient, zoneId: string, id: string): Promise<void> {
   await requireControlApplication(client, zoneId, id)
   await client.applications.delete(zoneId, id)
+}
+
+function scopeAction(scope: string): ControlAction {
+  const action = scope.split(':').at(-1)
+  if (action === 'read' || action === 'write' || action === 'delete') return action
+  throw new Error(`unsupported control scope action: ${scope}`)
+}
+
+function controlScopeTraits(traits: readonly string[]): string[] {
+  const valid = new Set(controlScopes())
+  return [...new Set(traits
+    .filter((trait) => trait.startsWith(CONTROL_SCOPE_TRAIT_PREFIX))
+    .map((trait) => trait.slice(CONTROL_SCOPE_TRAIT_PREFIX.length))
+    .filter((scope) => valid.has(scope)))]
+    .sort()
+}
+
+function controlMaxTtlTrait(traits: readonly string[]): number | undefined {
+  const trait = traits.find((value) => value.startsWith(CONTROL_MAX_TTL_TRAIT_PREFIX))
+  if (!trait) return undefined
+  const value = Number.parseInt(trait.slice(CONTROL_MAX_TTL_TRAIT_PREFIX.length), 10)
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+function controlExpiresTrait(traits: readonly string[]): string | undefined {
+  const trait = traits.find((value) => value.startsWith(CONTROL_EXPIRES_TRAIT_PREFIX))
+  if (!trait) return undefined
+  const value = trait.slice(CONTROL_EXPIRES_TRAIT_PREFIX.length)
+  return Number.isFinite(Date.parse(value)) ? value : undefined
+}
+
+function resolveAllowedScopes(input: ControlKeyCreateInput): string[] {
+  const available = new Set(controlScopes())
+  const requested = new Set<string>()
+  for (const scope of input.scopes ?? []) requested.add(scope)
+
+  const actions = new Set(input.actions ?? [])
+  const resources = new Set(input.resources ?? [])
+  if (actions.size > 0 || resources.size > 0) {
+    for (const permission of controlPermissions()) {
+      const actionMatch = actions.size === 0 || actions.has(permission.action)
+      const resourceMatch = resources.size === 0 || resources.has(permission.command)
+      if (actionMatch && resourceMatch) requested.add(permission.scope)
+    }
+  }
+
+  const scopes = [...requested].map((scope) => scope.trim()).filter((scope) => scope.length > 0)
+  if (scopes.length === 0) {
+    throw new Error('control key permissions are required; choose explicit scopes, actions, or resources')
+  }
+  for (const scope of scopes) {
+    if (!available.has(scope)) throw new Error(`unsupported control scope: ${scope}`)
+  }
+  return [...new Set(scopes)].sort()
+}
+
+function validateMaxTtl(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined
+  if (!Number.isInteger(value) || value < 60 || value > 900) {
+    throw new Error('control key max token TTL must be between 60 and 900 seconds')
+  }
+  return value
+}
+
+function validateExpiresAt(value: string | undefined): string | undefined {
+  if (!value) return undefined
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) throw new Error('control key expiry must be an ISO timestamp')
+  if (timestamp <= Date.now()) throw new Error('control key expiry must be in the future')
+  return new Date(timestamp).toISOString()
 }
