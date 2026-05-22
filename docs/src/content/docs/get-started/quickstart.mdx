@@ -4,7 +4,7 @@ description: Bring up the complete Caracal authority plane with one local comman
 pageType: workflow
 ---
 
-This quickstart brings up the full Caracal OSS stack, verifies service health, and prepares the default Gateway-first flow: a zone, an agent app, a tool/provider resource, and a policy template. You operate it as one local stack even though the internals are split into separate trust-boundary services.
+This quickstart brings up the full Caracal OSS stack, verifies service health, and prepares the default Gateway-first flow: a zone, an agent app, a tool/provider resource, and an active policy set. You operate it as one local stack even though the internals are split into separate trust-boundary services.
 
 :::note[Contributors]
 This page covers the **installed binary** workflow. If you are building Caracal from source, follow [Local Setup](../contributing/setup/) instead.
@@ -101,20 +101,85 @@ Readiness checks include Postgres, Redis, STS reachability, Gateway bindings, au
 
 ## Step 4: Protect one HTTP resource
 
-The stack starts with an empty database. Use the golden-path command to create or update the product objects needed for a Gateway-mediated call: zone, Gateway app, resource route, policy, policy set, activation, grant, and local config values. The admin token is read from `$CARACAL_HOME/secrets/caracalAdminToken` automatically — no manual export is needed.
+The stack starts with an empty database. Create the product objects needed for a Gateway-mediated call: zone, Gateway app, resource route, policy, policy set, activation, grant, and local config values. The admin token is read from `$CARACAL_HOME/secrets/caracalAdminToken` automatically — no manual export is needed.
+
+The copy-paste flow below uses `jq` to capture IDs from JSON output and `openssl` to generate the local app secret.
 
 ```sh
-caracal protect http \
+APP_CLIENT_SECRET="cs_$(openssl rand -hex 32)"
+ZONE_ID="$(caracal zone create --name "Local Development" --slug local-development | jq -r '.id')"
+APP_ID="$(caracal app create \
+  --zone "$ZONE_ID" \
+  --name local-gateway-app \
+  --credential-type token \
+  --client-secret "$APP_CLIENT_SECRET" \
+  --traits gateway | jq -r '.id')"
+RESOURCE_ID="$(caracal resource create \
+  --zone "$ZONE_ID" \
   --identifier "resource://local-tool" \
+  --name "Local Tool" \
   --upstream-url "https://httpbin.org" \
-  --scopes "demo:read" \
-  --user local-user \
-  --write-config caracal.toml
+  --gateway-application-id "$APP_ID" \
+  --scopes "demo:read" | jq -r '.id')"
+
+cat > gateway-scope.rego <<'REGO'
+package caracal.authz
+
+import rego.v1
+
+default allow := false
+default result := {"decision": "deny", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
+
+result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [{"policy": "gateway-scope"}], "diagnostics": []} if {
+  allow
+}
+
+allow if {
+  every scope in input.context.requested_scopes {
+    scope in input.resource.scopes
+  }
+}
+REGO
+
+POLICY_VERSION_ID="$(caracal policy create \
+  --zone "$ZONE_ID" \
+  --name "Gateway Scope Policy" \
+  --description "Allows requested scopes registered on the target resource." \
+  --file gateway-scope.rego \
+  --schema-version 2026-05-20 | jq -r '.version.id')"
+POLICY_SET_ID="$(caracal policy-set create \
+  --zone "$ZONE_ID" \
+  --name "Gateway Policies" \
+  --description "Local Gateway policy set" | jq -r '.id')"
+POLICY_SET_VERSION_ID="$(caracal policy-set version "$POLICY_SET_ID" \
+  --zone "$ZONE_ID" \
+  --policy-versions "$POLICY_VERSION_ID" | jq -r '.id')"
+caracal policy-set activate "$POLICY_SET_ID" --zone "$ZONE_ID" --version "$POLICY_SET_VERSION_ID" >/dev/null
+caracal grant create --zone "$ZONE_ID" --app "$APP_ID" --user local-user --resource "$RESOURCE_ID" --scopes "demo:read" >/dev/null
+rm gateway-scope.rego
 ```
 
-The command prints the generated `caracal.toml` and writes it with file mode `0600` when `--write-config` is supplied. The `app_client_secret` is shown once; store it as you would any other application secret.
+Write `caracal.toml` in the working directory. The `app_client_secret` is an application secret; store it as you would any other service credential.
 
-The generated file looks like this:
+```sh
+cat > caracal.toml <<EOF
+zone_url = "http://localhost:8080"
+zone_id = "$ZONE_ID"
+
+application_id = "$APP_ID"
+app_client_secret = "$APP_CLIENT_SECRET"
+
+[[credentials]]
+env = "RESOURCE_TOKEN"
+resource = "resource://local-tool"
+
+[mcp_governance]
+mode = "block"
+EOF
+chmod 600 caracal.toml
+```
+
+The file should look like this:
 
 ```toml
 zone_url = "http://localhost:8080"
@@ -131,7 +196,7 @@ resource = "resource://local-tool"
 mode = "block"
 ```
 
-The Gateway application identity is same-zone service identity used for internal STS exchange. In production, use a dedicated Gateway application identity and review the generated policy before activation.
+The Gateway application identity is same-zone service identity used for internal STS exchange. In production, use a dedicated Gateway application identity and review policy content before activation.
 
 Run the readiness doctor if the credential step below fails:
 
@@ -183,7 +248,7 @@ This stops and removes containers but preserves the named volumes (`postgresData
 At this point you have:
 
 - A fully operational local Caracal authority plane
-- A zone with an agent app, tool/provider resource, active policy template, grant, and Gateway provider route
+- A zone with an agent app, tool/provider resource, active policy set, grant, and Gateway provider route
 - A `caracal.toml` that the CLI and SDKs can read for configuration
 
 Continue to [First Integration](./first-integration/) to wire an application to Caracal using the SDK.

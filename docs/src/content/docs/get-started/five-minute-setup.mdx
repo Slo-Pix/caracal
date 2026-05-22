@@ -12,8 +12,9 @@ If a step fails, stop at that step and use the troubleshooting section before co
 
 - Caracal CLI installed — see [Installation](./installation/).
 - Docker 24+ with the Compose v2 plugin.
+- `jq` and `openssl` available in your shell.
 - Outbound HTTPS access to `https://httpbin.org`.
-- No existing `caracal.toml` in the working directory, or permission to overwrite it with `--force`.
+- No existing `caracal.toml` in the working directory, or permission to replace it.
 
 ## 1. Start the stack
 
@@ -32,17 +33,78 @@ The command must exit `0`. If it does not, run `caracal doctor --extended --json
 ## 2. Protect one HTTP resource
 
 ```bash
-caracal protect http \
+APP_CLIENT_SECRET="cs_$(openssl rand -hex 32)"
+ZONE_ID="$(caracal zone create --name "Local Development" --slug local-development | jq -r '.id')"
+APP_ID="$(caracal app create \
+  --zone "$ZONE_ID" \
+  --name local-gateway-app \
+  --credential-type token \
+  --client-secret "$APP_CLIENT_SECRET" \
+  --traits gateway | jq -r '.id')"
+RESOURCE_ID="$(caracal resource create \
+  --zone "$ZONE_ID" \
   --identifier "resource://demo-api" \
+  --name "Demo API" \
   --upstream-url "https://httpbin.org" \
-  --scopes "demo:read" \
-  --user local-user \
-  --write-config caracal.toml
+  --gateway-application-id "$APP_ID" \
+  --scopes "demo:read" | jq -r '.id')"
+
+cat > gateway-scope.rego <<'REGO'
+package caracal.authz
+
+import rego.v1
+
+default allow := false
+default result := {"decision": "deny", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
+
+result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [{"policy": "gateway-scope"}], "diagnostics": []} if {
+  allow
+}
+
+allow if {
+  every scope in input.context.requested_scopes {
+    scope in input.resource.scopes
+  }
+}
+REGO
+
+POLICY_VERSION_ID="$(caracal policy create \
+  --zone "$ZONE_ID" \
+  --name "Gateway Scope Policy" \
+  --description "Allows requested scopes registered on the target resource." \
+  --file gateway-scope.rego \
+  --schema-version 2026-05-20 | jq -r '.version.id')"
+POLICY_SET_ID="$(caracal policy-set create \
+  --zone "$ZONE_ID" \
+  --name "Gateway Policies" \
+  --description "Local Gateway policy set" | jq -r '.id')"
+POLICY_SET_VERSION_ID="$(caracal policy-set version "$POLICY_SET_ID" \
+  --zone "$ZONE_ID" \
+  --policy-versions "$POLICY_VERSION_ID" | jq -r '.id')"
+caracal policy-set activate "$POLICY_SET_ID" --zone "$ZONE_ID" --version "$POLICY_SET_VERSION_ID" >/dev/null
+caracal grant create --zone "$ZONE_ID" --app "$APP_ID" --user local-user --resource "$RESOURCE_ID" --scopes "demo:read" >/dev/null
+rm gateway-scope.rego
+
+cat > caracal.toml <<EOF
+zone_url = "http://localhost:8080"
+zone_id = "$ZONE_ID"
+
+application_id = "$APP_ID"
+app_client_secret = "$APP_CLIENT_SECRET"
+
+[[credentials]]
+env = "RESOURCE_TOKEN"
+resource = "resource://demo-api"
+
+[mcp_governance]
+mode = "block"
+EOF
+chmod 600 caracal.toml
 ```
 
-This command creates or updates the zone, application, resource, policy, policy set, activation, grant, Gateway binding, and local `caracal.toml`.
+These commands create the zone, application, resource, policy, policy set, activation, grant, Gateway binding, and local `caracal.toml`.
 
-The command writes `caracal.toml` with file mode `0600`. The `app_client_secret` in that file is shown once and should be handled as an application secret.
+The `app_client_secret` in `caracal.toml` should be handled as an application secret.
 
 Verification:
 
@@ -51,7 +113,7 @@ caracal policy-set list
 caracal resource list
 ```
 
-Both must return at least one row. The active policy version id is the one shipped by `caracal protect http`, and the resource row should include `resource://demo-api`.
+Both must return at least one row. The policy set should be active, and the resource row should include `resource://demo-api`.
 
 ## 3. Verify token injection
 
@@ -90,17 +152,15 @@ The explanation reproduces the policy decision, the determining policies, and th
 
 ## Troubleshooting
 
-### `refusing to overwrite caracal.toml`
+### Existing `caracal.toml`
 
-`caracal protect http` refuses to replace an existing config file unless you opt in.
+The setup writes `caracal.toml` in the current directory.
 
 1. Move the existing file if you need to keep it:
    ```bash
    mv caracal.toml caracal.toml.backup
    ```
-2. Re-run the `caracal protect http` command.
-
-If you intend to replace the file, add `--force` to the command.
+2. Re-run the setup commands.
 
 ### `missing routing headers`
 

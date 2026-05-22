@@ -25,12 +25,8 @@ Use the local stack for development and evaluation:
 
 ```bash
 caracal up
-caracal protect http \
-  --identifier resource://local-tool \
-  --upstream-url https://httpbin.org \
-  --scopes demo:read \
-  --user local-user \
-  --write-config caracal.toml
+# Register the zone, Gateway app, resource, policy set, grant, and caracal.toml
+# with the admin commands or Control API before running Gateway-mediated calls.
 caracal doctor
 ```
 
