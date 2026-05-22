@@ -35,7 +35,6 @@ export class DoctorView implements View {
   private strict = false
   private loading = true
   private error: string | undefined
-  private report: DoctorReport | undefined
   private body: string[] = [' loading...']
   private offset = 0
   private aborted = false
@@ -66,14 +65,14 @@ export class DoctorView implements View {
     this.body = [' loading...']
     app?.invalidate()
     try {
-      this.report = await runDoctorDiagnostics({
+      const report = await runDoctorDiagnostics({
         cfg: this.cfg,
         zoneId: this.mode === 'system' ? this.zoneId : undefined,
         strict: this.strict,
         preflightOnly: this.mode === 'preflight',
       })
       if (this.aborted) return
-      this.body = renderDoctor(this.report)
+      this.body = renderDoctor(report)
       this.offset = 0
     } catch (err) {
       if (this.aborted) return

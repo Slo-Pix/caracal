@@ -13,8 +13,8 @@ import { zoneCommand } from '../../../../apps/cli/src/commands/zone.ts'
 import { agentCommand, delegationCommand } from '../../../../apps/cli/src/commands/agent.ts'
 import { policyCommand, policySetCommand } from '../../../../apps/cli/src/commands/policy.ts'
 import { doctorCommand } from '../../../../apps/cli/src/commands/doctor.ts'
-import { runPreflightChecks } from '../../../../apps/cli/src/commands/preflight.ts'
 import { manifestCommand } from '../../../../apps/cli/src/commands/manifest.ts'
+import { runPreflightChecks } from '@caracalai/engine'
 
 const ORIG_ENV = { ...process.env }
 
