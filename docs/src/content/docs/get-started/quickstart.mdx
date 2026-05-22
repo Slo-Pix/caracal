@@ -151,13 +151,13 @@ caracal credential read resource://local-tool
 
 If successful, a signed Caracal access token is printed to stdout. This proves the public STS allowed the agent app to access the resource; provider-native credentials are not returned to the CLI.
 
-Decode it to inspect the claims:
+Inspect it to review the claims:
 
 ```sh
-caracal credential read resource://local-tool | cut -d. -f2 | base64 -d | jq .
+caracal credential read resource://local-tool | caracal credential inspect -
 ```
 
-You should see claims including `zone_id`, `scope`, `target`, and an expiry (`exp`) 15 minutes from now.
+You should see `verification=not_verified` because this command decodes locally instead of validating the signature. The claims should include `zone_id`, `scopes`, `resource`, and an expiry 15 minutes from now.
 
 To test the full product path, run a local HTTP service on port `8090`, then call it through the Gateway from an SDK integration or a process launched by `caracal run`. The Gateway verifies the Caracal token, resolves the provider route, forwards the upstream call, and records action-result audit.
 
