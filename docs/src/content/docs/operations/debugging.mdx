@@ -4,114 +4,14 @@ description: A practical runbook for tracing Caracal decisions, authority flow, 
 pageType: workflow
 ---
 
-Use this page when a platform engineer or operator needs to explain why an agent could or could not act. The goal is to stay inside your own environment: terminal management interface output, audit records, readiness reasons, metrics, and decoded token claims.
+This page no longer documents standalone management command examples. Human-facing management now runs through the terminal management interface.
 
-## One-minute model
-
-Caracal has one authority path:
-
-```text
-agent app -> agent run -> STS policy decision -> mandate -> Gateway or verified service -> audit
-```
-
-If delegation is involved, a delegated permission sits between the source run and the receiver run. If a provider credential is involved, the Gateway brokers it after the Caracal mandate is verified. Operators can debug the path by finding the request ID, explaining the audit event, inspecting the token claims, and checking the component that owned the failing step.
-
-## First commands to run
-
-| Question | Command | What it answers |
-| --- | --- | --- |
-| Is the stack ready? | `caracal status --ready` | Which service is not ready and the structured reason. |
-| Are dependencies and metrics healthy? | the terminal management interface Doctor view | API auth, zone selection, resources, policy sets, grants, audit queryability, readiness, and metric summaries. |
-| What happened to one request? | the terminal management interface audit detail view | Policy decision, authority path, diagnostics, metadata, and supporting policy version. |
-| Can I visualize the authority path? | the terminal management interface audit detail view | Mermaid flowchart for agent app, session, run, delegation, policy decision, resource, provider, and audit event. |
-Open the terminal management interface and follow the matching view.
-Open the terminal management interface and follow the matching view.
-
-## Trace a denied request
-
-1. Find the request:
+Open the interface with:
 
 ```bash
-the terminal management interface Audit view
+caracal terminal
 ```
 
-2. Trace the decision:
+Use the matching view for the workflow covered by this page. For automation, enable the Control API from the terminal management interface Control menu and call the authenticated HTTP surface.
 
-```bash
-Use the terminal management interface audit detail view for the request.
-```
-
-Use `--json` when attaching the full audit detail to an incident or automation workflow. The output includes the request ID, zone, decision, diagnostics, redacted metadata, and the audit events that support the answer.
-
-3. Render the flow when the path is not obvious:
-
-```bash
-Use the terminal management interface audit detail view for the request.
-```
-
-The Mermaid graph is safe to attach to an incident ticket because it contains identifiers and decision metadata, not provider secrets or request bodies.
-
-4. Decode the token if the failure reached a resource boundary:
-
-```bash
-Open the terminal management interface and follow the matching view.
-```
-
-The inspection is deliberately marked `not_verified`; it decodes claims for triage but does not prove signature validity. Use it to compare `zone_id`, `target`, `scope`, `sid`, `agent_session_id`, `delegation_edge_id`, `exp`, `kid`, and `jti` against the audit event.
-
-5. Simulate the policy before changing production state:
-
-```bash
-cat > input.json <<'JSON'
-{"schema_version":"2026-05-20","principal":{"zone_id":"zone_prod","id":"app_payments_agent"},"resource":{"identifier":"resource://payments","scopes":["payments:submit"]},"context":{"requested_scopes":["payments:submit"]}}
-JSON
-
-Open the terminal management interface and follow the matching view.
-  --version psetv_candidate \
-  --input-file input.json
-```
-
-Policy simulation is the dry-run path for policy rollouts. It validates the version, schema, manifest, and optional OPA input before activation.
-
-## Component debugging paths
-
-| Component | Owns | Start with | If unhealthy |
-| --- | --- | --- | --- |
-| API | Zones, apps, resources, providers, grants, policy objects, admin audit | `the terminal management interface`, API `/ready` | Check Postgres reachability, Redis reachability, admin token, zone selector, and validation body. |
-| STS | Token exchange, OPA evaluation, mandate signing, authorization audit | the terminal management interface audit detail view, STS `/ready`, `caracal_sts_opa_*` metrics | Check active policy set, policy compile errors, runtime OPA diagnostics, signing key/JWKS validity, Redis replay state, and audit replay health. |
-| Gateway | Token verification, replay/revocation checks, route lookup, provider brokering, action-result audit | Gateway `/ready`, `caracal_gateway_*` metrics, the terminal management interface audit detail view | Check resource upstream URL, Gateway application ID, provider grant, `target` claim, replay counters, revocation cache, STS reachability, and upstream errors. |
-Open the terminal management interface and follow the matching view.
-| Audit | Event ingestion, tamper evidence, export, retention | the terminal management interface Audit view, Audit `/ready`, `caracal_audit_*` metrics | Check stream lag, DLQ size, HMAC failures, tamper counters, Postgres reachability, Redis pending entries, and object-store export errors. |
-| Redis | Streams, revocation propagation, replay state, invalidation | Service readiness, Redis `XINFO GROUPS` | Restore connectivity and memory headroom; do not flush streams without an approved replay or backup plan. |
-| PostgreSQL | Durable control-plane and audit state | Service readiness, database pool alerts | Resolve connection exhaustion, slow queries, migration state, and storage pressure. |
-
-## Failure reasons to preserve
-
-When a command or readiness probe fails, keep the structured reason in the incident record. The most useful fields are:
-
-| Surface | Fields |
-| --- | --- |
-| `/ready` responses | `reason`, `error`, `dependency`, `ready`, `draining` |
-| terminal management interface API errors | HTTP status, error code, response body, remediation hint |
-| Audit event | `request_id`, `event_type`, `decision`, `evaluation_status`, `policy_set_id`, `policy_set_version_id`, `manifest_sha`, `diagnostics_json` |
-| Token inspection | `zone_id`, `target`, `scope`, `sid`, `agent_session_id`, `delegation_edge_id`, `exp`, `kid`, `jti` |
-| Metrics | Component-specific counters that changed during the incident window |
-
-## Authority-flow checklist
-
-Use this checklist to prove where authority stopped:
-
-| Step | Evidence |
-| --- | --- |
-Open the terminal management interface and follow the matching view.
-Open the terminal management interface and follow the matching view.
-Open the terminal management interface and follow the matching view.
-| Policy allowed the resource | the terminal management interface audit detail view shows the decision, event status, authority metadata, diagnostics, and determining policies in JSON output |
-Open the terminal management interface and follow the matching view.
-| Gateway can route the resource | Resource has `upstream_url` and `gateway_application_id`; Gateway `/ready` is 200 |
-| Provider credential stayed inside Gateway | Audit metadata shows provider and grant identifiers; token inspection does not show provider-native credentials |
-| Audit is durable | the terminal management interface Audit view returns the decision and any action-result event |
-
-## What not to infer
-
-Do not treat a decoded token as verified proof; it is an inspection aid until the Gateway or a connector verifies signature, expiry, replay, and revocation. Do not treat an application-managed direct provider call as Gateway-enforced unless the application also verifies mandates, checks revocation, prevents replay, and emits action-result audit.
+Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Terminal Management](/runtime-terminal/).

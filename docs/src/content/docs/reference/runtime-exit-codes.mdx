@@ -4,60 +4,14 @@ description: Exit statuses returned by `caracal`, `caracal-terminal`, and `carac
 pageType: reference
 ---
 
-Caracal terminal management interface commands use a small exit-status surface: success is `0`, command or API failures are `1`, and wrapper commands may return the status of the process they launched. Use stderr and, where available, `--json` output to distinguish authentication, authorization, validation, not-found, conflict, rate-limit, and server errors.
+This page no longer documents standalone management command examples. Human-facing management now runs through the terminal management interface.
 
-## Convention
-
-| Code | Meaning |
-| --- | --- |
-| `0` | Success. The operation completed, a help/version request was printed, or every health probe passed. |
-| `1` | Command failure. This includes usage errors, missing configuration, failed authentication, failed authorization, not-found objects, validation errors, conflicts, rate limits, service errors, and failed health probes. |
-| `127` | `caracal terminal` or `caracal terminal` could not find the sibling binary, or `caracal run` could not spawn the requested subprocess. |
-| `<child code>` | `caracal run`, `caracal up`, `caracal down`, and sibling dispatch return the child process or Docker Compose status after the subprocess starts. |
-| `128 + N` | A dispatched sibling process ended because of signal `N`. |
-
-`caracal status` and `caracal status --ready` exit `0` only when every probe passes. Any failed, down, or unreachable dependency exits `1`.
-
-## API error handling
-
-Admin, runtime, and observability commands do not map HTTP statuses to separate exit codes. They exit `1` and print the API error code, HTTP status, remediation hint, and request ID when available.
-
-| HTTP status | Exit status | terminal management interface output |
-| --- | --- | --- |
-| `401` | `1` | Check `CARACAL_ADMIN_TOKEN`, `app_client_secret`, or `CARACAL_COORDINATOR_TOKEN`. |
-| `403` | `1` | Current credentials lack the required scope or zone access. |
-| `404` | `1` | Confirm the referenced object ID with the matching `list` command. |
-| `409` | `1` | Re-fetch the object and retry the operation. |
-| `422` | `1` | Inspect the validation body and correct the submitted fields. |
-| `429` | `1` | Back off and retry; inspect service health if throttling persists. |
-| `5xx` | `1` | Probe readiness with `the terminal management interface` and check service logs. |
-
-## Examples
+Open the interface with:
 
 ```bash
-# Gate a Helm post-install hook on full readiness:
-caracal status --ready --json > /tmp/doctor.json || exit 1
-
-# Detect a missing zone in CI:
-Open the terminal management interface and follow the matching view.
-  if grep -q 'HTTP 404' /tmp/zone.err; then
-Open the terminal management interface and follow the matching view.
-  else
-    cat /tmp/zone.err >&2
-    exit 1
-  fi
-fi
-
-# Preserve a subprocess failure from caracal run:
-caracal run -- ./agent-smoke-test.sh
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  echo "agent smoke test failed with status $rc" >&2
-  exit "$rc"
-fi
+caracal terminal
 ```
 
-## Notes
+Use the matching view for the workflow covered by this page. For automation, enable the Control API from the terminal management interface Control menu and call the authenticated HTTP surface.
 
-- Usage errors and missing `caracal.toml` both exit `1`; the usage or configuration message on stderr identifies the cause.
-Open the terminal management interface and follow the matching view.
+Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Terminal Management](/runtime-terminal/).

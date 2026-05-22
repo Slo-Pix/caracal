@@ -4,119 +4,14 @@ description: Source-aligned reference for operational defaults, token lifetimes,
 pageType: reference
 ---
 
-Use this page when sizing a deployment, writing automation, or troubleshooting unexpected expirations. Values listed here are backed by current service configuration, terminal management interface behavior, or hard-coded protocol limits.
+This page no longer documents standalone management command examples. Human-facing management now runs through the terminal management interface.
 
-## Token exchange and authority
+Open the interface with:
 
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| Resource mandate TTL | 15 minutes | `ttl_seconds`, capped at 15 minutes | STS default and maximum for resource-bound exchanges. |
-| Session mandate TTL cap | 60 minutes | `ttl_seconds`, capped at 60 minutes | Applies only when STS is allowed to issue a session mandate. |
-| `caracal run` token request | 3600 seconds | Not configurable by terminal management interface flag | The terminal management interface requests the session-mandate cap before injecting configured credentials. |
-Open the terminal management interface and follow the matching view.
-| Subject-token validation leeway | 60 seconds | Not configurable | STS accepts issuer, audience, issued-at, and expiry clock skew within this leeway. |
-| Zone signing key cache | 15 minutes | Not configurable | STS keeps decrypted zone signing keys in memory for this interval. |
-| Issued-JTI registry TTL | Token TTL | Not configurable | STS stores minted JTIs in Redis until the corresponding token expires. |
-| Gateway JTI replay marker | Time until token expiry | Not configurable | Gateway rejects duplicate JTI presentations within the token lifetime. |
-| Delegated token TTL | Minimum of requested TTL, edge expiry, and `ttl_seconds` constraint | Delegation constraints | Delegated exchanges cannot outlive the active edge or an explicit delegation TTL constraint. |
+```bash
+caracal terminal
+```
 
-## Policy evaluation
+Use the matching view for the workflow covered by this page. For automation, enable the Control API from the terminal management interface Control menu and call the authenticated HTTP surface.
 
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| OPA policy poll interval | 60 seconds | `OPA_POLL_SECONDS`, max 300 | STS reload cadence for active policy sets as a safety net around stream invalidation. |
-| OPA input schema version | `2026-05-20` | Not configurable | Policy simulation and live evaluation reject unsupported schema versions. |
-
-## Gateway
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| STS exchange timeout | 5 seconds | `STS_TIMEOUT` | Per-request timeout for Gateway-to-STS token exchange. |
-| Upstream proxy timeout | 30 seconds | `UPSTREAM_TIMEOUT` | Per-request upstream call timeout. |
-| Request body size cap | 10 MiB | `MAX_REQUEST_BYTES` | Gateway rejects larger request bodies. |
-| Read header timeout | 5 seconds | `READ_HEADER_TIMEOUT` | HTTP server header-read timeout. |
-| Read timeout | 45 seconds | `READ_TIMEOUT` | Must exceed `STS_TIMEOUT + UPSTREAM_TIMEOUT`. |
-| Write timeout | 60 seconds | `WRITE_TIMEOUT` | HTTP server write timeout. |
-| Idle timeout | 120 seconds | `IDLE_TIMEOUT` | HTTP keep-alive idle timeout. |
-| Binding cache poll interval | 30 seconds | Not configurable | Gateway refreshes zone/resource-to-application bindings from Postgres on this cadence. |
-| Revocation snapshot poll | 30 seconds | Not configurable | Gateway refreshes revocation state from the database if stream delivery is delayed. |
-| Revocation cache retention | 24 hours | Not configurable | Revoked sessions, agents, and edges are retained far beyond the 15-minute resource-token cap. |
-| Revocation pending-idle retry | 30 seconds | Not configurable | Redis pending stream entries older than this are reclaimed. |
-| Private upstreams | Disabled | `ALLOW_PRIVATE_UPSTREAMS` | In `rc` and `stable`, enabling private upstreams also requires `UPSTREAM_HOST_ALLOWLIST`. |
-
-## Audit pipeline
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| Audit retention | 365 days | `AUDIT_RETENTION_DAYS` | Long-term audit retention used by the audit service. |
-| Maximum stream deliveries | 8 | `AUDIT_MAX_DELIVERIES` | Events that exceed this delivery count are treated as failed delivery work. |
-| Claim idle threshold | 30 seconds | `AUDIT_CLAIM_IDLE_SECS` | Idle pending stream entries may be claimed by another consumer. |
-| Tamper rolling window | 4 hours | `AUDIT_TAMPER_ROLLING_HOURS` | Window used for rolling tamper verification. |
-| Readiness DLQ threshold | 0 | `AUDIT_READY_DLQ_MAX` | A non-zero threshold can make readiness fail when DLQ size is too high. |
-| Readiness lag threshold | 0 | `AUDIT_READY_LAG_MAX` | A non-zero threshold can make readiness fail when consumer lag is too high. |
-| Readiness pending-age threshold | 0 | `AUDIT_READY_PEL_OLDEST_SECS_MAX` | A non-zero threshold can make readiness fail when pending entries are too old. |
-
-## API service
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| Request body limit | 1 MiB | `API_BODY_LIMIT_BYTES` | Applies to API request bodies. |
-| Request timeout | 30 seconds | `REQUEST_TIMEOUT_MS` | Per-request API timeout. |
-| Database pool size | 20 | `DB_POOL_MAX` | API Postgres pool maximum. |
-| Database statement timeout | 15 seconds | `DB_STATEMENT_TIMEOUT_MS` | API statement timeout. |
-| Database connection timeout | 5 seconds | `DB_CONNECTION_TIMEOUT_MS` | API Postgres connection timeout. |
-| Outbox poll interval | 250 ms | `OUTBOX_POLL_MS` | API transactional outbox poll cadence. |
-| Outbox batch size | 32 | `OUTBOX_BATCH_SIZE` | Maximum API outbox rows per batch. |
-| Outbox lock duration | 30 seconds | `OUTBOX_LOCK_SEC` | Time before locked outbox work can be retried. |
-| Outbox max attempts | 100 | `OUTBOX_MAX_ATTEMPTS` | Attempts before API outbox work is abandoned. |
-| Outbox stream max length | 100000 | `OUTBOX_STREAM_MAXLEN` | Approximate Redis stream length cap for API outbox publishing. |
-| API v1 rate limit | 600 requests/minute | `API_V1_RATE_LIMIT_PER_MIN` | Set to `0` to disable. |
-| Admin auth failure limit | 60 requests/minute | `ADMIN_AUTH_FAIL_LIMIT_PER_MIN` | Set to `0` to disable. |
-
-## Coordinator
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| Request timeout | 30 seconds | `REQUEST_TIMEOUT_MS` | Coordinator request timeout. |
-| Database pool size | 20 | `DB_POOL_MAX` | Coordinator Postgres pool maximum. |
-| Database statement timeout | 10 seconds | `DB_STATEMENT_TIMEOUT_MS` | Coordinator statement timeout. |
-| Outbox interval | 1000 ms | `OUTBOX_INTERVAL_MS` | Coordinator outbox publish cadence. |
-| Outbox batch size | 50 | `OUTBOX_BATCH_SIZE` | Maximum Coordinator outbox rows per batch. |
-| Outbox max attempts | 10 | `OUTBOX_MAX_ATTEMPTS` | Rows are marked dead after this many publish attempts. |
-| Stream max length | 100000 | `STREAMS_MAXLEN` | Approximate Redis stream length cap for Coordinator event topics. |
-| TTL sweep interval | 60000 ms | `TTL_SWEEP_INTERVAL_MS` | Terminates expired agent sessions and descendants. |
-| Service lease sweep interval | 30000 ms | `SERVICE_LEASE_SWEEP_INTERVAL_MS` | Suspends service agents with expired heartbeat leases. |
-| Service agent lease | 120 seconds | `SERVICE_AGENT_LEASE_SECONDS` | Heartbeat lease length for service agents. |
-| Invocation deadline sweep interval | 5000 ms | `DEADLINE_SWEEP_INTERVAL_MS` | Marks overdue invocations failed or timed out. |
-| Sweeper batch size | 500 | `SWEEPER_BATCH_SIZE` | Maximum rows processed by TTL, lease, and deadline sweepers. |
-| Retention cleanup interval | 900000 ms | `RETENTION_CLEANUP_INTERVAL_MS` | Expires active edges and prunes old terminal rows. |
-| Retention cleanup batch size | 500 | `RETENTION_CLEANUP_BATCH_SIZE` | Maximum rows per retention cleanup query. |
-| Delegation retention | 90 days | `DELEGATION_RETENTION_DAYS` | Retains revoked or expired delegation edges before pruning. |
-| Outbox retention | 7 days | `OUTBOX_RETENTION_DAYS` | Retains published or dead Coordinator outbox rows before pruning. |
-| Verification rate limit | 60 requests/minute | `VERIFY_RATE_LIMIT_PER_MIN` | Set to `0` to disable. |
-| Invocation rate limit | 120 requests/minute | `INVOCATION_RATE_LIMIT_PER_MIN` | Set to `0` to disable. |
-| Coordinator API rate limit | 600 requests/minute | `COORDINATOR_RATE_LIMIT_PER_MIN` | Set to `0` to disable. |
-
-## STS provider refresh
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| Maximum delegated provider grant TTL | 3600 seconds | `MAX_GRANT_TTL_SECONDS` | Caps provider-token refresh responses persisted by STS. |
-| Provider refresh circuit TTL | 30 seconds | Not configurable | Temporary circuit-open window for provider refresh failures. |
-
-## terminal management interface
-
-| Value | Default | Configurable via | Notes |
-| --- | --- | --- | --- |
-| the terminal management interface Audit view | 100 | `--limit` (max 1000) | Default page size. |
-| `caracal status` probe timeout | 1500 ms per service | Not configurable by terminal management interface flag | Applies to health and readiness probes. |
-| `caracal run` step-up poll interval | 2 seconds | Not configurable | Polls pending step-up challenges. |
-| `caracal run` step-up timeout | 300 seconds | Not configurable | Exits `1` when the challenge is not satisfied in time. |
-
-## Hard ceilings (not configurable)
-
-- `OPA_POLL_SECONDS` must be less than or equal to `300`.
-- Gateway `PORT` must be `8081`; STS `PORT` must be `8080`; Audit `PORT` must be `9090`.
-- Gateway `READ_TIMEOUT` must be greater than `STS_TIMEOUT + UPSTREAM_TIMEOUT`.
-- `JTI_FAIL_OPEN` is forbidden when `CARACAL_MODE=rc` or `CARACAL_MODE=stable`.
-- Delegation `max_depth`, `max_hops`, `ttl_seconds`, and `budget` constraints must be non-negative. If neither `max_depth` nor `max_hops` is set, delegation proof validation uses `1` hop.
+Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Terminal Management](/runtime-terminal/).

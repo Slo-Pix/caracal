@@ -4,30 +4,14 @@ description: Task-oriented walkthroughs for integrating, operating, and extendin
 pageType: landing
 ---
 
-Each guide covers one end-to-end workflow. Start from the guide that matches your current task. Prerequisites are listed at the top of each guide.
+This page no longer documents standalone management command examples. Human-facing management now runs through the terminal management interface.
 
-## Section map
+Open the interface with:
 
-| Guide | What it covers |
-| ----- | -------------- |
-| [Integrate the TypeScript SDK](./sdk-typescript/) | Install `@caracalai/sdk`, configure env vars, spawn agents, delegate authority, and make outbound calls |
-| [Integrate the Python SDK](./sdk-python/) | Install `caracalai-sdk`, use async context managers to spawn and delegate, wire ASGI middleware |
-| [Integrate the Go SDK](./sdk-go/) | Install `github.com/garudex-labs/caracal/packages/sdk/go`, use `Spawn`, `Delegate`, `Current`, and `Transport` |
-| [Protect an MCP Server](./protect-mcp/) | Gate MCP tool calls with mandate verification using `@caracalai/transport-mcp` (TS) or `caracalai_transport_mcp` (Python) |
-| [Protect an Express App](./protect-express/) | Add `caracalAuth` middleware to Express routes and enforce scope requirements |
-| [Protect a FastMCP App](./protect-fastmcp/) | Attach `CaracalAuth` to a FastMCP server so every tool call is mandate-gated |
-| [Protect a Go net/http Service](./protect-nethttp/) | Wrap Go handlers with `mcpnethttp.Middleware` and read validated claims from context |
-| [Author a Rego Policy](./author-policy/) | Write a `caracal.authz` policy, understand the full input schema, and avoid forbidden builtins |
-| [Activate a Policy Set](./activate-policy-set/) | Create, version, bundle, and promote a policy set to active using the terminal management interface |
-| [Define Resources and Providers](./resources-providers/) | Register upstream resources, declare scopes, and attach credential providers |
-| [Issue Grants and Invitations](./grants-invitations/) | Bind applications and users to resource scopes; invite new zone members |
-| [Implement Multi-Agent Delegation](./delegation/) | Spawn child agents, attach typed constraints, read the delegation graph, and trigger cascade revocation |
-| [Tail and Query the Audit Stream](./audit-stream/) | Stream live decisions from the terminal management interface and inspect full diagnostics per request |
-| [Run an Agent with `caracal run`](./runtime-run/) | Inject configured scoped tokens into a subprocess without writing SDK code |
-| [Step-Up Re-Authentication](./step-up/) | Handle `interaction_required`, satisfy the challenge, and retry token exchange through the STS |
+```bash
+caracal terminal
+```
 
-## Prerequisites shared across all guides
+Use the matching view for the workflow covered by this page. For automation, enable the Control API from the terminal management interface Control menu and call the authenticated HTTP surface.
 
-- A running Caracal stack (`caracal up` or Docker Compose).
-Open the terminal management interface and follow the matching view.
-- `CARACAL_ADMIN_TOKEN` set in your shell for terminal management interface operations that mutate control-plane state.
+Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Terminal Management](/runtime-terminal/).

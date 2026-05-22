@@ -4,108 +4,14 @@ description: Bind applications and users to resource scopes with grants, and inv
 pageType: workflow
 ---
 
-A grant is the control-plane record that binds a principal (application or user) to a set of scopes on a resource. Without a grant, OPA policy evaluation has no basis to allow a token exchange for that principal and resource combination. Invitations bring new users into the zone as members who can hold grants.
+This page no longer documents standalone management command examples. Human-facing management now runs through the terminal management interface.
 
-## Prerequisites
-
-- `CARACAL_ADMIN_TOKEN` set.
-- At least one registered application and one registered resource (see [Define Resources and Providers](./resources-providers/)).
-
-## Create a grant
+Open the interface with:
 
 ```bash
-Open the terminal management interface and follow the matching view.
-  --app app-abc123 \
-  --resource res-def456 \
-  --scopes "payment:read,payment:submit"
+caracal terminal
 ```
 
-The `--app` flag takes an application ID. The grant authorizes that application to request the listed scopes for the named resource. Whether the STS actually issues those scopes depends on the active policy — the grant is necessary but not sufficient.
+Use the matching view for the workflow covered by this page. For automation, enable the Control API from the terminal management interface Control menu and call the authenticated HTTP surface.
 
-### Grant options
-
-| Flag | Required | Description |
-| ---- | -------- | ----------- |
-| `--app` | Yes | Application ID receiving the grant |
-| `--resource` | Yes | Resource ID the grant covers |
-| `--scopes` | Yes | Comma-separated scope strings the application may request |
-| `--user` | No | User subject ID (for user-scoped grants rather than app-scoped) |
-
-### User grant
-
-```bash
-Open the terminal management interface and follow the matching view.
-  --app app-abc123 \
-  --user user-xyz789 \
-  --resource res-def456 \
-  --scopes "report:read"
-```
-
-A user grant restricts the grant to exchanges where the subject matches `--user`. This is used for delegated user authority: the application acts on behalf of the specific user.
-
-## List grants
-
-```bash
-# All grants in the zone
-Open the terminal management interface and follow the matching view.
-
-# As JSON (pipe to jq for filtering)
-Open the terminal management interface and follow the matching view.
-```
-
-## Inspect a grant
-
-```bash
-Open the terminal management interface and follow the matching view.
-```
-
-## Revoke a grant
-
-```bash
-Open the terminal management interface and follow the matching view.
-```
-
-Revoking a grant does not immediately terminate active sessions or revoke already-issued mandates. The 15-minute resource TTL on issued mandates means the effect fully propagates within that window. Future token exchanges fail at policy evaluation once the grant is gone.
-
-## Invitations
-
-Invitations add users to the zone as members. A member can receive user-scoped grants, log into the control plane, and manage their own credentials (depending on zone configuration).
-
-### Invite a user by email
-
-```bash
-caracal invitation create --email alice@example.com
-```
-
-The command returns an invitation token and link. Send the link to the user. Invitations expire after the configured TTL (default: 24 hours).
-
-### List pending invitations
-
-```bash
-caracal invitation list
-```
-
-### Revoke an invitation
-
-```bash
-caracal invitation revoke inv-mno345
-```
-
-## Checking grant effects
-
-After issuing a grant, verify that an exchange succeeds with the application credentials in `caracal.toml`:
-
-```bash
-Open the terminal management interface and follow the matching view.
-```
-
-If the exchange fails, check whether:
-
-Open the terminal management interface and follow the matching view.
-2. The active policy allows the exchange: the terminal management interface Audit view
-Open the terminal management interface and follow the matching view.
-
-## What to read next
-
-- [Author a Rego Policy](./author-policy/) — policies are evaluated at exchange time; grants alone are not sufficient
-- [Tail and Query the Audit Stream](./audit-stream/) — check why a specific exchange was denied
+Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Terminal Management](/runtime-terminal/).
