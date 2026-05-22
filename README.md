@@ -31,7 +31,7 @@
 
 The default product path is intentionally small: register an **agent app**, run an **agent run**, request a short-lived **mandate**, call a **resource** through the **Gateway**, and inspect the resulting **audit** trail. The STS evaluates policy and issues Caracal access tokens, the Gateway enforces token validity and provider routing, the Coordinator tracks runtime and delegation state, and Audit records why access was allowed or denied and what happened upstream.
 
-Platform teams can evaluate Caracal locally with `caracal up`, check dependency-aware readiness with `caracal status --ready`, inspect production-style diagnostics with `caracal doctor`, dry-run policy changes with `caracal policy-set simulate`, inspect token claims with `caracal credential inspect`, and trace individual decisions with `caracal audit tail`, `caracal explain <request_id>`, and `caracal explain <request_id> --flow`.
+Platform teams can evaluate Caracal locally with `caracal up` and check dependency-aware runtime readiness with `caracal status --ready`. Product management stays in optional interfaces: use `caracal cli` or `caracal-tui` for diagnostics, policy dry-runs, token inspection, audit search, and request explanation.
 
 -----
 
