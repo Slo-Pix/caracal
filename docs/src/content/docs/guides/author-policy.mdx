@@ -106,14 +106,26 @@ The STS populates `input` on every evaluation:
 
 `schema_version` identifies the STS policy input contract. The current contract is `2026-05-20`; policy creation, policy set creation, and activation reject unsupported or mixed schema versions. Policies should check it explicitly if they depend on fields introduced after their original authoring. `principal.agent_kind` and `principal.capabilities` are present when the exchange asserts an active Coordinator agent session. `delegation_edge` is present only when the exchange involves a delegation edge. `context.actor_claims` carries custom claims injected by the credential provider (e.g., from an OIDC userinfo endpoint).
 
-Generate a local fixture instead of hand-writing the object:
+Create a local fixture with the same schema shape when you need a repeatable simulation input:
 
 ```sh
-caracal policy sample-input \
-  --resource resource://payments \
-  --scopes payment:read,payment:submit \
-  --principal local-user \
-  --zone zone_abc123 > input.json
+cat > input.json <<'JSON'
+{
+  "schema_version": "2026-05-20",
+  "principal": {
+    "type": "application",
+    "id": "app-abc123",
+    "zone_id": "zone_abc123"
+  },
+  "resource": {
+    "identifier": "resource://payments",
+    "scopes": ["payment:read", "payment:submit"]
+  },
+  "context": {
+    "requested_scopes": ["payment:read", "payment:submit"]
+  }
+}
+JSON
 ```
 
 Validate a Rego module against the STS policy contract before creating a policy:

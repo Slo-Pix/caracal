@@ -4,13 +4,13 @@ description: Operator-focused detection, blast radius, safe recovery, and verifi
 pageType: reference
 ---
 
-This matrix gives operators a direct path from symptom to safe recovery. It complements [Incident Response](./incident-response/) and maps to `caracal status --ready`, `caracal doctor --extended`, service `/ready`, Prometheus `/metrics`, and the optional Helm `PrometheusRule` resources.
+This matrix gives operators a direct path from symptom to safe recovery. It complements [Incident Response](./incident-response/) and maps to `caracal status --ready`, `caracal doctor`, service `/ready`, Prometheus `/metrics`, and the optional Helm `PrometheusRule` resources.
 
 **Maturity label:** implemented operator guidance. Some recoveries still depend on the platform team's Postgres, Redis, backup, ingress, and secret-management tooling.
 
 | Failure mode | Detect with | Blast radius | Safe recovery | Verify |
 | --- | --- | --- | --- | --- |
-| STS unavailable | `caracal status --ready`, Gateway 502/504, STS `/ready` | New token exchanges fail; existing upstream calls may fail at Gateway exchange | Restore STS replicas, check Postgres/Redis reachability, confirm STS audit replay is ready | `caracal doctor --extended`; STS `/ready` 200; Gateway STS exchange errors stop increasing |
+| STS unavailable | `caracal status --ready`, Gateway 502/504, STS `/ready` | New token exchanges fail; existing upstream calls may fail at Gateway exchange | Restore STS replicas, check Postgres/Redis reachability, confirm STS audit replay is ready | `caracal doctor`; STS `/ready` 200; Gateway STS exchange errors stop increasing |
 | OPA compile failure | `caracal_sts_opa_compile_errors_total`, STS logs, policy activation history | Affected policy loads fail closed or keep last valid bundle depending on load path | Roll back to the last known-good policy-set version; validate policy source; reactivate | `policy-set simulate`; STS compile errors stop increasing; denied requests match expected policy |
 | No active policy set | STS deny audit, policy-set list shows no `active_version_id` | Token exchanges for that zone deny by design | Activate a validated baseline policy set | `caracal policy-set list`; successful allow/deny fixture exchanges |
 | Gateway binding missing | `caracal_gateway_denials_binding_total`, Gateway 403 | Protected route denies before upstream dispatch | Create or correct resource binding and Gateway application; reload Gateway if required | Gateway `/ready`; denial counter stops increasing for expected route |
@@ -24,7 +24,7 @@ This matrix gives operators a direct path from symptom to safe recovery. It comp
 ## Diagnostic ladder
 
 1. Run `caracal status --ready` for local or evaluation stacks.
-2. Run `caracal doctor --extended --json` and keep the JSON output with the incident record.
+2. Run `caracal doctor --json` and keep the JSON output with the incident record.
 3. Check Prometheus alerts and service `/metrics` for the component listed in the matrix.
 4. Use `caracal audit tail --request-id <id>` and `caracal explain <request-id>` for request-specific denials.
 5. Use `caracal explain <request-id> --flow` when delegation, Gateway routing, or provider brokering makes the authority path hard to see.

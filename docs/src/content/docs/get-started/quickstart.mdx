@@ -201,7 +201,7 @@ The Gateway application identity is same-zone service identity used for internal
 Run the readiness doctor if the credential step below fails:
 
 ```sh
-caracal doctor --extended
+caracal doctor
 ```
 
 It checks API reachability, admin authentication, selected zone, resource registration, active policy sets, grants, audit queryability, service readiness, and operator metrics. Use `--json` when you want to attach the output to an incident record or CI gate.
