@@ -44,7 +44,7 @@ describe('dispatch', () => {
     ).rejects.toMatchObject({ code: 'denied' })
   })
 
-  it('blocks hidden commands for remote principals', async () => {
+  it('blocks local-only Control management for remote principals', async () => {
     await expect(
       dispatch({ command: 'control', subcommand: 'key' }, principal(['control:control:read']), ctx),
     ).rejects.toMatchObject({ code: 'denied' })
@@ -98,7 +98,7 @@ describe('dispatch', () => {
 })
 
 describe('describeRemoteSurface', () => {
-  it('omits hidden commands', () => {
+  it('omits hidden and local-only commands', () => {
     const surface = describeRemoteSurface()
     for (const row of surface) {
       expect(row.command).not.toBe('control')

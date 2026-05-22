@@ -80,9 +80,16 @@ describe('audit explain entry', () => {
     })
   })
 
+  it('renders the production menu with Control API management', () => {
+    const client = { audit: { byRequest: vi.fn() } } as unknown as AdminClient
+    const menu = new MenuView(client, 'z1')
+    const body = menu.render({ app: fakeApp(), size: { rows: 25, cols: 80 }, status: '' }).join('\n')
+    expect(body).toContain('doctor')
+    expect(body).toContain('credential')
+    expect(body).toContain('control')
+  })
+
   it('opens control key get and loads the selected key', async () => {
-    const originalControlEnabled = process.env.CARACAL_CONTROL_ENABLED
-    process.env.CARACAL_CONTROL_ENABLED = 'true'
     const get = vi.fn(async () => ({
       id: 'app-1',
       name: 'control',
@@ -91,28 +98,48 @@ describe('audit explain entry', () => {
       credential_type: 'token',
     }))
     const client = {
-      zones: { get: vi.fn(async () => ({})) },
+      audit: { byRequest: vi.fn() },
       applications: { get },
     } as unknown as AdminClient
-    try {
-      const menu = new MenuView(client, 'z1')
-      const app = fakeApp()
-      await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
-      const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-      const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-      await control.onKey('g', { app, size: { rows: 25, cols: 80 }, status: '' })
-      const form = pushed[pushed.length - 1] as FormView
-      ;(form as unknown as { values: Record<string, string> }).values = { id: 'app-1' }
-      ;(form as unknown as { focus: number }).focus = 1
-      await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
-      const detail = pushed[pushed.length - 1] as DetailView
-      expect(detail).toBeInstanceOf(DetailView)
-      await detail.init(app)
-      expect(get).toHaveBeenCalledWith('z1', 'app-1')
-    } finally {
-      if (originalControlEnabled === undefined) delete process.env.CARACAL_CONTROL_ENABLED
-      else process.env.CARACAL_CONTROL_ENABLED = originalControlEnabled
-    }
+    const menu = new MenuView(client, 'z1')
+    const app = fakeApp()
+
+    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
+    await control.onKey('g', { app, size: { rows: 25, cols: 80 }, status: '' })
+    const form = pushed[pushed.length - 1] as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = { id: 'app-1' }
+    ;(form as unknown as { focus: number }).focus = 1
+    await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
+    const detail = pushed[pushed.length - 1] as DetailView
+    expect(detail).toBeInstanceOf(DetailView)
+    await detail.init(app)
+    expect(get).toHaveBeenCalledWith('z1', 'app-1')
+  })
+
+  it('opens credential inspect and decodes local JWT claims', async () => {
+    const client = { audit: { byRequest: vi.fn() } } as unknown as AdminClient
+    const menu = new MenuView(client, 'z1')
+    const app = fakeApp()
+    const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
+    const token = `${encode({ alg: 'none', kid: 'k1' })}.${encode({ sub: 'user-1', exp: 4_102_444_800 })}.signature`
+
+    await menu.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
+    await credential.onKey('i', { app, size: { rows: 25, cols: 80 }, status: '' })
+    const form = pushed[pushed.length - 1] as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = { token, file: '' }
+    ;(form as unknown as { focus: number }).focus = 2
+    await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
+
+    const detail = pushed[pushed.length - 1] as DetailView
+    expect(detail).toBeInstanceOf(DetailView)
+    await detail.init(app)
+    const body = detail.render({ app, size: { rows: 25, cols: 80 }, status: '' }).join('\n')
+    expect(body).toContain('"user-1"')
+    expect(body).toContain('"k1"')
   })
 
 })

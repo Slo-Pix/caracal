@@ -46,14 +46,16 @@ function mockExit() {
 }
 
 describe('controlCommand', () => {
-  it('rejects Control management through the thin shell CLI dispatch path', async () => {
+  it('allows Control management through the interactive shell CLI dispatch path', async () => {
     process.env = { ...originalEnv, CARACAL_INVOKED_AS: 'caracal cli' }
-    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-    const exit = mockExit()
+    writeAdminToken()
+    process.env.CARACAL_MODE = 'stable'
+    setTty(true, true)
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
 
-    await expect(controlCommand(['status'])).rejects.toThrow('exit:1')
-    expect(exit).toHaveBeenCalledWith(1)
-    expect(stderr.mock.calls.map((call) => call[0]).join('')).toContain('caracal-cli or the TUI Control menu')
+    await controlCommand(['status'])
+
+    expect(stdout.mock.calls.map((call) => call[0]).join('')).toContain('Control:')
   })
 
   it('rejects Control lifecycle status outside an interactive terminal', async () => {

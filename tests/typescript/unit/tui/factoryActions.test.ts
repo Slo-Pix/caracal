@@ -73,6 +73,7 @@ function makeClient() {
       list: vi.fn(async () => []),
       get: vi.fn(async () => ({})),
       create: vi.fn(async () => ({})),
+      validate: vi.fn(async () => ({ valid: true })),
       addVersion: vi.fn(async () => ({})),
       delete: vi.fn(async () => undefined),
     },
@@ -82,6 +83,7 @@ function makeClient() {
       create: vi.fn(async () => ({})),
       addVersion: vi.fn(async () => ({})),
       activate: vi.fn(async () => ({})),
+      simulate: vi.fn(async () => ({ decision: 'allow' })),
       delete: vi.fn(async () => undefined),
     },
     grants: {
@@ -100,6 +102,7 @@ function makeClient() {
       terminate: vi.fn(async () => undefined),
     },
     delegations: {
+      active: vi.fn(async () => ({ items: [] })),
       inbound: vi.fn(async () => []),
       outbound: vi.fn(async () => []),
       traverse: vi.fn(async () => []),
@@ -221,6 +224,15 @@ describe('resources actions', () => {
     expect(keys).toContain('identifier')
     expect(keys).toContain('scopes')
   })
+
+  it('n includes gateway and provider fields matching resource CLI flags', async () => {
+    const { ctx } = newCtx()
+    const list = resourcesView(ctx as unknown as Parameters<typeof resourcesView>[0]) as ListView<unknown>
+    const pushed = await pressKey(list, 'n', fakeApp()) as FormView
+    const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
+    expect(keys).toContain('gateway_application_id')
+    expect(keys).toContain('credential_provider_id')
+  })
 })
 
 describe('providers actions', () => {
@@ -230,6 +242,14 @@ describe('providers actions', () => {
     const pushed = await pressKey(list, 'n', fakeApp()) as FormView
     const fields = (pushed as unknown as { fields: { key: string; kind: string }[] }).fields
     expect(fields.find((f) => f.key === 'config_json')?.kind).toBe('multiline')
+  })
+
+  it('n includes client_id matching provider CLI flags', async () => {
+    const { ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const pushed = await pressKey(list, 'n', fakeApp()) as FormView
+    const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
+    expect(keys).toContain('client_id')
   })
 })
 
@@ -243,6 +263,23 @@ describe('policies actions', () => {
     const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
     expect(keys).toEqual(['file', 'content', 'schema_version'])
   })
+
+  it('c opens validate form and calls policies.validate', async () => {
+    const { client, ctx } = newCtx()
+    const list = policiesView(ctx as unknown as Parameters<typeof policiesView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'c', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      file: '',
+      content: 'package caracal\nallow := true',
+      schema_version: '2026-05-20',
+    }
+    ;(form as unknown as { focus: number }).focus = 3
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    expect(client.policies.validate).toHaveBeenCalledWith('package caracal\nallow := true', '2026-05-20')
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    expect(pushed[pushed.length - 1]).toBeInstanceOf(DetailView)
+  })
 })
 
 describe('policySets actions', () => {
@@ -253,6 +290,24 @@ describe('policySets actions', () => {
     const pushed = await pressKey(list, 'a', fakeApp()) as FormView
     const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
     expect(keys).toEqual(['version_id', 'shadow_version_id'])
+  })
+
+  it('s on row simulates a policy-set version with JSON input', async () => {
+    const { client, ctx } = newCtx()
+    const list = policySetsView(ctx as unknown as Parameters<typeof policySetsView>[0]) as ListView<unknown>
+    setRows(list, [{ id: 'ps1', name: 'ps', description: null, active_version_id: null }])
+    const app = fakeApp()
+    const form = await pressKey(list, 's', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      version_id: 'v1',
+      input: '{"subject":"u1"}',
+      input_file: '',
+    }
+    ;(form as unknown as { focus: number }).focus = 3
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+    expect(client.policySets.simulate).toHaveBeenCalledWith('z1', 'ps1', 'v1', { subject: 'u1' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    expect(pushed[pushed.length - 1]).toBeInstanceOf(DetailView)
   })
 })
 
@@ -362,5 +417,14 @@ describe('delegations actions', () => {
     await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
     expect(client.delegations.revoke).toHaveBeenCalledWith('z1', 'e1')
     expect(pushed[pushed.length - 1]).toBeInstanceOf(DetailView)
+  })
+
+  it('does not expose removed impact action', async () => {
+    const { ctx } = newCtx()
+    const menu = delegationsView(ctx as unknown as Parameters<typeof delegationsView>[0])
+    const app = fakeApp()
+    await menu.onKey('b', { app, size: { rows: 20, cols: 80 }, status: '' })
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    expect(pushed).toHaveLength(0)
   })
 })
