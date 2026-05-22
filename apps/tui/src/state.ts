@@ -37,9 +37,11 @@ const STATE_VERSION = 1
 const MAX_TEXT = 256
 
 export class TuiStateStore {
+  private readonly path: string
   private state: PersistedState
 
-  constructor(private readonly path = defaultStatePath(), state?: PersistedState) {
+  constructor(path = defaultStatePath(), state?: PersistedState) {
+    this.path = path
     this.state = normalizeState(state)
   }
 

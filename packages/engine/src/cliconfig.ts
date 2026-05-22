@@ -36,6 +36,13 @@ export interface CliConfig {
   mcp_governance?: McpGovernance;
 }
 
+export function defaultCliConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  const xdg = env.XDG_CONFIG_HOME && env.XDG_CONFIG_HOME.length > 0
+    ? env.XDG_CONFIG_HOME
+    : join(homedir(), '.config');
+  return join(xdg, 'caracal', 'caracal.toml');
+}
+
 // Resolves the path to caracal.toml using the documented precedence:
 //   $CARACAL_CONFIG → ./caracal.toml (cwd / $PWD / $INIT_CWD) → $XDG_CONFIG_HOME/caracal/caracal.toml
 // Returns undefined when no candidate exists on disk.
@@ -45,10 +52,7 @@ export function resolveCliConfigPath(env: NodeJS.ProcessEnv = process.env): stri
   for (const dir of [process.cwd(), env.PWD, env.INIT_CWD]) {
     if (dir) candidates.push(join(dir, 'caracal.toml'));
   }
-  const xdg = env.XDG_CONFIG_HOME && env.XDG_CONFIG_HOME.length > 0
-    ? env.XDG_CONFIG_HOME
-    : join(homedir(), '.config');
-  candidates.push(join(xdg, 'caracal', 'caracal.toml'));
+  candidates.push(defaultCliConfigPath(env));
   for (const path of candidates) {
     if (existsSync(path)) return path;
   }

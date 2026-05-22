@@ -4,11 +4,12 @@
 // End-to-end CLI command tests using a stubbed fetch and admin token env.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { auditCommand, explainCommand } from '../../../../apps/cli/src/commands/audit.ts'
 import { debugCommand } from '../../../../apps/cli/src/commands/debug.ts'
+import { configCommand } from '../../../../apps/cli/src/commands/config.ts'
 import { zoneCommand } from '../../../../apps/cli/src/commands/zone.ts'
 import { agentCommand, delegationCommand } from '../../../../apps/cli/src/commands/agent.ts'
 import { policyCommand, policySetCommand } from '../../../../apps/cli/src/commands/policy.ts'
@@ -216,6 +217,57 @@ describe('CLI commands (e2e against stubbed fetch)', () => {
     const out = stdout.mock.calls.map((c) => c[0]).join('')
     expect(out).toContain('id')
     expect(out).toContain('z1')
+  })
+
+  it('config init creates a confidential app and writes caracal.toml', async () => {
+    delete process.env.CARACAL_ZONE_ID
+    const path = join(tempDirs[0]!, 'config', 'caracal.toml')
+    const fetchMock = stubFetch((url, init) => {
+      if (url === 'http://api/v1/zones') {
+        expect(init.method).toBe('POST')
+        expect(JSON.parse(String(init.body))).toEqual({ name: 'dev' })
+        return { id: 'zone-new', name: 'dev', slug: 'dev' }
+      }
+      if (url === 'http://api/v1/zones/zone-new/applications') {
+        expect(init.method).toBe('POST')
+        const body = JSON.parse(String(init.body))
+        expect(body).toMatchObject({
+          name: 'runner',
+          registration_method: 'managed',
+          credential_type: 'token',
+        })
+        expect(body.client_secret).toMatch(/^cs_/)
+        return { id: 'app-new', zone_id: 'zone-new', name: 'runner', registration_method: 'managed', credential_type: 'token', traits: [], consent: 'implicit', created_at: 't' }
+      }
+      throw new Error(`unexpected url ${url}`)
+    })
+
+    await configCommand(['init', '--path', path, '--resource', 'resource://api'])
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    const text = readFileSync(path, 'utf8')
+    expect(text).toContain('zone_url = "http://sts"')
+    expect(text).toContain('zone_id = "zone-new"')
+    expect(text).toContain('application_id = "app-new"')
+    expect(text).toMatch(/app_client_secret = "cs_[A-Za-z0-9_-]+"/)
+    expect(text).toContain('[[credentials]]')
+    expect(text).toContain('env = "RESOURCE_TOKEN"')
+    expect(text).toContain('resource = "resource://api"')
+    expect(statSync(path).mode & 0o777).toBe(0o600)
+  })
+
+  it('config init uses the selected zone when one is already configured', async () => {
+    const path = join(tempDirs[0]!, 'selected-zone.toml')
+    const fetchMock = stubFetch((url, init) => {
+      expect(url).toBe('http://api/v1/zones/z1/applications')
+      expect(init.method).toBe('POST')
+      return { id: 'app-selected', zone_id: 'z1', name: 'runner', registration_method: 'managed', credential_type: 'token', traits: [], consent: 'implicit', created_at: 't' }
+    })
+
+    await configCommand(['init', '--path', path])
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(readFileSync(path, 'utf8')).toContain('zone_id = "z1"')
   })
 
   it('agent list refuses to run without coordinator token', async () => {
