@@ -100,7 +100,7 @@ scripts/testCi.sh --smoke | --go | --py | --ts
   - `pnpm caracal up`
   - `pnpm caracal status`
   - `pnpm caracal console`
-  - `pnpm caracal console`
+  - `pnpm caracal down`
 4. Ensure tests pass:
   - `pnpm test`
   - `scripts/testCi.sh --smoke` (post-commit parity)
