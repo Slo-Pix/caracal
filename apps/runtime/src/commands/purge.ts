@@ -19,7 +19,7 @@ import {
 } from '@caracalai/engine'
 import { CARACAL_REGISTRY, CARACAL_VERSION } from '../runtime/version.gen.ts'
 import { runtimePaths } from '@caracalai/engine'
-import { resolvePaths } from './stack.ts'
+import { composeUnavailableReason, dockerComposeAvailable, resolvePaths } from './stack.ts'
 import { showHelp } from './shared.ts'
 import {
   style,
@@ -118,11 +118,6 @@ function buildContext(dryRun: boolean): PurgeContext {
     composeAvailable: dryRun || dockerComposeAvailable(),
     dryRun,
   }
-}
-
-function dockerComposeAvailable(): boolean {
-  const check = spawnSync('docker', ['compose', 'version'], { stdio: 'ignore' })
-  return check.status === 0
 }
 
 async function runCompose(args: string[], ctx: PurgeContext, stack?: ComposeStack): Promise<number> {
@@ -324,10 +319,6 @@ function targetById(id: string): Target | undefined {
 
 function requiresCompose(t: Target): boolean {
   return t.id === 'stack' || t.id === 'volumes' || t.id === 'logs'
-}
-
-function composeUnavailableReason(): string {
-  return 'docker compose is not available; install Docker with the Compose plugin or add docker to PATH'
 }
 
 function prompt(question: string): Promise<string> {

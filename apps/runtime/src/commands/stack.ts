@@ -3,6 +3,7 @@
 //
 // `caracal up | down | status`: docker-compose lifecycle and health probes for the OSS stack.
 
+import { spawnSync } from 'node:child_process'
 import {
   defaultServiceProbes,
   resolveStackPaths,
@@ -36,6 +37,21 @@ export function resolvePaths(quiet = false): StackPaths {
   }
 }
 
+export function dockerComposeAvailable(): boolean {
+  const check = spawnSync('docker', ['compose', 'version'], { stdio: 'ignore' })
+  return check.status === 0
+}
+
+export function composeUnavailableReason(): string {
+  return 'docker compose is not available; install Docker with the Compose plugin or add docker to PATH'
+}
+
+function requireDockerCompose(): void {
+  if (dockerComposeAvailable()) return
+  printError(composeUnavailableReason())
+  process.exit(1)
+}
+
 function printBanner(paths: StackPaths): void {
   const tag =
     paths.mode === 'dev'
@@ -61,6 +77,7 @@ export function composeEnv(paths: StackPaths): Record<string, string | undefined
 
 export async function upCommand(argv: string[]): Promise<void> {
   const paths = resolvePaths()
+  requireDockerCompose()
   printBanner(paths)
   const handle = stackUp({ paths, args: argv, env: composeEnv(paths) })
   const code = await handle.exitCode
@@ -69,6 +86,7 @@ export async function upCommand(argv: string[]): Promise<void> {
 
 export async function downCommand(argv: string[]): Promise<void> {
   const paths = resolvePaths()
+  requireDockerCompose()
   printBanner(paths)
   const handle = stackDown({ paths, args: argv, env: composeEnv(paths) })
   const code = await handle.exitCode
