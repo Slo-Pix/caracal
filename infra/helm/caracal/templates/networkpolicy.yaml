@@ -35,6 +35,9 @@ spec:
         - protocol: TCP
           port: 53
     {{- end }}
+    {{- with .Values.networkPolicy.dnsEgress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
     - to:
         - podSelector:
             matchLabels:

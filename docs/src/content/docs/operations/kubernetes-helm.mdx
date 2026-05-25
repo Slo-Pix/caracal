@@ -49,7 +49,7 @@ stringData:
 
 Each service mounts the Secret at `/run/secrets` and uses the existing `*_FILE` environment variables. This matches the Compose runtime and works with External Secrets Operator, Sealed Secrets, SOPS, Vault CSI, cloud secret managers, or a platform-controlled Secret pipeline.
 
-For disposable evaluations only, set `secrets.create=true` and provide `secrets.plaintext.*` values. Do not commit plaintext secret values to Git.
+For disposable evaluations only, set `secrets.create=true` and provide `secrets.plaintext.*` values. The chart rejects plaintext Secret creation when `global.mode=stable`; rc renders require `global.evaluation=true` before plaintext Secret creation is allowed. Do not commit plaintext secret values to Git.
 
 ## Install path
 
@@ -93,6 +93,14 @@ If you use the release name `caracal`, objects are named `caracal-caracal-*` by 
 
 Keep the Gateway as the default external entry point. Expose the API only to operators through your existing private ingress, VPN, identity-aware proxy, or bastion model.
 
+Use the checked-in profiles as starting points:
+
+| Profile | Purpose |
+| --- | --- |
+| `values.dev.yaml` | Disposable local/dev clusters |
+| `values.rc.yaml` | Release-candidate validation clusters |
+| `values.production.yaml` | Hardened production baseline |
+
 ## Replay persistence
 
 STS and Gateway write failed audit emissions to `/var/lib/caracal/audit-replay` and replay them when Redis or Audit recovers. The chart deploys those components as StatefulSets when `replayPersistence.enabled=true` so each replica gets a stable volume claim named `replay`.
@@ -110,7 +118,32 @@ Disable replay persistence only for disposable environments. A pod backed by `em
 
 ## Network and service-account posture
 
-The default NetworkPolicy permits in-namespace traffic plus DNS, Postgres, Redis, and OTLP. Open HTTPS egress is disabled by default; add explicit `networkPolicy.extraEgress` entries for provider APIs, S3-compatible object stores, identity providers, or other external destinations required by your deployment.
+The default NetworkPolicy permits in-namespace traffic plus Postgres, Redis, and OTLP. Open DNS and HTTPS egress are disabled by default for production; add explicit `networkPolicy.dnsEgress` and `networkPolicy.extraEgress` entries for CoreDNS, provider APIs, S3-compatible object stores, identity providers, or other external destinations required by your deployment.
+
+CoreDNS-scoped example:
+
+```yaml
+networkPolicy:
+  dnsEgress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+```
+
+Validate chart guardrails locally:
+
+```bash
+bash infra/helm/caracal/scripts/validate.sh
+```
 
 Service account tokens are not mounted into pods by default (`serviceAccount.automountToken=false`) because Caracal services do not need Kubernetes API access. Enable token mounting only when a platform integration explicitly requires it.
 

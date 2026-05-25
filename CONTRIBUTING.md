@@ -103,7 +103,7 @@ scripts/testCi.sh --smoke | --go | --py | --ts
 
 ## Releases
 
-Release artifacts share one CalVer: `vYYYY.MM.DD` (suffix `.N` for same-day re-cuts). Only maintainers listed in `.github/MAINTAINERS` may cut releases.
+Release artifacts share one CalVer: `vYYYY.MM.DD` (suffix `.N` for same-day re-cuts). Only maintainers listed in `.github/MAINTAINERS` may cut releases. Stable release publication is gated by the protected `release-approval` GitHub Environment and must be approved by a maintainer other than the actor who pushed the tag.
 
 ### Create dev builds
 
@@ -127,7 +127,7 @@ The local `build:release` stamps the binary with `CARACAL_VERSION=<base>-dev.sha
 Use rc when a downstream project must consume Caracal exactly like a third-party dependency before stable:
 
 ```bash
-scripts/rc.sh prepare                         # write manifest and stamp package metadata to rc versions
+scripts/rc.sh prepare                         # write manifest and stamp Helm/package metadata to rc versions
 git add -A && git commit -m "rc: vYYYY.MM.DD-rc.sha<sha>"
 git tag -a vYYYY.MM.DD-rc.sha<sha> -m vYYYY.MM.DD-rc.sha<sha>
 git push origin HEAD && git push origin vYYYY.MM.DD-rc.sha<sha>
@@ -136,11 +136,11 @@ git push origin HEAD && git push origin vYYYY.MM.DD-rc.sha<sha>
 ### Create and publish stable
 
 ```bash
-scripts/release.sh               # applies changesets, computes CalVer, tags, pushes stable
+scripts/release.sh               # applies changesets, stamps Helm metadata, computes CalVer, tags, pushes stable
 scripts/release.sh --dry-run     # preview stable without tagging
 ```
 
-Pushing the tag triggers `.github/workflows/release.yml`
+Pushing the tag triggers `.github/workflows/release.yml`. Stable GitHub Release creation waits for `release-approval`; configure the repository so `v*` tags are protected from deletion and force-push.
 
 ### Post-release validation
 
@@ -156,12 +156,13 @@ CARACAL_RELEASE=v2026.05.14 FINDINGS_DIR=/tmp/findings \
 ### Publishing to npm and PyPI
 
 ```bash
-./scripts/publishNpm.sh
-./scripts/publishPypi.sh             # PyPI
-./scripts/publishPypi.sh --testpypi   # TestPyPI
+gh workflow run publishNpm.yml -f package=changed -f dryRun=true
+gh workflow run publishNpm.yml -f package=changed
+gh workflow run publishPypi.yml -f package=changed -f dryRun=true
+gh workflow run publishPypi.yml -f package=changed
 ```
 
-By default, both scripts diff the current `HEAD` against the latest reachable release tag and select only changed publishable package directories. Use `--base <ref>` to override the diff base, `--select` to manually narrow the detected set, or `--all` only for an intentional full-package publish. The scripts skip versions already published. `scripts/publishNpm.sh` publishes rc versions with the `rc` dist-tag and stable versions with `latest`.
+Protected workflows are the normal release path. They diff the current `HEAD` against the latest reachable release tag and select only changed publishable package directories. Use `baseRef` to override the diff base or `package=all` only for an intentional full-package publish. Local scripts remain available for RC publishing and emergency recovery, but stable local publishing requires `CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1` after release approval.
 
 ### Published artifacts
 

@@ -28,6 +28,7 @@ spec:
           annotations:
             summary: STS OPA policy compilation is failing
             description: A policy bundle failed compilation. STS fails closed for affected policy loads; inspect STS logs and policy activation history.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalstsopacompileerrors
         - alert: CaracalSTSPolicyBundleStale
           expr: caracal_sts_opa_max_policy_age_seconds > {{ .Values.alertRules.stsMaxPolicyAgeSeconds }}
           for: 5m
@@ -37,6 +38,7 @@ spec:
           annotations:
             summary: STS policy bundle age exceeds the configured threshold
             description: Policy invalidation or PostgreSQL polling may be delayed. Check Redis policy invalidation stream and STS readiness.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalstspolicybundlestale
         - alert: CaracalAuditDLQNonEmpty
           expr: caracal_audit_dlq_size > {{ .Values.alertRules.auditDlqSize }}
           for: 2m
@@ -46,6 +48,17 @@ spec:
           annotations:
             summary: Audit dead-letter queue is non-empty
             description: Audit events are failing ingestion or verification. Inspect Audit logs, DLQ age, producer HMAC failures, and Redis stream health.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalauditdlqnonempty
+        - alert: CaracalAuditDLQGrowth
+          expr: increase(caracal_audit_dlq_size[10m]) > {{ .Values.alertRules.auditDlqGrowth }}
+          for: 5m
+          labels:
+            severity: critical
+            component: audit
+          annotations:
+            summary: Audit dead-letter queue is growing
+            description: Audit failure backlog is increasing. Protected action evidence may be delayed; stop risky rollouts and recover Audit/Redis/Postgres before continuing.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalauditdlqgrowth
         - alert: CaracalAuditConsumerLagHigh
           expr: caracal_audit_consumer_lag > {{ .Values.alertRules.auditConsumerLag }}
           for: 5m
@@ -55,6 +68,7 @@ spec:
           annotations:
             summary: Audit consumer lag is high
             description: Audit ingestion is behind the Redis stream. Scale Audit, check PostgreSQL latency, and confirm Redis memory is not constrained.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalauditconsumerlaghigh
         - alert: CaracalAuditTamperDetected
           expr: increase(caracal_audit_tamper_mismatch_total[5m]) + increase(caracal_audit_tamper_chain_breaks_total[5m]) + increase(caracal_audit_tamper_hmac_failures_total[5m]) > 0
           for: 0m
@@ -64,6 +78,7 @@ spec:
           annotations:
             summary: Audit tamper evidence detected
             description: Audit chain verification detected mismatch, ordering break, or stored HMAC failure. Treat as a security incident.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalaudittamperdetected
         - alert: CaracalGatewaySTSExchangeErrors
           expr: increase(caracal_gateway_sts_exchange_errors_total[5m]) > {{ .Values.alertRules.gatewayStsExchangeErrors }}
           for: 2m
@@ -73,6 +88,7 @@ spec:
           annotations:
             summary: Gateway cannot reliably exchange mandates with STS
             description: Protected requests may fail before upstream dispatch. Check Gateway readiness, STS readiness, route bindings, and service-to-service auth.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalgatewaystsexchangeerrors
         - alert: CaracalPostgresPoolSaturation
           expr: max by (service) (caracal_db_pool_in_use_ratio) > {{ .Values.alertRules.dbPoolInUseRatio }}
           for: 5m
@@ -82,6 +98,7 @@ spec:
           annotations:
             summary: Postgres connection pool is near saturation
             description: A service is holding most of its Postgres pool. Inspect long-running queries, statement timeouts, and connection leaks before the pool exhausts and requests start failing.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalpostgrespoolsaturation
         - alert: CaracalReadinessFlapping
           expr: changes(kube_pod_container_status_ready{pod=~"{{ include "caracal.fullname" . }}-.*"}[10m]) > {{ .Values.alertRules.readinessFlapsPer10m }}
           for: 5m
@@ -91,4 +108,5 @@ spec:
           annotations:
             summary: Caracal pod readiness is flapping
             description: A pod is repeatedly toggling Ready/NotReady. Check dependency health (Postgres/Redis), CPU throttling, OOM, and readiness probe timeouts.
+            runbook_url: https://docs.caracal.run/operations/alerts/#caracalreadinessflapping
 {{- end }}
