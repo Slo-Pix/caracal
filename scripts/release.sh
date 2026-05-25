@@ -19,7 +19,7 @@ for arg in "$@"; do
             cat <<EOF
 Usage: scripts/release.sh [--dry-run]
 
-  --dry-run   Print the planned tag, run \`changeset version\`, run \`changeset publish --dry-run\`, then revert local changes.
+  --dry-run   Print the planned tag, apply pending changesets, write a manifest, show the diff, then revert local changes.
 
 Tag format: vYYYY.MM.DD (with .N suffix on additional cuts the same day).
 Per-package versions follow semver and are bumped by Changesets.

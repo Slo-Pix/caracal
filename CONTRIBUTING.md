@@ -141,7 +141,7 @@ git push origin HEAD && git push origin vYYYY.MM.DD-rc.sha<sha>
 
 Use `scripts/rc.sh version` only to preview a manifest without stamping package metadata; clean that preview with `scripts/rc.sh clean --manifest <manifest-path>`.
 
-Pushing an rc tag runs `.github/workflows/release.yml`, publishes OCI images to GHCR, and creates a GitHub Release for rc. npm packages publish with the `rc` dist-tag through `scripts/publishNpm.sh`; PyPI packages publish with PEP 440 rc versions through `scripts/publishPypi.sh`.
+Pushing an rc tag runs `.github/workflows/release.yml`, publishes OCI images to GHCR, and creates a GitHub Release for rc. npm packages publish with the `rc` dist-tag through `scripts/publishNpm.sh`; PyPI packages publish with PEP 440 rc versions through `scripts/publishPypi.sh`. Both package scripts publish only changed package directories by default.
 
 Switch a downstream repo between rc and stable by changing only the Caracal versions it already consumes:
 
@@ -182,7 +182,7 @@ CARACAL_RELEASE=v2026.05.14 FINDINGS_DIR=/tmp/findings \
 ./scripts/publishPypi.sh --testpypi   # TestPyPI
 ```
 
-Skips versions already published. `scripts/publishNpm.sh` publishes rc versions with the `rc` dist-tag and stable versions with `latest`. Both scripts refuse dev-stamped versions (`-dev.sha<sha>`).
+By default, both scripts diff the current `HEAD` against the latest reachable release tag and select only changed publishable package directories. Use `--base <ref>` to override the diff base, `--select` to manually narrow the detected set, or `--all` only for an intentional full-package publish. The scripts skip versions already published. `scripts/publishNpm.sh` publishes rc versions with the `rc` dist-tag and stable versions with `latest`. Both scripts refuse dev-stamped versions (`-dev.sha<sha>`).
 
 ### Published artifacts
 

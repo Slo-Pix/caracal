@@ -48,6 +48,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      hasPackages: ${{ steps.matrix.outputs.hasPackages }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -75,15 +76,17 @@ jobs:
             args+=(--package "$PACKAGE")
           fi
           selected="$(node scripts/detectChangedPackages.mjs "${args[@]}")"
+          hasPackages="$(node -e "const m = JSON.parse(process.argv[1]); console.log(m.include.length > 0 ? 'true' : 'false')" "$selected")"
           {
             echo 'matrix<<JSON'
             printf '%s\n' "$selected"
             echo JSON
+            echo "hasPackages=$hasPackages"
           } >> "$GITHUB_OUTPUT"
 
   publish:
     name: Publish ${{ matrix.name }}
-    if: github.repository == 'Garudex-Labs/caracal'
+    if: github.repository == 'Garudex-Labs/caracal' && needs.select.outputs.hasPackages == 'true'
     needs: select
     runs-on: ubuntu-latest
     timeout-minutes: 15

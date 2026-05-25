@@ -29,7 +29,8 @@
     "changeset": "changeset",
     "version": "changeset version",
     "rc": "scripts/rc.sh",
-    "release": "pnpm run build:typescript && changeset publish",
+    "release": "scripts/release.sh",
+    "release:dry-run": "scripts/release.sh --dry-run",
     "knip": "node ./node_modules/knip/dist/cli.js"
   },
   "devDependencies": {

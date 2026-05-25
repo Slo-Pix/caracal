@@ -45,8 +45,8 @@ git push origin vYYYY.MM.DD-rc.sha<gitsha>
 Publish packages after `prepare`:
 
 ```sh
-./scripts/publishNpm.sh       # rc versions publish with dist-tag rc
-./scripts/publishPypi.sh      # rc versions use PEP 440 rc metadata
+./scripts/publishNpm.sh       # changed rc packages publish with dist-tag rc
+./scripts/publishPypi.sh      # changed rc packages use PEP 440 rc metadata
 ```
 
 Switch a downstream project between rc and stable by changing only the Caracal versions it already consumes:
@@ -64,21 +64,21 @@ For containers, change only `ghcr.io/garudex-labs/caracal-{svc}:v<version>`. For
 
 ## stable workflow
 
-stable is created by pushing a CalVer tag to `main`:
+Stable releases are created from `main` with the release script:
 
 ```sh
-git tag v2026.05.12
-git push origin v2026.05.12
+scripts/release.sh
+scripts/release.sh --dry-run
 ```
 
-This triggers `release.yml` in GitHub Actions. The stable pipeline:
+The script applies pending changesets, writes `releases/<tag>/manifest.json`, tags the release, and pushes `main` plus the tag. The tag triggers `release.yml` in GitHub Actions. The stable pipeline:
 
 1. Verifies the pushing actor is listed in `.github/MAINTAINERS`.
 2. Builds runtime/console binaries and container images in parallel.
 3. Pushes images to GHCR with SLSA provenance and SBOM.
 4. Creates a GitHub Release with generated release notes, binaries, checksums, and provenance attestations.
 
-Only maintainers push stable tags. Do not push CalVer tags from feature branches.
+Only maintainers cut stable releases. Do not push CalVer tags from feature branches.
 
 ---
 
@@ -87,12 +87,12 @@ Only maintainers push stable tags. Do not push CalVer tags from feature branches
 The shell (`caracal`) and Console (`caracal-console`) are compiled to self-contained binaries using `bun --compile`. Ten archives are produced per release (five targets x two binaries), each containing one executable:
 
 | Target | Shell archive | Console archive |
-| --- | --- | --- | --- |
-| `linux-amd64` | `caracal-shell-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` |
-| `linux-arm64` | `caracal-shell-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` |
-| `darwin-amd64` | `caracal-shell-darwin-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-amd64-vYYYY.MM.DD.tar.gz` |
-| `darwin-arm64` | `caracal-shell-darwin-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-arm64-vYYYY.MM.DD.tar.gz` |
-| `windows-amd64` | `caracal-shell-windows-amd64-vYYYY.MM.DD.zip` | `caracal-console-windows-amd64-vYYYY.MM.DD.zip` | `caracal-console-windows-amd64-vYYYY.MM.DD.zip` |
+| --- | --- | --- |
+| `linux-amd64` | `caracal-shell-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` |
+| `linux-arm64` | `caracal-shell-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` |
+| `darwin-amd64` | `caracal-shell-darwin-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-amd64-vYYYY.MM.DD.tar.gz` |
+| `darwin-arm64` | `caracal-shell-darwin-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-arm64-vYYYY.MM.DD.tar.gz` |
+| `windows-amd64` | `caracal-shell-windows-amd64-vYYYY.MM.DD.zip` | `caracal-console-windows-amd64-vYYYY.MM.DD.zip` |
 
 Archives are attached to the GitHub Release with a `SHA256SUMS` file and SLSA provenance attestations. rc tags create GitHub Releases for rc; stable tags create GitHub Releases for stable.
 
@@ -103,12 +103,6 @@ The Runtime and Console have separate install targets:
 ```sh
 # Linux/macOS: Console
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
-
-# Linux/macOS: Console
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
-
-# Windows: Console
-iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
 
 # Windows: Console
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
@@ -122,7 +116,7 @@ Re-run the same install command. The installer overwrites the binary in place wi
 
 ### Uninstall
 
-Linux/macOS: remove the installed binaries from `~/.local/bin` (`caracal`, plus `caracal-console` or `caracal-console`).
+Linux/macOS: remove `caracal` and `caracal-console` from `~/.local/bin`.
 
 Windows: delete `%LOCALAPPDATA%\Programs\caracal` and remove the user PATH entry.
 
@@ -130,14 +124,16 @@ Windows: delete `%LOCALAPPDATA%\Programs\caracal` and remove the user PATH entry
 
 ## Container images
 
-Seven container images are published to GitHub Container Registry on every release:
+Runtime and service container images are published to GitHub Container Registry on every release:
 
 | Image | Service |
 | --- | --- |
+| `ghcr.io/garudex-labs/caracal-runtime` | Runtime shell image |
 | `ghcr.io/garudex-labs/caracal-api` | Control-Plane API |
 | `ghcr.io/garudex-labs/caracal-sts` | Security Token Service |
 | `ghcr.io/garudex-labs/caracal-gateway` | Gateway |
 | `ghcr.io/garudex-labs/caracal-coordinator` | Coordinator |
+| `ghcr.io/garudex-labs/caracal-control` | Control service |
 | `ghcr.io/garudex-labs/caracal-audit` | Audit service |
 | `ghcr.io/garudex-labs/caracal-postgres` | PostgreSQL image |
 | `ghcr.io/garudex-labs/caracal-redis` | Redis image |
@@ -148,7 +144,7 @@ All images are multi-arch (`linux/amd64`, `linux/arm64`) and are tagged with the
 
 ## npm and PyPI packages
 
-npm and PyPI packages are published from a maintainer workstation using the scripts in `scripts/`. Each script opens an interactive picker (up/down, space to toggle, `a` toggles all, enter confirms), prompts for the registry token, builds the selected packages, and uploads them: skipping versions already present on the registry. npm rc versions publish with the `rc` dist-tag; stable versions publish with `latest`.
+npm and PyPI packages are published from a maintainer workstation using the scripts in `scripts/`. Each script diffs the current `HEAD` against the latest reachable release tag and selects only changed publishable package directories by default. Use `--base <ref>` to override the diff base, `--select` to manually narrow the detected set, or `--all` only for an intentional full-package publish. The scripts prompt for the registry token, build the selected packages, upload them, and skip versions already present on the registry. npm rc versions publish with the `rc` dist-tag; stable versions publish with `latest`.
 
 ```sh
 ./scripts/publishNpm.sh
@@ -158,7 +154,7 @@ npm and PyPI packages are published from a maintainer workstation using the scri
 
 **npm packages** (`@caracalai/*`): `core`, `oauth`, `admin`, `identity`, `revocation`, `sdk`, `transport-mcp`, `transport-a2a`, `mcp-express`, `mcp-fastmcp`, `tokenstate-postgres`, `revocation-redis`. Browse at [npmjs.com/~caracal-run](https://www.npmjs.com/~caracal-run).
 
-**PyPI packages** (`caracalai-*`): `core`, `identity`, `revocation`, `sdk`, `transport-mcp`, `mcp-fastmcp`, `revocation-redis`. Browse at [pypi.org/user/CaracalAI](https://pypi.org/user/CaracalAI).
+**PyPI packages** (`caracalai-*`): `core`, `oauth`, `identity`, `revocation`, `sdk`, `transport-mcp`, `mcp-fastmcp`, `revocation-redis`. Browse at [pypi.org/user/CaracalAI](https://pypi.org/user/CaracalAI).
 
 ---
 
