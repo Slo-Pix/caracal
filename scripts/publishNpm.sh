@@ -126,8 +126,11 @@ done
 say_step "publishNpm: verifying latest versions on npm"
 for d in "${packages[@]}"; do
     name="$(jq -r .name "$d/package.json")"
-    latest="$(curl -fsSL "https://registry.npmjs.org/${name}" 2>/dev/null | jq -r '.["dist-tags"].latest // "unknown"')"
-    printf '  %s%s%s  latest=%s\n' "${C_LABEL}" "${name}" "${C_RESET}" "${latest}"
+    ver="$(jq -r .version "$d/package.json")"
+    dist_tag="latest"
+    [[ "$ver" == *"-rc."* ]] && dist_tag="rc"
+    published="$(curl -fsSL "https://registry.npmjs.org/${name}" 2>/dev/null | jq -r --arg tag "$dist_tag" '.["dist-tags"][$tag] // "unknown"')"
+    printf '  %s%s%s  %s=%s\n' "${C_LABEL}" "${name}" "${C_RESET}" "${dist_tag}" "${published}"
 done
 
 say_success "publishNpm: done"

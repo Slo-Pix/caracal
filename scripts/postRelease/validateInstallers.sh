@@ -65,3 +65,4 @@ validatePwshInstaller() {
 
 validateShellConsole
 validatePwshInstaller "install-console.ps1" "caracal-console" "$CONSOLE_VER"
+exitForFindings

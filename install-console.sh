@@ -85,7 +85,24 @@ case "${os}" in
 esac
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "${tmp}"' EXIT
+backup="${tmp}/backup"
+stage="${tmp}/stage"
+committed=0
+installedFiles=" "
+mkdir -p "${backup}" "${stage}"
+cleanup() {
+    if [ "${committed}" != "1" ]; then
+        for binFile in caracal caracal.exe caracal-console caracal-console.exe; do
+            if [ -e "${backup}/${binFile}" ] || [ -L "${backup}/${binFile}" ]; then
+                mv -f "${backup}/${binFile}" "${INSTALL_DIR}/${binFile}" 2>/dev/null || true
+            elif [ "${installedFiles#* ${binFile} }" != "${installedFiles}" ]; then
+                rm -f "${INSTALL_DIR}/${binFile}" 2>/dev/null || true
+            fi
+        done
+    fi
+    rm -rf "${tmp}"
+}
+trap cleanup EXIT
 
 if [ "${VERSION}" = "latest" ]; then
     fetch "https://api.github.com/repos/${REPO}/releases/latest" "${tmp}/_latest.json" \
@@ -105,7 +122,7 @@ printf 'caracal-install: target release %s (%s-%s)\n' "${tag}" "${os}" "${arch}"
 printf 'caracal-install: downloading SHA256SUMS\n'
 fetch "${base}/SHA256SUMS" "${tmp}/SHA256SUMS" || err "failed to download SHA256SUMS"
 
-installArchive() {
+stageArchive() {
     kind="$1"
     binName="$2"
     archive="caracal-${kind}-${os}-${arch}-${tag}.${ext}"
@@ -117,19 +134,19 @@ installArchive() {
     actual="$(sha "${tmp}/${archive}")"
     [ "${expected}" = "${actual}" ] || err "checksum mismatch for ${archive}: expected ${expected}, got ${actual}"
 
+    extractDir="${tmp}/extract-${kind}"
+    mkdir -p "${extractDir}"
     case "${ext}" in
-        tar.gz) tar -xzf "${tmp}/${archive}" -C "${tmp}" ;;
-        zip) unzip -q -o "${tmp}/${archive}" -d "${tmp}" ;;
+        tar.gz) tar -xzf "${tmp}/${archive}" -C "${extractDir}" ;;
+        zip) unzip -q -o "${tmp}/${archive}" -d "${extractDir}" ;;
     esac
 
     binFile="${binName}"
     [ "${os}" = windows ] && binFile="${binName}.exe"
-    [ -f "${tmp}/${binFile}" ] || err "expected ${binFile} inside ${archive}, not found"
+    [ -f "${extractDir}/${binFile}" ] || err "expected ${binFile} inside ${archive}, not found"
 
-    dest="${INSTALL_DIR}/${binFile}"
-    mv "${tmp}/${binFile}" "${dest}"
-    chmod +x "${dest}"
-    printf 'caracal-install: installed %s\n' "${dest}"
+    mv "${extractDir}/${binFile}" "${stage}/${binFile}"
+    chmod +x "${stage}/${binFile}"
 }
 
 hasArchive() {
@@ -141,9 +158,27 @@ mkdir -p "${INSTALL_DIR}"
 installedShell=0
 if hasArchive shell; then
     installedShell=1
-    installArchive shell caracal
+    stageArchive shell caracal
 fi
-installArchive console caracal-console
+stageArchive console caracal-console
+
+installStaged() {
+    binFile="$1"
+    src="${stage}/${binFile}"
+    dest="${INSTALL_DIR}/${binFile}"
+    [ -f "${src}" ] || err "staged binary missing: ${binFile}"
+    if [ -e "${dest}" ] || [ -L "${dest}" ]; then
+        mv -f "${dest}" "${backup}/${binFile}"
+    fi
+    mv "${src}" "${dest}"
+    installedFiles="${installedFiles}${binFile} "
+    chmod +x "${dest}"
+    printf 'caracal-install: installed %s\n' "${dest}"
+}
+
+[ "${installedShell}" = "1" ] && installStaged "$([ "${os}" = windows ] && printf 'caracal.exe' || printf 'caracal')"
+installStaged "$([ "${os}" = windows ] && printf 'caracal-console.exe' || printf 'caracal-console')"
+committed=1
 
 case ":${PATH}:" in
     *":${INSTALL_DIR}:"*) ;;

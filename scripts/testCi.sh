@@ -26,6 +26,7 @@ go_pkgs=(
   ./packages/connectors/nethttp/go/...
   ./packages/connectors/redis/go/...
   ./packages/identity/go/...
+  ./packages/oauth/go/...
   ./packages/revocation/go/...
   ./packages/sdk/go/...
 )
@@ -126,7 +127,9 @@ if $run_ts; then
   ts_run packages/connectors/express/ts mcp-express tests/typescript/unit/sdk/mcp-express
   ts_run packages/connectors/fastmcp/ts mcp-fastmcp tests/typescript/unit/sdk/mcp-fastmcp
   ts_run packages/connectors/postgres/ts tokenstate-postgres tests/typescript/unit/connectors/postgres
+  ts_run packages/connectors/redis/ts tokenstate-redis tests/typescript/unit/connectors/redis
   ts_run packages/identity/ts identity tests/typescript/unit/identity
+  ts_run apps/control control tests/typescript/unit/control tests/typescript/integration/control
 fi
 
 if $run_go; then
@@ -142,7 +145,8 @@ if $run_go; then
     -coverprofile=coverage/go/tests.out \
     ./tests/go/unit/revocation \
     ./tests/go/unit/transport/mcp \
-    ./tests/go/unit/identity
+    ./tests/go/unit/identity \
+    ./tests/go/contract/interoperability
   tail -n +2 coverage/go/tests.out >> coverage/go/coverage.out
   "$go_cmd" tool cover -func=coverage/go/coverage.out
 fi

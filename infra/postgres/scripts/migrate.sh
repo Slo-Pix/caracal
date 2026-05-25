@@ -66,7 +66,7 @@ psql_cmd -c "
   );
 " >/dev/null
 
-for path in $(ls "${migrations_dir}"/*.up.sql 2>/dev/null | sort); do
+find "${migrations_dir}" -maxdepth 1 -type f -name '*.up.sql' | sort | while IFS= read -r path; do
     version=$(basename "${path}" .up.sql)
     case "${version}" in
         [0-9][0-9][0-9][0-9]_*) : ;;
