@@ -55,28 +55,22 @@ pnpm unlink --global caracal  # Remove global symlink
 #### Console
 
 ```bash
-pnpm caracal console
+pnpm caracal console          # Human-facing product management
 ```
-
-The runtime shell keeps lifecycle and workload execution commands. Human-facing product management belongs in the Console.
 
 #### Standalone execution
 
-`pnpm caracal run -- <command>` is separate from runtime and Console. It reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell. Keep this path for workload execution and automation that needs `RESOURCE_TOKEN`; do not expose it through the Console.
+`pnpm caracal run -- <command>` reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell.
 
 ```bash
-pnpm caracal run -- node examples/agent.js
+pnpm caracal run -- <command> # Example: -- node examples/agent.js
 ```
 
 #### Control API (optional)
 
-The control service is an OAuth-protected HTTP API hosted by the engine for any external client (script, AI agent, workflow, or another instance of runtime/console) that needs to drive Caracal programmatically. It is unmounted by default.
+The control service is an OAuth-protected HTTP API hosted by the engine for any external client that needs to drive Caracal programmatically.
 
-The control service reads its admin token from `infra/secrets/files/caracalAdminToken`, which is generated on the first `pnpm caracal up` or `pnpm secrets:init`. Control lifecycle management must run through the authenticated Control menu in the Console. Do not call the underlying Node entrypoints, thin scripts, or Docker profiles directly; lifecycle commands require a controlling TTY, the local managed admin secret, and explicit human confirmation before changing runtime state.
-
-If you created `infra/docker/local.env` for operator overrides, pass it after `dev.env` so local entries win.
-
-Clients authenticate by exchanging the Control key credentials for a token whose resource matches the control audience (`caracal-control` by default). Create the key from the Console Control menu; Caracal generates `client_secret` and shows it once in the create result. Store it, then drive the enabled Control API from the workflow or client that will use it in production.
+Clients authenticate by exchanging the Control key credentials for a token whose resource matches the control audience (`caracal control`). Create the key from the Console Control menu; Caracal generates `client_secret` and shows it once in the create result. Store it, then drive the enabled Control API from the workflow or client that will use it in production.
 
 ## Tests
 
@@ -139,21 +133,6 @@ git tag -a vYYYY.MM.DD-rc.sha<sha> -m vYYYY.MM.DD-rc.sha<sha>
 git push origin HEAD && git push origin vYYYY.MM.DD-rc.sha<sha>
 ```
 
-Use `scripts/rc.sh version` only to preview a manifest without stamping package metadata; clean that preview with `scripts/rc.sh clean --manifest <manifest-path>`.
-
-Pushing an rc tag runs `.github/workflows/release.yml`, publishes OCI images to GHCR, and creates a GitHub Release for rc. npm packages publish with the `rc` dist-tag through `scripts/publishNpm.sh`; PyPI packages publish with PEP 440 rc versions through `scripts/publishPypi.sh`. Both package scripts publish only changed package directories by default.
-
-Switch a downstream repo between rc and stable by changing only the Caracal versions it already consumes:
-
-```bash
-npm install @caracalai/sdk@1.4.2-rc.sha<sha>      # rc
-npm install @caracalai/sdk@1.4.2                  # stable
-uv add caracalai-sdk==1.4.2rc0+sha<sha>           # rc
-uv add caracalai-sdk==1.4.2                       # stable
-```
-
-For containers, change only `ghcr.io/garudex-labs/caracal-{svc}:v<version>`. For binaries, install the desired `--version`. Do not add `file:../caracal`, editable Caracal installs, Docker `COPY` from this checkout, Caracal source paths, or extra consumer env files.
-
 ### Create and publish stable
 
 ```bash
@@ -182,7 +161,7 @@ CARACAL_RELEASE=v2026.05.14 FINDINGS_DIR=/tmp/findings \
 ./scripts/publishPypi.sh --testpypi   # TestPyPI
 ```
 
-By default, both scripts diff the current `HEAD` against the latest reachable release tag and select only changed publishable package directories. Use `--base <ref>` to override the diff base, `--select` to manually narrow the detected set, or `--all` only for an intentional full-package publish. The scripts skip versions already published. `scripts/publishNpm.sh` publishes rc versions with the `rc` dist-tag and stable versions with `latest`. Both scripts refuse dev-stamped versions (`-dev.sha<sha>`).
+By default, both scripts diff the current `HEAD` against the latest reachable release tag and select only changed publishable package directories. Use `--base <ref>` to override the diff base, `--select` to manually narrow the detected set, or `--all` only for an intentional full-package publish. The scripts skip versions already published. `scripts/publishNpm.sh` publishes rc versions with the `rc` dist-tag and stable versions with `latest`.
 
 ### Published artifacts
 
