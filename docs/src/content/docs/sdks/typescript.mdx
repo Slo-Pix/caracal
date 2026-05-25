@@ -193,7 +193,7 @@ Clients backed by an async token source should use `headersAsync({ allowRoot: tr
 
 ### `bindFromHeaders(headers, fn)`
 
-Reads the Caracal envelope from inbound HTTP headers and binds the resulting context for the duration of `fn`. Use this in server handlers to propagate the calling agent's identity:
+Reads the Caracal envelope from inbound HTTP headers and binds the resulting context for the duration of `fn`. Use this after Gateway or a verifier connector has authenticated the request, so server handlers can propagate the calling agent's identity:
 
 ```typescript
 bindFromHeaders<T>(
@@ -210,6 +210,8 @@ Returns an Express/Connect-compatible request handler that calls `bindFromHeader
 ```typescript
 middleware(opts?: { allowRoot?: boolean }): (req: IncomingMessage, res: ServerResponse, next: () => void) => void
 ```
+
+This is context propagation only. It does not verify JWT signatures, audience, scopes, token use, or revocation. Use the Gateway path or [`@caracalai/mcp-express`](../../guides/protect-express/) for protected inbound routes.
 
 ## Lifecycle hooks
 

@@ -4,7 +4,7 @@ description: caracal.toml schema, lookup order, permission rules, and credential
 pageType: config
 ---
 
-`caracal.toml` configures runtime credential injection for `caracal run`. It contains application credentials, so keep it in the user config directory or a secret mount, not in a project repository.
+`caracal.toml` configures runtime credential injection for `caracal run` and can also carry SDK endpoint hints for applications that use the same secret mount. It contains application credentials, so keep it in the user config directory or a secret mount, not in a project repository.
 
 ## Lookup order
 
@@ -28,7 +28,10 @@ Explicit `CARACAL_CONFIG` paths may be read-only secret mounts, but they must no
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `zone_url` | yes | STS zone URL used for OAuth token exchange. Local default is `http://localhost:8080`. |
+| `zone_url` | yes | STS zone URL used by `caracal run` for OAuth token exchange. Local default is `http://localhost:8080`. |
+| `sts_url` | no | SDK-readable STS alias. The runtime ignores this field. |
+| `coordinator_url` | no | SDK-readable Coordinator endpoint for clients that use `Caracal.from_config()`. The runtime ignores this field. |
+| `gateway_url` | no | SDK-readable Gateway endpoint for clients that route provider calls through Gateway. The runtime ignores this field. |
 | `zone_id` | yes | Zone created in the Console. |
 | `application_id` | yes | Confidential application used by the runner. |
 | `app_client_secret` | yes | One-time secret copied from the Console when the application credential is created. |
@@ -43,12 +46,18 @@ Credential entries use:
 | --- | --- | --- |
 | `env` | yes | Environment variable name that receives the access token. |
 | `resource` | yes | Resource identifier registered in Caracal. |
+| `upstream_prefix` | no | SDK-readable absolute URL prefix for Gateway-routed provider calls. The runtime ignores this field. |
 | `on_failure` | optional | Optional credentials only: `warn` or `error`. |
+
+`caracal run` only exchanges the listed credentials and injects the resulting access tokens into the configured `env` names. It does not automatically set `CARACAL_COORDINATOR_URL`, `CARACAL_GATEWAY_URL`, or other SDK environment variables for the subprocess.
 
 ## Example
 
 ```toml
 zone_url = "http://localhost:8080"
+sts_url = "http://localhost:8080"
+coordinator_url = "http://localhost:4000"
+gateway_url = "http://localhost:8081"
 zone_id = "zone_from_console"
 application_id = "app_from_console"
 app_client_secret = "secret_from_console"
@@ -57,10 +66,12 @@ continue_on_failure = false
 [[credentials]]
 env = "RESOURCE_TOKEN"
 resource = "resource://local-http"
+upstream_prefix = "https://api.example.internal/"
 
 [[optional_credentials]]
 env = "OPTIONAL_RESOURCE_TOKEN"
 resource = "resource://optional-http"
+upstream_prefix = "https://optional.example.internal/"
 on_failure = "warn"
 
 [mcp_governance]

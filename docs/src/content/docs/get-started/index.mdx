@@ -18,13 +18,15 @@ The default product path is intentionally narrow:
 
 Other provider flows fit into three buckets: connector-verified services you own, application-managed external provider calls that keep Caracal context for attribution, and future native broker plugins. Start with the Gateway path unless you know which bucket applies.
 
+For a first OSS integration, keep the mental model simple: use the Console to create the zone, application, resource, and policy; use the SDK or `caracal run` to run the agent; send protected calls through Gateway. SDK middleware is for propagating already-verified context, not for replacing the Gateway enforcement boundary.
+
 ## In this section
 
 | Page | What you will do |
 | ---- | ---------------- |
 | [Welcome](./welcome/) | Understand the product promise and where to start |
 | [What Caracal Does](./what-caracal-does/) | Learn the Gateway-first enforcement model before touching code |
-| [Installation](./installation/) | Install the Console, and SDK packages |
+| [Installation](./installation/) | Install the Console, runtime shell, and SDK packages |
 | [Quickstart](./quickstart/) | Bring up the local authority plane with a single command |
 | [First Integration](./first-integration/) | Run an agent and call a provider through the Gateway |
 | [Key Ideas at a Glance](./key-ideas/) | Review the simplified mental model and terminology |

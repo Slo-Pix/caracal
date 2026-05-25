@@ -89,9 +89,9 @@ await caracal.spawn(async () => {
 
 `Caracal.fromEnv()` requires the base Coordinator, zone, and application variables plus either `CARACAL_SUBJECT_TOKEN` or `CARACAL_APP_CLIENT_SECRET` with `CARACAL_STS_URL`. Use client-secret mode for long-running local services that should refresh authority automatically.
 
-### Express middleware
+### Context propagation in Express
 
-To bind inbound Caracal context in an Express app, use the SDK middleware:
+If a request has already passed through Gateway or a verified connector, the SDK middleware can bind the incoming Caracal context so downstream calls keep the same identity and trace:
 
 ```sh
 npm install @caracalai/sdk
@@ -113,7 +113,7 @@ app.post("/tool", (req, res) => {
 });
 ```
 
-The middleware extracts the agent's Caracal token from the `Authorization` header and W3C baggage, then binds the `CaracalContext` to the request. Use this connector-verified path only for services you own and can operate with the same revocation and audit contract as the Gateway.
+This middleware is context propagation only. It does not verify JWT signature, audience, scopes, token use, or revocation. To protect an Express route directly, use [`@caracalai/mcp-express`](../../guides/protect-express/), or keep the service behind Gateway.
 
 ## Python
 
@@ -146,9 +146,9 @@ async def main():
 asyncio.run(main())
 ```
 
-### FastAPI ASGI middleware
+### Context propagation in FastAPI or Starlette
 
-To protect a FastAPI or Starlette service:
+If a FastAPI or Starlette request has already been verified by Gateway or a trusted adapter, bind the inbound Caracal context with the ASGI middleware:
 
 ```sh
 pip install caracalai-sdk
@@ -161,7 +161,7 @@ from caracalai_sdk import Caracal
 app = FastAPI()
 caracal = Caracal.from_env()
 
-app.add_middleware(caracal.middleware().__class__, caracal=caracal)
+app.add_middleware(caracal.middleware())
 
 @app.post("/tool")
 async def tool():
@@ -170,7 +170,7 @@ async def tool():
     return {"ok": True}
 ```
 
-The ASGI middleware extracts the agent's Caracal token from inbound request headers and binds the `CaracalContext` to the request scope.
+The ASGI middleware binds the agent's Caracal envelope to the request scope. It is not a verifier. For direct protection of Python services, use Gateway first or implement a verified adapter with `caracalai_transport_mcp.authenticate()` plus a production revocation store.
 
 ## Go
 
