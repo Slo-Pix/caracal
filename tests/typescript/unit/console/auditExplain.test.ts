@@ -207,8 +207,9 @@ describe('audit explain entry', () => {
     const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await credential.onKey('r', { app, size: { rows: 25, cols: 80 }, status: '' })
     const form = pushed[pushed.length - 1] as FormView
-    ;(form as unknown as { values: Record<string, string> }).values = { resource: 'caracal-control' }
-    ;(form as unknown as { focus: number }).focus = 1
+    ;(form as unknown as { values: Record<string, string> }).values = { resource: 'caracal-control', application_id: 'app1' }
+    const fields = (form as unknown as { fields: unknown[] }).fields
+    ;(form as unknown as { focus: number }).focus = fields.length
     await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
 
     expect(app.setStatus).toHaveBeenCalledWith(

@@ -51,9 +51,13 @@ describe('buildAdminClient', () => {
     mkdirSync(join(dir, 'secrets'), { recursive: true })
     writeFileSync(join(dir, 'secrets', 'caracalAdminToken'), 'admin-secret\n')
     writeFileSync(join(dir, 'secrets', 'caracalCoordinatorToken'), 'coordinator-secret\n')
+    mkdirSync(join(dir, 'infra', 'secrets', 'files'), { recursive: true })
+    writeFileSync(join(dir, 'infra', 'secrets', 'files', 'caracalAdminToken'), 'admin-secret\n')
+    writeFileSync(join(dir, 'infra', 'secrets', 'files', 'caracalCoordinatorToken'), 'coordinator-secret\n')
     process.env = {
       ...saved,
       CARACAL_HOME: dir,
+      CARACAL_REPO_ROOT: dir,
       CARACAL_ADMIN_TOKEN: 'stale-admin',
       CARACAL_COORDINATOR_TOKEN: 'stale-coordinator',
       CARACAL_API_URL: 'http://localhost:3000',

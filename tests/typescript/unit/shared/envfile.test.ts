@@ -108,12 +108,11 @@ describe('discoverAdminToken', () => {
     expect(discoverAdminToken()).toBe('installed-token')
   })
 
-  it('reads dev secret file only when CARACAL_REPO_ROOT is set', () => {
+  it('reads development secret files from the current workspace', () => {
     process.env.CARACAL_HOME = dir
+    writeFileSync(join(cwd, 'pnpm-workspace.yaml'), 'packages: []\n')
     mkdirSync(join(cwd, 'infra', 'secrets', 'files'), { recursive: true })
     writeFileSync(join(cwd, 'infra', 'secrets', 'files', 'caracalAdminToken'), 'dev-token\n')
-    expect(discoverAdminToken()).toBeUndefined()
-    process.env.CARACAL_REPO_ROOT = cwd
     expect(discoverAdminToken()).toBe('dev-token')
   })
 
@@ -216,6 +215,15 @@ describe('discoverCoordinatorToken', () => {
     mkdirSync(join(dir, 'secrets'), { recursive: true })
     mkdirSync(join(cwd, 'infra', 'secrets', 'files'), { recursive: true })
     writeFileSync(join(dir, 'secrets', 'caracalCoordinatorToken'), 'installed-token\n')
+    writeFileSync(join(cwd, 'infra', 'secrets', 'files', 'caracalCoordinatorToken'), 'dev-token\n')
+    expect(discoverCoordinatorToken(undefined, { preferGenerated: true })).toBe('dev-token')
+  })
+
+  it('prefers current workspace coordinator tokens over stale env values', () => {
+    process.env.CARACAL_HOME = dir
+    process.env.CARACAL_COORDINATOR_TOKEN = 'stale-env-token'
+    writeFileSync(join(cwd, 'pnpm-workspace.yaml'), 'packages: []\n')
+    mkdirSync(join(cwd, 'infra', 'secrets', 'files'), { recursive: true })
     writeFileSync(join(cwd, 'infra', 'secrets', 'files', 'caracalCoordinatorToken'), 'dev-token\n')
     expect(discoverCoordinatorToken(undefined, { preferGenerated: true })).toBe('dev-token')
   })

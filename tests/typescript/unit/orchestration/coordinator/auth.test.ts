@@ -19,6 +19,9 @@ function buildApp() {
   app.addHook('preHandler', verifyBearer)
   app.get('/secure', async () => ({ ok: true }))
   app.get('/stats', async () => ({ ok: true }))
+  app.get('/zones/:zoneId/agents', async (req) => ({ auth: req.caracalAuth }))
+  app.patch('/zones/:zoneId/agents/:id/suspend', async (req) => ({ auth: req.caracalAuth }))
+  app.post('/zones/:zoneId/agents', async () => ({ ok: true }))
   return app
 }
 
@@ -51,7 +54,7 @@ describe('coordinator bearer authentication', () => {
     expect(res.json()).toEqual({ error: 'invalid_token' })
   })
 
-  it('accepts the managed operator token only on metrics endpoints', async () => {
+  it('accepts the managed operator token on metrics and operator management endpoints', async () => {
     const app = buildApp()
     await app.ready()
 
@@ -65,8 +68,28 @@ describe('coordinator bearer authentication', () => {
       url: '/secure',
       headers: { authorization: 'Bearer coordinator-operator-token' },
     })
+    const agents = await app.inject({
+      method: 'GET',
+      url: '/zones/019e5da7-7834-7309-857f-b983bbcd40e3/agents',
+      headers: { authorization: 'Bearer coordinator-operator-token' },
+    })
+    const suspend = await app.inject({
+      method: 'PATCH',
+      url: '/zones/019e5da7-7834-7309-857f-b983bbcd40e3/agents/a1/suspend',
+      headers: { authorization: 'Bearer coordinator-operator-token' },
+    })
+    const create = await app.inject({
+      method: 'POST',
+      url: '/zones/019e5da7-7834-7309-857f-b983bbcd40e3/agents',
+      headers: { authorization: 'Bearer coordinator-operator-token' },
+    })
 
     expect(stats.statusCode).toBe(200)
+    expect(agents.statusCode).toBe(200)
+    expect(agents.json().auth.scopes).toContain('coordinator.admin')
+    expect(suspend.statusCode).toBe(200)
+    expect(suspend.json().auth.clientId).toBe('caracal-operator')
+    expect(create.statusCode).toBe(401)
     expect(secure.statusCode).toBe(401)
     expect(secure.json()).toEqual({ error: 'invalid_token' })
   })
