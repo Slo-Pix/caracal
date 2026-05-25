@@ -69,3 +69,4 @@ checkNpm() {
 
 for (( i = 0; i < ${#PYPI_NAMES[@]}; i++ )); do checkPyPi "${PYPI_NAMES[$i]}" "${PYPI_VERS[$i]}"; done
 for (( i = 0; i < ${#NPM_NAMES[@]}; i++ )); do checkNpm "${NPM_NAMES[$i]}" "${NPM_VERS[$i]}"; done
+exitForFindings

@@ -26,6 +26,7 @@ readonly SEV_INFO="info"
 readonly STATUS_PASS="pass"
 readonly STATUS_WARN="warn"
 readonly STATUS_FAIL="fail"
+CARACAL_FINDINGS_FAILED=0
 
 readonly DRY_RUN="${DRY_RUN:-0}"
 readonly CARACAL_REPO="${CARACAL_REPO:-Garudex-Labs/caracal}"
@@ -99,6 +100,9 @@ manifestVersion() {
 logFinding() {
   local area="$1" artifact="$2" platform="$3" pm="$4" runtime="$5" severity="$6" status="$7" evidence="$8" repro="$9"
   local file="$FINDINGS_DIR/${area}.jsonl"
+  if [[ "$status" == "$STATUS_FAIL" ]]; then
+    CARACAL_FINDINGS_FAILED=1
+  fi
   "$CARACAL_PYTHON" -c '
 import json, sys
 print(json.dumps({
@@ -107,6 +111,13 @@ print(json.dumps({
   "status": sys.argv[7], "evidence": sys.argv[8], "repro": sys.argv[9]
 }))
 ' "$area" "$artifact" "$platform" "$pm" "$runtime" "$severity" "$status" "$evidence" "$repro" >> "$file"
+}
+
+exitForFindings() {
+  if [[ "$CARACAL_FINDINGS_FAILED" == "1" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 retryBackoff() {

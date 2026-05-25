@@ -75,3 +75,4 @@ else
 fi
 for (( i = 0; i < ${#NPM_NAMES[@]}; i++ )); do validateOne "${NPM_NAMES[$i]}"; done
 rm -rf "$dir"
+exitForFindings

@@ -61,6 +61,8 @@ verifyImage() {
 
 for p in "${PLATS[@]}"; do
   verifyArchive "$(archiveFor shell "$p")"
-  verifyArchive "$(archiveFor Console "$p")"
+  verifyArchive "$(archiveFor console "$p")"
 done
 for (( i = 0; i < ${#CONTAINER_NAMES[@]}; i++ )); do verifyImage "${CONTAINER_NAMES[$i]}" "${CONTAINER_VERS[$i]}"; done
+if [[ -n "$RUNTIME_IMAGE_VER" ]]; then verifyImage "runtime" "$RUNTIME_IMAGE_VER"; fi
+exitForFindings

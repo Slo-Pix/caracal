@@ -91,3 +91,4 @@ validateOne() {
 for (( i = 0; i < ${#IMPORT_PKGS[@]}; i++ )); do
   validateOne "${IMPORT_PKGS[$i]}" "${IMPORT_MODS[$i]}"
 done
+exitForFindings
