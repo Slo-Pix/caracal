@@ -82,7 +82,7 @@ Application services read `REDIS_URL`. Redis provisioning scripts use `REDIS_HOS
 | `REDIS_URL` | None | **Required.** Redis connection string |
 | `STS_URL` | None | **Required.** STS base URL (e.g., `http://sts:8080`) |
 | `ZONE_KEK` | None | **Required.** 32-byte hex-encoded KEK |
-| `CARACAL_ADMIN_TOKEN` / `CARACAL_ADMIN_TOKEN_FILE` | None | Bootstrap admin token. Seeded into the database on first startup. Prefer the file-backed form. |
+| `CARACAL_ADMIN_TOKEN` / `CARACAL_ADMIN_TOKEN_FILE` | None | Bootstrap admin token. Seeded into the database on first startup. Prefer the file-backed form. Local Console prefers generated localhost secrets over stale exported token values. |
 | `PORT` | `3000` | Listen port |
 | `HOST` | `0.0.0.0` in rc or stable, `127.0.0.1` otherwise | Listen host |
 | `WORKER_ID` | Derived from hostname and process ID | Outbox worker identifier |

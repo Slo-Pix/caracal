@@ -195,7 +195,7 @@ Management workflows require an admin token. Console discovers local tokens gene
 caracal-console
 ```
 
-Uses the same management discovery as the runtime engine: explicit env vars, `*_FILE` variables, runtime secret files, then development secret files. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view and is also discovered from local secret files. The Console does not run workloads; launch token-injected processes with `caracal run -- <command>`.
+Uses the same management discovery as the runtime engine. For the default local API and Coordinator, Console prefers the generated local secret files so `caracal purge` followed by `caracal up` automatically repairs stale exported tokens. For non-default services, set explicit env vars or `*_FILE` variables. `CARACAL_COORDINATOR_TOKEN` is only needed for the agents view and is also discovered from local secret files. The Console does not run workloads; launch token-injected processes with `caracal run -- <command>`.
 
 | Key | Action |
 |---|---|
