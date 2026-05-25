@@ -64,3 +64,4 @@ validatePlat() {
 }
 
 for p in "${PLATS[@]}"; do validatePlat "$p"; done
+exitForFindings

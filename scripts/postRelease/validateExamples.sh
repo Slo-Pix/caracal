@@ -52,3 +52,4 @@ PY
 }
 
 run
+exitForFindings

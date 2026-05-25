@@ -132,3 +132,4 @@ PY
 for (( i = 0; i < ${#CONTAINER_NAMES[@]}; i++ )); do validatePull "${CONTAINER_NAMES[$i]}" "${CONTAINER_VERS[$i]}"; done
 if [[ -n "$RUNTIME_IMAGE_VER" ]]; then validatePull "runtime" "$RUNTIME_IMAGE_VER"; fi
 validateStack
+exitForFindings
