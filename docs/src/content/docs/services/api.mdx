@@ -138,7 +138,7 @@ Redis streams published:
 
 1. Parse configuration from environment.
 2. Connect to PostgreSQL; open connection pool (max 20 connections by default).
-3. Seed `CARACAL_ADMIN_TOKEN` into `admin_tokens` if the env var is set.
+3. Seed the admin token into `admin_tokens` when `CARACAL_ADMIN_TOKEN` or `CARACAL_ADMIN_TOKEN_FILE` is configured.
 4. Register Fastify plugins (schema validation, logging, auth hook, admin audit hook).
 5. Register all route plugins.
 6. Start OutboxDispatcher background loop.
@@ -161,7 +161,7 @@ The API is fully stateless. All state is in PostgreSQL and Redis. Run any number
 | `PORT` | `3000` | HTTP listen port |
 | `DATABASE_URL` | — | PostgreSQL connection string |
 | `REDIS_URL` | — | Redis connection string |
-| `CARACAL_ADMIN_TOKEN` | — | Bootstrap admin token. Seeded into the database on first startup. |
+| `CARACAL_ADMIN_TOKEN` / `CARACAL_ADMIN_TOKEN_FILE` | — | Bootstrap admin token. Seeded into the database on first startup. Prefer the file-backed form for service deployments. |
 | `DB_POOL_MAX` | `20` | PostgreSQL pool size |
 | `DB_STATEMENT_TIMEOUT_MS` | `15000` | Statement timeout |
 | `OUTBOX_POLL_MS` | `250` | Outbox dispatcher poll interval |

@@ -12,6 +12,8 @@ Manual environment-driven deployments must provide the shared secrets required b
 
 The installed local stack created by `caracal up` generates file-backed equivalents under `$CARACAL_HOME/secrets/` and passes them to services through the matching `*_FILE` variables.
 
+For service deployments, prefer the `*_FILE` form for sensitive values so the secret is mounted from a secret store instead of placed directly in the process environment.
+
 | Variable | Services that use it | Description |
 | --- | --- | --- |
 | `ZONE_KEK` | STS, API | 32-byte hex-encoded key encryption key. Encrypts zone signing key material at rest. Must not be all zeros. |
@@ -80,7 +82,7 @@ Application services read `REDIS_URL`. Redis provisioning scripts use `REDIS_HOS
 | `REDIS_URL` | — | **Required.** Redis connection string |
 | `STS_URL` | — | **Required.** STS base URL (e.g., `http://sts:8080`) |
 | `ZONE_KEK` | — | **Required.** 32-byte hex-encoded KEK |
-| `CARACAL_ADMIN_TOKEN` | — | Bootstrap admin token. Seeded into the database on first startup. |
+| `CARACAL_ADMIN_TOKEN` / `CARACAL_ADMIN_TOKEN_FILE` | — | Bootstrap admin token. Seeded into the database on first startup. Prefer the file-backed form. |
 | `PORT` | `3000` | Listen port |
 | `HOST` | `0.0.0.0` in rc or stable, `127.0.0.1` otherwise | Listen host |
 | `WORKER_ID` | Derived from hostname and process ID | Outbox worker identifier |
@@ -218,7 +220,7 @@ The control service is unmounted by default and managed through the authenticate
 | `STS_ISSUER_URL` | — | **Required.** Expected issuer for control bearer tokens |
 | `CONTROL_AUDIENCE` | — | **Required.** Expected audience for control bearer tokens |
 | `CARACAL_API_URL` | — | **Required.** Admin API base URL the engine dispatches to (e.g. `http://api:3000`) |
-| `CONTROL_API_TOKEN` | — | **Required.** Admin token used by the engine when calling the API |
+| `CONTROL_API_TOKEN` / `CONTROL_API_TOKEN_FILE` | — | **Required.** Admin token used by the engine when calling the API. Prefer the file-backed form. |
 | `CONTROL_REDIS_URL` | — | Replay cache and audit sink Redis URL. Required when `CARACAL_MODE=rc` or `CARACAL_MODE=stable`; optional in dev mode |
 | `AUDIT_HMAC_KEY` | — | Hex-encoded ≥32-byte key for HMAC-SHA256 signing of audit rows. Required when `CARACAL_MODE=rc` or `CARACAL_MODE=stable` |
 | `CONTROL_RATE_CAPACITY` | `60` | Per-subject token-bucket capacity |

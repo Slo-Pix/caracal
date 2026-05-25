@@ -25,10 +25,10 @@ The Console communicates with the control-plane API and discovers operator crede
 | `CARACAL_API_URL` | `http://localhost:3000` in development | Control-plane API base URL. |
 | `CARACAL_ZONE_ID` | From `caracal.toml` or saved Console state | Default zone for zone-scoped views. |
 | `CARACAL_COORDINATOR_URL` | `http://localhost:4000` in development | Coordinator service URL for agent and delegation views. |
-| `CARACAL_COORDINATOR_TOKEN` | — | JWT with `agent:lifecycle` authority for agent and delegation views. |
+| `CARACAL_COORDINATOR_TOKEN` | Auto-discovered when possible | JWT with `agent:lifecycle` authority for agent and delegation views. |
 | `CARACAL_CONFIG` | Auto-resolved | Explicit `caracal.toml` path. |
 
-`CARACAL_ADMIN_TOKEN` is discovered in order: `CARACAL_ADMIN_TOKEN`, `CARACAL_ADMIN_TOKEN_FILE`, the runtime secret file written by `caracal up`, and `infra/secrets/files/caracalAdminToken` in development mode.
+`CARACAL_ADMIN_TOKEN` is discovered in order: `CARACAL_ADMIN_TOKEN`, `CARACAL_ADMIN_TOKEN_FILE`, the runtime secret file written by `caracal up`, and `infra/secrets/files/caracalAdminToken` in development mode. `CARACAL_COORDINATOR_TOKEN` follows the same order using `CARACAL_COORDINATOR_TOKEN_FILE`, `$CARACAL_HOME/secrets/caracalCoordinatorToken`, and `infra/secrets/files/caracalCoordinatorToken`.
 
 ---
 
