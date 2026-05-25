@@ -10,8 +10,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_API_URL,
   RuntimeConfigPermissionError,
+  RuntimeConfigValidationError,
   assertRuntimeConfigFileSecure,
   defaultRuntimeConfigPath,
+  loadRuntimeConfig,
   ServiceUrlMissingError,
   resolveRuntimeConfigPath,
   resolveServiceUrl,
@@ -29,6 +31,17 @@ afterEach(() => {
   process.chdir(cwdBefore)
   rmSync(root, { recursive: true, force: true })
   delete process.env.CARACAL_CONFIG
+  delete process.env.CARACAL_STS_URL
+  delete process.env.CARACAL_ZONE_URL
+  delete process.env.CARACAL_ZONE_ID
+  delete process.env.CARACAL_APPLICATION_ID
+  delete process.env.CARACAL_APP_CLIENT_SECRET
+  delete process.env.CARACAL_APP_CLIENT_SECRET_FILE
+  delete process.env.CARACAL_RUN_CREDENTIALS
+  delete process.env.CARACAL_RUN_CREDENTIALS_FILE
+  delete process.env.CARACAL_RUN_CONTINUE_ON_FAILURE
+  delete process.env.CARACAL_MCP_GOVERNANCE_MODE
+  delete process.env.CARACAL_ALLOW_INSECURE_CONFIG_URLS
   delete process.env.PWD
   delete process.env.INIT_CWD
   delete process.env.XDG_CONFIG_HOME
@@ -140,6 +153,106 @@ describe('resolveRuntimeConfigPath', () => {
     if (process.platform !== 'win32') chmodSync(path, 0o600)
 
     expect(() => assertRuntimeConfigFileSecure(path)).not.toThrow()
+  })
+
+  it('loads and validates config files with secret-file references', () => {
+    const secret = join(root, 'client-secret')
+    const cfg = join(root, 'caracal.toml')
+    writeFileSync(secret, 'secret-value\n')
+    writeFileSync(cfg, [
+      'zone_url = "https://sts.example.com"',
+      'zone_id = "zone1"',
+      'application_id = "app1"',
+      `app_client_secret_file = "${secret}"`,
+      '[[credentials]]',
+      'env = "RESOURCE_TOKEN"',
+      'resource = "resource://api"',
+      '',
+    ].join('\n'))
+    if (process.platform !== 'win32') {
+      chmodSync(secret, 0o444)
+      chmodSync(cfg, 0o600)
+    }
+    process.env.CARACAL_CONFIG = cfg
+
+    expect(loadRuntimeConfig(true)).toMatchObject({
+      zone_url: 'https://sts.example.com',
+      zone_id: 'zone1',
+      application_id: 'app1',
+      app_client_secret: 'secret-value',
+      credentials: [{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }],
+    })
+  })
+
+  it('loads runtime config from env and JSON credential manifests', () => {
+    const secret = join(root, 'client-secret')
+    const credentials = join(root, 'credentials.json')
+    writeFileSync(secret, 'secret-value\n')
+    writeFileSync(credentials, JSON.stringify({
+      credentials: [{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }],
+      optional_credentials: [{ env: 'OPTIONAL_TOKEN', resource: 'resource://optional' }],
+      mcp_governance: { mode: 'log' },
+    }))
+    if (process.platform !== 'win32') {
+      chmodSync(secret, 0o444)
+      chmodSync(credentials, 0o444)
+    }
+    process.env.CARACAL_STS_URL = 'https://sts.example.com'
+    process.env.CARACAL_ZONE_ID = 'zone1'
+    process.env.CARACAL_APPLICATION_ID = 'app1'
+    process.env.CARACAL_APP_CLIENT_SECRET_FILE = secret
+    process.env.CARACAL_RUN_CREDENTIALS_FILE = credentials
+    process.env.CARACAL_RUN_CONTINUE_ON_FAILURE = 'true'
+    process.env.CARACAL_MCP_GOVERNANCE_MODE = 'block'
+
+    expect(loadRuntimeConfig(true)).toMatchObject({
+      zone_url: 'https://sts.example.com',
+      zone_id: 'zone1',
+      application_id: 'app1',
+      app_client_secret: 'secret-value',
+      continue_on_failure: true,
+      credentials: [{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }],
+      optional_credentials: [{ env: 'OPTIONAL_TOKEN', resource: 'resource://optional', on_failure: 'warn' }],
+      mcp_governance: { mode: 'block' },
+    })
+  })
+
+  it('does not treat a Console-only zone env var as runtime config', () => {
+    process.env.CARACAL_ZONE_ID = 'zone1'
+    process.env.CARACAL_ZONE_URL = 'https://sts.example.com'
+
+    expect(loadRuntimeConfig(false)).toBeUndefined()
+  })
+
+  it('rejects unknown runtime config fields', () => {
+    const cfg = join(root, 'caracal.toml')
+    writeFileSync(cfg, [
+      'zone_url = "https://sts.example.com"',
+      'zone_id = "zone1"',
+      'application_id = "app1"',
+      'app_client_secret = "secret-value"',
+      'surprise = "nope"',
+      '',
+    ].join('\n'))
+    if (process.platform !== 'win32') chmodSync(cfg, 0o600)
+    process.env.CARACAL_CONFIG = cfg
+
+    expect(() => loadRuntimeConfig(true)).toThrow(RuntimeConfigValidationError)
+    expect(() => loadRuntimeConfig(true)).toThrow(/unknown runtime config field 'surprise'/)
+  })
+
+  it('rejects non-local http endpoints outside development unless explicitly allowed', () => {
+    process.env.NODE_ENV = 'production'
+    process.env.CARACAL_STS_URL = 'http://sts.example.com'
+    process.env.CARACAL_ZONE_ID = 'zone1'
+    process.env.CARACAL_APPLICATION_ID = 'app1'
+    process.env.CARACAL_APP_CLIENT_SECRET = 'secret-value'
+    process.env.CARACAL_RUN_CREDENTIALS = JSON.stringify([{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }])
+
+    expect(() => loadRuntimeConfig(true)).toThrow(/zone_url must use https outside local development/)
+
+    process.env.CARACAL_ALLOW_INSECURE_CONFIG_URLS = 'true'
+    expect(loadRuntimeConfig(true)?.zone_url).toBe('http://sts.example.com')
   })
 })
 

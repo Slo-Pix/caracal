@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Example configuration for Caracal runtime injection and SDK clients.
+# Local profile example for Caracal runtime injection and SDK clients.
 
 # STS endpoint used by caracal run for OAuth token exchange.
 zone_url = "http://localhost:8080"
@@ -15,7 +15,10 @@ gateway_url = "http://localhost:8081"
 # Zone and confidential application created in the Console.
 zone_id = "zone_from_console"
 application_id = "app_from_console"
-app_client_secret = "secret_from_console"
+
+# Prefer a secret-manager or orchestrator-mounted file outside local development.
+app_client_secret_file = "/run/secrets/caracal-app-client-secret"
+# app_client_secret = "secret_from_console"
 
 # Runtime behavior for optional credential failures.
 continue_on_failure = false

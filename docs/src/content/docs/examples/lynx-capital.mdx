@@ -102,8 +102,9 @@ In the Console, open **Control**, confirm **enable endpoint**, then create or in
 | Resources | `lynx/<provider>` | One protected resource per provider in `config/company.yaml` |
 
 After creating the Lynx zone, control key, and resources in the Console, write
-`~/.config/caracal/caracal.toml` from the Console values. The generated config
-includes SDK resource bindings:
+the control key secret to an owner-only file, then write
+`~/.config/caracal/caracal.toml` from the Console values. The config includes
+SDK resource bindings:
 
 ```toml
 zone_url = "http://127.0.0.1:8080"
@@ -112,7 +113,7 @@ coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
 zone_id = "<zone id from Console>"
 application_id = "<control key client_id>"
-app_client_secret = "<control key client_secret>"
+app_client_secret_file = "/home/me/.config/caracal/lynx-client-secret"
 
 [[credentials]]
 env = "LYNX_MERCURY_BANK_TOKEN"
