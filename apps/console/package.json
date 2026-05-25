@@ -35,8 +35,7 @@
   "dependencies": {
     "@caracalai/admin": "workspace:*",
     "@caracalai/engine": "workspace:*",
-    "@caracalai/core": "workspace:*",
-    "smol-toml": "^1.3.1"
+    "@caracalai/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

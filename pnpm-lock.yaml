@@ -96,6 +96,28 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(@vitest/coverage-v8@4.1.6)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
 
+  apps/console:
+    dependencies:
+      '@caracalai/admin':
+        specifier: workspace:*
+        version: link:../../packages/admin/ts
+      '@caracalai/core':
+        specifier: workspace:*
+        version: link:../../packages/core/ts
+      '@caracalai/engine':
+        specifier: workspace:*
+        version: link:../../packages/engine
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(@vitest/coverage-v8@4.1.6)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
+
   apps/control:
     dependencies:
       '@caracalai/admin':
@@ -187,34 +209,6 @@ importers:
       '@caracalai/engine':
         specifier: workspace:*
         version: link:../../packages/engine
-      smol-toml:
-        specifier: ^1.3.1
-        version: 1.6.1
-    devDependencies:
-      '@types/node':
-        specifier: ^24.12.2
-        version: 24.12.2
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: ^4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(@vitest/coverage-v8@4.1.6)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(tsx@4.21.0)(yaml@2.9.0))
-
-  apps/console:
-    dependencies:
-      '@caracalai/admin':
-        specifier: workspace:*
-        version: link:../../packages/admin/ts
-      '@caracalai/core':
-        specifier: workspace:*
-        version: link:../../packages/core/ts
-      '@caracalai/engine':
-        specifier: workspace:*
-        version: link:../../packages/engine
-      smol-toml:
-        specifier: ^1.3.1
-        version: 1.6.1
     devDependencies:
       '@types/node':
         specifier: ^24.12.2
@@ -388,6 +382,9 @@ importers:
       '@caracalai/oauth':
         specifier: workspace:*
         version: link:../oauth/ts
+      smol-toml:
+        specifier: ^1.3.1
+        version: 1.6.1
     devDependencies:
       '@types/node':
         specifier: ^24.12.2
