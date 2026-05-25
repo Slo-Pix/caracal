@@ -9,6 +9,7 @@ import type { RuntimeConfig } from './runtimeConfig.js'
 export interface CredentialReadOpts {
   cfg: RuntimeConfig
   resource: string
+  scopes?: string[]
   ttlSeconds?: number
 }
 
@@ -29,6 +30,7 @@ export async function credentialRead(opts: CredentialReadOpts): Promise<string> 
   const client = new OAuthClient(cfg.zone_url, cfg.zone_id, cfg.application_id)
   const token = await client.exchange('', opts.resource, {
     clientSecret: cfg.app_client_secret,
+    scopes: opts.scopes,
     ttlSeconds: opts.ttlSeconds ?? DEFAULT_TTL_SECONDS,
   })
   return token.accessToken

@@ -98,20 +98,20 @@ export async function ensureControlResource(
   audience = process.env.CONTROL_AUDIENCE ?? DEFAULT_CONTROL_AUDIENCE,
 ): Promise<Resource> {
   const scopes = controlScopes()
-  const resources = await client.resources.list(zoneId)
+  const resources = await client.resources.list(zoneId, { controlResource: true })
   const current = resources.find((resource) => resource.identifier === audience)
   if (!current) {
     return client.resources.create(zoneId, {
       name: 'Control API',
       identifier: audience,
       scopes,
-    })
+    }, { controlResource: true })
   }
   const nextScopes = [...new Set([...current.scopes, ...scopes])].sort()
   if (nextScopes.length === current.scopes.length && nextScopes.every((scope, index) => scope === [...current.scopes].sort()[index])) {
     return current
   }
-  return client.resources.patch(zoneId, current.id, { scopes: nextScopes })
+  return client.resources.patch(zoneId, current.id, { scopes: nextScopes }, { controlResource: true })
 }
 
 export async function controlKeyList(client: AdminClient, zoneId: string): Promise<ControlKeyRecord[]> {

@@ -99,7 +99,7 @@ Errors map as:
 
 **Transport.** Bind to `127.0.0.1` in dev; `0.0.0.0` only in `rc`/`stable` modes, behind a terminating proxy.
 
-**Authentication.** Bearer JWTs minted by the in-cluster STS. The verifier enforces:
+**Authentication.** Bearer JWTs minted by the in-cluster STS for Console-managed Control keys. The verifier enforces:
 
 - `alg: ES256` (only). RS256/HS256 tokens are rejected.
 - `iss` matches `STS_ISSUER_URL`.
@@ -118,7 +118,17 @@ JWKS lookups are scoped per zone (`${STS_JWKS_URL}?zone_id=<id>`). A key miss tr
 | `zone` | `delete` | `control:zone:delete` |
 | `policy-set` | `activate` | `control:policy-set:write` |
 
-There is no `control:invoke` blanket scope. A token that needs both reads and writes must carry both scopes.
+There is no `control:invoke` blanket scope. `control:invoke` is an internal trait on the Control key application, not a permission presented to the Control API. A token that needs both reads and writes must carry both scopes.
+
+**Control keys.** Operators create Control keys from the Console Control menu. A Control key is a managed confidential application with:
+
+- `control:invoke`, which marks the application as eligible for the STS Control-key exchange path.
+- One or more `control:scope:<scope>` traits, which bound the scopes the key may request.
+- Optional TTL and expiry restrictions, which STS enforces when issuing tokens.
+
+The Console shows the client secret only when the key is created or rotated. To mint an invocation token, use **Control → issue invocation token**, paste that one-time secret, select a subset of the key's granted permissions, and choose a TTL that does not exceed the key restriction. The Console verifies the requested scopes locally before calling STS; STS repeats the same checks and issues a token only for the Control audience.
+
+The `caracal-control` audience is maintained by the Control management path and is hidden from generic resource management. It exists so STS can validate Control scopes; operators should not edit or delete it as an ordinary resource.
 
 **Replay defence.** Every accepted `jti` is recorded in Redis (`caracal:control:jti:<jti>`) using `SET NX PX`. TTL is `min(CONTROL_REPLAY_TTL_SEC * 1000, exp_ms - now_ms)`. Memory replay is permitted only in `dev` mode; `rc`/`stable` refuse to start without `CONTROL_REDIS_URL`. Redis errors fail closed — a replay-check failure rejects the request.
 
@@ -151,7 +161,7 @@ The Control service does not call the Console binary or shell out. It calls `eng
 
 Piping stdin to the Console, running it under `CI=true`, or spawning it via `child_process.fork` exits non-zero with an isolation error. Automation must use the Control API (or the SDK built on top of it). There is no `--script` or `--input-file` flag.
 
-**Control management access.** Lifecycle actions are accepted only from a controlling Console with the local managed admin secret. Console lifecycle changes require explicit typed confirmation, and Console lifecycle changes require confirmation in the Control menu. Thin scripts, direct Docker profile use, and non-interactive process execution are not valid Control management paths.
+**Control management access.** Lifecycle actions and Control key management are accepted only from a controlling Console with the local managed admin secret. Lifecycle changes require explicit typed confirmation in the Control menu. Thin scripts, direct Docker profile use, generic credential reads, and non-interactive Console execution are not valid Control management paths.
 
 **Console control section.** The control-management menu entry is always visible. Operators can mount the runtime, enable or disable the endpoint, inspect lifecycle status, unmount long-term runtime components, and manage Control credentials without leaving the Console.
 
@@ -222,16 +232,29 @@ The service refuses to start if any required variable is missing for the active 
 
 ---
 
+## Automation flow
+
+1. Open `caracal console`.
+2. Go to **control → create key** and grant only the permissions the automation needs, such as `control:zone:read`.
+3. Copy the displayed client secret. It is shown only at create or rotate time.
+4. Go to **control → issue invocation token**, choose the Control key, paste the secret, select a subset of the key permissions, and choose a TTL.
+5. Use the returned bearer token against `POST /v1/control/invoke`.
+
+The local runner application created during runtime onboarding is not a Control key and should not be used for Control API automation. It only supports local runtime credential injection for `caracal run`.
+
+---
+
 ## Wire example
 
 ```bash
-# Set these from caracal.toml; local dev defaults STS to http://localhost:8080.
+# Prefer Console → control → issue invocation token. This raw STS request is the
+# equivalent exchange for a Console-managed Control key.
 STS=${STS:-http://localhost:8080}
-: "${ZONE_ID:?set ZONE_ID from caracal.toml zone_id}"
-: "${CLIENT_ID:?set CLIENT_ID from caracal.toml application_id}"
-: "${CLIENT_SECRET:?set CLIENT_SECRET from caracal.toml app_client_secret}"
+: "${ZONE_ID:?set the zone id}"
+: "${CLIENT_ID:?set the Control key client id}"
+: "${CLIENT_SECRET:?set the Control key client secret from create or rotate}"
 
-# 1. Mint a token. The OAuth client must carry the `control:zone:read` scope,
+# 1. Mint a token. The requested scope must be granted on the Control key,
 # and the resource value must match CONTROL_AUDIENCE.
 TOKEN=$(curl -fsS -X POST "${STS%/}/oauth/2/token" \
   -d "grant_type=urn:ietf:params:oauth:grant-type:token-exchange" \
@@ -240,6 +263,7 @@ TOKEN=$(curl -fsS -X POST "${STS%/}/oauth/2/token" \
   -d "client_secret=$CLIENT_SECRET" \
   -d "resource=caracal-control" \
   -d "scope=control:zone:read" \
+  -d "ttl_seconds=300" \
   | jq -er .access_token)
 : "${TOKEN:?token mint failed}"
 
