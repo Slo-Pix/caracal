@@ -240,7 +240,7 @@ The service refuses to start if any required variable is missing for the active 
 4. Go to **control → issue invocation token**, choose the Control key, paste the secret, select a subset of the key permissions, and choose a TTL.
 5. Use the returned bearer token against `POST /v1/control/invoke`.
 
-Applications used for local `caracal.toml` runtime credential injection are not Control keys and should not be used for Control API automation.
+Applications used for workload runtime credential injection are not Control keys and should not be used for Control API automation.
 
 ---
 

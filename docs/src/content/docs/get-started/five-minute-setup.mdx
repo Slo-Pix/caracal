@@ -45,15 +45,22 @@ In the Console:
 4. Create or activate a policy set that allows the local runner application to call `local-http`.
 5. Copy the generated zone ID, application ID, and client secret before leaving the result view.
 
-## Write `caracal.toml`
+## Configure runtime injection
 
 ```bash
-mkdir -p ~/.config/caracal
-cp caracal.toml.example ~/.config/caracal/caracal.toml
-chmod 600 ~/.config/caracal/caracal.toml
+printf '%s\n' '<client-secret>' > "$XDG_RUNTIME_DIR/caracal-client-secret"
+chmod 600 "$XDG_RUNTIME_DIR/caracal-client-secret"
+cat > "$XDG_RUNTIME_DIR/caracal-credentials.json" <<'JSON'
+[{ "env": "RESOURCE_TOKEN", "resource": "resource://local-http" }]
+JSON
+export CARACAL_STS_URL="http://localhost:8080"
+export CARACAL_ZONE_ID="<zone-id>"
+export CARACAL_APPLICATION_ID="<application-id>"
+export CARACAL_APP_CLIENT_SECRET_FILE="$XDG_RUNTIME_DIR/caracal-client-secret"
+export CARACAL_RUN_CREDENTIALS_FILE="$XDG_RUNTIME_DIR/caracal-credentials.json"
 ```
 
-Edit the copied file with the values from the Console. Keep `RESOURCE_TOKEN` mapped to `resource://local-http`.
+Use the zone ID, application ID, and one-time client secret from the Console. This is the same runtime injection shape used by release, CI, and orchestrated deployments; TOML is optional compatibility, not local stack state.
 
 ## Run a local upstream
 

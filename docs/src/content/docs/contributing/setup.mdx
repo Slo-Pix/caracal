@@ -38,7 +38,7 @@ pnpm caracal status --ready --json
 pnpm caracal-console
 ```
 
-Use the Console to create a local zone, application, resource, policy set, and runner credential. Copy the generated values into `~/.config/caracal/caracal.toml` from `caracal.toml.example`, then run `chmod 600 ~/.config/caracal/caracal.toml`.
+Use the Console to create a zone, application, resource, policy set, and runner credential. For `caracal run`, provide the generated values through the same env/secret-file interface used by release and CI deployments; use TOML only when a tool specifically requires a readable runtime profile.
 
 ## Smoke test
 
@@ -68,7 +68,7 @@ Run the narrowest relevant command while iterating, then run the affected suite 
 
 | Symptom | Fix |
 | --- | --- |
-| `runtime config not found` | Create `~/.config/caracal/caracal.toml` for local development, or provide `CARACAL_STS_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, `CARACAL_APP_CLIENT_SECRET_FILE`, and `CARACAL_RUN_CREDENTIALS_FILE`. |
+| `runtime config not found` | Provide `CARACAL_STS_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, `CARACAL_APP_CLIENT_SECRET_FILE`, and `CARACAL_RUN_CREDENTIALS_FILE`, or set `CARACAL_CONFIG` to an explicit runtime profile. |
 | `config_permissions` | Run `chmod 600 ~/.config/caracal/caracal.toml`; explicit secret mounts must not be group/world writable. |
 | Stack readiness timeout | Check Docker memory/CPU, then inspect `pnpm caracal status --ready --json` for the failing service. |
 | Control endpoint disabled | Open the Console Control menu, mount Control, then enable the endpoint. |

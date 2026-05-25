@@ -30,7 +30,7 @@ The `--` separator is optional but recommended when the subprocess accepts flags
 
 Each credential exchange posts to `{zone_url}/oauth/2/token` using `zone_id`, `application_id`, and the confidential application secret from the validated runtime config. Tokens are injected under the declared `env` names.
 
-The runtime first resolves `caracal.toml` from `CARACAL_CONFIG`, then `~/.config/caracal/caracal.toml`. When no TOML file is present, it can run from `CARACAL_STS_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, `CARACAL_APP_CLIENT_SECRET_FILE`, and `CARACAL_RUN_CREDENTIALS_FILE`. It does not load project-local files from the current working directory because local config may contain credential material.
+The runtime first resolves platform configuration from `CARACAL_STS_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, `CARACAL_APP_CLIENT_SECRET_FILE`, and `CARACAL_RUN_CREDENTIALS_FILE`. TOML remains available through `CARACAL_CONFIG` or the XDG runtime profile path for tools that need a readable file. It does not load project-local files from the current working directory because local config may contain credential material, and Console/admin commands do not load runtime profiles.
 
 ### Minimal configuration
 
@@ -63,4 +63,4 @@ mode = "block"   # "block" or "log"
 ```
 
 `"block"` exits before spawning the subprocess. `"log"` writes the notice and continues.
-Outside development, `"log"` requires an explicit platform override so local profiles cannot silently weaken enforcement.
+Outside development, `"log"` requires an explicit platform override so runtime profiles cannot silently weaken enforcement.

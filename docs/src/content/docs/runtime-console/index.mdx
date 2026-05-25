@@ -23,7 +23,7 @@ The Console communicates with the control-plane API and discovers operator crede
 | --- | --- | --- |
 | `CARACAL_ADMIN_TOKEN` | Auto-discovered when possible | Bearer token for control-plane management routes. |
 | `CARACAL_API_URL` | `http://localhost:3000` in development | Control-plane API base URL. |
-| `CARACAL_ZONE_ID` | From runtime config or saved Console state | Default zone for zone-scoped views. |
+| `CARACAL_ZONE_ID` | Environment or saved Console state | Default zone for zone-scoped views. |
 | `CARACAL_COORDINATOR_URL` | `http://localhost:4000` in development | Coordinator service URL for agent and delegation views. |
 | `CARACAL_COORDINATOR_TOKEN` | Auto-discovered when possible | JWT with `agent:lifecycle` authority for agent and delegation views. |
 | `CARACAL_CONFIG` | `~/.config/caracal/caracal.toml` | Explicit local TOML profile path. |

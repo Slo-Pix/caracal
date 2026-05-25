@@ -4,7 +4,7 @@ description: Runtime configuration sources, caracal.toml compatibility, permissi
 pageType: config
 ---
 
-`caracal run` can load runtime credential injection settings from platform environment variables or from `caracal.toml`. Use environment variables and secret-file mounts for CI, containers, Kubernetes, serverless, and production deployments. Use `caracal.toml` as a local development profile or compatibility file when a human needs a readable config.
+`caracal run` loads workload credential-injection settings from platform environment variables or from an explicit runtime profile. Use environment variables and secret-file mounts for local development, CI, containers, Kubernetes, serverless, and production deployments. `caracal.toml` is a compatibility format for humans and SDKs that need a readable file; it is not Console state and it does not create, select, or manage zones.
 
 The runtime validates configuration before token exchange. Unknown fields are rejected, credential environment names must be safe process environment keys, and non-local `http://` STS endpoints are rejected outside development unless `CARACAL_ALLOW_INSECURE_CONFIG_URLS=true` is set explicitly.
 
@@ -47,7 +47,7 @@ Or an object with required credentials, optional credentials, and runtime policy
 
 Mount secret files read-only where possible. The runtime rejects secret files that are group- or world-writable.
 
-## Local `caracal.toml`
+## Optional `caracal.toml`
 
 ### Lookup order
 
@@ -55,7 +55,7 @@ Mount secret files read-only where possible. The runtime rejects secret files th
 2. `$XDG_CONFIG_HOME/caracal/caracal.toml`.
 3. `~/.config/caracal/caracal.toml`.
 
-The runtime intentionally does not read `./caracal.toml` from the current working directory because local config may contain credential material.
+The runtime intentionally does not read `./caracal.toml` from the current working directory because local config may contain credential material. Console, Doctor, and stack lifecycle commands do not load this file; it is workload runtime input for `caracal run` and SDK credential loaders.
 
 ### Permissions
 
@@ -136,4 +136,4 @@ export CARACAL_APP_CLIENT_SECRET_FILE="$RUNNER_TEMP/caracal-client-secret"
 export CARACAL_RUN_CREDENTIALS_FILE="$RUNNER_TEMP/caracal-credentials.json"
 ```
 
-Write the two files from the CI secret store or orchestration secret mount before running `caracal run`. Use `CARACAL_CONFIG` only when a tool or local workflow specifically needs a TOML profile.
+Write the two files from the CI secret store, local secret file, or orchestration secret mount before running `caracal run`. Use `CARACAL_CONFIG` only when a tool or workflow specifically needs a TOML profile.

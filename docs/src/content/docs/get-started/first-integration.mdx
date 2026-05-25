@@ -6,7 +6,7 @@ pageType: workflow
 
 This page walks through integrating an agent with Caracal using the TypeScript, Python, or Go SDK. By the end you will have an agent run that calls a tool/provider resource through the Gateway and leaves both authorization and action-result audit behind.
 
-The instructions assume you have a running stack and a `caracal.toml` from the [Quickstart](./quickstart/).
+The instructions assume you have a running stack and runtime environment variables from the [Quickstart](./quickstart/).
 
 ## How the SDK works
 
@@ -25,8 +25,8 @@ All three SDKs read the same base configuration from environment variables:
 | Variable | Source | Description |
 | -------- | ------ | ----------- |
 | `CARACAL_COORDINATOR_URL` | Stack | URL of the Coordinator service |
-| `CARACAL_ZONE_ID` | `caracal.toml` | Zone the application belongs to |
-| `CARACAL_APPLICATION_ID` | `caracal.toml` | Application ID in that zone |
+| `CARACAL_ZONE_ID` | Runtime environment | Zone the application belongs to |
+| `CARACAL_APPLICATION_ID` | Runtime environment | Application ID in that zone |
 | `CARACAL_SUBJECT_TOKEN` | Runtime bootstrap | Static subject token for startup |
 
 The subject token is short-lived Caracal authority. It is not a static secret. Long-running services should prefer client-secret mode so the SDK can exchange and refresh authority on demand.
@@ -43,7 +43,7 @@ Client-secret mode requires these variables:
 
 ## Using `caracal run` with SDK examples
 
-`caracal run` reads validated runtime config from platform environment variables or a local `caracal.toml` profile, exchanges credentials with the STS, and injects tokens under the configured environment variable names. It does not automatically set `CARACAL_COORDINATOR_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, or `CARACAL_SUBJECT_TOKEN`.
+`caracal run` reads validated runtime config from platform environment variables or an explicit runtime profile, exchanges credentials with the STS, and injects tokens under the configured environment variable names. It does not automatically set `CARACAL_COORDINATOR_URL`, `CARACAL_ZONE_ID`, `CARACAL_APPLICATION_ID`, or `CARACAL_SUBJECT_TOKEN`.
 
 Use `caracal run` for scripts that read a declared token such as `RESOURCE_TOKEN`:
 
