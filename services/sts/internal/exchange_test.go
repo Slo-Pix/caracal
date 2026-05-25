@@ -1459,6 +1459,22 @@ func TestValidateSubjectTokenGracePeriodAndRotation(t *testing.T) {
 		}
 	})
 
+	t.Run("RejectsExpiredGracePeriodKey", func(t *testing.T) {
+		activeOnlyDB := &stubDB{
+			secrets: []SecretRow{secretB},
+		}
+		activeOnlySrv := &Server{
+			cfg:  Config{IssuerURL: "https://sts.example.com"},
+			keys: newKeyCache(activeOnlyDB, zek),
+			db:   activeOnlyDB,
+		}
+		tok := mintToken(keyA, "key-A", true)
+		_, err := activeOnlySrv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err == nil {
+			t.Fatal("expected expired grace period key to be rejected, got nil error")
+		}
+	})
+
 	t.Run("RejectsUnknownKid", func(t *testing.T) {
 		otherKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		if err != nil {

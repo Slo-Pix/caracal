@@ -523,14 +523,22 @@ func (d *DB) EnsureZoneSigningKeySecret(ctx context.Context, zoneID string, ciph
 	return &s, nil
 }
 
-// GetZoneSigningKeySecrets returns the two most recent signing key secrets for a zone.
-// The first entry is the active signing key; the second (if present) is the previous key
-// still served in JWKS during the 24h key-rotation grace period.
+// GetZoneSigningKeySecrets returns the active signing key and the previous key
+// while it remains inside the 24h rotation grace period.
 func (d *DB) GetZoneSigningKeySecrets(ctx context.Context, zoneID string) ([]SecretRow, error) {
 	rows, err := d.pool.Query(ctx,
-		`SELECT id, ciphertext, nonce, dek_id FROM secrets
-		 WHERE zone_id = $1 AND name = 'zone_signing_key'
-		 ORDER BY version DESC LIMIT 2`, zoneID,
+		`WITH ranked AS (
+		   SELECT id, ciphertext, nonce, dek_id, created_at,
+		          row_number() OVER (ORDER BY version DESC, created_at DESC) AS key_rank
+		     FROM secrets
+		    WHERE zone_id = $1 AND name = 'zone_signing_key'
+		 ), active AS (
+		   SELECT created_at FROM ranked WHERE key_rank = 1
+		 )
+		 SELECT ranked.id, ranked.ciphertext, ranked.nonce, ranked.dek_id
+		   FROM ranked CROSS JOIN active
+		  WHERE key_rank = 1 OR (key_rank = 2 AND active.created_at >= now() - interval '24 hours')
+		  ORDER BY key_rank`, zoneID,
 	)
 	if err != nil {
 		return nil, err
