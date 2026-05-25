@@ -137,7 +137,7 @@ The local `build:release` stamps the binary with `CARACAL_VERSION=<base>-dev.sha
 Use rc when a downstream project must consume Caracal exactly like a third-party dependency before stable:
 
 ```bash
-scripts/rc.sh dry-run --base-version 2026.05.26 --suffix rc.1  # simulate the rc release workflow locally
+scripts/rc.sh dry-run --base-version 2026.05.26 --suffix rc.1  # run release.yml as a non-publishing rc dry-run
 scripts/rc.sh prepare --base-version 2026.05.26 --suffix rc.1
 git add -A && git commit -m "rc: v2026.05.26-rc.1"
 git tag -a v2026.05.26-rc.1 -m v2026.05.26-rc.1
@@ -151,7 +151,7 @@ scripts/release.sh               # applies changesets, stamps Helm metadata, com
 scripts/release.sh --dry-run     # preview stable without tagging
 ```
 
-Pushing the tag triggers `.github/workflows/release.yml`. Stable GitHub Release creation waits for `release-approval`; configure the repository so `v*` tags are protected from deletion and force-push.
+Pushing the tag triggers `.github/workflows/release.yml`. RC dry-runs use workflow dispatch and require the selected `--ref` to exist on GitHub with the current workflow file; the helper refuses to queue the run when the selected branch differs from local `HEAD` unless `--allow-stale-ref` is passed. Stable GitHub Release creation waits for `release-approval`; configure the repository so `v*` tags are protected from deletion and force-push.
 
 ### Post-release validation
 

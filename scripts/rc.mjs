@@ -77,7 +77,7 @@ function parseArgs(argv) {
     const arg = argv[i]
     if (!arg.startsWith('--')) die(`unexpected positional argument: ${arg}`)
     const key = arg.slice(2)
-    if (['base-version', 'manifest', 'npm-registry', 'pypi-index', 'oci-registry', 'github-release-base', 'suffix'].includes(key)) {
+    if (['base-version', 'manifest', 'npm-registry', 'pypi-index', 'oci-registry', 'github-release-base', 'suffix', 'ref'].includes(key)) {
       args.values[key] = argv[++i]
       if (!args.values[key]) die(`--${key} requires a value`)
     } else {
@@ -94,6 +94,23 @@ function shortSha() {
 
 function dirtyTree() {
   return execFileSync('git', ['status', '--porcelain'], { cwd: repoRoot, encoding: 'utf8' }).trim()
+}
+
+function currentBranch() {
+  return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim()
+}
+
+function headSha() {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim()
+}
+
+function remoteSha(ref) {
+  const refs = [`refs/heads/${ref}`, `refs/tags/${ref}`]
+  for (const candidate of refs) {
+    const out = execFileSync('git', ['ls-remote', 'origin', candidate], { cwd: repoRoot, encoding: 'utf8' }).trim()
+    if (out) return out.split(/\s+/, 1)[0]
+  }
+  return ''
 }
 
 function currentCalVer() {
@@ -291,6 +308,48 @@ function printVersion(options) {
 
 function dryRun(options) {
   const manifest = makeManifest(options.values)
+  if (options.flags.has('local')) {
+    simulateWorkflow(manifest)
+    return
+  }
+  const ref = options.values.ref ?? process.env.CARACAL_WORKFLOW_REF ?? currentBranch()
+  const args = [
+    'workflow',
+    'run',
+    'release.yml',
+    '--ref',
+    ref,
+    '-f',
+    `ref=${ref}`,
+    '-f',
+    `releaseVersion=${manifest.release}`,
+    '-f',
+    'dryRun=true',
+  ]
+  say(`rc release workflow dry-run: ${manifest.release}`)
+  say(`queuing .github/workflows/release.yml on ${ref}`)
+  say(`publishing: disabled by workflow_dispatch`)
+  if (manifest.source.dirty) say(`warning: local working tree is dirty; GitHub Actions will run the remote ${ref}, not local uncommitted changes`)
+  if (options.flags.has('print-command')) {
+    say(`gh ${args.map(shellArg).join(' ')}`)
+    return
+  }
+  const remote = remoteSha(ref)
+  if (!remote) die(`origin does not have ref ${ref}; push a branch or choose an existing --ref`)
+  if (!options.flags.has('allow-stale-ref') && ref === currentBranch() && remote !== headSha()) {
+    die(`origin/${ref} does not match local HEAD; GitHub Actions would run the old remote workflow. Push ${ref}, choose another --ref, or pass --allow-stale-ref.`)
+  }
+  execFileSync('gh', args, { cwd: repoRoot, stdio: 'inherit' })
+  say(`queued release.yml dry run for ${manifest.release}`)
+  say(`monitor with: gh run list --workflow release.yml --limit 5`)
+}
+
+function shellArg(value) {
+  if (/^[A-Za-z0-9_./:=@-]+$/.test(value)) return value
+  return `'${value.replace(/'/g, "'\\''")}'`
+}
+
+function simulateWorkflow(manifest) {
   const path = manifestPath(manifest)
   say(`rc release workflow dry-run: ${manifest.release}`)
   say(`workflow: .github/workflows/release.yml`)
@@ -365,7 +424,7 @@ function main() {
       say(`Usage: scripts/rc.sh <command> [options]
 
 Commands:
-  dry-run                Simulate the rc release workflow without writing files.
+  dry-run                Queue release.yml through workflow_dispatch without publishing.
   version                 Generate an rc manifest under releases/<tag>/manifest.json.
   prepare [--allow-dirty] Generate the manifest and stamp package metadata to rc versions.
   clean --manifest PATH   Remove an rc manifest directory.
@@ -373,11 +432,15 @@ Commands:
 Options:
   --base-version VER      Base version; default UTC CalVer.
   --suffix VALUE          rc suffix; default rc.sha<gitsha>. Also supports rc.<number>.
+  --ref REF               GitHub ref to run for dry-run; default current branch.
   --manifest PATH|TAG     rc manifest path or tag for clean.
   --npm-registry URL      npm registry endpoint; default https://registry.npmjs.org/.
   --pypi-index URL        Python simple index endpoint; default https://pypi.org/simple/.
   --oci-registry HOST     OCI registry namespace; default ghcr.io/garudex-labs.
-  --github-release-base   GitHub Releases download base URL.`)
+  --github-release-base   GitHub Releases download base URL.
+  --local                 Print the local workflow simulation instead of queuing Actions.
+  --print-command         Print the gh workflow command without running it.
+  --allow-stale-ref       Queue Actions even when the selected branch differs from local HEAD.`)
       break
     default:
       die(`unknown command: ${options.command}`)

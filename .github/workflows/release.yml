@@ -6,9 +6,10 @@
 # Triggers:
 # - Tag push vYYYY.MM.DD[.N]: stable release (binaries → GitHub Release, immutable images → GHCR, approval-gated latest/series image promotion, attestations), then postReleaseValidation.
 # - Tag push vYYYY.MM.DD[.N]-rc.*: rc (immutable artifact destinations, GitHub Release marked as rc), then postReleaseValidation.
-# - workflow_dispatch: build-only validation (binary artifact upload; images built with buildx: no GHCR push). No GitHub Release.
+# - workflow_dispatch with releaseVersion: rc/stable dry-run (binary artifact upload, image builds with buildx, release asset verification; no GHCR push, no GitHub Release).
+# - workflow_dispatch without releaseVersion: build-only validation (binary artifact upload; images built with buildx: no GHCR push). No GitHub Release.
 #   Use ref to checkout a branch or tag; leave empty to use the caller's default ref.
-# - dryRun is informational for dispatch only (publishing is already gated on tag push).
+# - dryRun is required for dispatch releaseVersion runs; publishing is gated on tag push only.
 
 name: release
 
@@ -25,6 +26,11 @@ on:
         description: 'Git ref to build (branch or tag); empty = workflow ref'
         required: false
         default: ''
+      releaseVersion:
+        description: 'Optional release tag for dry-run builds, such as v2026.05.26-rc.1. Dispatch never publishes.'
+        required: false
+        default: ''
+        type: string
       dryRun:
         description: 'Note: publishing only happens on tag push; dispatch never publishes'
         required: false
@@ -76,21 +82,32 @@ jobs:
           fi
           echo "$actor is an authorised maintainer."
 
-      - name: Validate tag format
-        if: github.event_name == 'push'
+      - name: Validate dispatch dry-run request
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion != ''
         run: |
           set -euo pipefail
-          if ! echo "${GITHUB_REF_NAME}" | grep -qE '^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$'; then
-            echo "::error::Tag '${GITHUB_REF_NAME}' does not match vYYYY.MM.DD[.N], vYYYY.MM.DD[.N]-rc.<number>, or vYYYY.MM.DD[.N]-rc.sha<gitsha>"
+          if [ "${{ github.event.inputs.dryRun }}" != "true" ]; then
+            echo "::error::workflow_dispatch releaseVersion runs must keep dryRun=true because dispatch never publishes."
+            exit 1
+          fi
+
+      - name: Validate tag format
+        if: github.event_name == 'push' || github.event.inputs.releaseVersion != ''
+        run: |
+          set -euo pipefail
+          release_ref="${{ github.event_name == 'push' && github.ref_name || github.event.inputs.releaseVersion }}"
+          if ! echo "${release_ref}" | grep -qE '^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$'; then
+            echo "::error::Tag '${release_ref}' does not match vYYYY.MM.DD[.N], vYYYY.MM.DD[.N]-rc.<number>, or vYYYY.MM.DD[.N]-rc.sha<gitsha>"
             exit 1
           fi
 
       - name: Validate release manifest
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || github.event.inputs.releaseVersion != ''
         run: |
           set -euo pipefail
-          manifest="releases/${GITHUB_REF_NAME}/manifest.json"
-          version="${GITHUB_REF_NAME#v}"
+          release_ref="${{ github.event_name == 'push' && github.ref_name || github.event.inputs.releaseVersion }}"
+          manifest="releases/${release_ref}/manifest.json"
+          version="${release_ref#v}"
           test -f "$manifest" || { echo "::error::Missing release manifest: $manifest"; exit 1; }
           CARACAL_VALIDATE_HELM_FILES=1 node scripts/validateReleaseManifest.mjs "$manifest"
 
@@ -142,6 +159,9 @@ jobs:
           set -euo pipefail
           if [ "${{ github.event_name }}" = "push" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ github.event.inputs.releaseVersion }}" ]; then
+            VERSION="${{ github.event.inputs.releaseVersion }}"
+            VERSION="${VERSION#v}"
           else
             SHA="$(git rev-parse --short HEAD)"
             VERSION="$(date -u +%Y.%m.%d)-dev.sha${SHA}"
@@ -381,7 +401,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/caracal-${{ matrix.name }}
           tags: |
             type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'push' }}
-            type=raw,value=dispatch-${{ github.run_id }},enable=${{ github.event_name != 'push' }}
+            type=raw,value=${{ github.event.inputs.releaseVersion }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion != '' }}
+            type=raw,value=dispatch-${{ github.run_id }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion == '' }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -431,7 +452,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/caracal-runtime
           tags: |
             type=raw,value=${{ github.ref_name }},enable=${{ github.event_name == 'push' }}
-            type=raw,value=dispatch-${{ github.run_id }},enable=${{ github.event_name != 'push' }}
+            type=raw,value=${{ github.event.inputs.releaseVersion }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion != '' }}
+            type=raw,value=dispatch-${{ github.run_id }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion == '' }}
 
       - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -519,6 +541,53 @@ jobs:
             dist/SHA256SUMS
             dist/install-console.sh
             dist/install-console.ps1
+
+  publishDryRun:
+    name: Verify release assets without publishing
+    needs: [binaries, images, runtimeImage]
+    if: github.repository == 'Garudex-Labs/caracal' && github.event_name == 'workflow_dispatch' && github.event.inputs.releaseVersion != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.inputs.ref != '' && github.event.inputs.ref || github.ref }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-archives
+          path: dist
+
+      - name: Verify release assets
+        env:
+          RELEASE_REF: ${{ github.event.inputs.releaseVersion }}
+        run: |
+          set -euo pipefail
+          echo "Dry-run release assets:"
+          ls -la dist/
+          for asset in \
+            "dist/caracal-shell-linux-amd64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-shell-linux-arm64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-shell-darwin-amd64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-shell-darwin-arm64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-shell-windows-amd64-${RELEASE_REF}.zip" \
+            "dist/caracal-console-linux-amd64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-console-linux-arm64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-console-darwin-amd64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-console-darwin-arm64-${RELEASE_REF}.tar.gz" \
+            "dist/caracal-console-windows-amd64-${RELEASE_REF}.zip" \
+            "dist/manifest.json" \
+            "dist/install-console.sh" \
+            "dist/install-console.ps1" \
+            "dist/SHA256SUMS"
+          do
+            [ -f "${asset}" ] || { echo "::error::Missing release asset: ${asset}"; exit 1; }
+          done
+          sha256sum --check dist/SHA256SUMS
+          echo "Release dry-run verified assets for ${RELEASE_REF}; no GitHub Release was created."
 
   validateRelease:
     name: Validate release artifacts
