@@ -10,6 +10,7 @@ import { explainError } from '../../../../apps/console/src/errors.ts'
 describe('explainError', () => {
   it('formats AdminApiError 401', () => {
     expect(explainError(new AdminApiError(401, 'unauthorized', {}))).toMatch(/CARACAL_ADMIN_TOKEN/)
+    expect(explainError(new AdminApiError(401, 'invalid_token', {}, undefined, 'coordinator'))).toMatch(/CARACAL_COORDINATOR_TOKEN/)
   })
 
   it('formats AdminApiError 403 with code', () => {

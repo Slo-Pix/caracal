@@ -10,6 +10,7 @@ interface AdminApiErrorLike {
   status: number
   code: string
   body: unknown
+  target?: 'api' | 'coordinator'
 }
 
 function isAdminApiError(err: unknown): err is AdminApiErrorLike {
@@ -57,6 +58,9 @@ function rawExplain(err: unknown): string {
     const detail = typeof err.body === 'object' && err.body !== null && 'message' in err.body
       ? String((err.body as { message: unknown }).message)
       : ''
+    if (err.status === 401 && err.target === 'coordinator') {
+      return 'unauthorized — check CARACAL_COORDINATOR_TOKEN matches the Coordinator; unset stale env vars to use generated local secrets'
+    }
     if (err.status === 401) return `unauthorized — check CARACAL_ADMIN_TOKEN matches the API`
     if (err.status === 403) return `forbidden (${err.code}) — token lacks required scope`
     if (err.status === 404) return `not found — resource may have been deleted`

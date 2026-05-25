@@ -153,7 +153,7 @@ export class AdminClient {
               code = (parsed as { error: string }).error
             }
           } catch { /* keep raw text */ }
-          throw new AdminApiError(res.status, code, parsed)
+          throw new AdminApiError(res.status, code, parsed, undefined, opts.base ?? 'api')
         }
         if (opts.expectEmpty || res.status === 204) return undefined as T
         return await res.json() as T
