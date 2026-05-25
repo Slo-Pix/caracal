@@ -8,7 +8,6 @@ import {
   stackStatus,
   type ProbeResult,
 } from '@caracalai/engine'
-import { loadRuntimeConfig } from '@caracalai/engine/runtime-config'
 import { printInfo } from '../style.ts'
 
 const POLL_MS = 1000
@@ -24,14 +23,6 @@ function summarize(results: readonly ProbeResult[]): string {
   return failed.map((result) => `${result.name} ${result.detail}`).join('; ')
 }
 
-function hasRuntimeConfig(): boolean {
-  try {
-    return loadRuntimeConfig(false) !== undefined
-  } catch {
-    return true
-  }
-}
-
 export async function completeRuntimeOnboarding(): Promise<void> {
   const probes = defaultServiceProbes(undefined, 'ready')
   const deadline = Date.now() + TIMEOUT_MS
@@ -40,9 +31,6 @@ export async function completeRuntimeOnboarding(): Promise<void> {
     results = await stackStatus({ probes })
     if (results.length > 0 && results.every((result) => result.ok)) {
       printInfo('runtime services ready')
-      if (!hasRuntimeConfig()) {
-        printInfo('runtime config not found; create a local profile with `pnpm caracal console` before using `pnpm caracal run`')
-      }
       return
     }
     await delay(POLL_MS)

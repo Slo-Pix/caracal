@@ -8,19 +8,11 @@ import {
   buildAdminClient,
   formatVersionOutput,
 } from '@caracalai/engine'
-import {
-  loadRuntimeConfig,
-  type RuntimeConfig,
-} from '@caracalai/engine/runtime-config'
 import { installCrashHandlers } from '@caracalai/engine/crash'
 import { App } from './screen.ts'
 import { CARACAL_CONSOLE_MODE, CARACAL_CONSOLE_SHA, CARACAL_CONSOLE_VERSION } from './version.gen.ts'
 import { ConsoleStateStore } from './state.ts'
 import { MenuView } from './views/menu.ts'
-
-function loadConfig(): RuntimeConfig | undefined {
-  return loadRuntimeConfig(false)
-}
 
 function nonInteractiveReason(): string | undefined {
   if (!process.stdin.isTTY) return 'stdin is not a TTY'
@@ -86,8 +78,7 @@ function main(): void {
   }
   let adminCtx: import('@caracalai/engine').AdminContext
   try {
-    const cfg = loadConfig()
-    adminCtx = buildAdminClient(cfg)
+    adminCtx = buildAdminClient()
   } catch (err) {
     process.stderr.write(`caracal-console: ${err instanceof Error ? err.message : String(err)}\n`)
     process.exit(1)
