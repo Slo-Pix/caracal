@@ -6,6 +6,7 @@
     "shell": "2026.05.14",
     "console": "2026.05.14"
   },
+  "runtimeImage": "2026.05.14",
   "containers": {
     "api": "2026.05.14",
     "coordinator": "2026.05.14",
@@ -13,6 +14,11 @@
     "gateway": "2026.05.14",
     "sts": "2026.05.14",
     "redis": "2026.05.14"
+  },
+  "helm": {
+    "chartVersion": "2026.5.14",
+    "appVersion": "2026.05.14",
+    "imageTag": "2026.05.14"
   },
   "pypi": {
     "caracalai-core": "0.1.1",
