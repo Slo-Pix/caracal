@@ -32,16 +32,27 @@ type zoneCacheEntry struct {
 	expiresAt time.Time
 }
 
+type publicKeysCacheEntry struct {
+	keys      map[string]*ecdsa.PublicKey
+	expiresAt time.Time
+}
+
 // KeyCache holds decrypted zone signing keys in memory with a 15-minute TTL.
 type KeyCache struct {
-	mu      sync.RWMutex
-	entries map[string]*zoneCacheEntry
-	db      DBQuerier
-	zek     []byte
+	mu           sync.RWMutex
+	entries      map[string]*zoneCacheEntry
+	pubKeysCache map[string]*publicKeysCacheEntry
+	db           DBQuerier
+	zek          []byte
 }
 
 func newKeyCache(db DBQuerier, zek []byte) *KeyCache {
-	return &KeyCache{entries: make(map[string]*zoneCacheEntry), db: db, zek: zek}
+	return &KeyCache{
+		entries:      make(map[string]*zoneCacheEntry),
+		pubKeysCache: make(map[string]*publicKeysCacheEntry),
+		db:           db,
+		zek:          zek,
+	}
 }
 
 func (k *KeyCache) getKeyAndKid(ctx context.Context, zoneID string) (*ecdsa.PrivateKey, string, error) {
@@ -106,9 +117,61 @@ func (k *KeyCache) getPublicKeyAndKid(ctx context.Context, zoneID string) (*ecds
 	return &priv.PublicKey, kid, nil
 }
 
+// getPublicKeysByZone returns all active and grace-period public keys for a zone,
+// keyed by kid. Used by validateSubjectToken to verify tokens signed by any key
+// in the current rotation window (active + previous key during 24h grace period).
+func (k *KeyCache) getPublicKeysByZone(ctx context.Context, zoneID string) (map[string]*ecdsa.PublicKey, error) {
+	k.mu.RLock()
+	e, ok := k.pubKeysCache[zoneID]
+	k.mu.RUnlock()
+	if ok && time.Now().Before(e.expiresAt) {
+		return e.keys, nil
+	}
+
+	secrets, err := k.db.GetZoneSigningKeySecrets(ctx, zoneID)
+	if err != nil {
+		return nil, fmt.Errorf("load zone signing keys for %s: %w", zoneID, err)
+	}
+	if len(secrets) == 0 {
+		return nil, fmt.Errorf("no signing keys for zone %s", zoneID)
+	}
+	keys := make(map[string]*ecdsa.PublicKey, len(secrets))
+	var decryptFailedKids []string
+	var parseFailedKids []string
+	for _, secret := range secrets {
+		keyBytes, err := sharedcrypto.Open(k.zek, secret.Nonce, secret.Ciphertext)
+		if err != nil {
+			decryptFailedKids = append(decryptFailedKids, secret.ID)
+			continue
+		}
+		priv, err := jwt.ParseECPrivateKeyFromPEM(keyBytes)
+		if err != nil {
+			parseFailedKids = append(parseFailedKids, secret.ID)
+			continue
+		}
+		keys[secret.ID] = &priv.PublicKey
+	}
+
+	if len(decryptFailedKids) > 0 || len(parseFailedKids) > 0 {
+		return nil, fmt.Errorf(
+			"load signing keys for zone %s: decryption failed for kids %v; PEM parsing failed for kids %v",
+			zoneID,
+			decryptFailedKids,
+			parseFailedKids,
+		)
+	}
+
+	k.mu.Lock()
+	k.pubKeysCache[zoneID] = &publicKeysCacheEntry{keys: keys, expiresAt: time.Now().Add(dekCacheTTL)}
+	k.mu.Unlock()
+
+	return keys, nil
+}
+
 func (k *KeyCache) Invalidate(zoneID string) {
 	k.mu.Lock()
 	delete(k.entries, zoneID)
+	delete(k.pubKeysCache, zoneID)
 	k.mu.Unlock()
 }
 
