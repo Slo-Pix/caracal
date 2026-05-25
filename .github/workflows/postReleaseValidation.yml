@@ -9,13 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       release:
-        description: Release tag, such as v2026.05.13 or v2026.05.13.1.
+        description: Release tag, such as v2026.05.26-rc.1 or v2026.05.26.
         required: true
         type: string
   workflow_call:
     inputs:
       release:
-        description: Release tag, such as v2026.05.13 or v2026.05.13.1.
+        description: Release tag, such as v2026.05.26-rc.1 or v2026.05.26.
         required: true
         type: string
 

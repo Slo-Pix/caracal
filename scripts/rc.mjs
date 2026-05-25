@@ -214,7 +214,7 @@ function rewritePyproject(path, versions) {
   let text = readFileSync(path, 'utf8')
   const name = text.match(/^name = "([^"]+)"/m)?.[1]
   if (name && versions[name]) text = text.replace(/^version = "[^"]+"/m, `version = "${versions[name]}"`)
-  text = text.replace(/"(?<name>caracalai-[a-z0-9-]+)(?<spec>[^"]*)"/g, (match, pkgName) => {
+  text = text.replace(/"(?<name>caracalai-[a-z0-9-]+)==[^"]+"/g, (match, pkgName) => {
     if (!versions[pkgName]) return match
     return `"${pkgName}==${versions[pkgName]}"`
   })
