@@ -12,6 +12,12 @@ on:
         description: Release tag, such as v2026.05.13 or v2026.05.13.1.
         required: true
         type: string
+  workflow_call:
+    inputs:
+      release:
+        description: Release tag, such as v2026.05.13 or v2026.05.13.1.
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -310,7 +316,6 @@ jobs:
           pattern: findings-*
 
       - id: report
-        continue-on-error: true
         run: bun scripts/postRelease/aggregateReport.ts
 
       - id: report-pr
@@ -327,11 +332,6 @@ jobs:
         run: |
           echo 'Report PR creation is unavailable to GitHub Actions in this repository.'
           echo 'The release-validation branch was still updated when branch push permissions allowed it.'
-
-      - if: steps.report.outcome == 'failure'
-        run: |
-          echo 'Post-release validation found blocker failures.'
-          exit 1
 
       - if: contains(join(needs.*.result, ','), 'failure') || contains(join(needs.*.result, ','), 'cancelled')
         run: |

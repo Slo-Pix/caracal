@@ -13,6 +13,7 @@ on:
       - '.github/workflows/test.yml'
       - 'apps/**'
       - 'docs/**'
+      - 'infra/**'
       - 'packages/**'
       - 'services/**'
       - 'tests/**'
@@ -26,6 +27,7 @@ on:
       - '.github/workflows/test.yml'
       - 'apps/**'
       - 'docs/**'
+      - 'infra/**'
       - 'packages/**'
       - 'services/**'
       - 'tests/**'
@@ -124,6 +126,7 @@ jobs:
       go: ${{ steps.paths.outputs.go }}
       python: ${{ steps.paths.outputs.python }}
       docs: ${{ steps.paths.outputs.docs }}
+      postgres: ${{ steps.paths.outputs.postgres }}
     steps:
       - name: Checkout
         if: github.event_name == 'pull_request'
@@ -142,6 +145,7 @@ jobs:
               echo 'go=true'
               echo 'python=true'
               echo 'docs=true'
+              echo 'postgres=true'
               exit 0
             fi
 
@@ -150,6 +154,7 @@ jobs:
             go=false
             python=false
             docs=false
+            postgres=false
             while IFS= read -r path; do
               case "$path" in
                 .github/workflows/test.yml|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|apps/**|packages/engine/**|packages/*/ts/**|packages/connectors/*/ts/**|packages/transport/*/ts/**|tests/typescript/**)
@@ -171,12 +176,18 @@ jobs:
                   docs=true
                   ;;
               esac
+              case "$path" in
+                .github/workflows/test.yml|infra/postgres/**)
+                  postgres=true
+                  ;;
+              esac
             done < changed.txt
 
             echo "typescript=$typescript"
             echo "go=$go"
             echo "python=$python"
             echo "docs=$docs"
+            echo "postgres=$postgres"
           } >> "$GITHUB_OUTPUT"
 
   typescript:
@@ -439,6 +450,46 @@ jobs:
           test -f docs/dist/CNAME
           grep -Fx 'docs.caracal.run' docs/dist/CNAME
 
+  postgres:
+    name: PostgreSQL migrations
+    needs: changes
+    if: needs.changes.outputs.postgres == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: caracal
+          POSTGRES_USER: caracal
+          POSTGRES_PASSWORD: caracal
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U caracal -d caracal"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Validate migrations
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: caracal
+          PGDATABASE: caracal
+          PGPASSWORD: caracal
+        run: bash infra/postgres/scripts/validateMigrations.sh
+
   coverage:
     name: Upload coverage
     needs:
@@ -501,6 +552,7 @@ jobs:
       - go
       - python
       - docs
+      - postgres
       - coverage
     if: always() && github.repository == 'Garudex-Labs/caracal'
     runs-on: ubuntu-latest
@@ -510,7 +562,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for result in '${{ needs.smoke.result }}' '${{ needs.changes.result }}' '${{ needs.typescript.result }}' '${{ needs.go.result }}' '${{ needs.python.result }}' '${{ needs.docs.result }}' '${{ needs.coverage.result }}'; do
+          for result in '${{ needs.smoke.result }}' '${{ needs.changes.result }}' '${{ needs.typescript.result }}' '${{ needs.go.result }}' '${{ needs.python.result }}' '${{ needs.docs.result }}' '${{ needs.postgres.result }}' '${{ needs.coverage.result }}'; do
             if [[ "$result" == 'failure' || "$result" == 'cancelled' ]]; then
               echo "A required test workflow job ended with $result."
               exit 1

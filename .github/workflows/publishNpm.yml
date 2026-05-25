@@ -1,9 +1,9 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Publishes selected Python packages to PyPI with trusted publishing.
+# Publishes selected TypeScript packages to npm from a protected CI environment.
 
-name: publishPypi
+name: publishNpm
 
 on:
   workflow_dispatch:
@@ -18,11 +18,15 @@ on:
           - all
           - core
           - oauth
+          - admin
           - identity
           - revocation
           - sdk
           - transport-mcp
+          - transport-a2a
+          - express
           - fastmcp
+          - postgres
           - redis
       baseRef:
         description: 'Optional git diff base. Empty uses the latest reachable release tag.'
@@ -30,7 +34,7 @@ on:
         default: ''
         type: string
       dryRun:
-        description: 'Build and check distributions without publishing.'
+        description: 'Build and pack packages without publishing.'
         required: false
         default: false
         type: boolean
@@ -39,12 +43,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-pypi-${{ inputs.package }}
+  group: publish-npm-${{ inputs.package }}
   cancel-in-progress: false
 
 env:
   NODE_VERSION: '24'
-  PYTHON_VERSION: '3.14'
+  PNPM_VERSION: '11.1.1'
 
 jobs:
   select:
@@ -67,14 +71,14 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${GITHUB_REF_NAME}" != "${{ github.event.repository.default_branch }}" && ! "${GITHUB_REF_NAME}" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$ ]]; then
-            echo "::error::PyPI publishing must run from ${{ github.event.repository.default_branch }} or a Caracal release tag."
+            echo "::error::npm publishing must run from ${{ github.event.repository.default_branch }} or a Caracal release tag."
             exit 1
           fi
           actor="${{ github.actor }}"
           maintainers="$(mktemp)"
           gh api "repos/${GITHUB_REPOSITORY}/contents/.github/MAINTAINERS?ref=${{ github.event.repository.default_branch }}" --jq '.content' | base64 -d > "$maintainers"
           if ! grep -Eo '@[[:alnum:]_-]+' "$maintainers" | sed 's/^@//' | grep -qiFx "$actor"; then
-            echo "::error::$actor is not listed in .github/MAINTAINERS on ${{ github.event.repository.default_branch }} and cannot publish PyPI packages."
+            echo "::error::$actor is not listed in .github/MAINTAINERS on ${{ github.event.repository.default_branch }} and cannot publish npm packages."
             exit 1
           fi
 
@@ -89,7 +93,7 @@ jobs:
           BASE_REF: ${{ inputs.baseRef }}
         run: |
           set -euo pipefail
-          args=(--ecosystem pypi --format github-matrix)
+          args=(--ecosystem npm --format github-matrix)
           if [[ "$PACKAGE" == 'all' ]]; then
             args+=(--all)
           elif [[ -n "$BASE_REF" ]]; then
@@ -112,10 +116,10 @@ jobs:
     if: github.repository == 'Garudex-Labs/caracal' && needs.select.outputs.hasPackages == 'true'
     needs: select
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
-      name: pypi
-      url: https://pypi.org/project/${{ matrix.name }}
+      name: npm-publish
+      url: https://www.npmjs.com/package/${{ matrix.name }}
     permissions:
       contents: read
       id-token: write
@@ -127,54 +131,80 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          version: ${{ env.PNPM_VERSION }}
 
-      - name: Build distribution
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Build TypeScript packages
+        run: pnpm run build:typescript
+
+      - name: Validate package
         working-directory: ${{ matrix.dir }}
+        shell: bash
         run: |
           set -euo pipefail
-          ver="$(awk -F'"' '/^version = /{print $2; exit}' pyproject.toml)"
+          name="$(jq -r .name package.json)"
+          ver="$(jq -r .version package.json)"
           if [[ "$ver" == *"dev.sha"* || "$ver" == *"dev."* ]]; then
-            echo "::error::Refusing to publish dev-stamped version ${ver} from ${{ matrix.dir }}"
+            echo "::error::Refusing to publish dev-stamped version ${name}@${ver}"
             exit 1
           fi
-          python -m pip install --require-hashes --requirement "$GITHUB_WORKSPACE/scripts/publishPypiRequirements.lock"
-          rm -rf dist build *.egg-info
-          python -m build
-          twine check dist/*
+          npm pack --dry-run --json > "$RUNNER_TEMP/npm-pack.json"
+          node - "$RUNNER_TEMP/npm-pack.json" <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const pack = JSON.parse(readFileSync(process.argv[2], 'utf8'))[0];
+          const files = new Set(pack.files.map((file) => file.path));
+          if (![...files].some((file) => file.startsWith('dist/'))) {
+            throw new Error('npm package does not include dist/');
+          }
+          if (!files.has('package.json')) {
+            throw new Error('npm package does not include package.json');
+          }
+          NODE
 
-      - uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+      - name: Publish package
         if: inputs.dryRun != true
-        with:
-          packages-dir: ${{ matrix.dir }}/dist
-          skip-existing: true
+        working-directory: ${{ matrix.dir }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="$(jq -r .name package.json)"
+          ver="$(jq -r .version package.json)"
+          dist_tag="latest"
+          [[ "$ver" == *"-rc."* ]] && dist_tag="rc"
+          if npm view "${name}@${ver}" version >/dev/null 2>&1; then
+            echo "Skipping ${name}@${ver}; it is already published."
+            exit 0
+          fi
+          npm publish --access public --tag "$dist_tag" --provenance
 
       - name: Verify published package
         if: inputs.dryRun != true
         working-directory: ${{ matrix.dir }}
+        shell: bash
         run: |
           set -euo pipefail
-          name="$(awk -F'"' '/^name = /{print $2; exit}' pyproject.toml)"
-          ver="$(awk -F'"' '/^version = /{print $2; exit}' pyproject.toml)"
-          python - "$name" "$ver" <<'PY'
-          import json
-          import sys
-          import urllib.request
-
-          name, expected = sys.argv[1:]
-          with urllib.request.urlopen(f"https://pypi.org/pypi/{name}/json", timeout=30) as response:
-              body = json.load(response)
-          versions = body.get("releases", {})
-          if expected not in versions:
-              raise SystemExit(f"{name}=={expected} is missing from PyPI releases")
-          PY
+          name="$(jq -r .name package.json)"
+          ver="$(jq -r .version package.json)"
+          published="$(npm view "${name}@${ver}" version)"
+          test "$published" = "$ver"
 
       - name: Dry-run summary
         if: inputs.dryRun == true
         working-directory: ${{ matrix.dir }}
         run: |
-          name="$(awk -F'"' '/^name = /{print $2; exit}' pyproject.toml)"
-          ver="$(awk -F'"' '/^version = /{print $2; exit}' pyproject.toml)"
-          echo "Validated PyPI package ${name}==${ver} without publishing."
+          name="$(jq -r .name package.json)"
+          ver="$(jq -r .version package.json)"
+          echo "Validated npm package ${name}@${ver} without publishing."
