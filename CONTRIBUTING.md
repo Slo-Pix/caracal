@@ -60,7 +60,7 @@ pnpm caracal console          # Human-facing product management
 
 #### Standalone execution
 
-`pnpm caracal run -- <command>` reads `caracal.toml`, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell.
+`pnpm caracal run -- <command>` reads validated runtime config from platform environment variables or a local `caracal.toml` profile, exchanges the configured application credentials with STS, injects only the configured scoped resource-token environment variables into the child process, and executes without a shell.
 
 ```bash
 pnpm caracal run -- <command> # Example: -- node examples/agent.js

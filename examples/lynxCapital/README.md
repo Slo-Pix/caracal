@@ -60,11 +60,12 @@ caracal-console
 The Console talks to the same control plane as the Control API. The control key is a real
 Caracal application credential with the `control:invoke` trait; Lynx stores
 its `client_id` as `application_id` and its one-time `client_secret` as
-`app_client_secret` in `caracal.toml`.
+an owner-only secret file referenced by `caracal.toml`.
 
 ### 4: Write `caracal.toml` from Console values
 
 After creating the Lynx zone, control key, and resources in the Console, write
+the client secret to an owner-only file, then write
 `~/.config/caracal/caracal.toml`. The Python SDK reads this file directly, so
 Caracal credentials stay out of `.env`.
 
@@ -75,7 +76,7 @@ coordinator_url = "http://127.0.0.1:4000"
 gateway_url = "http://127.0.0.1:8081"
 zone_id = "<zone id from Console>"
 application_id = "<control key client_id>"
-app_client_secret = "<control key client_secret>"
+app_client_secret_file = "/home/me/.config/caracal/lynx-client-secret"
 
 [[credentials]]
 env = "LYNX_MERCURY_BANK_TOKEN"
