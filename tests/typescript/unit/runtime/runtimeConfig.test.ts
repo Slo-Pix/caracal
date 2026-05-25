@@ -116,6 +116,24 @@ describe('resolveRuntimeConfigPath', () => {
     expect(() => assertRuntimeConfigFileSecure(path)).toThrow(RuntimeConfigPermissionError)
   })
 
+  it('accepts explicit read-only runtime config files for secret mounts', () => {
+    if (process.platform === 'win32') return
+    const path = join(root, 'caracal.toml')
+    writeFileSync(path, 'zone_id = "z1"\n')
+    chmodSync(path, 0o444)
+
+    expect(() => assertRuntimeConfigFileSecure(path, { CARACAL_CONFIG: path })).not.toThrow()
+  })
+
+  it('rejects explicit runtime config files with group or world write bits', () => {
+    if (process.platform === 'win32') return
+    const path = join(root, 'caracal.toml')
+    writeFileSync(path, 'zone_id = "z1"\n')
+    chmodSync(path, 0o666)
+
+    expect(() => assertRuntimeConfigFileSecure(path, { CARACAL_CONFIG: path })).toThrow(RuntimeConfigPermissionError)
+  })
+
   it('accepts owner-only runtime config files', () => {
     const path = join(root, 'caracal.toml')
     writeFileSync(path, 'zone_id = "z1"\n')

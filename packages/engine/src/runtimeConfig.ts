@@ -39,8 +39,8 @@ export interface RuntimeConfig {
 export class RuntimeConfigPermissionError extends CaracalError {
   readonly path: string;
   readonly mode: number;
-  constructor(path: string, mode: number) {
-    super('config_permissions', `caracal.toml permissions are too broad: ${path} is ${formatMode(mode)}; run chmod 600 ${path}`, {
+  constructor(path: string, mode: number, advice: string) {
+    super('config_permissions', `caracal.toml permissions are too broad: ${path} is ${formatMode(mode)}; ${advice}`, {
       details: { path, mode: formatMode(mode) },
     });
     this.name = 'RuntimeConfigPermissionError';
@@ -65,10 +65,18 @@ export function resolveRuntimeConfigPath(env: NodeJS.ProcessEnv = process.env): 
   return existsSync(path) ? path : undefined;
 }
 
-export function assertRuntimeConfigFileSecure(path: string): void {
+export function assertRuntimeConfigFileSecure(path: string, env: NodeJS.ProcessEnv = process.env): void {
   if (process.platform === 'win32') return;
   const mode = statSync(path).mode & 0o777;
-  if ((mode & 0o077) !== 0) throw new RuntimeConfigPermissionError(path, mode);
+  if (env.CARACAL_CONFIG === path) {
+    if ((mode & 0o022) !== 0) {
+      throw new RuntimeConfigPermissionError(path, mode, `remove group/world write bits from ${path}`);
+    }
+    return;
+  }
+  if ((mode & 0o077) !== 0) {
+    throw new RuntimeConfigPermissionError(path, mode, `run chmod 600 ${path}`);
+  }
 }
 
 function formatMode(mode: number): string {
