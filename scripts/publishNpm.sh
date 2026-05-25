@@ -66,6 +66,15 @@ fi
 
 say_info "publishNpm: ${#packages[@]} package(s) selected"
 
+for d in "${packages[@]}"; do
+    ver="$(jq -r .version "$d/package.json")"
+    if [[ "$ver" != *"-rc."* && "${CARACAL_ALLOW_LOCAL_STABLE_PUBLISH:-}" != "1" ]]; then
+        say_error "stable npm publishing must run through .github/workflows/publishNpm.yml"
+        say_label "For emergency local recovery, rerun with CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1 after release approval."
+        exit 1
+    fi
+done
+
 if [[ -z "${NPM_TOKEN:-}" ]]; then
     read -r -s -p "$(printf '%snpm token (granular, with publish access to @caracalai):%s ' "${C_PROMPT}" "${C_RESET}")" NPM_TOKEN
     echo

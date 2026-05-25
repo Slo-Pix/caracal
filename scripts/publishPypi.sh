@@ -69,6 +69,15 @@ fi
 
 say_info "publishPypi: ${#packages[@]} package(s) selected"
 
+for d in "${packages[@]}"; do
+    ver="$(awk -F'"' '/^version = /{print $2; exit}' "$d/pyproject.toml")"
+    if [[ "$repo" == "pypi" && "$ver" != *"rc"* && "${CARACAL_ALLOW_LOCAL_STABLE_PUBLISH:-}" != "1" ]]; then
+        say_error "stable PyPI publishing must run through .github/workflows/publishPypi.yml"
+        say_label "For emergency local recovery, rerun with CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1 after release approval."
+        exit 1
+    fi
+done
+
 if [[ -z "${PYPI_API_TOKEN:-}" ]]; then
     read -r -s -p "$(printf '%s%s API token (pypi-...):%s ' "${C_PROMPT}" "${repo}" "${C_RESET}")" PYPI_API_TOKEN
     echo

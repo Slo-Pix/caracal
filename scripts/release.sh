@@ -112,6 +112,25 @@ const pyPaths = [
 ];
 const containers = ["api", "coordinator", "control", "audit", "gateway", "sts", "postgres", "redis"];
 
+function helmChartVersion(value) {
+  const [core, pre] = value.split("-", 2);
+  const parts = core.split(".");
+  const recut = parts[3];
+  const base = `${Number(parts[0])}.${Number(parts[1])}.${Number(parts[2])}`;
+  return `${base}${pre ? `-${pre}` : ""}${recut ? `+${recut}` : ""}`;
+}
+
+function replaceRequired(path, text, pattern, replacement) {
+  if (!pattern.test(text)) throw new Error(`missing expected release field in ${path}`);
+  return text.replace(pattern, replacement);
+}
+
+function assertNoDevVersions(group, values) {
+  for (const [name, value] of Object.entries(values)) {
+    if (/dev\.sha|dev\./.test(value)) throw new Error(`${group} ${name} has dev version ${value}`);
+  }
+}
+
 const npm = Object.fromEntries(
   npmPaths.map((path) => {
     const pkg = JSON.parse(readFileSync(path, "utf8"));
@@ -127,6 +146,20 @@ const pypi = Object.fromEntries(
     return [name, pkgVersion];
   }),
 );
+assertNoDevVersions("npm", npm);
+assertNoDevVersions("pypi", pypi);
+const chartVersion = helmChartVersion(version);
+const chartPath = "infra/helm/caracal/Chart.yaml";
+const valuesPath = "infra/helm/caracal/values.yaml";
+const chart = replaceRequired(
+  chartPath,
+  replaceRequired(chartPath, readFileSync(chartPath, "utf8"), /^version: .*/m, `version: ${chartVersion}`),
+  /^appVersion: .*/m,
+  `appVersion: "${version}"`,
+);
+const values = replaceRequired(valuesPath, readFileSync(valuesPath, "utf8"), /^  tag: .*/m, `  tag: "${version}"`);
+writeFileSync(chartPath, chart);
+writeFileSync(valuesPath, values);
 const manifest = {
   release,
   mode: "stable",
@@ -134,6 +167,7 @@ const manifest = {
   binaries: { shell: version, console: version },
   runtimeImage: version,
   containers: Object.fromEntries(containers.map((name) => [name, version])),
+  helm: { chartVersion, appVersion: version, imageTag: version },
   pypi,
   npm,
 };
@@ -152,7 +186,7 @@ if [[ "$mode" == "dryrun" ]]; then
     fi
     writeManifest
     say_step "dry-run release diff"
-    git --no-pager diff -- '**/package.json' '**/pyproject.toml' "releases/$tag/manifest.json"
+    git --no-pager diff -- '**/package.json' '**/pyproject.toml' 'infra/helm/caracal/Chart.yaml' 'infra/helm/caracal/values.yaml' "releases/$tag/manifest.json"
     git restore --worktree --staged .
     git clean -fd -- .changeset packages apps releases
     if [[ -n "$(git status --porcelain)" ]]; then
