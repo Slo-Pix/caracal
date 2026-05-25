@@ -205,6 +205,26 @@ describe('EntityPickerView', () => {
     await view.onKey('enter', { app, size: { rows: 10, cols: 80 }, status: '' })
     expect(picked).toEqual(['res-2'])
   })
+
+  it('treats alphabet keys as search text', async () => {
+    const app = fakeApp()
+    const view = new EntityPickerView<{ id: string; name: string }>({
+      title: 'pick application',
+      rows: [
+        { id: 'app-1', name: 'alpha runner' },
+        { id: 'app-2', name: 'key broker' },
+      ],
+      load: async () => [],
+      value: (row) => row.id,
+      label: (row) => row.name,
+      onPick: () => {},
+    })
+
+    await view.onKey('k', { app, size: { rows: 10, cols: 80 }, status: '' })
+    const body = view.render({ app, size: { rows: 10, cols: 80 }, status: '' }).join('\n')
+    expect(body).toContain('key broker')
+    expect(body).not.toContain('alpha runner')
+  })
 })
 
 describe('DetailView', () => {

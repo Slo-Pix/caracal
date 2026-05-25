@@ -183,6 +183,79 @@ describe('applications actions', () => {
     const pushed = await pressKey(list, 'n', fakeApp()) as FormView
     const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
     expect(keys).toEqual(['name', 'credential_type', 'consent'])
+    expect(pushed.values_().credential_type).toBe('token')
+  })
+
+  it('creates managed applications with a generated confidential client secret', async () => {
+    const { client, ctx } = newCtx()
+    client.applications.create.mockResolvedValueOnce({
+      id: 'app-1',
+      zone_id: 'z1',
+      name: 'runner',
+      registration_method: 'managed',
+      credential_type: 'token',
+      traits: [],
+      consent: 'implicit',
+      created_at: '2026-01-01T00:00:00.000Z',
+    })
+    const list = applicationsView(ctx as unknown as Parameters<typeof applicationsView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'n', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      name: 'runner',
+      credential_type: 'token',
+      consent: 'false',
+    }
+    ;(form as unknown as { focus: number }).focus = 3
+
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.applications.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      name: 'runner',
+      registration_method: 'managed',
+      credential_type: 'token',
+      client_secret: expect.stringMatching(/^cs_[A-Za-z0-9_-]+$/),
+    }))
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const detail = pushed[pushed.length - 1] as DetailView
+    expect(detail).toBeInstanceOf(DetailView)
+    await detail.init(app)
+    const out = detail.render({ app, size: { rows: 20, cols: 80 }, status: '' }).join('\n')
+    expect(out).toContain('client_secret')
+    expect(out).toContain('••••')
+  })
+
+  it('upgrades public applications to token credentials with a generated secret', async () => {
+    const { client, ctx } = newCtx()
+    client.applications.patch.mockResolvedValueOnce({
+      id: 'app-1',
+      name: 'agent',
+    })
+    const list = applicationsView(ctx as unknown as Parameters<typeof applicationsView>[0]) as ListView<unknown>
+    setRows(list, [{ id: 'app-1', name: 'agent', registration_method: 'managed', credential_type: 'public', traits: [] }])
+    const app = fakeApp()
+    const form = await pressKey(list, 'e', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      name: 'agent',
+      credential_type: 'token',
+      traits: '',
+      consent: 'false',
+    }
+    ;(form as unknown as { focus: number }).focus = 4
+
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.applications.patch).toHaveBeenCalledWith('z1', 'app-1', expect.objectContaining({
+      credential_type: 'token',
+      client_secret: expect.stringMatching(/^cs_[A-Za-z0-9_-]+$/),
+    }))
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const detail = pushed[pushed.length - 1] as DetailView
+    expect(detail).toBeInstanceOf(DetailView)
+    await detail.init(app)
+    const out = detail.render({ app, size: { rows: 20, cols: 80 }, status: '' }).join('\n')
+    expect(out).toContain('client_secret')
+    expect(out).toContain('••••')
   })
 
   it('D opens DCR FormView with Console fields and calls applications.dcr', async () => {

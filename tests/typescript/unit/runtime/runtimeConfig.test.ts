@@ -278,6 +278,16 @@ describe('resolveRuntimeConfigPath', () => {
     expect(loadRuntimeConfig(false)).toBeUndefined()
   })
 
+  it('explains when the secret value is put in the secret file path variable', () => {
+    process.env.CARACAL_STS_URL = 'https://sts.example.com'
+    process.env.CARACAL_ZONE_ID = 'zone1'
+    process.env.CARACAL_APPLICATION_ID = 'app1'
+    process.env.CARACAL_APP_CLIENT_SECRET_FILE = 'cs_secret-value'
+    process.env.CARACAL_RUN_CREDENTIALS = JSON.stringify([{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }])
+
+    expect(() => loadRuntimeConfig(true)).toThrow(/secret file path looks like a client secret/)
+  })
+
   it('rejects unknown runtime config fields', () => {
     const cfg = join(root, 'caracal.toml')
     writeFileSync(cfg, [

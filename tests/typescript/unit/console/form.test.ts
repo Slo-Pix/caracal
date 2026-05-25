@@ -27,7 +27,7 @@ function fakeApp(): App {
 }
 
 describe('FormView focus', () => {
-  it('moves focus with tab and j on bool fields', async () => {
+  it('moves focus with tab and arrow keys while alphabet keys remain input-safe', async () => {
     const view = new FormView({
       title: 't',
       fields: [
@@ -41,6 +41,8 @@ describe('FormView focus', () => {
     await view.onKey('tab', ctx)
     expect((view as unknown as { focus: number }).focus).toBe(1)
     await view.onKey('j', ctx)
+    expect((view as unknown as { focus: number }).focus).toBe(1)
+    await view.onKey('down', ctx)
     expect((view as unknown as { focus: number }).focus).toBe(2)
   })
 })
@@ -76,6 +78,27 @@ describe('FormView input UX', () => {
     })
     await view.onKey('\u001b[200~Ryan\'s Workflow\u001b[201~', { app: fakeApp(), size: { rows: 10, cols: 80 }, status: '' })
     expect(view.values_().name).toBe('Ryan\'s Workflow')
+  })
+
+  it('keeps select fields bounded to options and opens an option picker with right arrow', async () => {
+    const view = new FormView({
+      title: 't',
+      fields: [{ key: 'credential_type', label: 'credential', kind: 'select', options: ['token', 'public'], default: 'token' }],
+      onSubmit: async () => {},
+    })
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 10, cols: 80 }, status: '' }
+
+    await view.onKey('p', ctx)
+    await view.onKey('u', ctx)
+    expect(view.values_().credential_type).toBe('token')
+    await view.onKey('right', ctx)
+
+    const picker = vi.mocked(app.push).mock.calls[0]![0] as { onKey: FormView['onKey']; render: FormView['render'] }
+    await picker.onKey('p', ctx)
+    expect(picker.render(ctx).join('\n')).toContain('public')
+    await picker.onKey('enter', ctx)
+    expect(view.values_().credential_type).toBe('public')
   })
 })
 

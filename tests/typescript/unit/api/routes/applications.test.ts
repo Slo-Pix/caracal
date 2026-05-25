@@ -31,7 +31,62 @@ function buildApp() {
   return { app, db, clientQuery, redis }
 }
 
+describe('POST /v1/zones/:zoneId/applications', () => {
+  it('rejects confidential managed applications without a client secret', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications',
+      payload: { name: 'Runner', registration_method: 'managed', credential_type: 'token' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'client_secret_required' })
+    expect(db.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects public managed applications with a client secret', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications',
+      payload: {
+        name: 'Browser',
+        registration_method: 'managed',
+        credential_type: 'public',
+        client_secret: 'secret',
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'client_secret_not_allowed' })
+    expect(db.query).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('POST /v1/zones/:zoneId/applications/dcr', () => {
+  it('rejects confidential DCR applications without a client secret', async () => {
+    const { app, db, redis } = buildApp()
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications/dcr',
+      payload: { name: 'Dynamic App', credential_type: 'token' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'client_secret_required' })
+    expect(redis.incr).not.toHaveBeenCalled()
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
   it('rejects DCR when the zone has disabled it', async () => {
     const { app, clientQuery, redis } = buildApp()
     redis.incr.mockResolvedValueOnce(1)
