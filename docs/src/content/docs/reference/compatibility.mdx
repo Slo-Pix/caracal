@@ -64,7 +64,7 @@ Redis 7 and earlier are not tested. The noeviction policy is mandatory: eviction
 
 ## Package versions
 
-All packages in the Caracal repository are released together and must be used at matching versions. Mixing package versions across a release boundary (e.g., using SDK v1.2.0 with core v1.1.0) is unsupported.
+Use packages from the same Caracal release tag. Keep dependent packages within each ecosystem on the version set published for that release; mixing SDKs, connectors, transports, or services across release boundaries is unsupported. Package version numbers can differ across ecosystems, so the repository release tag is the source of truth for a compatible set.
 
 ### TypeScript packages
 

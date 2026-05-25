@@ -296,6 +296,8 @@ async with caracal.bind_from_headers(request.headers):
     ctx = caracal.current()   # populated from inbound headers
 ```
 
+Use this only after Gateway or a verifier adapter has authenticated the request. It binds context; it does not verify JWT signatures, audience, scopes, token use, or revocation.
+
 ### `bind(ctx)`
 
 Async context manager. Rebinds an existing `CaracalContext` into the current task, which is required when handing a context to an `asyncio.create_task()` worker that does not inherit the parent task's context variable.
@@ -307,7 +309,7 @@ async with caracal.bind(parent_ctx):
 
 ### `middleware()`
 
-Returns an ASGI middleware factory for use with FastAPI or Starlette. Wraps each request with `bind_from_headers`.
+Returns an ASGI middleware factory for use with FastAPI or Starlette. Wraps each request with `bind_from_headers` after the request has passed a verifier boundary.
 
 ```python
 def middleware(self) -> Callable[[ASGIApp], CaracalASGIMiddleware]: ...
@@ -321,6 +323,8 @@ from fastapi import FastAPI
 app = FastAPI()
 app.add_middleware(caracal.middleware())
 ```
+
+This middleware is context propagation only. Use Gateway for the default protected-resource path, or build a verified adapter around `caracalai_transport_mcp.authenticate()` and a production revocation store.
 
 ## Advanced API
 

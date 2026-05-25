@@ -140,7 +140,7 @@ If `CARACAL_GATEWAY_URL` and `CARACAL_RESOURCES` are set, the transport rewrites
 
 ## Receive inbound context
 
-When your service receives a request from another Caracal agent, extract the context from the request headers:
+When your service receives a request that has already been verified by Gateway or a connector, bind the context from request headers so downstream calls preserve identity and trace metadata:
 
 ```typescript
 import express from 'express';
@@ -153,6 +153,8 @@ app.use(async (req, res, next) => {
   });
 });
 ```
+
+`bindFromHeaders()` and `caracal.middleware()` do not verify JWT signatures, audience, scopes, token use, or revocation. Use [`@caracalai/mcp-express`](../protect-express/) for direct Express protection, or keep the service behind Gateway.
 
 ## Lifecycle hooks
 

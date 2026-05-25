@@ -134,7 +134,7 @@ async with caracal.spawn():
 
 ## Receive inbound context
 
-Bind context from inbound HTTP headers to propagate the calling agent's identity into the current task:
+After a request has been verified by Gateway or a trusted adapter, bind context from inbound HTTP headers to propagate the calling agent's identity into the current task:
 
 ```python
 async with caracal.bind_from_headers(request.headers):
@@ -144,7 +144,7 @@ async with caracal.bind_from_headers(request.headers):
 
 ## ASGI middleware
 
-For FastAPI and Starlette, attach the ASGI middleware to bind inbound context automatically on every request:
+For FastAPI and Starlette, attach the ASGI middleware to bind already-verified inbound context automatically on every request:
 
 ```python
 from fastapi import FastAPI
@@ -157,6 +157,8 @@ async def list_items():
     ctx = caracal.current()
     return {'agent': ctx.agent_session_id if ctx else None}
 ```
+
+The SDK ASGI middleware is not a verifier. It does not check JWT signatures, audience, scopes, token use, or revocation. Use Gateway for the default protected-resource path. If the service must verify directly, build the adapter around `caracalai_transport_mcp.authenticate()` and a production revocation store.
 
 ## Complete example
 

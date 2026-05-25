@@ -6,6 +6,8 @@ pageType: workflow
 
 The quickest local path is: install dependencies, start the stack, verify readiness, then use the Console for product setup.
 
+This source-tree flow is for contributors and local evaluation. If you installed the released binaries, use the same commands without the `pnpm` prefix: `caracal up`, `caracal status --ready`, and `caracal console`.
+
 ```bash
 corepack enable
 corepack prepare pnpm@11.1.1 --activate
@@ -35,4 +37,4 @@ Stop the stack with:
 pnpm caracal down
 ```
 
-Use [Five-Minute Setup](./five-minute-setup/) for the full protected HTTP request and audit verification flow.
+Use [First Integration](./first-integration/) for the full protected HTTP request and audit verification flow.
