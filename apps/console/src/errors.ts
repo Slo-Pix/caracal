@@ -75,7 +75,7 @@ function rawExplain(err: unknown): string {
       return 'coordinator token not found: run `caracal up` or set CARACAL_COORDINATOR_TOKEN'
     }
     if (/fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN/i.test(msg)) {
-      return `${msg}: are local services running? try \`caracal up\` and \`caracal status\``
+      return `${msg}. Are local services running? try \`caracal up\` and \`caracal status\``
     }
     return msg
   }

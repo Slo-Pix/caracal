@@ -143,6 +143,14 @@ describe('discoverAdminToken', () => {
     expect(discoverAdminToken()).toBe('from-env')
   })
 
+  it('can prefer generated admin tokens over stale env values', () => {
+    process.env.CARACAL_HOME = dir
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'caracalAdminToken'), 'from-file\n')
+    process.env.CARACAL_ADMIN_TOKEN = 'from-env'
+    expect(discoverAdminToken(undefined, { preferGenerated: true })).toBe('from-file')
+  })
+
   it('CARACAL_ENV_FILE is used only as a last resort', () => {
     process.env.CARACAL_HOME = dir
     const envFile = join(cwd, '.env')
@@ -192,5 +200,23 @@ describe('discoverCoordinatorToken', () => {
     expect(discoverCoordinatorToken()).toBe('file-token')
     process.env.CARACAL_COORDINATOR_TOKEN = 'env-token'
     expect(discoverCoordinatorToken()).toBe('env-token')
+  })
+
+  it('can prefer generated coordinator tokens over stale env values', () => {
+    process.env.CARACAL_HOME = dir
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'caracalCoordinatorToken'), 'installed-token\n')
+    process.env.CARACAL_COORDINATOR_TOKEN = 'stale-env-token'
+    expect(discoverCoordinatorToken(undefined, { preferGenerated: true })).toBe('installed-token')
+  })
+
+  it('prefers development coordinator tokens over installed tokens when requested', () => {
+    process.env.CARACAL_HOME = dir
+    process.env.CARACAL_REPO_ROOT = cwd
+    mkdirSync(join(dir, 'secrets'), { recursive: true })
+    mkdirSync(join(cwd, 'infra', 'secrets', 'files'), { recursive: true })
+    writeFileSync(join(dir, 'secrets', 'caracalCoordinatorToken'), 'installed-token\n')
+    writeFileSync(join(cwd, 'infra', 'secrets', 'files', 'caracalCoordinatorToken'), 'dev-token\n')
+    expect(discoverCoordinatorToken(undefined, { preferGenerated: true })).toBe('dev-token')
   })
 })

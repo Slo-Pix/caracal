@@ -42,18 +42,32 @@ function readSecretFile(path: string): string | undefined {
   return value.length > 0 ? value : undefined;
 }
 
-export function discoverAdminToken(explicit?: string): string | undefined {
+export interface DiscoverTokenOptions {
+  preferGenerated?: boolean;
+}
+
+function readGeneratedSecret(fileName: string): string | undefined {
+  if (process.env.CARACAL_REPO_ROOT) {
+    const dev = readSecretFile(join(process.env.CARACAL_REPO_ROOT, 'infra', 'secrets', 'files', fileName));
+    if (dev) return dev;
+  }
+  return readSecretFile(join(installedHome(), 'secrets', fileName));
+}
+
+export function discoverAdminToken(explicit?: string, opts: DiscoverTokenOptions = {}): string | undefined {
   if (explicit) return explicit;
+  if (opts.preferGenerated) {
+    const generated = readGeneratedSecret('caracalAdminToken');
+    if (generated) return generated;
+  }
   if (process.env.CARACAL_ADMIN_TOKEN) return process.env.CARACAL_ADMIN_TOKEN;
   if (process.env.CARACAL_ADMIN_TOKEN_FILE) {
     const value = readSecretFile(process.env.CARACAL_ADMIN_TOKEN_FILE);
     if (value) return value;
   }
-  const installed = readSecretFile(join(installedHome(), 'secrets', 'caracalAdminToken'));
-  if (installed) return installed;
-  if (process.env.CARACAL_REPO_ROOT) {
-    const dev = readSecretFile(join(process.env.CARACAL_REPO_ROOT, 'infra', 'secrets', 'files', 'caracalAdminToken'));
-    if (dev) return dev;
+  if (!opts.preferGenerated) {
+    const generated = readGeneratedSecret('caracalAdminToken');
+    if (generated) return generated;
   }
   if (process.env.CARACAL_ENV_FILE) {
     const env = readEnvFile(process.env.CARACAL_ENV_FILE);
@@ -62,18 +76,20 @@ export function discoverAdminToken(explicit?: string): string | undefined {
   return undefined;
 }
 
-export function discoverCoordinatorToken(explicit?: string): string | undefined {
+export function discoverCoordinatorToken(explicit?: string, opts: DiscoverTokenOptions = {}): string | undefined {
   if (explicit) return explicit;
+  if (opts.preferGenerated) {
+    const generated = readGeneratedSecret('caracalCoordinatorToken');
+    if (generated) return generated;
+  }
   if (process.env.CARACAL_COORDINATOR_TOKEN) return process.env.CARACAL_COORDINATOR_TOKEN;
   if (process.env.CARACAL_COORDINATOR_TOKEN_FILE) {
     const value = readSecretFile(process.env.CARACAL_COORDINATOR_TOKEN_FILE);
     if (value) return value;
   }
-  const installed = readSecretFile(join(installedHome(), 'secrets', 'caracalCoordinatorToken'));
-  if (installed) return installed;
-  if (process.env.CARACAL_REPO_ROOT) {
-    const dev = readSecretFile(join(process.env.CARACAL_REPO_ROOT, 'infra', 'secrets', 'files', 'caracalCoordinatorToken'));
-    if (dev) return dev;
+  if (!opts.preferGenerated) {
+    const generated = readGeneratedSecret('caracalCoordinatorToken');
+    if (generated) return generated;
   }
   if (process.env.CARACAL_ENV_FILE) {
     const env = readEnvFile(process.env.CARACAL_ENV_FILE);

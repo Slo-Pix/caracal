@@ -6,9 +6,9 @@ pageType: landing
 
 Connectors wrap the primitive transport and revocation packages and expose framework-native interfaces: middleware functions, callable auth classes, and backend implementations. They are for connector-verified services and enforcement adapters. For a new provider or tool integration, use the Gateway first unless the transport cannot be proxied safely.
 
-Connectors are not a promise that Caracal natively governs every protocol. They are boundary helpers: a connector is ready for production use only when it verifies mandates, checks revocation anchors, preserves trace context, enforces resource/scope requirements, and emits or forwards action-result audit.
+Connectors are not a promise that Caracal natively governs every protocol. They are boundary helpers: use a connector in production only when it verifies mandates, checks revocation anchors, preserves trace context, enforces resource/scope requirements, and emits or forwards action-result audit.
 
-Choose the connector for your framework. If your framework is not listed, use the transport packages directly: [`@caracalai/transport-mcp`](../transport-mcp/) (TypeScript) or [`caracalai_transport_mcp`](../transport-mcp/) (Python) call `authenticate()` without any framework dependency.
+Choose the connector for your framework. If your framework is not listed, use the transport packages directly. The TypeScript [`@caracalai/transport-mcp`](../transport-mcp/) package and Python [`caracalai_transport_mcp`](../transport-mcp/) package call `authenticate()` without any framework dependency.
 
 ## Available connectors
 

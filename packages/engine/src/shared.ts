@@ -20,16 +20,25 @@ export interface AdminContext {
   apiUrl: string
 }
 
+function isLocalUrl(value: string): boolean {
+  try {
+    const host = new URL(value).hostname
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1'
+  } catch {
+    return false
+  }
+}
+
 export function buildAdminClient(cfg?: RuntimeConfig): AdminContext {
-  const adminToken = discoverAdminToken()
+  const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
+  const coordinatorUrl = resolveServiceUrl('CARACAL_COORDINATOR_URL', DEFAULT_COORDINATOR_URL)
+  const adminToken = discoverAdminToken(undefined, { preferGenerated: isLocalUrl(apiUrl) })
   if (!adminToken) {
     throw new Error(
       `CARACAL_ADMIN_TOKEN not set; export it or run \`caracal up\` (writes ${join(installedHome(), 'secrets', 'caracalAdminToken')})`,
     )
   }
-  const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
-  const coordinatorUrl = resolveServiceUrl('CARACAL_COORDINATOR_URL', DEFAULT_COORDINATOR_URL)
-  const coordinatorToken = discoverCoordinatorToken()
+  const coordinatorToken = discoverCoordinatorToken(undefined, { preferGenerated: isLocalUrl(coordinatorUrl) })
   const zoneId = process.env.CARACAL_ZONE_ID ?? cfg?.zone_id
   return {
     client: new AdminClient({ apiUrl, coordinatorUrl, adminToken, coordinatorToken }),

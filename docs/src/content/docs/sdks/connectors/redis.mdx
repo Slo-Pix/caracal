@@ -1,10 +1,10 @@
 ---
 title: Redis Token State
-description: RedisRevocationStore and RedisRevocationConsumer reference: constructor options, failClosed behavior, stream consumer configuration, and HMAC verification.
+description: "RedisRevocationStore and RedisRevocationConsumer reference: constructor options, failClosed behavior, stream consumer configuration, and HMAC verification."
 pageType: reference
 ---
 
-The Redis connector packages provide a `RevocationStore` ready for production use backed by Redis and a stream consumer that populates it automatically from the `caracal.sessions.revoke` Redis stream. Use them to replace `InMemoryRevocationStore` in any multi-replica deployment.
+The Redis connector packages provide a Redis-backed `RevocationStore` and a stream consumer that populates it from the `caracal.sessions.revoke` Redis stream. Use them to replace `InMemoryRevocationStore` in multi-replica deployments.
 
 - **TypeScript:** `@caracalai/revocation-redis`
 - **Python:** `caracalai-revocation-redis`
