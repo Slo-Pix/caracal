@@ -27,10 +27,15 @@ export class RateLimiter {
     this.evict(now)
     const b = this.buckets.get(subject)
     if (!b) {
-      if (this.buckets.size >= this.maxKeys) return false
+      if (this.buckets.size >= this.maxKeys) {
+        const oldest = this.buckets.keys().next().value
+        if (oldest !== undefined) this.buckets.delete(oldest)
+      }
       this.buckets.set(subject, { tokens: this.capacity - 1, lastMs: now })
       return true
     }
+    this.buckets.delete(subject)
+    this.buckets.set(subject, b)
     const elapsed = (now - b.lastMs) / 1000
     const refill = elapsed * (this.capacity / (this.windowMs / 1000))
     b.tokens = Math.min(this.capacity, b.tokens + refill)

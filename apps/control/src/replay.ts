@@ -24,11 +24,14 @@ export class MemoryReplay implements Replay {
   }
 
   async mark(jti: string, expEpochSec: number | undefined): Promise<boolean> {
-    if (!jti) return true
+    if (!jti) return false
     const now = Date.now()
     this.evict(now)
     if (this.seen.has(jti)) return false
-    if (this.seen.size >= this.maxKeys) return false
+    if (this.seen.size >= this.maxKeys) {
+      const oldest = this.seen.keys().next().value
+      if (oldest !== undefined) this.seen.delete(oldest)
+    }
     let keepUntilMs = now + this.ttlMs
     if (expEpochSec) {
       const expMs = expEpochSec * 1000
@@ -59,7 +62,7 @@ export class RedisReplay implements Replay {
   }
 
   async mark(jti: string, expEpochSec: number | undefined): Promise<boolean> {
-    if (!jti) return true
+    if (!jti) return false
     const now = Date.now()
     let ttlMs = this.maxTtlMs
     if (expEpochSec) {

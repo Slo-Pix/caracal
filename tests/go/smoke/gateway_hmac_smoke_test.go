@@ -22,18 +22,21 @@ func TestGatewayHMACRoundTrip(t *testing.T) {
 	body := []byte(`{"policy_set_id":"ps_1","version_id":"v1"}`)
 	now := time.Now().UTC()
 	ts := strconv.FormatInt(now.Unix(), 10)
-	sig := corests.SignGatewayExchange(key, now, "req_smoke", body)
+	sig := corests.SignGatewayExchange(key, now, "req_smoke", "POST", "/internal/policy/simulate", body)
 	if sig == "" {
 		t.Fatal("empty signature")
 	}
-	if err := corests.VerifyGatewayExchange(key, now, 30*time.Second, ts, "req_smoke", sig, body); err != nil {
+	if err := corests.VerifyGatewayExchange(key, now, 30*time.Second, ts, "req_smoke", sig, "POST", "/internal/policy/simulate", body); err != nil {
 		t.Fatalf("verify: %v", err)
 	}
-	if err := corests.VerifyGatewayExchange(key, now, 30*time.Second, ts, "req_smoke", sig, []byte(`{"tampered":true}`)); err == nil {
+	if err := corests.VerifyGatewayExchange(key, now, 30*time.Second, ts, "req_smoke", sig, "POST", "/internal/policy/simulate", []byte(`{"tampered":true}`)); err == nil {
 		t.Fatal("verify accepted tampered body")
 	}
+	if err := corests.VerifyGatewayExchange(key, now, 30*time.Second, ts, "req_smoke", sig, "POST", "/internal/other", body); err == nil {
+		t.Fatal("verify accepted mismatched path")
+	}
 	skewed := now.Add(10 * time.Minute)
-	if err := corests.VerifyGatewayExchange(key, skewed, 30*time.Second, ts, "req_smoke", sig, body); err == nil {
+	if err := corests.VerifyGatewayExchange(key, skewed, 30*time.Second, ts, "req_smoke", sig, "POST", "/internal/policy/simulate", body); err == nil {
 		t.Fatal("verify accepted out-of-skew timestamp")
 	}
 }
