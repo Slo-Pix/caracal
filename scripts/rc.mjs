@@ -28,6 +28,7 @@ const npmPaths = [
 
 const pyPaths = [
   'packages/core/python',
+  'packages/oauth/python',
   'packages/identity/python',
   'packages/revocation/python',
   'packages/sdk/python',
@@ -36,7 +37,7 @@ const pyPaths = [
   'packages/connectors/redis/python',
 ]
 
-const containers = ['api', 'coordinator', 'audit', 'gateway', 'sts', 'postgres', 'redis']
+const containers = ['api', 'coordinator', 'control', 'audit', 'gateway', 'sts', 'postgres', 'redis']
 
 function die(message) {
   process.stderr.write(`rc: ${message}\n`)
@@ -149,8 +150,9 @@ function makeManifest(options = {}) {
     },
     registries: reg,
     binaries: { shell: version, console: version },
+    runtimeImage: version,
     containers: Object.fromEntries(containers.map((name) => [name, version])),
-    images: Object.fromEntries(containers.map((name) => [name, `${reg.oci.replace(/\/$/, '')}/caracal-${name}:v${version}`])),
+    images: Object.fromEntries([...containers, 'runtime'].map((name) => [name, `${reg.oci.replace(/\/$/, '')}/caracal-${name}:v${version}`])),
     npm,
     pypi,
     githubRelease: {
