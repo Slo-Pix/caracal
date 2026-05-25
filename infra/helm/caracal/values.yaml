@@ -5,9 +5,9 @@
 
 global:
   registry: ghcr.io/garudex-labs
-  tag: "0.1.2"
+  tag: "2026.05.26-rc.1"
   imagePullPolicy: IfNotPresent
-  mode: stable
+  mode: rc
   evaluation: false
   otelExporterOtlpEndpoint: ""
   logLevel: info
