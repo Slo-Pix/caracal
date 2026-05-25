@@ -364,7 +364,7 @@ function assertUniqueCredentialEnv(credentials: readonly Credential[] | undefine
 function runtimeConfigFromEnv(env: NodeJS.ProcessEnv): UnknownRecord | undefined {
   if (!hasEnvRuntimeConfig(env)) return undefined;
   const manifest = credentialManifestFromEnv(env);
-  return {
+  const cfg: UnknownRecord = {
     ...manifest,
     zone_url: env.CARACAL_STS_URL ?? env.CARACAL_ZONE_URL,
     coordinator_url: env.CARACAL_COORDINATOR_URL,
@@ -373,8 +373,10 @@ function runtimeConfigFromEnv(env: NodeJS.ProcessEnv): UnknownRecord | undefined
     application_id: env.CARACAL_APPLICATION_ID,
     app_client_secret: env.CARACAL_APP_CLIENT_SECRET,
     app_client_secret_file: env.CARACAL_APP_CLIENT_SECRET_FILE,
-    continue_on_failure: parseBooleanEnv(env.CARACAL_RUN_CONTINUE_ON_FAILURE, 'CARACAL_RUN_CONTINUE_ON_FAILURE'),
   };
+  const continueOnFailure = parseBooleanEnv(env.CARACAL_RUN_CONTINUE_ON_FAILURE, 'CARACAL_RUN_CONTINUE_ON_FAILURE');
+  if (continueOnFailure !== undefined) cfg.continue_on_failure = continueOnFailure;
+  return cfg;
 }
 
 function hasEnvRuntimeConfig(env: NodeJS.ProcessEnv): boolean {
