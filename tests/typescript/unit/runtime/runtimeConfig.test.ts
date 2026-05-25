@@ -25,6 +25,7 @@ let cwdBefore: string
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'caracal-consolecfg-'))
   cwdBefore = process.cwd()
+  process.env.XDG_CONFIG_HOME = join(root, 'xdg-default')
 })
 
 afterEach(() => {
