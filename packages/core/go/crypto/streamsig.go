@@ -20,7 +20,7 @@ const StreamSigField = "_sig"
 
 // CanonicalizeStream produces a deterministic byte serialization of a stream values
 // map for signing. Keys are sorted; values are coerced to strings via Sprint, the same
-// shape Redis preserves on the wire. The reserved sig field is skipped.
+// shape Redis preserves on the wire. Nil values and the reserved sig field are skipped.
 func CanonicalizeStream(stream string, values map[string]any) []byte {
 	keys := make([]string, 0, len(values))
 	for k := range values {
@@ -34,6 +34,9 @@ func CanonicalizeStream(stream string, values map[string]any) []byte {
 	b.WriteString(stream)
 	b.WriteByte('\n')
 	for _, k := range keys {
+		if values[k] == nil {
+			continue
+		}
 		b.WriteString(k)
 		b.WriteByte('=')
 		b.WriteString(fmt.Sprint(values[k]))
