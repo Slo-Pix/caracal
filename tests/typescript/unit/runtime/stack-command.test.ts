@@ -32,11 +32,13 @@ import { downCommand, upCommand } from '../../../../apps/runtime/src/commands/st
 
 describe('stack commands', () => {
   let stderr = ''
+  let stdout = ''
   let xdg: string
 
   beforeEach(() => {
     vi.clearAllMocks()
     stderr = ''
+    stdout = ''
     xdg = mkdtempSync(join(tmpdir(), 'caracal-stack-command-'))
     vi.stubEnv('XDG_CONFIG_HOME', xdg)
     vi.stubEnv('CARACAL_CONFIG', undefined)
@@ -54,7 +56,10 @@ describe('stack commands', () => {
       stderr += chunk.toString()
       return true
     })
-    vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+      stdout += chunk.toString()
+      return true
+    })
     vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`exit:${code}`)
     }) as never)
@@ -104,12 +109,15 @@ describe('stack commands', () => {
     expect(engineMocks.stackStatus).not.toHaveBeenCalled()
   })
 
-  it('completes onboarding without creating runtime config after a full stack start', async () => {
+  it('reports services ready without creating runtime config after a full stack start', async () => {
     await expect(upCommand([])).rejects.toThrow('exit:0')
 
     expect(engineMocks.stackStatus).toHaveBeenCalledWith({
       probes: [],
     })
     expect(existsSync(join(xdg, 'caracal', 'caracal.toml'))).toBe(false)
+    expect(stdout).toContain('runtime services ready')
+    expect(stdout).not.toContain('runtime onboarding complete')
+    expect(stdout).not.toContain('runtime config not found')
   })
 })

@@ -3,7 +3,7 @@
 //
 // audit-explain form submits the request_id and pushes a populated DetailView.
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, it, expect, vi } from 'vitest'
@@ -218,9 +218,28 @@ describe('audit explain entry', () => {
     )
   })
 
-  it('reads credentials without requiring caracal.toml by using selected application fields', async () => {
+  it('reads credentials from selected application fields without loading runtime config', async () => {
     const cwd = process.cwd()
     const dir = mkdtempSync(join(tmpdir(), 'caracal-console-credential-'))
+    const configDir = join(dir, '.config', 'caracal')
+    mkdirSync(configDir, { recursive: true })
+    const secretPath = join(configDir, 'runtime-secret')
+    const configPath = join(configDir, 'caracal.toml')
+    writeFileSync(secretPath, 'runtime-secret\n')
+    writeFileSync(configPath, [
+      'zone_url = "https://runtime-sts.example.com"',
+      'zone_id = "runtime-zone"',
+      'application_id = "runtime-app"',
+      `app_client_secret_file = "${secretPath}"`,
+      '[[credentials]]',
+      'env = "RESOURCE_TOKEN"',
+      'resource = "resource://runtime"',
+      '',
+    ].join('\n'))
+    if (process.platform !== 'win32') {
+      chmodSync(secretPath, 0o600)
+      chmodSync(configPath, 0o600)
+    }
     vi.stubEnv('PWD', dir)
     vi.stubEnv('INIT_CWD', dir)
     vi.stubEnv('XDG_CONFIG_HOME', join(dir, '.config'))
@@ -261,6 +280,7 @@ describe('audit explain entry', () => {
       expect(fetchMock).toHaveBeenCalledWith('https://sts.example.com/oauth/2/token', expect.objectContaining({
         method: 'POST',
       }))
+      expect(fetchMock).not.toHaveBeenCalledWith('https://runtime-sts.example.com/oauth/2/token', expect.anything())
       const detail = pushed[pushed.length - 1] as DetailView
       expect(detail).toBeInstanceOf(DetailView)
       await detail.init(app)

@@ -107,6 +107,17 @@ describe('resolveRuntimeConfigPath', () => {
     expect(resolveRuntimeConfigPath()).toBeUndefined()
   })
 
+  it('explains missing runtime config without recommending local TOML generation', () => {
+    let message = ''
+    try {
+      loadRuntimeConfig(true)
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err)
+    }
+    expect(message).toContain('workload identity from env/secret files')
+    expect(message).not.toMatch(/create .*caracal\.toml/)
+  })
+
   it('does not fall back when explicit config is missing', () => {
     const cwdDir = join(root, 'cwd')
     const xdg = join(root, 'xdg')
@@ -217,6 +228,46 @@ describe('resolveRuntimeConfigPath', () => {
       credentials: [{ env: 'RESOURCE_TOKEN', resource: 'resource://api' }],
       optional_credentials: [{ env: 'OPTIONAL_TOKEN', resource: 'resource://optional', on_failure: 'warn' }],
       mcp_governance: { mode: 'block' },
+    })
+  })
+
+  it('prefers platform env config over a default XDG runtime profile', () => {
+    const xdg = join(root, 'xdg')
+    const configDir = join(xdg, 'caracal')
+    const profileSecret = join(configDir, 'profile-secret')
+    const profileConfig = join(configDir, 'caracal.toml')
+    const envSecret = join(root, 'env-secret')
+    mkdirSync(configDir, { recursive: true })
+    writeFileSync(profileSecret, 'profile-secret\n')
+    writeFileSync(profileConfig, [
+      'zone_url = "https://profile-sts.example.com"',
+      'zone_id = "profile-zone"',
+      'application_id = "profile-app"',
+      `app_client_secret_file = "${profileSecret}"`,
+      '[[credentials]]',
+      'env = "PROFILE_TOKEN"',
+      'resource = "resource://profile"',
+      '',
+    ].join('\n'))
+    writeFileSync(envSecret, 'env-secret\n')
+    if (process.platform !== 'win32') {
+      chmodSync(profileSecret, 0o600)
+      chmodSync(profileConfig, 0o600)
+      chmodSync(envSecret, 0o600)
+    }
+    process.env.XDG_CONFIG_HOME = xdg
+    process.env.CARACAL_STS_URL = 'https://env-sts.example.com'
+    process.env.CARACAL_ZONE_ID = 'env-zone'
+    process.env.CARACAL_APPLICATION_ID = 'env-app'
+    process.env.CARACAL_APP_CLIENT_SECRET_FILE = envSecret
+    process.env.CARACAL_RUN_CREDENTIALS = JSON.stringify([{ env: 'ENV_TOKEN', resource: 'resource://env' }])
+
+    expect(loadRuntimeConfig(true)).toMatchObject({
+      zone_url: 'https://env-sts.example.com',
+      zone_id: 'env-zone',
+      application_id: 'env-app',
+      app_client_secret: 'env-secret',
+      credentials: [{ env: 'ENV_TOKEN', resource: 'resource://env' }],
     })
   })
 
