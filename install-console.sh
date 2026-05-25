@@ -9,6 +9,8 @@ set -eu
 REPO="Garudex-Labs/caracal"
 INSTALL_DIR="${CARACAL_INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${CARACAL_VERSION:-latest}"
+VERIFY_PROVENANCE="${CARACAL_VERIFY_PROVENANCE:-0}"
+REQUIRE_PROVENANCE="${CARACAL_REQUIRE_PROVENANCE:-0}"
 
 err() {
     printf 'caracal-install: %s\n' "$1" >&2
@@ -20,13 +22,15 @@ usage() {
 caracal-install: download the Caracal Console binaries from GitHub Releases.
 
 Usage:
-  install-console.sh [--version vYYYY.MM.DD[.N]] [--install-dir PATH]
+  install-console.sh [--version vYYYY.MM.DD[.N]] [--install-dir PATH] [--verify-provenance] [--require-provenance]
 
 Installs the thin 'caracal' shell and the 'caracal-console' Console binary.
 
 Environment overrides:
   CARACAL_VERSION       same as --version
   CARACAL_INSTALL_DIR   same as --install-dir
+  CARACAL_VERIFY_PROVENANCE   same as --verify-provenance
+  CARACAL_REQUIRE_PROVENANCE  same as --require-provenance
 EOF
 }
 
@@ -34,6 +38,8 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --version) [ $# -ge 2 ] || err "--version requires a value"; VERSION="$2"; shift ;;
         --install-dir) [ $# -ge 2 ] || err "--install-dir requires a value"; INSTALL_DIR="$2"; shift ;;
+        --verify-provenance) VERIFY_PROVENANCE=1 ;;
+        --require-provenance) VERIFY_PROVENANCE=1; REQUIRE_PROVENANCE=1 ;;
         --help|-h) usage; exit 0 ;;
         *) err "unknown argument: $1 (use --help for usage)" ;;
     esac
@@ -56,6 +62,19 @@ elif command -v wget >/dev/null 2>&1; then
 else
     err "neither curl nor wget is installed"
 fi
+
+verifyProvenance() {
+    file="$1"
+    [ "${VERIFY_PROVENANCE}" = "1" ] || return 0
+    if ! command -v gh >/dev/null 2>&1; then
+        [ "${REQUIRE_PROVENANCE}" = "1" ] && err "gh is required for provenance verification"
+        printf 'caracal-install: warning: gh not found; skipping provenance verification for %s\n' "${file}" >&2
+        return 0
+    fi
+    gh attestation verify "${file}" --repo "${REPO}" >/dev/null \
+        || err "provenance verification failed for ${file}"
+    printf 'caracal-install: provenance verified for %s\n' "$(basename "${file}")"
+}
 
 if command -v sha256sum >/dev/null 2>&1; then
     sha() { sha256sum "$1" | awk '{print $1}'; }
@@ -133,6 +152,7 @@ stageArchive() {
     fetch "${base}/${archive}" "${tmp}/${archive}" || err "failed to download ${archive}"
     actual="$(sha "${tmp}/${archive}")"
     [ "${expected}" = "${actual}" ] || err "checksum mismatch for ${archive}: expected ${expected}, got ${actual}"
+    verifyProvenance "${tmp}/${archive}"
 
     extractDir="${tmp}/extract-${kind}"
     mkdir -p "${extractDir}"

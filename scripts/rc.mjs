@@ -127,6 +127,14 @@ function registries(options) {
   }
 }
 
+function helmChartVersion(value) {
+  const [core, pre] = value.split('-', 2)
+  const parts = core.split('.')
+  const recut = parts[3]
+  const base = `${Number(parts[0])}.${Number(parts[1])}.${Number(parts[2])}`
+  return `${base}${pre ? `-${pre}` : ''}${recut ? `+${recut}` : ''}`
+}
+
 function makeManifest(options = {}) {
   const sha = shortSha()
   const suffix = rcSuffix(options)
@@ -152,6 +160,7 @@ function makeManifest(options = {}) {
     binaries: { shell: version, console: version },
     runtimeImage: version,
     containers: Object.fromEntries(containers.map((name) => [name, version])),
+    helm: { chartVersion: helmChartVersion(version), appVersion: version, imageTag: version },
     images: Object.fromEntries([...containers, 'runtime'].map((name) => [name, `${reg.oci.replace(/\/$/, '')}/caracal-${name}:v${version}`])),
     npm,
     pypi,
@@ -212,12 +221,25 @@ function rewritePyproject(path, versions) {
   writeFileSync(path, text)
 }
 
+function rewriteHelm(manifest) {
+  const chartPath = join(repoRoot, 'infra/helm/caracal/Chart.yaml')
+  const valuesPath = join(repoRoot, 'infra/helm/caracal/values.yaml')
+  let chart = readFileSync(chartPath, 'utf8')
+  let values = readFileSync(valuesPath, 'utf8')
+  chart = chart.replace(/^version: .*/m, `version: ${manifest.helm.chartVersion}`)
+  chart = chart.replace(/^appVersion: .*/m, `appVersion: "${manifest.helm.appVersion}"`)
+  values = values.replace(/^  tag: .*/m, `  tag: "${manifest.helm.imageTag}"`)
+  writeFileSync(chartPath, chart)
+  writeFileSync(valuesPath, values)
+}
+
 function prepare(options) {
   if (dirtyTree() && !options.flags.has('allow-dirty')) die('working tree is dirty; commit/stash first or pass --allow-dirty')
   const manifest = makeManifest(options.values)
   const path = writeManifest(manifest)
   for (const pkgPath of npmPaths) rewritePackageJson(join(repoRoot, pkgPath, 'package.json'), manifest.npm)
   for (const pyPath of pyPaths) rewritePyproject(join(repoRoot, pyPath, 'pyproject.toml'), manifest.pypi)
+  rewriteHelm(manifest)
   say(`prepared ${manifest.release}`)
   say(path)
 }

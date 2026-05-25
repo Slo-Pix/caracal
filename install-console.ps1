@@ -6,7 +6,9 @@
 [CmdletBinding()]
 param(
     [string]$Version = $env:CARACAL_VERSION,
-    [string]$InstallDir = $env:CARACAL_INSTALL_DIR
+    [string]$InstallDir = $env:CARACAL_INSTALL_DIR,
+    [switch]$VerifyProvenance,
+    [switch]$RequireProvenance
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,6 +18,11 @@ $repo = 'Garudex-Labs/caracal'
 if ([string]::IsNullOrEmpty($Version)) { $Version = 'latest' }
 if ([string]::IsNullOrEmpty($InstallDir)) {
     $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\caracal'
+}
+if ($env:CARACAL_VERIFY_PROVENANCE -eq '1') { $VerifyProvenance = $true }
+if ($env:CARACAL_REQUIRE_PROVENANCE -eq '1') {
+    $VerifyProvenance = $true
+    $RequireProvenance = $true
 }
 
 $osArch = (Get-CimInstance Win32_OperatingSystem).OSArchitecture
@@ -58,6 +65,17 @@ try {
         $actual = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLower()
         if ($actual -ne $sums[$archive]) {
             throw "checksum mismatch for $archive (expected $($sums[$archive]), got $actual)"
+        }
+        if ($VerifyProvenance) {
+            $gh = Get-Command gh -ErrorAction SilentlyContinue
+            if (-not $gh) {
+                if ($RequireProvenance) { throw 'gh is required for provenance verification' }
+                Write-Warning "gh not found; skipping provenance verification for $archive"
+            } else {
+                & gh attestation verify $archivePath --repo $repo | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "provenance verification failed for $archive" }
+                Write-Host "caracal-install: provenance verified for $archive"
+            }
         }
         Expand-Archive -Path $archivePath -DestinationPath $tmp.FullName -Force
         $src = Join-Path $tmp.FullName "$BinName.exe"
