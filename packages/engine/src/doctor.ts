@@ -5,7 +5,7 @@
 
 import type { Zone } from '@caracalai/admin'
 import { discoverCoordinatorToken } from '@caracalai/core'
-import { DEFAULT_API_URL, DEFAULT_COORDINATOR_URL, DEFAULT_ZONE_URL, resolveServiceUrl, type RuntimeConfig } from './runtimeConfig.js'
+import { DEFAULT_API_URL, DEFAULT_COORDINATOR_URL, DEFAULT_ZONE_URL, resolveServiceUrl } from './runtimeConfig.js'
 import { scrubTokens } from './crash.js'
 import { buildAdminClient as buildAdminClientCore, type AdminContext } from './shared.js'
 import { runPreflightChecks, type PreflightCheck } from './preflight.js'
@@ -48,7 +48,6 @@ export interface DoctorReport {
 }
 
 export interface DoctorOptions {
-  cfg?: RuntimeConfig
   zoneId?: string
   strict?: boolean
   preflightOnly?: boolean
@@ -326,9 +325,9 @@ function report(mode: DoctorMode, strict: boolean, context: DoctorContext, check
   }
 }
 
-function buildAdminContext(checks: DoctorCheck[], cfg?: RuntimeConfig): AdminContext | undefined {
+function buildAdminContext(checks: DoctorCheck[]): AdminContext | undefined {
   try {
-    return buildAdminClientCore(cfg)
+    return buildAdminClientCore()
   } catch (err) {
     addCheck(checks, {
       section: 'health',
@@ -433,7 +432,7 @@ export async function runDoctorDiagnostics(options: DoctorOptions = {}): Promise
   let zoneIds: string[] = preflightOnly ? [] : zoneId ? [zoneId] : []
 
   if (!preflightOnly) {
-    const ctx = buildAdminContext(checks, options.cfg)
+    const ctx = buildAdminContext(checks)
     apiUrl = normalizeHttpUrl(ctx?.apiUrl ?? apiUrl, 'CARACAL_API_URL')
     zoneId = zoneId ?? ctx?.zoneId
     const zoneResult = await runHealthAndZoneChecks(checks, ctx, zoneId)

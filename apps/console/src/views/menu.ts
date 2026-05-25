@@ -30,7 +30,6 @@ import { readFileSync } from 'node:fs'
 import {
   DEFAULT_ZONE_URL,
   resolveServiceUrl,
-  loadRuntimeConfig as loadValidatedRuntimeConfig,
   type RuntimeConfig,
 } from '@caracalai/engine/runtime-config'
 import { pad, ui } from '../ansi.ts'
@@ -69,14 +68,9 @@ interface Entry {
   open: (ctx: Ctx, app: App) => View
 }
 
-function loadRuntimeConfig(): RuntimeConfig | undefined {
-  return loadValidatedRuntimeConfig(false)
-}
-
-function credentialConfig(ctx: Ctx, cfg: RuntimeConfig | undefined, values: Record<string, string>): RuntimeConfig {
-  if (cfg) return cfg
+function credentialConfig(ctx: Ctx, values: Record<string, string>): RuntimeConfig {
   const applicationId = values.application_id
-  if (!applicationId) throw new Error('application is required when caracal.toml is not configured')
+  if (!applicationId) throw new Error('application is required')
   return {
     zone_url: process.env.CARACAL_STS_URL ?? resolveServiceUrl('CARACAL_ZONE_URL', DEFAULT_ZONE_URL),
     zone_id: ctx.zoneId,
@@ -149,7 +143,7 @@ function auditExplainEntry(ctx: Ctx): View {
 }
 
 function doctorEntry(ctx: Ctx): View {
-  return new DoctorView({ cfg: loadRuntimeConfig(), zoneId: ctx.zoneId, zonePicker: zoneFieldPicker(ctx.client) })
+  return new DoctorView({ zoneId: ctx.zoneId, zonePicker: zoneFieldPicker(ctx.client) })
 }
 
 function zoneFieldPicker(client: AdminClient): Field['pick'] {
@@ -248,16 +242,11 @@ class CredentialMenuView implements View {
   }
 
   private readForm(): View {
-    const cfg = loadRuntimeConfig()
     const fields: Field[] = [
       { key: 'resource', label: 'resource', kind: 'text', required: true, pick: resourceIdentifierPicker(this.ctx) },
+      { key: 'application_id', label: 'application', kind: 'text', required: true, pick: applicationPicker(this.ctx) },
+      { key: 'app_client_secret', label: 'client secret', kind: 'secret', hint: 'required for confidential apps; leave blank for public apps' },
     ]
-    if (!cfg) {
-      fields.push(
-        { key: 'application_id', label: 'application', kind: 'text', required: true, pick: applicationPicker(this.ctx) },
-        { key: 'app_client_secret', label: 'client secret', kind: 'secret', hint: 'required for confidential apps; leave blank for public apps' },
-      )
-    }
     return new FormView({
       title: 'credential read',
       fields,
@@ -265,7 +254,7 @@ class CredentialMenuView implements View {
         if (v.resource === controlAudience()) {
           throw new Error('Control API tokens are issued from control → issue invocation token')
         }
-        const token = await credentialRead({ cfg: credentialConfig(this.ctx, cfg, v), resource: v.resource! })
+        const token = await credentialRead({ cfg: credentialConfig(this.ctx, v), resource: v.resource! })
         app.pop()
         app.push(new DetailView({
           title: `credential / ${v.resource}`,

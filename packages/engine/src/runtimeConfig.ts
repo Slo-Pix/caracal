@@ -51,7 +51,7 @@ const BLOCKED_CREDENTIAL_ENV = new Set([
   'DYLD_LIBRARY_PATH',
 ]);
 
-const CONFIG_MISSING_MESSAGE = 'runtime config not found; create ~/.config/caracal/caracal.toml for local development or provide CARACAL_STS_URL, CARACAL_ZONE_ID, CARACAL_APPLICATION_ID, CARACAL_APP_CLIENT_SECRET_FILE, and CARACAL_RUN_CREDENTIALS_FILE from your platform secret/config system.';
+const CONFIG_MISSING_MESSAGE = 'runtime config not found; caracal run needs workload identity from env/secret files. Create or select a zone, application, resource, and policy in caracal console; store the one-time client secret in a 0600 secret file; set CARACAL_STS_URL, CARACAL_ZONE_ID, CARACAL_APPLICATION_ID, CARACAL_APP_CLIENT_SECRET_FILE, and CARACAL_RUN_CREDENTIALS_FILE. Use CARACAL_CONFIG only for an explicit runtime profile.';
 
 const RUNTIME_CONFIG_KEYS = new Set([
   'zone_url',
@@ -141,7 +141,7 @@ export function assertCredentialEnvName(name: string): void {
 
 export function loadRuntimeConfig(required = false, env: NodeJS.ProcessEnv = process.env): RuntimeConfig | undefined {
   const path = resolveRuntimeConfigPath(env);
-  if (path) {
+  if (env.CARACAL_CONFIG && path) {
     assertRuntimeConfigFileSecure(path, env);
     return normalizeRuntimeConfig(parseRuntimeConfigFile(path), path, env);
   }
@@ -151,6 +151,10 @@ export function loadRuntimeConfig(required = false, env: NodeJS.ProcessEnv = pro
   }
   const cfg = runtimeConfigFromEnv(env);
   if (cfg) return normalizeRuntimeConfig(cfg, 'environment', env);
+  if (path) {
+    assertRuntimeConfigFileSecure(path, env);
+    return normalizeRuntimeConfig(parseRuntimeConfigFile(path), path, env);
+  }
   if (required) throw new RuntimeConfigMissingError();
   return undefined;
 }

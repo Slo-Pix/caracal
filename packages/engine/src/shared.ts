@@ -12,7 +12,6 @@ import {
   DEFAULT_COORDINATOR_URL,
   resolveServiceUrl,
 } from './runtimeConfig.js'
-import type { RuntimeConfig } from './runtimeConfig.js'
 
 export interface AdminContext {
   client: AdminClient
@@ -29,7 +28,7 @@ function isLocalUrl(value: string): boolean {
   }
 }
 
-export function buildAdminClient(cfg?: RuntimeConfig): AdminContext {
+export function buildAdminClient(): AdminContext {
   const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
   const coordinatorUrl = resolveServiceUrl('CARACAL_COORDINATOR_URL', DEFAULT_COORDINATOR_URL)
   const adminToken = discoverAdminToken(undefined, { preferGenerated: isLocalUrl(apiUrl) })
@@ -39,7 +38,7 @@ export function buildAdminClient(cfg?: RuntimeConfig): AdminContext {
     )
   }
   const coordinatorToken = discoverCoordinatorToken(undefined, { preferGenerated: isLocalUrl(coordinatorUrl) })
-  const zoneId = process.env.CARACAL_ZONE_ID ?? cfg?.zone_id
+  const zoneId = process.env.CARACAL_ZONE_ID
   return {
     client: new AdminClient({ apiUrl, coordinatorUrl, adminToken, coordinatorToken }),
     zoneId,
