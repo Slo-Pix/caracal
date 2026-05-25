@@ -162,6 +162,7 @@ if $run_py; then
   step "py: install editable packages"
   "$py_python" -m pip install \
     -e packages/core/python \
+    -e packages/oauth/python \
     -e packages/identity/python \
     -e packages/revocation/python \
     -e packages/sdk/python \
@@ -172,8 +173,8 @@ if $run_py; then
 
   step "py: coverage run"
   mkdir -p coverage/python
-  PYTHONPATH="$root/packages/core/python:$root/packages/identity/python:$root/packages/revocation/python:$root/packages/sdk/python:$root/packages/transport/mcp/python:$root/packages/connectors/fastmcp/python:$root/packages/connectors/redis/python:$root/tests/shared/test-utils/python" \
-    "$py_coverage" run --source=packages/core/python/caracalai_core,packages/identity/python/caracalai_identity,packages/revocation/python/caracalai_revocation,packages/sdk/python/caracalai_sdk,packages/transport/mcp/python/caracalai_transport_mcp,packages/connectors/fastmcp/python/caracalai_mcp_fastmcp,packages/connectors/redis/python/caracalai_revocation_redis \
+  PYTHONPATH="$root/packages/core/python:$root/packages/oauth/python:$root/packages/identity/python:$root/packages/revocation/python:$root/packages/sdk/python:$root/packages/transport/mcp/python:$root/packages/connectors/fastmcp/python:$root/packages/connectors/redis/python:$root/tests/shared/test-utils/python" \
+    "$py_coverage" run --source=packages/core/python/caracalai_core,packages/oauth/python/caracalai_oauth,packages/identity/python/caracalai_identity,packages/revocation/python/caracalai_revocation,packages/sdk/python/caracalai_sdk,packages/transport/mcp/python/caracalai_transport_mcp,packages/connectors/fastmcp/python/caracalai_mcp_fastmcp,packages/connectors/redis/python/caracalai_revocation_redis \
     -m unittest discover -s tests/python -p 'test_*.py' -v
   "$py_coverage" xml -o coverage/python/coverage.xml
   "$py_coverage" report --show-missing

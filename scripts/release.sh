@@ -102,6 +102,7 @@ const npmPaths = [
 ];
 const pyPaths = [
   "packages/core/python/pyproject.toml",
+  "packages/oauth/python/pyproject.toml",
   "packages/identity/python/pyproject.toml",
   "packages/revocation/python/pyproject.toml",
   "packages/sdk/python/pyproject.toml",
@@ -109,7 +110,7 @@ const pyPaths = [
   "packages/connectors/fastmcp/python/pyproject.toml",
   "packages/connectors/redis/python/pyproject.toml",
 ];
-const containers = ["api", "coordinator", "audit", "gateway", "sts", "postgres", "redis"];
+const containers = ["api", "coordinator", "control", "audit", "gateway", "sts", "postgres", "redis"];
 
 const npm = Object.fromEntries(
   npmPaths.map((path) => {
@@ -131,6 +132,7 @@ const manifest = {
   mode: "stable",
   publishedAt,
   binaries: { shell: version, console: version },
+  runtimeImage: version,
   containers: Object.fromEntries(containers.map((name) => [name, version])),
   pypi,
   npm,

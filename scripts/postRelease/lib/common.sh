@@ -48,6 +48,7 @@ NPM_NAMES=()
 NPM_VERS=()
 CONTAINER_NAMES=()
 CONTAINER_VERS=()
+RUNTIME_IMAGE_VER=""
 SHELL_VER=""
 CONSOLE_VER=""
 
@@ -59,6 +60,8 @@ if m.get("release") != release:
     raise SystemExit(f"manifest release {m.get('release')!r} does not match {release!r}")
 print(f'SHELL_VER={shlex.quote(m["binaries"]["shell"])}')
 print(f'CONSOLE_VER={shlex.quote(m["binaries"]["console"])}')
+if m.get("runtimeImage"):
+    print(f'RUNTIME_IMAGE_VER={shlex.quote(m["runtimeImage"])}')
 for k, v in m["containers"].items():
     print(f'CONTAINER_NAMES+=({shlex.quote(k)})')
     print(f'CONTAINER_VERS+=({shlex.quote(v)})')

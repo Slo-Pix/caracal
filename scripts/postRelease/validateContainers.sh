@@ -44,6 +44,7 @@ POSTGRES_DB=caracal
 POSTGRES_PASSWORD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 REDIS_PASSWORD=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 CARACAL_ADMIN_TOKEN=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+CARACAL_COORDINATOR_TOKEN=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 ZONE_KEK=1111111111111111111111111111111111111111111111111111111111111111
 AUDIT_HMAC_KEY=2222222222222222222222222222222222222222222222222222222222222222
 STREAMS_HMAC_KEY=3333333333333333333333333333333333333333333333333333333333333333
@@ -57,6 +58,9 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
   cat >"$dir/secrets/caracalAdminToken" <<'EOF'
 cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+EOF
+  cat >"$dir/secrets/caracalCoordinatorToken" <<'EOF'
+dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
 EOF
   cat >"$dir/secrets/zoneKek" <<'EOF'
 1111111111111111111111111111111111111111111111111111111111111111
@@ -86,6 +90,7 @@ secret_names = [
     "postgresPassword",
     "redisPassword",
     "caracalAdminToken",
+    "caracalCoordinatorToken",
     "zoneKek",
     "auditHmacKey",
     "streamsHmacKey",
@@ -125,4 +130,5 @@ PY
 }
 
 for (( i = 0; i < ${#CONTAINER_NAMES[@]}; i++ )); do validatePull "${CONTAINER_NAMES[$i]}" "${CONTAINER_VERS[$i]}"; done
+if [[ -n "$RUNTIME_IMAGE_VER" ]]; then validatePull "runtime" "$RUNTIME_IMAGE_VER"; fi
 validateStack
