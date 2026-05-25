@@ -49,7 +49,7 @@ try {
         }
     }
 
-    function Install-Archive([string]$Kind, [string]$BinName) {
+    function Stage-Archive([string]$Kind, [string]$BinName) {
         $archive = "caracal-$Kind-windows-$arch-$tag.zip"
         if (-not $sums.ContainsKey($archive)) { throw "no checksum for $archive in SHA256SUMS" }
         $archivePath = Join-Path $tmp.FullName $archive
@@ -62,9 +62,9 @@ try {
         Expand-Archive -Path $archivePath -DestinationPath $tmp.FullName -Force
         $src = Join-Path $tmp.FullName "$BinName.exe"
         if (-not (Test-Path $src)) { throw "expected $BinName.exe inside $archive, not found" }
-        $dest = Join-Path $InstallDir "$BinName.exe"
-        Move-Item -Force $src $dest
-        Write-Host "caracal-install: installed $dest"
+        $stagePath = Join-Path $stage.FullName "$BinName.exe"
+        Move-Item -Force $src $stagePath
+        return $stagePath
     }
 
     function Test-Archive([string]$Kind) {
@@ -72,14 +72,44 @@ try {
         return $sums.ContainsKey($archive)
     }
 
-    $installPath = New-Item -ItemType Directory -Force -Path $InstallDir
-    if (-not $installPath) { throw "failed to create or access install directory: $InstallDir" }
+    $stage = New-Item -ItemType Directory -Force -Path (Join-Path $tmp.FullName 'stage')
+    $backup = New-Item -ItemType Directory -Force -Path (Join-Path $tmp.FullName 'backup')
+    $staged = @{}
     $installedShell = $false
     if (Test-Archive -Kind 'shell') {
         $installedShell = $true
-        Install-Archive -Kind 'shell' -BinName 'caracal'
+        $staged['caracal.exe'] = Stage-Archive -Kind 'shell' -BinName 'caracal'
     }
-    Install-Archive -Kind 'console' -BinName 'caracal-console'
+    $staged['caracal-console.exe'] = Stage-Archive -Kind 'console' -BinName 'caracal-console'
+
+    $installPath = New-Item -ItemType Directory -Force -Path $InstallDir
+    if (-not $installPath) { throw "failed to create or access install directory: $InstallDir" }
+    $committed = $false
+    $installed = @()
+    try {
+        foreach ($name in $staged.Keys) {
+            $dest = Join-Path $InstallDir $name
+            $backupPath = Join-Path $backup.FullName $name
+            if (Test-Path $dest) {
+                Move-Item -Force $dest $backupPath
+            }
+            Move-Item -Force $staged[$name] $dest
+            $installed += $name
+            Write-Host "caracal-install: installed $dest"
+        }
+        $committed = $true
+    } finally {
+        if (-not $committed) {
+            foreach ($name in $staged.Keys) {
+                $backupPath = Join-Path $backup.FullName $name
+                if (Test-Path $backupPath) {
+                    Move-Item -Force $backupPath (Join-Path $InstallDir $name)
+                } elseif (($installed -contains $name) -and (Test-Path (Join-Path $InstallDir $name))) {
+                    Remove-Item -Force (Join-Path $InstallDir $name)
+                }
+            }
+        }
+    }
 } finally {
     Remove-Item -Recurse -Force $tmp.FullName -ErrorAction SilentlyContinue
 }

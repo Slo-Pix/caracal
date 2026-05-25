@@ -5,7 +5,7 @@
 
 # syntax=docker/dockerfile:1.7
 ARG PNPM_VERSION=11.1.1
-ARG BUN_VERSION=1.2.21
+ARG BUN_VERSION=1.3.14
 
 FROM node:24-slim@sha256:24dc26ef1e3c3690f27ebc4136c9c186c3133b25563ae4d7f0692e4d1fe5db0e AS builder
 ARG PNPM_VERSION
@@ -14,10 +14,10 @@ ARG TARGETARCH
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:/root/.bun/bin:$PATH \
     CI=1
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip jq \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
-RUN curl -fsSL https://bun.sh/install | bash -s "bun-v${BUN_VERSION}"
+RUN npm install --global "bun@${BUN_VERSION}" && bun --version | grep -Fx "${BUN_VERSION}"
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/runtime/package.json apps/runtime/package.json

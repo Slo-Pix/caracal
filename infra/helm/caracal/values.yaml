@@ -25,6 +25,7 @@ secrets:
     postgresPassword: ""
     redisPassword: ""
     caracalAdminToken: ""
+    caracalCoordinatorToken: ""
     zoneKek: ""
     auditHmacKey: ""
     streamsHmacKey: ""
@@ -186,6 +187,7 @@ services:
     replicas: 2
     image: caracal-coordinator
     port: 4000
+    requiredScope: agent:lifecycle
     resources:
       requests:
         cpu: 250m

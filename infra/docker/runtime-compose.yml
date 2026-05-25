@@ -58,7 +58,7 @@ secrets:
 
 services:
   postgres:
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-postgres:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-postgres:v${CARACAL_VERSION}
     restart: unless-stopped
     init: true
     stop_grace_period: 30s
@@ -98,7 +98,7 @@ services:
       start_period: 15s
 
   redis:
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-redis:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-redis:v${CARACAL_VERSION}
     restart: unless-stopped
     init: true
     stop_grace_period: 20s
@@ -128,7 +128,7 @@ services:
       start_period: 10s
 
   dbMigrate:
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-postgres:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-postgres:v${CARACAL_VERSION}
     restart: "no"
     init: true
     logging: *defaultLogging
@@ -158,7 +158,7 @@ services:
 
   sts:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-sts:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-sts:v${CARACAL_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
@@ -203,7 +203,7 @@ services:
 
   api:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-api:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-api:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
@@ -244,7 +244,7 @@ services:
 
   gateway:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-gateway:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-gateway:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
@@ -285,7 +285,7 @@ services:
 
   audit:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-audit:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-audit:v${CARACAL_VERSION}
     depends_on:
       postgres:
         condition: service_healthy
@@ -320,7 +320,7 @@ services:
 
   coordinator:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-coordinator:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-coordinator:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
@@ -358,7 +358,7 @@ services:
   control:
     <<: *appService
     profiles: [control]
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-control:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs}/caracal-control:v${CARACAL_VERSION}
     depends_on:
       sts:
         condition: service_healthy
