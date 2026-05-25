@@ -643,10 +643,14 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 // as issuer, the issuer audience, a matching zone_id, and use=session. Resource mandates
 // are deliberately rejected here (RFC 8693 §2.1 subject-confusion mitigation): a token
 // already narrowed to resources A,B must not bootstrap the minting of one for resource C.
+//
+// The keyfunc extracts the token's kid header and selects the matching verification key
+// from the zone's active + grace-period key set, ensuring tokens signed by a previous
+// key during key rotation are still accepted within the 24h grace window.
 func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID string) (map[string]any, error) {
-	pub, _, err := s.keys.getPublicKeyAndKid(ctx, zoneID)
+	zoneKeys, err := s.keys.getPublicKeysByZone(ctx, zoneID)
 	if err != nil {
-		return nil, fmt.Errorf("get zone key: %w", err)
+		return nil, fmt.Errorf("get zone keys: %w", err)
 	}
 	mc := jwt.MapClaims{}
 	_, err = jwt.NewParser(
@@ -656,7 +660,15 @@ func (s *Server) validateSubjectToken(ctx context.Context, tokenStr, zoneID stri
 		jwt.WithExpirationRequired(),
 		jwt.WithIssuedAt(),
 		jwt.WithLeeway(60*time.Second),
-	).ParseWithClaims(tokenStr, mc, func(*jwt.Token) (any, error) {
+	).ParseWithClaims(tokenStr, mc, func(token *jwt.Token) (any, error) {
+		kid, ok := token.Header["kid"].(string)
+		if !ok || kid == "" {
+			return nil, errors.New("token missing kid header")
+		}
+		pub, found := zoneKeys[kid]
+		if !found {
+			return nil, fmt.Errorf("unknown signing key kid %q for zone %s", kid, zoneID)
+		}
 		return pub, nil
 	})
 	if err != nil {

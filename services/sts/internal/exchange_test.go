@@ -10,12 +10,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"net/http"
 	"testing"
 	"time"
 
+	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/open-policy-agent/opa/rego"
 )
 
@@ -213,6 +218,8 @@ type stubDB struct {
 	graphEpoch    int64
 	epochErr      error
 	sessErr       error
+	secrets       []SecretRow
+	secretsErr    error
 }
 
 func (s *stubDB) Ping(_ context.Context) error { return nil }
@@ -291,9 +298,21 @@ func (s *stubDB) EnsureZoneSigningKeySecret(_ context.Context, _ string, _, _ []
 	return nil, errors.New("stub")
 }
 func (s *stubDB) GetZoneSigningKeySecret(_ context.Context, _ string) (*SecretRow, error) {
+	if s.secretsErr != nil {
+		return nil, s.secretsErr
+	}
+	if len(s.secrets) > 0 {
+		return &s.secrets[0], nil
+	}
 	return nil, errors.New("stub")
 }
 func (s *stubDB) GetZoneSigningKeySecrets(_ context.Context, _ string) ([]SecretRow, error) {
+	if s.secretsErr != nil {
+		return nil, s.secretsErr
+	}
+	if len(s.secrets) > 0 {
+		return s.secrets, nil
+	}
 	return nil, errors.New("stub")
 }
 func (s *stubDB) GetActivePolicySetBinding(_ context.Context, _ string) (*PolicySetBinding, error) {
@@ -1339,4 +1358,134 @@ result := {"decision": "allow", "evaluation_status": "complete", "determining_po
 	if got := opaEngine.MetricsSnapshot().EvalTotal; got != 250 {
 		t.Fatalf("want 250 OPA evaluations, got %d", got)
 	}
+}
+
+func makeTestSecretRow(t *testing.T, zek []byte, priv *ecdsa.PrivateKey, kid string) SecretRow {
+	der, err := x509.MarshalECPrivateKey(priv)
+	if err != nil {
+		t.Fatalf("marshal private key: %v", err)
+	}
+	keyBytes := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
+	ciphertext, nonce, err := sharedcrypto.Seal(zek, keyBytes)
+	if err != nil {
+		t.Fatalf("seal key: %v", err)
+	}
+	return SecretRow{
+		ID:         kid,
+		Ciphertext: ciphertext,
+		Nonce:      nonce,
+		DEKID:      "zoneKek",
+	}
+}
+
+func TestValidateSubjectTokenGracePeriodAndRotation(t *testing.T) {
+	// Setup keys and environment
+	zek := []byte("12345678901234567890123456789012")
+	keyCache := newKeyCache(nil, zek) // We will supply the db below
+
+	keyA, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key A: %v", err)
+	}
+	keyB, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key B: %v", err)
+	}
+
+	secretA := makeTestSecretRow(t, zek, keyA, "key-A")
+	secretB := makeTestSecretRow(t, zek, keyB, "key-B")
+
+	db := &stubDB{
+		secrets: []SecretRow{secretB, secretA}, // B is active/newest, A is grace-period/older
+	}
+	keyCache.db = db
+
+	srv := &Server{
+		cfg:  Config{IssuerURL: "https://sts.example.com"},
+		keys: keyCache,
+		db:   db,
+	}
+
+	// Helper to mint tokens
+	mintToken := func(priv *ecdsa.PrivateKey, kid string, useSession bool) string {
+		now := time.Now()
+		audience := []string{"https://sts.example.com"}
+		use := UseSession
+		if !useSession {
+			use = UseResource
+		}
+		claims := Claims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Issuer:    "https://sts.example.com",
+				Subject:   "user-123",
+				Audience:  audience,
+				ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+				IssuedAt:  jwt.NewNumericDate(now),
+				ID:        uuid.NewString(),
+			},
+			ZoneID: "zone-1",
+			Use:    use,
+		}
+		tok := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+		if kid != "" {
+			tok.Header["kid"] = kid
+		}
+		sig, err := tok.SignedString(priv)
+		if err != nil {
+			t.Fatalf("sign token: %v", err)
+		}
+		return sig
+	}
+
+	t.Run("AcceptsActiveKey", func(t *testing.T) {
+		tok := mintToken(keyB, "key-B", true)
+		claims, err := srv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err != nil {
+			t.Fatalf("expected active key to be accepted: %v", err)
+		}
+		if claims["sub"] != "user-123" {
+			t.Errorf("expected subject user-123, got %v", claims["sub"])
+		}
+	})
+
+	t.Run("AcceptsGracePeriodKey", func(t *testing.T) {
+		tok := mintToken(keyA, "key-A", true)
+		claims, err := srv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err != nil {
+			t.Fatalf("expected grace period key to be accepted: %v", err)
+		}
+		if claims["sub"] != "user-123" {
+			t.Errorf("expected subject user-123, got %v", claims["sub"])
+		}
+	})
+
+	t.Run("RejectsUnknownKid", func(t *testing.T) {
+		otherKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatalf("generate unknown kid key: %v", err)
+		}
+		tok := mintToken(otherKey, "unknown-kid", true)
+		_, err = srv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err == nil {
+			t.Fatal("expected failure for unknown kid, got nil error")
+		}
+	})
+
+	t.Run("RejectsMissingKid", func(t *testing.T) {
+		tok := mintToken(keyB, "", true)
+		_, err := srv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err == nil {
+			t.Fatal("expected failure for missing kid, got nil error")
+		}
+	})
+
+	t.Run("RejectsResourceMandate", func(t *testing.T) {
+		tok := mintToken(keyB, "key-B", false)
+		_, err := srv.validateSubjectToken(context.Background(), tok, "zone-1")
+		if err == nil {
+			t.Fatal("expected resource mandate token to be rejected, got nil error")
+		} else if err.Error() != "subject_token must be a session mandate" {
+			t.Fatalf("expected rejection due to session mandate requirement, got: %v", err)
+		}
+	})
 }
