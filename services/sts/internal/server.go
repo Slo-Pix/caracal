@@ -7,6 +7,7 @@ package internal
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	coremetrics "github.com/garudex-labs/caracal/packages/core/go/metrics"
 	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 )
 
@@ -196,6 +198,10 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleStepUpStatus(w http.ResponseWriter, r *http.Request) {
 	challengeID := r.PathValue("id")
+	if _, err := uuid.Parse(challengeID); err != nil {
+		writeError(w, http.StatusNotFound, sharederr.New(sharederr.ResourceNotFound, "challenge not found"))
+		return
+	}
 	c, err := s.db.GetStepUpChallenge(r.Context(), challengeID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, sharederr.New(sharederr.ResourceNotFound, "challenge not found"))
@@ -255,7 +261,23 @@ func writeReadyFailure(w http.ResponseWriter, reason string) {
 	})
 }
 
-func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) metricsAuthorized(r *http.Request) bool {
+	if s.cfg.MetricsBearer == "" {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	expected := "Bearer " + s.cfg.MetricsBearer
+	if len(auth) != len(expected) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) == 1
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	sts := s.metrics.Snapshot()
 	opa := s.opa.MetricsSnapshot()
 	auditDropped := s.auditBuffer.Dropped()
@@ -279,7 +301,11 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	})))
 }
 
-func (s *Server) handleMetricsJSON(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
 		"sts":           s.metrics.Snapshot(),

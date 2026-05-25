@@ -24,7 +24,7 @@ function entityFromUrl(url: string): { type: string | null; id: string | null } 
   for (let i = segments.length - 2; i >= 0; i--) {
     const candidate = segments[i]
     const next = segments[i + 1]
-    if (candidate && next && /^(zones|applications|resources|providers|policies|policy-sets|grants|invitations|teams|step-up-challenges)$/.test(candidate)) {
+    if (candidate && next && /^(zones|applications|resources|providers|policies|policy-sets|policy-templates|grants|invitations|teams|step-up-challenges)$/.test(candidate)) {
       return { type: candidate, id: next }
     }
   }

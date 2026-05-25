@@ -74,6 +74,7 @@ export interface Config {
   lastUsedDebounceSec: number
   trustProxy: boolean
   enableDocs: boolean
+  metricsBearer: string | null
 }
 
 function deriveWorkerId(): string {
@@ -121,5 +122,6 @@ export function loadConfig(): Config {
     lastUsedDebounceSec: intEnv('ADMIN_TOKEN_LAST_USED_DEBOUNCE_SEC', 60, 0),
     trustProxy: boolEnv('TRUST_PROXY', false),
     enableDocs: boolEnv('API_ENABLE_DOCS', true),
+    metricsBearer: process.env.METRICS_BEARER ?? null,
   }
 }
