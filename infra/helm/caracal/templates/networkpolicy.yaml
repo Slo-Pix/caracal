@@ -24,9 +24,9 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "caracal.selectorLabels" . | nindent 14 }}
-    - ports:
-        - protocol: TCP
-          port: {{ .Values.services.gateway.port }}
+    {{- with .Values.networkPolicy.extraIngress }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
   egress:
     {{- if .Values.networkPolicy.allowOpenDns }}
     - ports:

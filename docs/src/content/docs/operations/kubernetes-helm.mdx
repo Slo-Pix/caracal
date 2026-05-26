@@ -25,6 +25,8 @@ The Helm chart in `infra/helm/caracal` is the reference Kubernetes path for the 
 
 Postgres and Redis are not installed by the chart. Use managed services, platform-owned StatefulSets, or an existing database/Redis operator. This keeps Caracal portable and avoids forcing a database ownership model onto enterprise teams.
 
+When `global.mode=stable`, the chart rejects the built-in `postgres.default.svc.cluster.local` and `redis.default.svc.cluster.local` host defaults. Set `secrets.database.host` and `secrets.redis.host` to the platform-owned HA endpoints before rendering a production release.
+
 ## Secret model
 
 By default, the chart expects an existing Kubernetes Secret named `caracal-runtime`:
@@ -86,6 +88,7 @@ If you use the release name `caracal`, objects are named `caracal-caracal-*` by 
 | `services.*.hpa` | Enables CPU-based autoscaling for evaluation |
 | `replayPersistence.*` | Keeps STS and Gateway audit replay buffers across pod restarts |
 | `networkPolicy.enabled` | Adds namespace-level ingress/egress guardrails |
+| `networkPolicy.extraIngress` | Allows explicit ingress-controller or mesh peers to reach Gateway/API |
 | `networkPolicy.extraEgress` | Allows explicit external endpoints such as object storage, identity providers, or provider APIs |
 | `serviceMonitor.enabled` | Publishes scrape targets for Prometheus Operator |
 | `alertRules.enabled` | Publishes baseline Prometheus alerts mapped to failure-mode recovery |
@@ -119,7 +122,26 @@ Disable replay persistence only for disposable environments. A pod backed by `em
 
 ## Network and service-account posture
 
-The default NetworkPolicy permits in-namespace traffic plus Postgres, Redis, and OTLP. Open DNS and HTTPS egress are disabled by default for production; add explicit `networkPolicy.dnsEgress` and `networkPolicy.extraEgress` entries for CoreDNS, provider APIs, S3-compatible object stores, identity providers, or other external destinations required by your deployment.
+The default NetworkPolicy permits Caracal pods to call each other plus Postgres, Redis, and OTLP. It does not admit arbitrary Gateway traffic from the namespace. Add explicit `networkPolicy.extraIngress` entries for ingress controllers, service mesh gateways, or namespace-local Gateway clients.
+
+Gateway ingress-controller example:
+
+```yaml
+networkPolicy:
+  extraIngress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8081
+```
+
+Open DNS and HTTPS egress are disabled by default for production; add explicit `networkPolicy.dnsEgress` and `networkPolicy.extraEgress` entries for CoreDNS, provider APIs, S3-compatible object stores, identity providers, or other external destinations required by your deployment.
 
 CoreDNS-scoped example:
 
