@@ -28,6 +28,7 @@ interface SetupValues {
   resource_scopes?: string
   upstream_url?: string
   request_path?: string
+  advanced_options?: string
   provider_id?: string
   activate_policy?: string
   generate_profile?: string
@@ -90,14 +91,15 @@ export function firstSetupView(ctx: Ctx): View {
       { key: 'resource_scopes', label: 'scopes', kind: 'list', required: true, hint: 'comma-separated scopes this resource accepts' },
       { key: 'upstream_url', label: 'upstream URL', kind: 'text', hint: 'optional; creates a Gateway route when set' },
       { key: 'request_path', label: 'first request path', kind: 'text', hint: 'optional real upstream path for the generated Gateway check' },
-      { key: 'provider_id', label: 'provider ID', kind: 'text', hint: 'optional existing provider credential source' },
-      { key: 'activate_policy', label: 'activate policy', kind: 'bool', default: 'true' },
-      { key: 'generate_profile', label: 'runtime profile', kind: 'bool', default: 'true' },
       { key: 'write_files', label: 'write files', kind: 'bool', default: 'false', hint: 'explicitly write generated profile and secret files on this machine' },
-      { key: 'overwrite_files', label: 'overwrite files', kind: 'bool', default: 'false', hint: 'kept off unless replacing existing generated setup files is intended' },
-      { key: 'profile_path', label: 'profile path', kind: 'text', default: defaultRuntimeConfigPath() },
-      { key: 'secret_file_path', label: 'secret file', kind: 'text', hint: 'optional; derived from profile path when blank' },
-      { key: 'credential_env', label: 'token env', kind: 'text', hint: 'optional; derived from the resource ID when blank' },
+      { key: 'advanced_options', label: 'advanced options', kind: 'bool', default: 'false', hint: 'shows provider, policy, profile path, overwrite, and token-env controls' },
+      { key: 'provider_id', label: 'provider ID', kind: 'text', visible: advancedVisible, hint: 'optional existing provider credential source' },
+      { key: 'activate_policy', label: 'activate policy', kind: 'bool', default: 'true', visible: advancedVisible },
+      { key: 'generate_profile', label: 'runtime profile', kind: 'bool', default: 'true', visible: advancedVisible },
+      { key: 'overwrite_files', label: 'overwrite files', kind: 'bool', default: 'false', visible: advancedVisible, hint: 'kept off unless replacing existing generated setup files is intended' },
+      { key: 'profile_path', label: 'profile path', kind: 'text', default: defaultRuntimeConfigPath(), visible: advancedVisible },
+      { key: 'secret_file_path', label: 'secret file', kind: 'text', visible: advancedVisible, hint: 'optional; derived from profile path when blank' },
+      { key: 'credential_env', label: 'token env', kind: 'text', visible: advancedVisible, hint: 'optional; derived from the resource ID when blank' },
     ],
     onSubmit: async (raw, app) => {
       const result = await runFirstSetup(ctx, raw, app)
@@ -301,6 +303,10 @@ function setupSummary(result: SetupResult): Record<string, unknown> {
     if_no_event: 'Re-check the active policy, resource identifier, Gateway route, and runtime profile before retrying.',
   }
   return summary
+}
+
+function advancedVisible(values: Readonly<Record<string, string>>): boolean {
+  return values.advanced_options === 'true'
 }
 
 function posixSetupCommands(profile: NonNullable<SetupResult['profile']>): string[] {

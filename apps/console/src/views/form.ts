@@ -20,6 +20,7 @@ export interface Field {
   default?: string
   options?: string[]
   validate?: (v: string) => string | undefined
+  visible?: (values: Readonly<Record<string, string>>) => boolean
   hint?: string
   pick?: (app: App, setValue: (value: string, label?: string) => void | Promise<void>, currentValue: string) => void | Promise<void>
   resolve?: (value: string) => string | undefined | Promise<string | undefined>
@@ -78,8 +79,9 @@ export class FormView implements View {
 
   hints(): string[] {
     if (this.multilineMode) return ['esc:done', 'enter:newline']
+    this.clampFocus()
     const base = ['tab/↑/↓:next', 'enter:advance/submit', 'esc:cancel']
-    const field = this.fields[this.focus]
+    const field = this.visibleFields()[this.focus]
     if (field?.pick) base.push('→:pick')
     else if (field?.kind === 'select') base.push('→:options')
     else if (field?.kind === 'file') base.push('→:file')
@@ -96,12 +98,14 @@ export class FormView implements View {
   }
 
   render(ctx: ViewContext): string[] {
+    const fields = this.visibleFields()
+    this.clampFocus(fields)
     const lines: string[] = ['']
     lines.push(' ' + ui.title(this.title))
     lines.push(' ' + ui.muted('Type or paste into fields. Required fields are marked *.'))
     lines.push('')
-    for (let i = 0; i < this.fields.length; i++) {
-      const f = this.fields[i]!
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i]!
       const focused = i === this.focus
       const display = this.displayValue(f)
       const label = pad(f.required ? `${f.label} *` : f.label, 18)
@@ -122,8 +126,8 @@ export class FormView implements View {
       }
     }
     lines.push('')
-    const submitMark = this.focus === this.fields.length ? ansi.invert : ''
-    const reset = this.focus === this.fields.length ? ansi.reset : ''
+    const submitMark = this.focus === fields.length ? ansi.invert : ''
+    const reset = this.focus === fields.length ? ansi.reset : ''
     lines.push(' ' + submitMark + ` [${this.submitLabel}] ` + reset)
     if (this.submitting) lines.push(' ' + ui.muted('submitting...'))
     return lines
@@ -151,7 +155,9 @@ export class FormView implements View {
 
   async onKey(key: Key, ctx: ViewContext): Promise<void> {
     if (this.submitting) return
-    const f = this.fields[this.focus]
+    const fields = this.visibleFields()
+    this.clampFocus(fields)
+    const f = fields[this.focus]
     if (this.multilineMode && f) {
       if (key === 'esc') { this.multilineMode = false; return }
       if (key === 'enter') { this.values[f.key] = (this.values[f.key] ?? '') + '\n'; return }
@@ -215,7 +221,7 @@ export class FormView implements View {
       return
     }
     if (key === 'tab' || key === 'down') {
-      this.focus = Math.min(this.fields.length, this.focus + 1)
+      this.focus = Math.min(fields.length, this.focus + 1)
       return
     }
     if (key === 'up') {
@@ -223,16 +229,16 @@ export class FormView implements View {
       return
     }
     if (key === 'enter') {
-      if (this.focus === this.fields.length) return this.trySubmit(ctx.app)
+      if (this.focus === fields.length) return this.trySubmit(ctx.app)
       if (f && f.kind === 'bool') {
         this.values[f.key] = this.values[f.key] === 'true' ? 'false' : 'true'
         return
       }
       if (f && f.kind === 'select') {
-        this.focus = Math.min(this.fields.length, this.focus + 1)
+        this.focus = Math.min(fields.length, this.focus + 1)
         return
       }
-      if (this.focus === this.fields.length - 1) return this.trySubmit(ctx.app)
+      if (this.focus === fields.length - 1) return this.trySubmit(ctx.app)
       this.focus++
       return
     }
@@ -267,7 +273,7 @@ export class FormView implements View {
   }
 
   private async resolveLabels(app: App): Promise<void> {
-    await Promise.all(this.fields.map((field) => this.resolveLabel(field, app)))
+    await Promise.all(this.visibleFields().map((field) => this.resolveLabel(field, app)))
   }
 
   private async resolveLabel(field: Field, app: App): Promise<void> {
@@ -289,18 +295,19 @@ export class FormView implements View {
   }
 
   private async trySubmit(app: App): Promise<void> {
-    for (const f of this.fields) {
+    const fields = this.visibleFields()
+    for (const f of fields) {
       const v = (this.values[f.key] ?? '').trim()
       if (f.required && v.length === 0) {
         app.setStatus(`${f.label} is required`, 'error')
-        this.focus = this.fields.indexOf(f)
+        this.focus = fields.indexOf(f)
         return
       }
       if (f.validate) {
         const msg = f.validate(this.values[f.key] ?? '')
         if (msg) {
           app.setStatus(scrubTokens(msg), 'error')
-          this.focus = this.fields.indexOf(f)
+          this.focus = fields.indexOf(f)
           return
         }
       }
@@ -315,6 +322,14 @@ export class FormView implements View {
       this.submitting = false
       app.invalidate()
     }
+  }
+
+  private visibleFields(): Field[] {
+    return this.fields.filter((field) => field.visible ? field.visible(this.values) : true)
+  }
+
+  private clampFocus(fields = this.visibleFields()): void {
+    this.focus = Math.min(this.focus, fields.length)
   }
 }
 
