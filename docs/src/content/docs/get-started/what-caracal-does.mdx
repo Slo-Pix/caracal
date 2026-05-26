@@ -10,11 +10,11 @@ You have already brought up the stack, registered an app, and issued a Caracal t
 
 When your agent called the SDK and then the Gateway, six things happened in order:
 
-1. The SDK presented your app's client secret to the public STS.
-2. The STS evaluated the active policy set for the requested resource and scopes.
-3. On allow, the STS signed a short-lived Caracal access token (a **mandate**) and emitted an authorization audit event.
+1. The SDK presented your app's client secret to the Caracal token service.
+2. Caracal evaluated the active policy set for the requested resource and scopes.
+3. On allow, Caracal signed a short-lived access token (a **mandate**) and emitted an authorization audit event.
 4. The Gateway verified the mandate, checked replay and revocation, and resolved the upstream provider route.
-5. The internal broker substituted the provider OAuth token or API key onto the upstream request — your agent never saw it.
+5. The Gateway credential broker substituted the provider OAuth token or API key onto the upstream request — your agent never saw it.
 6. The Gateway forwarded the call and emitted an action-execution audit event with status, latency, and result class.
 
 The rest of this page expands each of those steps so that the next time you read an audit row you know which surface produced it.
@@ -31,7 +31,7 @@ Caracal's product model is small: an **agent app** starts an **agent run**, asks
 
 The system issues authority, narrows it, traces it, and revokes it. Gateway routing, SDK context propagation, MCP helpers, and provider credential brokering are implementation surfaces that preserve that model at execution boundaries.
 
-Caracal is not trying to wrap every provider SDK, scheduler, prompt router, or protocol abstraction. If an integration path cannot preserve mandate verification, revocation, policy context, and audit, it should stay outside the core authority plane until it has a clear enforcement boundary.
+Caracal is not trying to wrap every provider SDK, scheduler, prompt router, or protocol abstraction. If an integration path cannot preserve mandate verification, revocation, policy context, and audit, it should stay outside the protected access path until it has a clear enforcement boundary.
 
 ## The golden path
 
@@ -41,8 +41,8 @@ The default path is:
 agent app
   → Caracal SDK opens an agent run
   → agent calls the Gateway
-  → public STS issues only Caracal access tokens
-  → internal broker resolves provider credentials for the Gateway
+  → Caracal issues only scoped access tokens
+  → Gateway resolves provider credentials inside the protected boundary
   → Gateway forwards the upstream call
   → audit records the decision and action result
 ```
@@ -51,7 +51,7 @@ This is the path new integrations should use. It gives the strongest default sec
 
 ## The enforcement point
 
-The public STS issues short-lived Caracal access tokens. It does not return provider-native credentials to agent-facing callers. Before signing a token, it:
+The Caracal token service issues short-lived access tokens. It does not return provider-native credentials to agent-facing callers. Before signing a token, it:
 
 1. Receives an exchange request carrying the agent identity and requested tool/provider resource.
 2. Loads the active policy set for the zone.
@@ -68,7 +68,7 @@ When an agent calls a tool, MCP server, REST API, or provider endpoint through t
 1. Verifies the Caracal token signature against the zone key.
 2. Checks replay and revocation anchors.
 3. Resolves the provider route for the requested resource.
-4. Calls the internal broker path when provider credentials are needed.
+4. Calls the Gateway credential broker when provider credentials are needed.
 5. Substitutes the provider OAuth token or API key only on the upstream request.
 6. Emits an action execution audit event with status, latency, result class, auth mode, and revocation interruption state.
 

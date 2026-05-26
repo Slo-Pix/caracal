@@ -1,32 +1,38 @@
 ---
-title: "Quickstart: Run Caracal Locally"
-description: Bring up the complete Caracal authority plane and launch the Console.
+title: "Quickstart: Released Product"
+description: Install the released Caracal tools, start the local stack, and launch guided setup.
 pageType: workflow
 ---
 
-The quickest local path is: install dependencies, start the stack, verify readiness, then let the Console generate the first production-shaped setup.
+Use this path when you installed the released `caracal` and `caracal-console` binaries. It keeps the first run focused on product workflows instead of repository tooling.
 
-This source-tree flow is for contributors and local evaluation. If you installed the released binaries, use the same commands without the `pnpm` prefix: `caracal up`, `caracal status --ready`, and `caracal console`.
+## Prerequisites
+
+- Docker 24+ with the Compose v2 plugin
+- `caracal` and `caracal-console` installed from [Installation](../installation/)
+
+## Start Caracal
 
 ```bash
-corepack enable
-corepack prepare pnpm@11.1.1 --activate
-pnpm install --frozen-lockfile --prefer-offline
-pnpm caracal up
-pnpm caracal status --ready
-pnpm caracal-console
+caracal up
+caracal status --ready
+caracal console
 ```
 
-In the Console, choose **first-setup**. Enter the real zone name, agent application name, resource ID, scopes, and upstream URL you want to protect. Leave optional fields blank when the resource does not need Gateway routing or a provider credential yet.
+`status --ready` must pass before setup. If it fails, run `caracal status --ready --json` and check the local stack logs.
+
+## Create the first protected path
+
+In the Console, choose **guided setup**. Enter the real zone name, agent application name, protected resource ID, scopes, and upstream URL you want to protect. Leave optional fields blank when the resource does not need Gateway routing or a provider credential yet.
 
 The result view gives you the real zone ID, application ID, resource ID, client secret, policy set, and generated runtime profile. Store the one-time client secret in the secret-file path shown by Console, copy the generated profile to the profile path shown by Console, and keep the file permissions owner-only.
 
-Set `CARACAL_CONFIG` to the profile path shown by Console, then run the workload command through `pnpm caracal run --`. Do not use copied placeholder profiles for onboarding; generate a profile from the objects you just created.
+Set `CARACAL_CONFIG` to the profile path shown by Console, then run the workload command through `caracal run --`. Do not use copied placeholder profiles for onboarding; generate a profile from the objects you just created.
 
 Stop the stack with:
 
 ```bash
-pnpm caracal down
+caracal down
 ```
 
-Use [Five-Minute Setup](./five-minute-setup/) for the full protected HTTP request and audit explanation flow.
+Use [Five-Minute Setup](../five-minute-setup/) for the full protected HTTP request and audit explanation flow. Use [Contributor Quickstart](../contributor-quickstart/) only when you are working from the source tree.

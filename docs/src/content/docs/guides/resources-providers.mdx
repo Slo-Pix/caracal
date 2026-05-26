@@ -8,7 +8,7 @@ Resources describe what an application can request through Caracal. Providers de
 
 ## Guided first setup
 
-Open the Console and choose **first-setup**:
+Open the Console and choose **guided setup**:
 
 ```bash
 caracal console
@@ -38,7 +38,7 @@ When an upstream URL is set, the Console binds the resource to the created confi
 
 ## Provider setup
 
-Create a provider only after the resource path is clear. In the Console, open **identity-provider** and register the real provider metadata supplied by your platform or identity team. Then edit the resource and set **provider ID** to that provider.
+Create a provider only after the resource path is clear. In the Console, open **provider** and register the real provider metadata supplied by your platform or identity team. Then edit the resource and set **provider ID** to that provider.
 
 Provider credentials should come from the platform secret store, vault, or orchestrator. Do not copy temporary credentials into resource definitions. The Console records provider configuration and identifiers; secret material should remain in the provider integration path.
 
