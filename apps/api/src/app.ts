@@ -34,6 +34,74 @@ import './fastify-augmentation.js'
 
 const READY_CHECK_TIMEOUT_MS = 5_000
 
+interface OutboxHealth {
+  pendingCount: number
+  deadCount: number
+  oldestPendingAgeSeconds: number
+  oldestDeadAgeSeconds: number
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+async function queryOutboxHealth(db: DB): Promise<OutboxHealth> {
+  const { rows } = await db.query<{
+    pending_count: string | number
+    dead_count: string | number
+    oldest_pending_age_seconds: string | number | null
+    oldest_dead_age_seconds: string | number | null
+  }>(
+    `SELECT
+       count(*) FILTER (
+         WHERE dispatched_at IS NULL
+           AND available_at <> 'infinity'::timestamptz
+       ) AS pending_count,
+       count(*) FILTER (
+         WHERE dispatched_at IS NULL
+           AND available_at = 'infinity'::timestamptz
+       ) AS dead_count,
+       COALESCE(EXTRACT(EPOCH FROM now() - MIN(created_at) FILTER (
+         WHERE dispatched_at IS NULL
+           AND available_at <> 'infinity'::timestamptz
+       )), 0) AS oldest_pending_age_seconds,
+       COALESCE(EXTRACT(EPOCH FROM now() - MIN(created_at) FILTER (
+         WHERE dispatched_at IS NULL
+           AND available_at = 'infinity'::timestamptz
+       )), 0) AS oldest_dead_age_seconds
+     FROM event_outbox`,
+  )
+  const row = rows[0]
+  return {
+    pendingCount: toNumber(row?.pending_count),
+    deadCount: toNumber(row?.dead_count),
+    oldestPendingAgeSeconds: toNumber(row?.oldest_pending_age_seconds),
+    oldestDeadAgeSeconds: toNumber(row?.oldest_dead_age_seconds),
+  }
+}
+
+function renderOutboxMetrics(health: OutboxHealth): string {
+  return [
+    '# HELP caracal_api_outbox_pending_total Undispatched API outbox rows that remain eligible for retry.',
+    '# TYPE caracal_api_outbox_pending_total gauge',
+    `caracal_api_outbox_pending_total ${health.pendingCount}`,
+    '# HELP caracal_api_outbox_dead_total API outbox rows abandoned after exhausting delivery attempts.',
+    '# TYPE caracal_api_outbox_dead_total gauge',
+    `caracal_api_outbox_dead_total ${health.deadCount}`,
+    '# HELP caracal_api_outbox_oldest_pending_age_seconds Age in seconds of the oldest pending API outbox row.',
+    '# TYPE caracal_api_outbox_oldest_pending_age_seconds gauge',
+    `caracal_api_outbox_oldest_pending_age_seconds ${health.oldestPendingAgeSeconds}`,
+    '# HELP caracal_api_outbox_oldest_dead_age_seconds Age in seconds of the oldest dead API outbox row.',
+    '# TYPE caracal_api_outbox_oldest_dead_age_seconds gauge',
+    `caracal_api_outbox_oldest_dead_age_seconds ${health.oldestDeadAgeSeconds}`,
+  ].join('\n')
+}
+
 export interface AppDeps {
   cfg: Config
   db: DB
@@ -183,8 +251,9 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
         return reply.code(401).send({ error: 'unauthorized' })
       }
     }
+    const health = await withTimeout(queryOutboxHealth(db), READY_CHECK_TIMEOUT_MS, 'metrics outbox check timed out')
     reply.type('text/plain; version=0.0.4')
-    return renderObservabilityMetrics()
+    return `${renderObservabilityMetrics()}\n${renderOutboxMetrics(health)}\n`
   })
   app.get('/ready', async (req, reply) => {
     if (cfg.readyRateLimitPerMin > 0) {
@@ -214,6 +283,19 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
       reply.code(503)
       req.log.warn({ err }, 'ready_redis_unreachable')
       return { ok: false, error: 'redis_unreachable', dependency: 'redis' }
+    }
+    let outboxHealth: OutboxHealth
+    try {
+      outboxHealth = await withTimeout(queryOutboxHealth(db), READY_CHECK_TIMEOUT_MS, 'ready outbox check timed out')
+    } catch (err) {
+      reply.code(503)
+      req.log.warn({ err }, 'ready_outbox_unreachable')
+      return { ok: false, error: 'outbox_unreachable', dependency: 'postgres' }
+    }
+    if (outboxHealth.deadCount > cfg.readyOutboxDeadMax) {
+      reply.code(503)
+      req.log.warn({ deadCount: outboxHealth.deadCount, limit: cfg.readyOutboxDeadMax }, 'ready_outbox_dead_messages')
+      return { ok: false, error: 'outbox_dead_messages', deadCount: outboxHealth.deadCount, limit: cfg.readyOutboxDeadMax }
     }
     return { ok: true }
   })

@@ -124,6 +124,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("GET /metrics.json", s.handleMetricsJSON)
 	mux.HandleFunc("POST /internal/policy/simulate", s.handlePolicySimulation)
+	mux.HandleFunc("POST /internal/zones/{zoneID}/signing-key/rotate", s.handleRotateZoneSigningKey)
 
 	srv := &http.Server{
 		Addr:              ":" + s.cfg.Port,
@@ -229,6 +230,44 @@ func (s *Server) handleStepUpStatus(w http.ResponseWriter, r *http.Request) {
 		"consumed":       c.ConsumedAt != nil,
 		"expires_at":     c.ExpiresAt.Format(time.RFC3339),
 	})
+}
+
+func (s *Server) handleRotateZoneSigningKey(w http.ResponseWriter, r *http.Request) {
+	if !s.adminAuthorized(w, r) {
+		return
+	}
+	zoneID := r.PathValue("zoneID")
+	if zoneID == "" {
+		writeError(w, http.StatusBadRequest, sharederr.New(sharederr.ZoneInvalid, "zone_id required"))
+		return
+	}
+	secret, err := s.keys.RotateZoneSigningKey(r.Context(), zoneID)
+	if err != nil {
+		s.log.Error().Err(err).Str("zone", zoneID).Msg("signing key rotation failed")
+		writeError(w, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "signing key rotation failed"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"rotated": true,
+		"zone_id": zoneID,
+		"kid":     secret.ID,
+	})
+}
+
+func (s *Server) adminAuthorized(w http.ResponseWriter, r *http.Request) bool {
+	if s.cfg.AdminToken == "" {
+		http.NotFound(w, r)
+		return false
+	}
+	auth := r.Header.Get("Authorization")
+	expected := "Bearer " + s.cfg.AdminToken
+	if len(auth) != len(expected) || subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="caracal-sts"`)
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

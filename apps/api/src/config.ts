@@ -73,6 +73,7 @@ export interface Config {
   adminAuthFailLimitPerMin: number
   lastUsedDebounceSec: number
   maxResourcesPerZone: number
+  readyOutboxDeadMax: number
   trustProxy: boolean
   enableDocs: boolean
   metricsBearer: string | null
@@ -122,6 +123,7 @@ export function loadConfig(): Config {
     adminAuthFailLimitPerMin: intEnv('ADMIN_AUTH_FAIL_LIMIT_PER_MIN', 60, 0),
     lastUsedDebounceSec: intEnv('ADMIN_TOKEN_LAST_USED_DEBOUNCE_SEC', 60, 0),
     maxResourcesPerZone: intEnv('API_MAX_RESOURCES_PER_ZONE', 100_000, 0),
+    readyOutboxDeadMax: intEnv('API_READY_OUTBOX_DEAD_MAX', 0, 0),
     trustProxy: boolEnv('TRUST_PROXY', false),
     enableDocs: boolEnv('API_ENABLE_DOCS', true),
     metricsBearer: process.env.METRICS_BEARER ?? null,
