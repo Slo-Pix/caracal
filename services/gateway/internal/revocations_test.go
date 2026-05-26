@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -52,7 +53,7 @@ func TestProcessRevocationMessageRequiresValidSignature(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: false}
 
-	processRevocationMessage(context.Background(), redis, store, redisMessage("1-0", map[string]any{"session_id": "sid1"}), zerolog.New(io.Discard))
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-0", map[string]any{"session_id": "sid1"}), nil, zerolog.New(io.Discard))
 
 	if store.IsRevoked("sid1") {
 		t.Fatalf("invalid stream signature must not mark session revoked")
@@ -66,7 +67,7 @@ func TestProcessRevocationMessageMarksSignedSession(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: true}
 
-	processRevocationMessage(context.Background(), redis, store, redisMessage("1-1", map[string]any{"session_id": "sid1"}), zerolog.New(io.Discard))
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-1", map[string]any{"session_id": "sid1"}), nil, zerolog.New(io.Discard))
 
 	if !store.IsRevoked("sid1") {
 		t.Fatalf("valid revocation message should mark session revoked")
@@ -76,11 +77,29 @@ func TestProcessRevocationMessageMarksSignedSession(t *testing.T) {
 	}
 }
 
+func TestProcessRevocationMessageUpdatesMetrics(t *testing.T) {
+	store := newRevocationStore(zerolog.New(io.Discard))
+	redis := &fakeRevocationRedis{verify: true}
+	metrics := &GatewayMetrics{}
+	id := time.Now().Add(-3 * time.Second).Format("150405")
+	msgID := fmt.Sprintf("%d-0", time.Now().Add(-3*time.Second).UnixMilli())
+
+	processRevocationMessage(context.Background(), redis, store, redisMessage(msgID, map[string]any{"session_id": id}), metrics, zerolog.New(io.Discard))
+
+	snap := metrics.Snapshot()
+	if snap.RevocationMessages != 1 {
+		t.Fatalf("expected one applied revocation, got %d", snap.RevocationMessages)
+	}
+	if snap.RevocationPropagationSeconds == 0 {
+		t.Fatal("expected revocation propagation age")
+	}
+}
+
 func TestProcessRevocationMessageMarksSignedAgent(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: true}
 
-	processRevocationMessage(context.Background(), redis, store, redisMessage("1-3", map[string]any{"agent_session_id": "agent1"}), zerolog.New(io.Discard))
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-3", map[string]any{"agent_session_id": "agent1"}), nil, zerolog.New(io.Discard))
 
 	if !store.IsAgentRevoked("agent1") {
 		t.Fatalf("valid revocation message should mark agent revoked")
@@ -94,7 +113,7 @@ func TestProcessRevocationMessageMarksSignedDelegation(t *testing.T) {
 	store := newRevocationStore(zerolog.New(io.Discard))
 	redis := &fakeRevocationRedis{verify: true}
 
-	processRevocationMessage(context.Background(), redis, store, redisMessage("1-4", map[string]any{"delegation_edge_id": "edge1"}), zerolog.New(io.Discard))
+	processRevocationMessage(context.Background(), redis, store, redisMessage("1-4", map[string]any{"delegation_edge_id": "edge1"}), nil, zerolog.New(io.Discard))
 
 	if !store.IsDelegationRevoked("edge1") {
 		t.Fatalf("valid revocation message should mark delegation edge revoked")
@@ -140,7 +159,7 @@ func TestProcessRevocationMessageDeadLettersPoisonMessage(t *testing.T) {
 	msg := redisMessage("1-2", map[string]any{"zone_id": "zone1"})
 
 	for i := 0; i < maxFailures; i++ {
-		processRevocationMessage(context.Background(), redis, store, msg, zerolog.New(io.Discard))
+		processRevocationMessage(context.Background(), redis, store, msg, nil, zerolog.New(io.Discard))
 	}
 
 	if len(redis.dead) != 1 {
@@ -258,7 +277,7 @@ func (e *ensureGroupFailRedis) EnsureGroup(_ context.Context, _, _ string) error
 }
 
 func TestStartRevocationConsumerNilRedisFailsStartup(t *testing.T) {
-	if err := startRevocationConsumer(context.Background(), nil, newRevocationStore(zerolog.Nop()), zerolog.Nop()); err == nil {
+	if err := startRevocationConsumer(context.Background(), nil, newRevocationStore(zerolog.Nop()), nil, zerolog.Nop()); err == nil {
 		t.Fatalf("expected nil redis to fail startup")
 	}
 }
@@ -266,7 +285,7 @@ func TestStartRevocationConsumerNilRedisFailsStartup(t *testing.T) {
 func TestStartRevocationConsumerEnsureGroupFailureSurfaces(t *testing.T) {
 	want := errors.New("ensure boom")
 	r := &ensureGroupFailRedis{err: want}
-	err := startRevocationConsumer(context.Background(), r, newRevocationStore(zerolog.Nop()), zerolog.Nop())
+	err := startRevocationConsumer(context.Background(), r, newRevocationStore(zerolog.Nop()), nil, zerolog.Nop())
 	if err == nil {
 		t.Fatal("expected error from EnsureGroup failure, got nil")
 	}

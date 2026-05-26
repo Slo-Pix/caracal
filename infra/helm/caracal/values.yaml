@@ -84,10 +84,16 @@ alertRules:
   auditDlqSize: 0
   auditDlqGrowth: 0
   auditConsumerLag: 1000
+  auditReplayOldestAgeSeconds: 300
   apiOutboxDead: 0
   apiOutboxPendingAgeSeconds: 300
   gatewayStsExchangeErrors: 0
+  gatewayStsCircuitOpen: 0
   gatewayRevocationSnapshotFresh: 0
+  gatewayRevocationPropagationSeconds: 30
+  gatewayRevocationReloadErrors: 0
+  stsProviderRefreshErrors: 0
+  stsProviderCircuitOpen: 0
   dbPoolInUseRatio: 0.9
   readinessFlapsPer10m: 4
 
