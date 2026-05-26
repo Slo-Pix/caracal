@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func TestRedisIDAgeSeconds(t *testing.T) {
@@ -173,5 +175,32 @@ func TestDLQReplayFieldsSkipsMalformedEntry(t *testing.T) {
 		"src_data": `{"id":"event-1","zone_id":"zone-1"}`,
 	}); ok {
 		t.Fatal("HMAC failure must stay in DLQ for forensic review")
+	}
+}
+
+func TestDLQEntryFromMessageSummarizesReplayableEvent(t *testing.T) {
+	msg := redis.XMessage{
+		ID: "1760000000000-0",
+		Values: map[string]any{
+			"reason":      "transient_exceeded_max_deliveries:connection refused",
+			"src_id":      "1759999999000-0",
+			"received_at": "1760000000000",
+			"src_sig":     "abc123",
+			"src_data":    `{"id":"event-1","zone_id":"zone-1","event_type":"token_exchange","request_id":"req-1","decision":"allow","evaluation_status":"complete","determining_policies_json":[],"diagnostics_json":[],"occurred_at":"2026-01-01T00:00:00Z"}`,
+		},
+	}
+
+	entry := dlqEntryFromMessage(msg, time.UnixMilli(1760000005000), true)
+	if !entry.Replayable {
+		t.Fatal("expected replayable DLQ entry")
+	}
+	if entry.EventID != "event-1" || entry.ZoneID != "zone-1" || entry.RequestID != "req-1" {
+		t.Fatalf("unexpected event summary: %#v", entry)
+	}
+	if entry.SourceEvent == nil || entry.Fields["src_sig"] != "abc123" {
+		t.Fatalf("expected detail fields and source event: %#v", entry)
+	}
+	if entry.ReceivedAt == "" || entry.AgeSeconds != 5 {
+		t.Fatalf("unexpected timing fields: %#v", entry)
 	}
 }

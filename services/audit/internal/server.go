@@ -123,6 +123,8 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("GET /metrics.json", s.handleMetricsJSON)
 	mux.HandleFunc("GET /api/audit/search", s.handleSearch)
+	mux.HandleFunc("GET /api/audit/dlq", s.handleDLQList)
+	mux.HandleFunc("GET /api/audit/dlq/{id}", s.handleDLQDetail)
 	mux.HandleFunc("POST /api/audit/dlq/replay", s.handleDLQReplay)
 
 	srv := &http.Server{
@@ -326,6 +328,70 @@ func (s *Server) handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(summary)
 }
 
+func (s *Server) handleDLQList(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeAdmin(w, r) {
+		return
+	}
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		n, err := strconv.Atoi(l)
+		if err != nil || n <= 0 {
+			http.Error(w, "limit must be a positive integer", http.StatusBadRequest)
+			return
+		}
+		limit = n
+	}
+	if limit > 1000 {
+		limit = 1000
+	}
+	start := r.URL.Query().Get("start")
+	if start == "" {
+		start = "-"
+	}
+	msgs, err := s.redis.XRangeN(r.Context(), auditDLQStream, start, "+", int64(limit)).Result()
+	if err != nil {
+		s.log.Error().Err(err).Msg("audit dlq list failed")
+		http.Error(w, "dlq list failed", http.StatusInternalServerError)
+		return
+	}
+	entries := make([]dlqEntry, 0, len(msgs))
+	for _, msg := range msgs {
+		entries = append(entries, dlqEntryFromMessage(msg, time.Now(), false))
+	}
+	nextCursor := ""
+	if len(entries) > 0 {
+		nextCursor = entries[len(entries)-1].ID
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"entries":     entries,
+		"next_cursor": nextCursor,
+	})
+}
+
+func (s *Server) handleDLQDetail(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeAdmin(w, r) {
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	msgs, err := s.redis.XRangeN(r.Context(), auditDLQStream, id, id, 1).Result()
+	if err != nil {
+		s.log.Error().Err(err).Str("id", id).Msg("audit dlq detail failed")
+		http.Error(w, "dlq detail failed", http.StatusInternalServerError)
+		return
+	}
+	if len(msgs) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(dlqEntryFromMessage(msgs[0], time.Now(), true))
+}
+
 func (s *Server) authorizeAdmin(w http.ResponseWriter, r *http.Request) bool {
 	if s.cfg.AdminToken == "" {
 		http.NotFound(w, r)
@@ -344,6 +410,69 @@ type dlqReplaySummary struct {
 	Scanned  int64 `json:"scanned"`
 	Replayed int64 `json:"replayed"`
 	Skipped  int64 `json:"skipped"`
+}
+
+type dlqEntry struct {
+	ID          string            `json:"id"`
+	SourceID    string            `json:"source_id,omitempty"`
+	Reason      string            `json:"reason"`
+	ReceivedAt  string            `json:"received_at,omitempty"`
+	AgeSeconds  int64             `json:"age_seconds"`
+	Replayable  bool              `json:"replayable"`
+	EventID     string            `json:"event_id,omitempty"`
+	ZoneID      string            `json:"zone_id,omitempty"`
+	EventType   string            `json:"event_type,omitempty"`
+	RequestID   string            `json:"request_id,omitempty"`
+	Decision    string            `json:"decision,omitempty"`
+	SourceSig   string            `json:"source_sig,omitempty"`
+	SourceEvent *AuditEvent       `json:"source_event,omitempty"`
+	Fields      map[string]string `json:"fields,omitempty"`
+}
+
+func dlqEntryFromMessage(msg redis.XMessage, now time.Time, includeDetail bool) dlqEntry {
+	fields := make(map[string]string)
+	for key, value := range msg.Values {
+		if s, ok := value.(string); ok {
+			fields[key] = s
+		}
+	}
+	entry := dlqEntry{
+		ID:         msg.ID,
+		SourceID:   fields["src_id"],
+		Reason:     fields["reason"],
+		ReceivedAt: millisStringToRFC3339(fields["received_at"]),
+		AgeSeconds: redisIDAgeSeconds(msg.ID, now),
+		Replayable: dlqReplayableReason(fields["reason"]) && strings.TrimSpace(fields["src_data"]) != "",
+		SourceSig:  fields["src_sig"],
+	}
+	if raw := fields["src_data"]; raw != "" {
+		var ev AuditEvent
+		if err := json.Unmarshal([]byte(raw), &ev); err == nil {
+			entry.EventID = ev.ID
+			entry.ZoneID = ev.ZoneID
+			entry.EventType = ev.EventType
+			entry.RequestID = ev.RequestID
+			entry.Decision = ev.Decision
+			if includeDetail {
+				entry.SourceEvent = &ev
+			}
+		}
+	}
+	if includeDetail {
+		entry.Fields = fields
+	}
+	return entry
+}
+
+func millisStringToRFC3339(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	millis, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || millis <= 0 {
+		return raw
+	}
+	return time.UnixMilli(millis).UTC().Format(time.RFC3339)
 }
 
 func (s *Server) replayDLQ(ctx context.Context, limit int64) (dlqReplaySummary, error) {

@@ -124,6 +124,7 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("GET /metrics.json", s.handleMetricsJSON)
 	mux.HandleFunc("POST /internal/policy/simulate", s.handlePolicySimulation)
+	mux.HandleFunc("GET /internal/policy/status/{zoneID}", s.handlePolicyStatus)
 	mux.HandleFunc("POST /internal/zones/{zoneID}/signing-key/rotate", s.handleRotateZoneSigningKey)
 
 	srv := &http.Server{
