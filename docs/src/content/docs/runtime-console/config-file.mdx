@@ -4,7 +4,7 @@ description: Runtime configuration sources, caracal.toml compatibility, permissi
 pageType: config
 ---
 
-`caracal run` loads workload credential-injection settings from platform environment variables or from an explicit runtime profile. Use environment variables and secret-file mounts for local development, CI, containers, Kubernetes, serverless, and production deployments. `caracal.toml` is a compatibility format for humans and SDKs that need a readable file; it is not Console state and it does not create, select, or manage zones.
+`caracal run` loads workload credential-injection settings from platform environment variables or from an explicit runtime profile. Use the Console first-setup flow to generate the first profile from real zone, application, resource, policy, and secret-file values. `caracal.toml` is a compatibility format for humans and SDKs that need a readable file; it is not Console state and it does not create, select, or manage zones.
 
 The runtime validates configuration before token exchange. Unknown fields are rejected, credential environment names must be safe process environment keys, and non-local `http://` STS endpoints are rejected outside development unless `CARACAL_ALLOW_INSECURE_CONFIG_URLS=true` is set explicitly.
 
@@ -23,27 +23,7 @@ Production and cloud workloads should avoid inline secrets and provide config th
 | `CARACAL_RUN_CONTINUE_ON_FAILURE` | no | `true` or `false`; `true` is accepted only in development unless `CARACAL_ALLOW_REQUIRED_CREDENTIAL_FAILURE=true`. |
 | `CARACAL_MCP_GOVERNANCE_MODE` | no | Platform override for MCP governance: `block` or `log`. `log` is accepted outside development only with `CARACAL_ALLOW_MCP_GOVERNANCE_LOG=true`. |
 
-The credential manifest may be an array of required credentials:
-
-```json
-[
-  { "env": "RESOURCE_TOKEN", "resource": "resource://my-api" }
-]
-```
-
-Or an object with required credentials, optional credentials, and runtime policy:
-
-```json
-{
-  "credentials": [
-    { "env": "RESOURCE_TOKEN", "resource": "resource://my-api" }
-  ],
-  "optional_credentials": [
-    { "env": "OPTIONAL_RESOURCE_TOKEN", "resource": "resource://optional", "on_failure": "warn" }
-  ],
-  "mcp_governance": { "mode": "block" }
-}
-```
+The credential manifest may be an array of required credentials, or an object with required credentials, optional credentials, and runtime policy. Each credential entry must use the real resource ID registered in Console and the token environment variable generated for that resource.
 
 Mount secret files read-only where possible. The runtime rejects secret files that are group- or world-writable.
 
@@ -95,45 +75,10 @@ Credential entries use:
 
 `caracal run` only exchanges the listed credentials and injects the resulting access tokens into the configured `env` names. It does not automatically set `CARACAL_COORDINATOR_URL`, `CARACAL_GATEWAY_URL`, or other SDK environment variables for the subprocess.
 
-### Example
+### Generated profiles
 
-```toml
-zone_url = "http://localhost:8080"
-sts_url = "http://localhost:8080"
-coordinator_url = "http://localhost:4000"
-gateway_url = "http://localhost:8081"
-zone_id = "zone_from_console"
-application_id = "app_from_console"
-app_client_secret_file = "/run/secrets/caracal-app-client-secret"
-continue_on_failure = false
-
-[[credentials]]
-env = "RESOURCE_TOKEN"
-resource = "resource://local-http"
-upstream_prefix = "https://api.example.internal/"
-
-[[optional_credentials]]
-env = "OPTIONAL_RESOURCE_TOKEN"
-resource = "resource://optional-http"
-upstream_prefix = "https://optional.example.internal/"
-on_failure = "warn"
-
-[mcp_governance]
-mode = "block"
-```
-
-The same example is checked in at `caracal.toml.example`.
+The Console first-setup result shows a complete profile with real values. Copy that generated profile to the profile path shown by Console, store the one-time client secret in the shown secret-file path, and set owner-only permissions on both files. The checked-in `caracal.toml.example` is a reference schema, not an onboarding profile.
 
 ## CI and secret mounts
 
-For CI, prefer environment variables and secret files:
-
-```bash
-export CARACAL_STS_URL="https://sts.example.com"
-export CARACAL_ZONE_ID="zone_abc123"
-export CARACAL_APPLICATION_ID="app_def456"
-export CARACAL_APP_CLIENT_SECRET_FILE="$RUNNER_TEMP/caracal-client-secret"
-export CARACAL_RUN_CREDENTIALS_FILE="$RUNNER_TEMP/caracal-credentials.json"
-```
-
-Write the two files from the CI secret store, local secret file, or orchestration secret mount before running `caracal run`. Use `CARACAL_CONFIG` only when a tool or workflow specifically needs a TOML profile.
+For CI, prefer environment variables and secret files sourced from the CI secret store or orchestration secret mount. Use the zone ID, application ID, secret-file path, and credential manifest from the Console-generated setup or from your platform provisioning system. Use `CARACAL_CONFIG` only when a tool or workflow specifically needs a TOML profile.

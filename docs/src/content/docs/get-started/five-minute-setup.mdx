@@ -4,7 +4,7 @@ description: Start the local stack, protect one HTTP resource, call it through t
 pageType: workflow
 ---
 
-This path starts a local authority plane, creates one protected resource from the Console, calls it through Gateway, and verifies audit evidence.
+This path starts a local authority plane, creates one protected resource from the Console, calls it through Gateway, and explains the audit evidence. Use a real upstream service that is reachable from the Gateway container or process.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ pnpm caracal status --ready
 
 `status --ready` must return success before you configure resources. If it fails, inspect `pnpm caracal status --ready --json` and the service logs from Docker Compose.
 
-## Configure the first resource
+## Configure the first resource with Console
 
 Open the Console:
 
@@ -39,46 +39,24 @@ pnpm caracal-console
 
 In the Console:
 
-1. Create a zone for local development.
-2. Create a managed application for the local runner and keep the default `token` credential type.
-3. Create a resource named `local-http` with upstream `http://host.docker.internal:18080`.
-4. Create or activate a policy set that allows the local runner application to call `local-http`.
-5. Copy the generated zone ID, application ID, and client secret before leaving the result view.
+1. Choose **first-setup**.
+2. Enter the zone name and agent application name used by the team that will own the workload.
+3. Enter the resource ID and scopes for the upstream you are protecting.
+4. Enter the real upstream URL when you want Gateway routing.
+5. Leave provider ID blank unless the resource already has a provider credential source.
+6. Keep **activate policy** and **runtime profile** enabled for the first run.
 
-## Configure runtime injection
+The result view shows the created objects, the one-time client secret, the active policy set, and a generated runtime profile. Store the client secret in the secret-file path shown by Console and copy the profile content to the shown profile path.
 
-```bash
-printf '%s\n' '<client-secret>' > "$XDG_RUNTIME_DIR/caracal-client-secret"
-chmod 600 "$XDG_RUNTIME_DIR/caracal-client-secret"
-cat > "$XDG_RUNTIME_DIR/caracal-credentials.json" <<'JSON'
-[{ "env": "RESOURCE_TOKEN", "resource": "resource://local-http" }]
-JSON
-export CARACAL_STS_URL="http://localhost:8080"
-export CARACAL_ZONE_ID="<zone-id>"
-export CARACAL_APPLICATION_ID="<application-id>"
-export CARACAL_APP_CLIENT_SECRET_FILE="$XDG_RUNTIME_DIR/caracal-client-secret"
-export CARACAL_RUN_CREDENTIALS_FILE="$XDG_RUNTIME_DIR/caracal-credentials.json"
-```
+## Call the protected resource
 
-Use the zone ID, application ID, and one-time client secret from the Console. This is the same runtime injection shape used by release, CI, and orchestrated deployments; TOML is optional compatibility, not local stack state.
+Set `CARACAL_CONFIG` to the profile path shown by Console, then run your workload command through `pnpm caracal run --`.
 
-## Run a local upstream
+The token environment variable in the generated profile is derived from the resource ID you entered. Use that injected token when your workload calls Gateway or the protected service. For Gateway-routed resources, include `Authorization: Bearer` with the injected token and `X-Caracal-Resource` with the resource ID shown by Console.
 
-```bash
-python3 -m http.server 18080
-```
+## Explain the first success
 
-In another shell, call the protected resource with injected credentials:
-
-```bash
-pnpm caracal run -- sh -c 'curl -fsS \
-  -H "Authorization: Bearer $RESOURCE_TOKEN" \
-  http://localhost:8081/local-http/'
-```
-
-## Verify audit
-
-Return to the Console Audit view and filter by the local application or resource. The request should show the decision, request ID, resource ID, and determining policy.
+Return to the Console **audit** view after the first request. Select the request and open **explain** with its request ID. The explanation should show the created application, protected resource, scopes, policy version, policy set version, Gateway result, and final decision. If the request failed, use the same explanation to identify whether the next correction belongs in runtime config, policy, resource routing, or the upstream service.
 
 ## Shut down
 

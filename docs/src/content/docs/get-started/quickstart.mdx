@@ -4,7 +4,7 @@ description: Bring up the complete Caracal authority plane and launch the Consol
 pageType: workflow
 ---
 
-The quickest local path is: install dependencies, start the stack, verify readiness, then use the Console for product setup.
+The quickest local path is: install dependencies, start the stack, verify readiness, then let the Console generate the first production-shaped setup.
 
 This source-tree flow is for contributors and local evaluation. If you installed the released binaries, use the same commands without the `pnpm` prefix: `caracal up`, `caracal status --ready`, and `caracal console`.
 
@@ -17,26 +17,11 @@ pnpm caracal status --ready
 pnpm caracal-console
 ```
 
-Use the Console to create the first zone, application, resource, and policy. Create the application as a managed `token` credential and copy the one-time client secret from the create result. When you need credential injection for a local process, provide those values through the same env/secret-file interface used by release deployments:
+In the Console, choose **first-setup**. Enter the real zone name, agent application name, resource ID, scopes, and upstream URL you want to protect. Leave optional fields blank when the resource does not need Gateway routing or a provider credential yet.
 
-```bash
-printf '%s\n' '<client-secret>' > "$XDG_RUNTIME_DIR/caracal-client-secret"
-chmod 600 "$XDG_RUNTIME_DIR/caracal-client-secret"
-cat > "$XDG_RUNTIME_DIR/caracal-credentials.json" <<'JSON'
-[{ "env": "RESOURCE_TOKEN", "resource": "resource://my-api" }]
-JSON
-export CARACAL_STS_URL="http://localhost:8080"
-export CARACAL_ZONE_ID="<zone-id>"
-export CARACAL_APPLICATION_ID="<application-id>"
-export CARACAL_APP_CLIENT_SECRET_FILE="$XDG_RUNTIME_DIR/caracal-client-secret"
-export CARACAL_RUN_CREDENTIALS_FILE="$XDG_RUNTIME_DIR/caracal-credentials.json"
-```
+The result view gives you the real zone ID, application ID, resource ID, client secret, policy set, and generated runtime profile. Store the one-time client secret in the secret-file path shown by Console, copy the generated profile to the profile path shown by Console, and keep the file permissions owner-only.
 
-Then run protected workloads with:
-
-```bash
-pnpm caracal run -- <command>
-```
+Set `CARACAL_CONFIG` to the profile path shown by Console, then run the workload command through `pnpm caracal run --`. Do not use copied placeholder profiles for onboarding; generate a profile from the objects you just created.
 
 Stop the stack with:
 
@@ -44,4 +29,4 @@ Stop the stack with:
 pnpm caracal down
 ```
 
-Use [First Integration](./first-integration/) for the full protected HTTP request and audit verification flow.
+Use [Five-Minute Setup](./five-minute-setup/) for the full protected HTTP request and audit explanation flow.
