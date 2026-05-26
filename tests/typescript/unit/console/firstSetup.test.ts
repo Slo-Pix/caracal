@@ -3,7 +3,10 @@
 //
 // First setup workflow creates production onboarding resources without dummy data.
 
-import { describe, it, expect, vi } from 'vitest'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { firstSetupView } from '../../../../apps/console/src/views/setup.ts'
 import { DetailView } from '../../../../apps/console/src/views/detail.ts'
 import { FormView } from '../../../../apps/console/src/views/form.ts'
@@ -86,6 +89,18 @@ function makeClient() {
   }
 }
 
+const tempDirs: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'caracal-first-setup-'))
+  tempDirs.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
 describe('first setup workflow', () => {
   it('creates the first zone, app, resource, policy, and generated profile', async () => {
     const client = makeClient()
@@ -107,11 +122,13 @@ describe('first setup workflow', () => {
       provider_id: '',
       activate_policy: 'true',
       generate_profile: 'true',
+      write_files: 'false',
+      overwrite_files: 'false',
       profile_path: '/secure/caracal/payroll.toml',
       secret_file_path: '/secure/caracal/payroll-secret',
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 12
+    ;(view as unknown as { focus: number }).focus = 14
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
@@ -167,11 +184,13 @@ describe('first setup workflow', () => {
       provider_id: '',
       activate_policy: 'false',
       generate_profile: 'false',
+      write_files: 'false',
+      overwrite_files: 'false',
       profile_path: '',
       secret_file_path: '',
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 12
+    ;(view as unknown as { focus: number }).focus = 14
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
@@ -184,5 +203,90 @@ describe('first setup workflow', () => {
     }))
     expect(client.policies.create).not.toHaveBeenCalled()
     expect(client.policySets.create).not.toHaveBeenCalled()
+  })
+
+  it('writes generated profile and secret files only when requested', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const dir = await tempDir()
+    const profilePath = join(dir, 'payroll.toml')
+    const secretPath = join(dir, 'payroll-secret')
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    }) as FormView
+    ;(view as unknown as { values: Record<string, string> }).values = {
+      zone_name: '',
+      agent_app_name: 'Payroll agent',
+      resource_identifier: 'resource://payroll',
+      resource_name: 'Payroll API',
+      resource_scopes: 'read',
+      upstream_url: 'https://payroll.internal',
+      request_path: '/health',
+      provider_id: '',
+      activate_policy: 'true',
+      generate_profile: 'true',
+      write_files: 'true',
+      overwrite_files: 'false',
+      profile_path: profilePath,
+      secret_file_path: secretPath,
+      credential_env: '',
+    }
+    ;(view as unknown as { focus: number }).focus = 14
+
+    await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
+
+    const profile = await readFile(profilePath, 'utf8')
+    const secret = await readFile(secretPath, 'utf8')
+    expect(profile).toContain('application_id = "app-1"')
+    expect(profile).toContain(`app_client_secret_file = ${JSON.stringify(secretPath)}`)
+    expect(secret).toMatch(/^cs_[A-Za-z0-9_-]+\n$/)
+    expect((await stat(profilePath)).mode & 0o777).toBe(0o600)
+    expect((await stat(secretPath)).mode & 0o777).toBe(0o600)
+
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const detail = pushed[pushed.length - 1] as DetailView
+    await detail.init(app)
+    const body = detail.render({ app, size: { rows: 120, cols: 160 }, status: '' }).join('\n')
+    expect(body).toContain('File Write')
+    expect(body).toContain('written')
+    expect(body).toContain('Console wrote the one-time client secret')
+    expect(body).not.toContain(secret.trim())
+  })
+
+  it('refuses to overwrite existing setup files before creating resources', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const dir = await tempDir()
+    const profilePath = join(dir, 'payroll.toml')
+    await writeFile(profilePath, 'existing')
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    }) as FormView
+    ;(view as unknown as { values: Record<string, string> }).values = {
+      zone_name: '',
+      agent_app_name: 'Payroll agent',
+      resource_identifier: 'resource://payroll',
+      resource_name: 'Payroll API',
+      resource_scopes: 'read',
+      upstream_url: 'https://payroll.internal',
+      request_path: '/health',
+      provider_id: '',
+      activate_policy: 'true',
+      generate_profile: 'true',
+      write_files: 'true',
+      overwrite_files: 'false',
+      profile_path: profilePath,
+      secret_file_path: join(dir, 'payroll-secret'),
+      credential_env: '',
+    }
+    ;(view as unknown as { focus: number }).focus = 14
+
+    await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
+
+    expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('refusing to overwrite existing setup file'), 'error')
+    expect(client.applications.create).not.toHaveBeenCalled()
+    expect(client.resources.create).not.toHaveBeenCalled()
   })
 })

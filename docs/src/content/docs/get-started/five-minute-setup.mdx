@@ -35,10 +35,12 @@ In the Console:
 3. Enter the resource ID and scopes for the upstream you are protecting.
 4. Enter the real upstream URL when you want Gateway routing.
 5. Enter a real first request path when you want Console to generate an exact Gateway check.
-6. Leave provider ID blank unless the resource already has a provider credential source.
-7. Keep **activate policy** and **runtime profile** enabled for the first run.
+6. Turn on **write files** when you want Console to create the runtime profile and secret file on this machine.
+7. Leave **overwrite files** off unless you are intentionally replacing existing generated setup files.
+8. Leave provider ID blank unless the resource already has a provider credential source.
+9. Keep **activate policy** and **runtime profile** enabled for the first run.
 
-The result view shows the created objects, the one-time client secret, the active policy set, the generated runtime profile, local setup commands, and first-success commands. Run the local setup commands, paste the revealed one-time client secret as the only line in the secret file, and keep the profile and secret files owner-readable only.
+The result view shows the created objects, the one-time client secret, the active policy set, the generated runtime profile, local setup commands, file-write status, and first-success commands. If file writing was skipped, run the local setup commands, paste the revealed one-time client secret as the only line in the secret file, and keep the profile and secret files owner-readable only.
 
 ## Call the protected resource
 

@@ -10,6 +10,7 @@ import {
   DEFAULT_ZONE_URL,
   defaultRuntimeConfigPath,
 } from '@caracalai/engine/runtime-config'
+import { access, chmod, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { maskSecretField } from '../errors.ts'
 import type { App, View } from '../screen.ts'
@@ -30,9 +31,17 @@ interface SetupValues {
   provider_id?: string
   activate_policy?: string
   generate_profile?: string
+  write_files?: string
+  overwrite_files?: string
   profile_path?: string
   secret_file_path?: string
   credential_env?: string
+}
+
+interface ProfileTarget {
+  path: string
+  secretPath: string
+  credentialEnv: string
 }
 
 interface SetupResult {
@@ -53,6 +62,13 @@ interface SetupResult {
     credentialEnv: string
     gatewayUrl: string
     content: string
+  }
+  fileWrite?: {
+    status: 'written' | 'failed' | 'skipped'
+    profile_path?: string
+    secret_file?: string
+    overwrite?: boolean
+    error?: string
   }
   requestPath?: string
 }
@@ -77,6 +93,8 @@ export function firstSetupView(ctx: Ctx): View {
       { key: 'provider_id', label: 'provider ID', kind: 'text', hint: 'optional existing provider credential source' },
       { key: 'activate_policy', label: 'activate policy', kind: 'bool', default: 'true' },
       { key: 'generate_profile', label: 'runtime profile', kind: 'bool', default: 'true' },
+      { key: 'write_files', label: 'write files', kind: 'bool', default: 'false', hint: 'explicitly write generated profile and secret files on this machine' },
+      { key: 'overwrite_files', label: 'overwrite files', kind: 'bool', default: 'false', hint: 'kept off unless replacing existing generated setup files is intended' },
       { key: 'profile_path', label: 'profile path', kind: 'text', default: defaultRuntimeConfigPath() },
       { key: 'secret_file_path', label: 'secret file', kind: 'text', hint: 'optional; derived from profile path when blank' },
       { key: 'credential_env', label: 'token env', kind: 'text', hint: 'optional; derived from the resource ID when blank' },
@@ -94,12 +112,17 @@ export function firstSetupView(ctx: Ctx): View {
 }
 
 async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<SetupResult> {
-  const zone = await ensureZone(ctx, values, app)
   const agentAppName = requiredText(values.agent_app_name, 'agent app is required')
   const resourceIdentifier = requiredText(values.resource_identifier, 'resource ID is required')
   const scopes = splitList(values.resource_scopes)
   if (scopes.length === 0) throw new Error('at least one resource scope is required')
+  const shouldGenerateProfile = boolDefault(values.generate_profile, true)
+  const writeFiles = shouldGenerateProfile && boolDefault(values.write_files, false)
+  const overwriteFiles = boolDefault(values.overwrite_files, false)
+  const target = shouldGenerateProfile ? profileTarget(values, agentAppName, resourceIdentifier) : undefined
+  if (writeFiles && target) await assertWritableTarget(target, overwriteFiles)
 
+  const zone = await ensureZone(ctx, values, app)
   const clientSecret = generateClientSecret()
   const application = await ctx.client.applications.create(zone.id, {
     name: agentAppName,
@@ -121,10 +144,11 @@ async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<S
   })
 
   const policy = bool(values.activate_policy) ? await createFirstPolicy(ctx, zone.id, application.id, resource.identifier, scopes) : undefined
-  const profile = bool(values.generate_profile) ? buildProfile(values, agentAppName, zone.id, application.id, resource.identifier, upstreamUrl) : undefined
+  const profile = target ? buildProfile(target, zone.id, application.id, resource.identifier, upstreamUrl) : undefined
   const requestPath = normalizeRequestPath(values.request_path)
+  const fileWrite = profile ? await setupFileWrite(profile, clientSecret, writeFiles, overwriteFiles) : undefined
 
-  return { zone, application, clientSecret, resource, policy, profile, requestPath }
+  return { zone, application, clientSecret, resource, policy, profile, fileWrite, requestPath }
 }
 
 async function ensureZone(ctx: Ctx, values: SetupValues, app: App): Promise<Zone | { id: string; name: string }> {
@@ -184,16 +208,12 @@ result := {"decision": "allow", "evaluation_status": "complete", "determining_po
 }
 
 function buildProfile(
-  values: SetupValues,
-  agentAppName: string,
+  target: ProfileTarget,
   zoneId: string,
   applicationId: string,
   resourceIdentifier: string,
   upstreamUrl: string | undefined,
 ): SetupResult['profile'] {
-  const path = trimmed(values.profile_path) ?? defaultRuntimeConfigPath()
-  const secretPath = trimmed(values.secret_file_path) ?? join(dirname(path), `${safeName(agentAppName)}-client-secret`)
-  const credentialEnv = trimmed(values.credential_env) ?? credentialEnvName(resourceIdentifier)
   const stsUrl = process.env.CARACAL_STS_URL ?? process.env.CARACAL_ZONE_URL ?? DEFAULT_ZONE_URL
   const coordinatorUrl = process.env.CARACAL_COORDINATOR_URL ?? DEFAULT_COORDINATOR_URL
   const gatewayUrl = process.env.CARACAL_GATEWAY_URL ?? DEFAULT_GATEWAY_URL
@@ -204,15 +224,15 @@ function buildProfile(
     `gateway_url = ${quoteToml(gatewayUrl)}`,
     `zone_id = ${quoteToml(zoneId)}`,
     `application_id = ${quoteToml(applicationId)}`,
-    `app_client_secret_file = ${quoteToml(secretPath)}`,
+    `app_client_secret_file = ${quoteToml(target.secretPath)}`,
     'continue_on_failure = false',
     '',
     '[[credentials]]',
-    `env = ${quoteToml(credentialEnv)}`,
+    `env = ${quoteToml(target.credentialEnv)}`,
     `resource = ${quoteToml(resourceIdentifier)}`,
   ]
   if (upstreamUrl) lines.push(`upstream_prefix = ${quoteToml(upstreamUrl)}`)
-  return { path, secretPath, credentialEnv, gatewayUrl, content: lines.join('\n') + '\n' }
+  return { ...target, gatewayUrl, content: lines.join('\n') + '\n' }
 }
 
 function setupSummary(result: SetupResult): Record<string, unknown> {
@@ -245,7 +265,7 @@ function setupSummary(result: SetupResult): Record<string, unknown> {
   }
   if (result.profile) {
     const profile = result.profile
-    summary.runtime_profile = {
+    const runtimeProfile: Record<string, unknown> = {
       path: profile.path,
       secret_file: profile.secretPath,
       token_env: profile.credentialEnv,
@@ -253,7 +273,9 @@ function setupSummary(result: SetupResult): Record<string, unknown> {
       local_profile_setup: {
         posix: posixSetupCommands(profile),
         powershell: powershellSetupCommands(profile),
-        secret_file_rule: 'Paste the revealed agent_app.client_secret as the only line in secret_file and keep the file owner-readable only.',
+        secret_file_rule: result.fileWrite?.status === 'written'
+          ? 'Console wrote the one-time client secret to secret_file.'
+          : 'Paste the revealed agent_app.client_secret as the only line in secret_file and keep the file owner-readable only.',
       },
       first_success: {
         run_command_prefix: `CARACAL_CONFIG=${shellQuote(profile.path)} caracal run --`,
@@ -264,11 +286,15 @@ function setupSummary(result: SetupResult): Record<string, unknown> {
           : 'Gateway routing was not configured because no upstream URL was provided.',
       },
       next_steps: [
-        'Create the profile and secret files with the local_profile_setup commands.',
+        result.fileWrite?.status === 'written'
+          ? 'Use the written runtime profile and secret file for local runs.'
+          : 'Create the profile and secret files with the local_profile_setup commands.',
         'Run the real workload through caracal run with CARACAL_CONFIG set to the profile path.',
         'Use the injected token_env value on Gateway or SDK-managed requests for this resource.',
       ],
     }
+    if (result.fileWrite) runtimeProfile.file_write = result.fileWrite
+    summary.runtime_profile = runtimeProfile
   }
   summary.audit_explanation = {
     first_success: 'After the first protected call, open Audit, select the request, and use Explain to view the policy decision and Gateway result.',
@@ -285,6 +311,76 @@ function posixSetupCommands(profile: NonNullable<SetupResult['profile']>): strin
     `cat > ${shellQuote(profile.path)} <<'CARACAL_PROFILE'\n${profile.content}CARACAL_PROFILE`,
     `chmod 600 -- ${shellQuote(profile.path)} ${shellQuote(profile.secretPath)}`,
   ]
+}
+
+function profileTarget(values: SetupValues, agentAppName: string, resourceIdentifier: string): ProfileTarget {
+  const path = trimmed(values.profile_path) ?? defaultRuntimeConfigPath()
+  const secretPath = trimmed(values.secret_file_path) ?? join(dirname(path), `${safeName(agentAppName)}-client-secret`)
+  if (path === secretPath) throw new Error('profile path and secret file must be different files')
+  return {
+    path,
+    secretPath,
+    credentialEnv: trimmed(values.credential_env) ?? credentialEnvName(resourceIdentifier),
+  }
+}
+
+async function assertWritableTarget(target: ProfileTarget, overwrite: boolean): Promise<void> {
+  if (overwrite) return
+  const existing = await Promise.all([
+    existingPath(target.path),
+    existingPath(target.secretPath),
+  ])
+  const conflicts = existing.filter((path): path is string => Boolean(path))
+  if (conflicts.length > 0) {
+    throw new Error(`refusing to overwrite existing setup file: ${conflicts.join(', ')}`)
+  }
+}
+
+async function existingPath(path: string): Promise<string | undefined> {
+  try {
+    await access(path)
+    return path
+  } catch (err) {
+    if (isMissingPath(err)) return undefined
+    throw err
+  }
+}
+
+async function setupFileWrite(
+  profile: NonNullable<SetupResult['profile']>,
+  clientSecret: string,
+  writeFiles: boolean,
+  overwrite: boolean,
+): Promise<SetupResult['fileWrite']> {
+  if (!writeFiles) return { status: 'skipped' }
+  try {
+    await writeSetupFile(profile.path, profile.content, overwrite)
+    await writeSetupFile(profile.secretPath, `${clientSecret}\n`, overwrite)
+    return {
+      status: 'written',
+      profile_path: profile.path,
+      secret_file: profile.secretPath,
+      overwrite,
+    }
+  } catch (err) {
+    return {
+      status: 'failed',
+      profile_path: profile.path,
+      secret_file: profile.secretPath,
+      overwrite,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
+async function writeSetupFile(path: string, content: string, overwrite: boolean): Promise<void> {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 })
+  await writeFile(path, content, { mode: 0o600, flag: overwrite ? 'w' : 'wx' })
+  await chmod(path, 0o600)
+}
+
+function isMissingPath(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 'ENOENT'
 }
 
 function powershellSetupCommands(profile: NonNullable<SetupResult['profile']>): string[] {
@@ -321,6 +417,11 @@ function splitList(value: string | undefined): string[] {
 
 function bool(value: string | undefined): boolean {
   return value === undefined || value === '' || value === 'true'
+}
+
+function boolDefault(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined || value === '') return defaultValue
+  return value === 'true'
 }
 
 function trimmed(value: string | undefined): string | undefined {
