@@ -7,6 +7,7 @@ package internal
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -106,5 +107,26 @@ func TestCoordinatedGrantRefreshCoalescesConcurrentCalls(t *testing.T) {
 	}
 	if s.metrics.ProviderRefreshShared.Load() == 0 {
 		t.Fatal("shared refresh metric was not recorded")
+	}
+}
+
+func TestRefreshCoordinationKeysHideRawGrantMaterial(t *testing.T) {
+	lockKey, resultKey := refreshCoordinationKeys("zone\x00user\x00resource\x00provider")
+	if lockKey == resultKey {
+		t.Fatal("lock and result keys must differ")
+	}
+	if strings.Contains(lockKey, "zone") || strings.Contains(resultKey, "user") {
+		t.Fatalf("coordination keys must not expose raw grant material: %q %q", lockKey, resultKey)
+	}
+}
+
+func TestRefreshResultRoundTripError(t *testing.T) {
+	err := sharederr.New(sharederr.STSUnavailable, "provider unavailable")
+	result := refreshResultFromError(err)
+	if result.OK {
+		t.Fatal("error result must not report OK")
+	}
+	if result.Code != sharederr.STSUnavailable || result.Description != "provider unavailable" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }

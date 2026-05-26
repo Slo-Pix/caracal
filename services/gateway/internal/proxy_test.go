@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/garudex-labs/caracal/packages/core/go/audit"
+	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
 	corests "github.com/garudex-labs/caracal/packages/core/go/sts"
 	"github.com/rs/zerolog"
 )
@@ -106,6 +107,31 @@ type recordAudit struct {
 
 func (r *recordAudit) Emit(event audit.Event) {
 	r.events = append(r.events, event)
+}
+
+func TestSTSCircuitOpensAfterRepeatedUnavailableErrors(t *testing.T) {
+	metrics := &GatewayMetrics{}
+	p := &proxy{metrics: metrics}
+	out := exchangeOutcome{
+		Status:    http.StatusBadGateway,
+		ClientErr: sharederr.New(sharederr.STSUnavailable, "sts unavailable"),
+	}
+
+	for i := 0; i < stsCircuitFailureLimit; i++ {
+		p.recordSTSFailure(out)
+	}
+
+	if !p.stsCircuitOpen() {
+		t.Fatal("expected STS circuit to open")
+	}
+	snap := metrics.Snapshot()
+	if snap.STSCircuitOpened != 1 || snap.STSCircuitOpen != 1 {
+		t.Fatalf("unexpected circuit metrics: %+v", snap)
+	}
+	p.recordSTSSuccess()
+	if p.stsCircuitOpen() {
+		t.Fatal("expected STS circuit to close after success")
+	}
 }
 
 // makeJWT builds an unsigned-but-shaped token whose exp is offset seconds in the future.

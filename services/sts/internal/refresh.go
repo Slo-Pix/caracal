@@ -8,7 +8,9 @@ package internal
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +22,8 @@ import (
 	"time"
 
 	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
+	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -33,7 +37,16 @@ const (
 	grantPersistAttempts    = 3
 	grantPersistBackoff     = 25 * time.Millisecond
 	providerRetryBackoff    = 100 * time.Millisecond
+	refreshLeaseTTL         = 15 * time.Second
+	refreshResultTTL        = 5 * time.Second
+	refreshWaitInterval     = 50 * time.Millisecond
 )
+
+type distributedRefreshResult struct {
+	OK          bool           `json:"ok"`
+	Code        sharederr.Code `json:"code,omitempty"`
+	Description string         `json:"description,omitempty"`
+}
 
 func sealZEK(zek, plaintext []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.New(zek)
@@ -161,7 +174,7 @@ func (s *Server) refreshExpiredBrokeredGrant(ctx context.Context, zoneID, userID
 
 func (s *Server) coordinatedGrantRefresh(ctx context.Context, key string, refresh func(context.Context) *sharederr.CaracalError) *sharederr.CaracalError {
 	ch := s.refreshGroup.DoChan(key, func() (any, error) {
-		return nil, refresh(ctx)
+		return nil, s.coordinatedDistributedGrantRefresh(ctx, key, refresh)
 	})
 	select {
 	case result := <-ch:
@@ -179,6 +192,98 @@ func (s *Server) coordinatedGrantRefresh(ctx context.Context, key string, refres
 	case <-ctx.Done():
 		return sharederr.New(sharederr.STSUnavailable, "credential refresh canceled")
 	}
+}
+
+func (s *Server) coordinatedDistributedGrantRefresh(ctx context.Context, key string, refresh func(context.Context) *sharederr.CaracalError) *sharederr.CaracalError {
+	if s.redis == nil {
+		return refresh(ctx)
+	}
+	lockKey, resultKey := refreshCoordinationKeys(key)
+	for {
+		if res, ok, err := s.readRefreshResult(ctx, resultKey); err != nil {
+			if s.metrics != nil {
+				s.metrics.ProviderRefreshErrors.Add(1)
+			}
+			return sharederr.New(sharederr.STSUnavailable, "credential refresh coordination unavailable")
+		} else if ok {
+			if s.metrics != nil {
+				s.metrics.ProviderRefreshWaited.Add(1)
+			}
+			return res
+		}
+		leaseID, err := uuid.NewV7()
+		if err != nil {
+			return sharederr.New(sharederr.Internal, "credential refresh lease id failed")
+		}
+		acquired, err := s.redis.SetNXTTL(ctx, lockKey, leaseID.String(), refreshLeaseTTL)
+		if err != nil {
+			if s.metrics != nil {
+				s.metrics.ProviderRefreshErrors.Add(1)
+			}
+			return sharederr.New(sharederr.STSUnavailable, "credential refresh coordination unavailable")
+		}
+		if acquired {
+			if s.metrics != nil {
+				s.metrics.ProviderRefreshLeased.Add(1)
+			}
+			err := refresh(ctx)
+			if setErr := s.redis.SetTTL(ctx, resultKey, refreshResultFromError(err), refreshResultTTL); setErr != nil {
+				if s.metrics != nil {
+					s.metrics.ProviderRefreshErrors.Add(1)
+				}
+				s.log.Error().Err(setErr).Msg("provider refresh result publish failed")
+			}
+			if delErr := s.redis.DelIfValue(context.Background(), lockKey, leaseID.String()); delErr != nil {
+				if s.metrics != nil {
+					s.metrics.ProviderRefreshErrors.Add(1)
+				}
+				s.log.Error().Err(delErr).Msg("provider refresh lease release failed")
+			}
+			return err
+		}
+		if s.metrics != nil {
+			s.metrics.ProviderRefreshWaited.Add(1)
+		}
+		select {
+		case <-ctx.Done():
+			return sharederr.New(sharederr.STSUnavailable, "credential refresh canceled")
+		case <-time.After(jitteredBackoff(refreshWaitInterval, 0)):
+		}
+	}
+}
+
+func refreshCoordinationKeys(key string) (string, string) {
+	sum := sha256.Sum256([]byte(key))
+	base := "provider-refresh:" + hex.EncodeToString(sum[:])
+	return base + ":lock", base + ":result"
+}
+
+func refreshResultFromError(err *sharederr.CaracalError) distributedRefreshResult {
+	if err == nil {
+		return distributedRefreshResult{OK: true}
+	}
+	return distributedRefreshResult{Code: err.Code, Description: err.Description}
+}
+
+func (s *Server) readRefreshResult(ctx context.Context, key string) (*sharederr.CaracalError, bool, error) {
+	raw, err := s.redis.Get(ctx, key)
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var result distributedRefreshResult
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return nil, false, err
+	}
+	if result.OK {
+		return nil, true, nil
+	}
+	if result.Code == "" {
+		return sharederr.New(sharederr.Internal, "credential refresh failed"), true, nil
+	}
+	return sharederr.New(result.Code, result.Description), true, nil
 }
 
 func refreshGrantKey(zoneID, userID, resourceID string, providerID *string, grant *DelegatedGrant) string {
@@ -391,6 +496,9 @@ func (s *Server) providerCircuitOpen(ctx context.Context, providerID string) boo
 		return false
 	}
 	open, err := s.redis.Exists(ctx, "provider-refresh-circuit:"+providerID)
+	if open && s.metrics != nil {
+		s.metrics.ProviderCircuitOpen.Add(1)
+	}
 	return err == nil && open
 }
 

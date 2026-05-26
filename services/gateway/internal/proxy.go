@@ -38,19 +38,19 @@ const (
 
 // proxy implements the gateway's reverse-proxy handler.
 type proxy struct {
-	sts         *stsClient
-	jwks        tokenVerifier
-	guard       *upstreamGuard
-	client      *http.Client
-	log         zerolog.Logger
-	maxBytes    int64
-	bindings    *bindingStore
-	tracker     replayTracker
-	revocations revocationChecker
-	metrics     *GatewayMetrics
-	audit       auditEmitter
-	circuitMu   sync.Mutex
-	stsFailures int
+	sts          *stsClient
+	jwks         tokenVerifier
+	guard        *upstreamGuard
+	client       *http.Client
+	log          zerolog.Logger
+	maxBytes     int64
+	bindings     *bindingStore
+	tracker      replayTracker
+	revocations  revocationChecker
+	metrics      *GatewayMetrics
+	audit        auditEmitter
+	circuitMu    sync.Mutex
+	stsFailures  int
 	stsOpenUntil time.Time
 }
 
