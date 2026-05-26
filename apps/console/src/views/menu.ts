@@ -109,7 +109,7 @@ function splitList(list: string): string[] {
 }
 
 const BASE_ENTRIES: Entry[] = [
-  { key: 'f', label: 'guided setup', group: 'start', description: 'Create the first agent app, protected resource, access policy, and runtime profile', needsZone: false, open: firstSetupView },
+  { key: 's', label: 'guided setup', group: 'start', description: 'Create the first agent app, protected resource, access policy, and runtime profile', needsZone: false, open: firstSetupView },
   { key: '1', label: 'zone',       group: 'manage', description: 'Manage zones', needsZone: false, open: zonesView },
   { key: '2', label: 'application', group: 'manage', description: 'Manage agent applications', needsZone: true, open: applicationsView },
   { key: '3', label: 'resource',   group: 'manage', description: 'Manage protected resources', needsZone: true, open: resourcesView },
@@ -118,12 +118,12 @@ const BASE_ENTRIES: Entry[] = [
   { key: '6', label: 'policy set', group: 'manage', description: 'Manage active policy sets', needsZone: true, open: policySetsView },
   { key: '7', label: 'grant',      group: 'manage', description: 'Manage access grants', needsZone: true, open: grantsView },
   { key: '8', label: 'session',    group: 'manage', description: 'List active authority sessions', needsZone: true, open: sessionsView },
-  { key: 'd', label: 'diagnostics', group: 'runtime', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
-  { key: 't', label: 'control',    group: 'manage', description: 'Manage the Control automation service', needsZone: true, open: controlEntry },
-  { key: '9', label: 'audit',      group: 'observe', description: 'Search audit events', needsZone: true, open: auditView },
-  { key: 'x', label: 'explain',    group: 'observe', description: 'Explain an audit decision', needsZone: true, open: auditExplainEntry },
-  { key: '0', label: 'agent run',  group: 'agents', description: 'Manage agent runs', needsZone: true, open: agentsView },
+  { key: '9', label: 'control',    group: 'manage', description: 'Manage the Control automation service', needsZone: true, open: controlEntry },
+  { key: 'a', label: 'audit',      group: 'observe', description: 'Search audit events', needsZone: true, open: auditView },
+  { key: 'e', label: 'explain',    group: 'observe', description: 'Explain an audit decision', needsZone: true, open: auditExplainEntry },
+  { key: 'r', label: 'agent run',  group: 'agents', description: 'Manage agent runs', needsZone: true, open: agentsView },
   { key: 'g', label: 'delegation', group: 'agents', description: 'Manage delegated permissions', needsZone: true, open: delegationsView },
+  { key: 'd', label: 'diagnostics', group: 'runtime', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
   { key: 'c', label: 'credential', group: 'runtime', description: 'Read or inspect a protected resource token', needsZone: false, open: credentialEntry },
 ]
 

@@ -42,7 +42,7 @@ describe('audit explain entry', () => {
     const client = { audit: { explain } } as unknown as AdminClient
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
-    await menu.onKey('x', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('e', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const form = pushed[pushed.length - 1] as FormView
     expect(form).toBeInstanceOf(FormView)
@@ -65,7 +65,7 @@ describe('audit explain entry', () => {
     const client = { audit: { list, byRequest: vi.fn() } } as unknown as AdminClient
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
-    await menu.onKey('9', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('a', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const form = pushed[pushed.length - 1] as FormView
     expect(form).toBeInstanceOf(FormView)
@@ -114,7 +114,7 @@ describe('audit explain entry', () => {
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
 
-    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('9', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await control.onKey('g', { app, size: { rows: 25, cols: 80 }, status: '' })
@@ -150,7 +150,7 @@ describe('audit explain entry', () => {
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
 
-    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('9', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await control.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
@@ -340,7 +340,7 @@ describe('audit explain entry', () => {
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
 
-    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('9', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await control.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
@@ -384,7 +384,7 @@ describe('audit explain entry', () => {
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
 
-    await menu.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })
+    await menu.onKey('9', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const control = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await control.onKey('t', { app, size: { rows: 25, cols: 80 }, status: '' })

@@ -14,10 +14,15 @@ import type { App } from '../../../../apps/console/src/screen.ts'
 import type { AdminClient, Zone } from '@caracalai/admin'
 
 const dirs: string[] = []
+const ansiPattern = /\u001b\[[0-9;?]*[A-Za-z]/g
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
 })
+
+function stripAnsi(value: string): string {
+  return value.replace(ansiPattern, '')
+}
 
 function stateStore(): ConsoleStateStore {
   const dir = mkdtempSync(join(tmpdir(), 'caracal-menu-zone-'))
@@ -52,6 +57,42 @@ function clientWithZones(zones: Zone[]): AdminClient {
 }
 
 describe('menu zone hotkey', () => {
+  it('renders each top-level group as one contiguous section', () => {
+    const menu = new MenuView(clientWithZones([]), 'zone-1')
+    const lines = menu.render({ app: fakeApp(), size: { rows: 25, cols: 100 }, status: '' }).map(stripAnsi)
+    const groups = lines
+      .map((line) => line.trim())
+      .filter((line) => ['start', 'manage', 'observe', 'agents', 'runtime'].includes(line))
+
+    expect(groups).toEqual(['start', 'manage', 'observe', 'agents', 'runtime'])
+  })
+
+  it('uses ordered management numbers and semantic group hotkeys', () => {
+    const menu = new MenuView(clientWithZones([]), 'zone-1')
+    const rendered = menu.render({ app: fakeApp(), size: { rows: 25, cols: 100 }, status: '' }).map(stripAnsi).join('\n')
+
+    expect(rendered).toContain(' s  guided setup')
+    for (const [key, label] of [
+      ['1', 'zone'],
+      ['2', 'application'],
+      ['3', 'resource'],
+      ['4', 'provider'],
+      ['5', 'policy'],
+      ['6', 'policy set'],
+      ['7', 'grant'],
+      ['8', 'session'],
+      ['9', 'control'],
+    ]) {
+      expect(rendered).toContain(` ${key}  ${label}`)
+    }
+    expect(rendered).toContain(' a  audit')
+    expect(rendered).toContain(' e  explain')
+    expect(rendered).toContain(' r  agent run')
+    expect(rendered).toContain(' g  delegation')
+    expect(rendered).toContain(' d  diagnostics')
+    expect(rendered).toContain(' c  credential')
+  })
+
   it('opens the zone picker with z and applies the selected zone', async () => {
     const client = clientWithZones([
       { id: 'z1', slug: 'alpha', name: 'Alpha' },
