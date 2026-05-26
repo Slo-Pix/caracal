@@ -83,6 +83,10 @@
             "npm": {
               "type": "object",
               "additionalProperties": { "type": "string" }
+            },
+            "go": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
             }
           },
           "additionalProperties": false
@@ -95,6 +99,10 @@
               "additionalProperties": { "type": "string" }
             },
             "npm": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "go": {
               "type": "object",
               "additionalProperties": { "type": "string" }
             }

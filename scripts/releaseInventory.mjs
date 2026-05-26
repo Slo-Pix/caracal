@@ -32,6 +32,9 @@ export function npmPackages(config = readReleaseConfig()) {
       dir: entry.dir,
       name: entry.name,
       version: pkg.version,
+      configVersion: entry.version,
+      tier: entry.tier,
+      publish: entry.publish !== false,
       private: Boolean(pkg.private),
       publishConfig: pkg.publishConfig,
       dependencies: packageDependencies(pkg, config.packages.npm.map((candidate) => candidate.name)),
@@ -54,6 +57,9 @@ export function pypiPackages(config = readReleaseConfig()) {
       name: entry.name,
       module: entry.module,
       version,
+      configVersion: entry.version,
+      tier: entry.tier,
+      publish: entry.publish !== false,
       dependencies: pythonDependencies(text, config.packages.pypi.map((candidate) => candidate.name)),
     }
   })
