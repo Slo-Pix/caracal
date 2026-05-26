@@ -21,11 +21,25 @@ type GatewayMetrics struct {
 	DenialsRevoked               atomic.Uint64
 	DenialsBinding               atomic.Uint64
 	STSExchangeErrors            atomic.Uint64
+	STSExchangeLatencyMs         atomic.Uint64
+	STSCircuitOpen               atomic.Uint64
+	STSCircuitOpened             atomic.Uint64
+	STSCircuitFastFail           atomic.Uint64
 	UpstreamErrors               atomic.Uint64
+	AuditReplayFiles             atomic.Uint64
+	AuditReplayBytes             atomic.Uint64
+	AuditReplayOldestAge         atomic.Uint64
 	BindingsLoaded               atomic.Uint64
 	RevocationsActive            atomic.Uint64
 	RevocationSnapshotAgeSeconds atomic.Uint64
 	RevocationSnapshotFresh      atomic.Uint64
+	RevocationMessages           atomic.Uint64
+	RevocationPendingReplayed    atomic.Uint64
+	RevocationDeadLetters        atomic.Uint64
+	RevocationInvalidSignatures  atomic.Uint64
+	RevocationReloads            atomic.Uint64
+	RevocationReloadErrors       atomic.Uint64
+	RevocationPropagationSeconds atomic.Uint64
 }
 
 type GatewayMetricsSnapshot struct {
@@ -42,11 +56,25 @@ type GatewayMetricsSnapshot struct {
 	DenialsRevoked               uint64 `json:"denials_revoked"`
 	DenialsBinding               uint64 `json:"denials_binding"`
 	STSExchangeErrors            uint64 `json:"sts_exchange_errors"`
+	STSExchangeLatencyMs         uint64 `json:"sts_exchange_latency_ms"`
+	STSCircuitOpen               uint64 `json:"sts_circuit_open"`
+	STSCircuitOpened             uint64 `json:"sts_circuit_opened"`
+	STSCircuitFastFail           uint64 `json:"sts_circuit_fast_fail"`
 	UpstreamErrors               uint64 `json:"upstream_errors"`
+	AuditReplayFiles             uint64 `json:"audit_replay_files"`
+	AuditReplayBytes             uint64 `json:"audit_replay_bytes"`
+	AuditReplayOldestAge         uint64 `json:"audit_replay_oldest_age_seconds"`
 	BindingsLoaded               uint64 `json:"bindings_loaded"`
 	RevocationsActive            uint64 `json:"revocations_active"`
 	RevocationSnapshotAgeSeconds uint64 `json:"revocation_snapshot_age_seconds"`
 	RevocationSnapshotFresh      uint64 `json:"revocation_snapshot_fresh"`
+	RevocationMessages           uint64 `json:"revocation_messages"`
+	RevocationPendingReplayed    uint64 `json:"revocation_pending_replayed"`
+	RevocationDeadLetters        uint64 `json:"revocation_dead_letters"`
+	RevocationInvalidSignatures  uint64 `json:"revocation_invalid_signatures"`
+	RevocationReloads            uint64 `json:"revocation_reloads"`
+	RevocationReloadErrors       uint64 `json:"revocation_reload_errors"`
+	RevocationPropagationSeconds uint64 `json:"revocation_propagation_seconds"`
 }
 
 func (m *GatewayMetrics) Snapshot() GatewayMetricsSnapshot {
@@ -64,10 +92,24 @@ func (m *GatewayMetrics) Snapshot() GatewayMetricsSnapshot {
 		DenialsRevoked:               m.DenialsRevoked.Load(),
 		DenialsBinding:               m.DenialsBinding.Load(),
 		STSExchangeErrors:            m.STSExchangeErrors.Load(),
+		STSExchangeLatencyMs:         m.STSExchangeLatencyMs.Load(),
+		STSCircuitOpen:               m.STSCircuitOpen.Load(),
+		STSCircuitOpened:             m.STSCircuitOpened.Load(),
+		STSCircuitFastFail:           m.STSCircuitFastFail.Load(),
 		UpstreamErrors:               m.UpstreamErrors.Load(),
+		AuditReplayFiles:             m.AuditReplayFiles.Load(),
+		AuditReplayBytes:             m.AuditReplayBytes.Load(),
+		AuditReplayOldestAge:         m.AuditReplayOldestAge.Load(),
 		BindingsLoaded:               m.BindingsLoaded.Load(),
 		RevocationsActive:            m.RevocationsActive.Load(),
 		RevocationSnapshotAgeSeconds: m.RevocationSnapshotAgeSeconds.Load(),
 		RevocationSnapshotFresh:      m.RevocationSnapshotFresh.Load(),
+		RevocationMessages:           m.RevocationMessages.Load(),
+		RevocationPendingReplayed:    m.RevocationPendingReplayed.Load(),
+		RevocationDeadLetters:        m.RevocationDeadLetters.Load(),
+		RevocationInvalidSignatures:  m.RevocationInvalidSignatures.Load(),
+		RevocationReloads:            m.RevocationReloads.Load(),
+		RevocationReloadErrors:       m.RevocationReloadErrors.Load(),
+		RevocationPropagationSeconds: m.RevocationPropagationSeconds.Load(),
 	}
 }

@@ -119,6 +119,14 @@ func (r *RedisClient) Del(ctx context.Context, key string) error {
 	return r.c.Del(ctx, key).Err()
 }
 
+func (r *RedisClient) DelIfValue(ctx context.Context, key, value string) error {
+	script := `if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0`
+	return r.c.Eval(ctx, script, []string{key}, value).Err()
+}
+
 func (r *RedisClient) Exists(ctx context.Context, key string) (bool, error) {
 	n, err := r.c.Exists(ctx, key).Result()
 	return n > 0, err

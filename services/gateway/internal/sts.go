@@ -43,6 +43,7 @@ type stsResult struct {
 type exchangeOutcome struct {
 	Result      *stsResult
 	Status      int
+	Latency     time.Duration
 	ClientErr   *sharederr.CaracalError
 	InternalErr error
 }
@@ -118,7 +119,7 @@ func (c *stsClient) Exchange(ctx context.Context, subjectToken string, bind bind
 	latency := time.Since(start)
 	if err != nil {
 		status, code, msg := classifySTSTransportError(err)
-		return exchangeOutcome{Status: status, ClientErr: sharederr.New(code, msg), InternalErr: err}
+		return exchangeOutcome{Status: status, Latency: latency, ClientErr: sharederr.New(code, msg), InternalErr: err}
 	}
 	defer resp.Body.Close()
 
@@ -126,33 +127,36 @@ func (c *stsClient) Exchange(ctx context.Context, subjectToken string, bind bind
 		var e sharederr.CaracalError
 		body := io.LimitReader(resp.Body, stsErrorBodyLimit)
 		if err := json.NewDecoder(body).Decode(&e); err == nil && e.Code != "" {
-			return exchangeOutcome{Status: resp.StatusCode, ClientErr: &e, InternalErr: fmt.Errorf("sts %d: %s", resp.StatusCode, e.Code)}
+			return exchangeOutcome{Status: resp.StatusCode, Latency: latency, ClientErr: &e, InternalErr: fmt.Errorf("sts %d: %s", resp.StatusCode, e.Code)}
 		}
 		return exchangeOutcome{Status: resp.StatusCode,
+			Latency:     latency,
 			ClientErr:   sharederr.New(sharederr.STSUnavailable, http.StatusText(resp.StatusCode)),
 			InternalErr: fmt.Errorf("sts non-200 status: %d", resp.StatusCode)}
 	}
 	if !isJSONResponse(resp.Header.Get("Content-Type")) {
 		return exchangeOutcome{Status: http.StatusBadGateway,
-			ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: fmt.Errorf("sts response content-type invalid")}
+			Latency: latency, ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: fmt.Errorf("sts response content-type invalid")}
 	}
 	var tr corests.TokenResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, stsErrorBodyLimit)).Decode(&tr); err != nil {
 		return exchangeOutcome{Status: http.StatusBadGateway,
-			ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: err}
+			Latency: latency, ClientErr: sharederr.New(sharederr.STSUnavailable, "sts response invalid"), InternalErr: err}
 	}
 	if tr.AccessToken == "" {
 		return exchangeOutcome{Status: http.StatusBadGateway,
+			Latency:     latency,
 			ClientErr:   sharederr.New(sharederr.STSUnavailable, "sts response invalid"),
 			InternalErr: fmt.Errorf("sts returned empty access_token")}
 	}
 	upstream, ok := tr.Upstreams[resource]
 	if !ok || upstream.URL == "" {
 		return exchangeOutcome{Status: http.StatusForbidden,
+			Latency:     latency,
 			ClientErr:   sharederr.New(sharederr.AccessDenied, "resource upstream not configured"),
 			InternalErr: fmt.Errorf("resource %q not in upstreams", resource)}
 	}
-	return exchangeOutcome{Result: &stsResult{AccessToken: tr.AccessToken, Upstream: upstream, Latency: latency}, Status: http.StatusOK}
+	return exchangeOutcome{Result: &stsResult{AccessToken: tr.AccessToken, Upstream: upstream, Latency: latency}, Status: http.StatusOK, Latency: latency}
 }
 
 func isJSONResponse(contentType string) bool {
