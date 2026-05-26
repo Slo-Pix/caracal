@@ -217,6 +217,7 @@ export default defineConfig({
             { label: 'Overview', link: '/operations/' },
             { label: 'Deployment with Docker Compose', link: '/operations/docker-compose/' },
             { label: 'Kubernetes with Helm', link: '/operations/kubernetes-helm/' },
+            { label: 'Enterprise Install Kit', link: '/operations/enterprise-install-kit/' },
             { label: 'Environment Variables', link: '/operations/env-vars/' },
             { label: 'Cloud-Native Deployment Profiles', link: '/operations/cloud-native-profiles/' },
             { label: 'PostgreSQL', link: '/operations/postgres/' },
