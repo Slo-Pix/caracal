@@ -68,6 +68,7 @@ Application services read `REDIS_URL`. Redis provisioning scripts use `REDIS_HOS
 | `ZONE_KEK_PROVIDER` | `local` | KEK provider. Currently only `local` is supported. |
 | `STREAMS_HMAC_KEY` | None | Required when `CARACAL_MODE=rc` or `CARACAL_MODE=stable`. 32-byte hex-encoded key for signing Redis stream messages |
 | `GATEWAY_STS_HMAC_KEY` | None | Required when `CARACAL_MODE=rc` or `CARACAL_MODE=stable`. 32-byte hex-encoded key for verifying signed internal Gateway/API calls |
+| `STS_ADMIN_TOKEN` / `STS_ADMIN_TOKEN_FILE` | None | Bearer token for STS operator endpoints such as signing-key rotation. When unset, those endpoints return 404. |
 | `MAX_GRANT_TTL_SECONDS` | `3600` | Maximum persisted provider-grant token lifetime in seconds |
 | `OPA_POLL_SECONDS` | `60` | Interval (seconds) between OPA policy bundle polls |
 | `LOG_LEVEL` | `info` | Log verbosity (`debug`, `info`, `warn`, `error`) |
@@ -111,6 +112,7 @@ Application services read `REDIS_URL`. Redis provisioning scripts use `REDIS_HOS
 | `ADMIN_AUTH_FAIL_LIMIT_PER_MIN` | `60` | Rate limit for failed admin-token attempts per source IP per minute (0 to disable) |
 | `ADMIN_TOKEN_LAST_USED_DEBOUNCE_SEC` | `60` | Minimum seconds between persisted admin-token last-used updates |
 | `API_MAX_RESOURCES_PER_ZONE` | `100000` | Maximum active resources allowed in one zone (0 to disable) |
+| `API_READY_OUTBOX_DEAD_MAX` | `0` | Maximum abandoned transactional-outbox rows allowed before `/ready` returns `503 outbox_dead_messages` |
 
 ---
 

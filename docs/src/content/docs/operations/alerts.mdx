@@ -16,7 +16,10 @@ The Helm chart can install these alerts through `alertRules.enabled=true`. Every
 | [CaracalAuditDLQGrowth](#caracalauditdlqgrowth) | critical | Audit | Audit failure backlog is increasing and release/rollout activity should stop. |
 | [CaracalAuditConsumerLagHigh](#caracalauditconsumerlaghigh) | warning | Audit | Audit ingestion is behind Redis stream production. |
 | [CaracalAuditTamperDetected](#caracalaudittamperdetected) | critical | Audit | Audit chain integrity failed; treat as a security incident. |
+| [CaracalAPIOutboxDeadMessages](#caracalapioutboxdeadmessages) | critical | API | Control-plane events exhausted delivery attempts and require reconciliation. |
+| [CaracalAPIOutboxPendingOldest](#caracalapioutboxpendingoldest) | warning | API | Control-plane event publication is delayed. |
 | [CaracalGatewaySTSExchangeErrors](#caracalgatewaystsexchangeerrors) | warning | Gateway | Protected requests can fail before upstream dispatch. |
+| [CaracalGatewayRevocationSnapshotStale](#caracalgatewayrevocationsnapshotstale) | critical | Gateway | Gateway cannot prove it has a fresh revocation baseline. |
 | [CaracalPostgresPoolSaturation](#caracalpostgrespoolsaturation) | warning | Database | Services are close to exhausting DB connections. |
 | [CaracalReadinessFlapping](#caracalreadinessflapping) | warning | Platform | Pods repeatedly transition Ready/NotReady. |
 
@@ -80,6 +83,26 @@ The Helm chart can install these alerts through `alertRules.enabled=true`. Every
 
 **Verification:** forensic review identifies the affected chain range, new events validate cleanly, and recovery is approved by the incident commander.
 
+## CaracalAPIOutboxDeadMessages
+
+**PromQL:** `caracal_api_outbox_dead_total > <threshold>`
+
+**Likely causes:** Redis outage, Redis stream write denial, stream memory exhaustion, HMAC configuration error, or an API outbox worker that repeatedly failed the same row until `OUTBOX_MAX_ATTEMPTS`.
+
+**Immediate action:** treat this as control-plane event loss risk. Check API logs for the abandoned row IDs, restore Redis write health, and reconcile each affected control-plane change with dependent consumers before continuing rollout activity.
+
+**Verification:** dead count returns below threshold, API readiness is green, and a fresh resource/policy change reaches the expected Redis stream and dependent service cache.
+
+## CaracalAPIOutboxPendingOldest
+
+**PromQL:** `caracal_api_outbox_oldest_pending_age_seconds > <threshold>`
+
+**Likely causes:** Redis latency, API DB pool saturation, stuck dispatcher loop, undersized `OUTBOX_BATCH_SIZE`, or stream trimming pressure.
+
+**Immediate action:** check Redis latency and memory, API logs, DB pool saturation, and outbox worker throughput. Scale API only if Postgres and Redis have headroom.
+
+**Verification:** oldest pending age trends back toward zero and new control-plane changes are published within the expected window.
+
 ## CaracalGatewaySTSExchangeErrors
 
 **PromQL:** `increase(caracal_gateway_sts_exchange_errors_total[5m]) > <threshold>`
@@ -89,6 +112,16 @@ The Helm chart can install these alerts through `alertRules.enabled=true`. Every
 **Immediate action:** check Gateway and STS readiness, compare `GATEWAY_STS_HMAC_KEY_FILE` rollout state, inspect NetworkPolicy, and confirm the resource binding still points to the intended STS issuer.
 
 **Verification:** a synthetic Gateway request succeeds and emits an audit event.
+
+## CaracalGatewayRevocationSnapshotStale
+
+**PromQL:** `caracal_gateway_revocation_snapshot_fresh <= <threshold>`
+
+**Likely causes:** Postgres unavailable, revocation query failure, Gateway cannot reload snapshots, or revocation polling is blocked by network policy.
+
+**Immediate action:** treat this as an access-safety incident. Confirm Gateway readiness output, restore Postgres connectivity, inspect revocation reload logs, and pause high-risk access changes until the snapshot is fresh.
+
+**Verification:** `caracal_gateway_revocation_snapshot_fresh` returns to `1`, snapshot age resets, and a revoked grant is denied by Gateway.
 
 ## CaracalPostgresPoolSaturation
 

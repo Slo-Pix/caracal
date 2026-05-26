@@ -43,6 +43,7 @@ stringData:
   postgresPassword: REDACTED
   redisPassword: REDACTED
   caracalAdminToken: REDACTED
+  caracalCoordinatorToken: REDACTED
   zoneKek: REDACTED
   auditHmacKey: REDACTED
   streamsHmacKey: REDACTED
@@ -50,6 +51,15 @@ stringData:
 ```
 
 Each service mounts the Secret at `/run/secrets` and uses the existing `*_FILE` environment variables. This matches the Compose runtime and works with External Secrets Operator, Sealed Secrets, SOPS, Vault CSI, cloud secret managers, or a platform-controlled Secret pipeline.
+
+STS operator endpoints use a separate token from the API bootstrap token. Mount that token from a dedicated Secret when you need signing-key rotation:
+
+```yaml
+secrets:
+  stsAdminToken:
+    secretName: caracal-sts-admin
+    key: stsAdminToken
+```
 
 For disposable evaluations only, set `secrets.create=true` and provide `secrets.plaintext.*` values. The chart rejects plaintext Secret creation when `global.mode=stable`; rc renders require `global.evaluation=true` before plaintext Secret creation is allowed. Do not commit plaintext secret values to Git.
 
@@ -82,6 +92,7 @@ If you use the release name `caracal`, objects are named `caracal-caracal-*` by 
 | --- | --- |
 | `global.registry`, `global.tag` | Pins the image source and release version |
 | `secrets.runtimeSecretName` | Integrates with your secret-management system |
+| `secrets.stsAdminToken.secretName` | Enables STS operator endpoints from a token separate from the API bootstrap admin token |
 | `secrets.database.*` | Lets the migration Job connect to managed Postgres |
 | `services.*.replicas` | Sets baseline availability per component |
 | `services.*.resources` | Controls scheduling and capacity planning |
