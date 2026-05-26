@@ -100,6 +100,11 @@ export interface ConnectOptions {
   clientSecret?: Partial<ClientSecretOptions>;
 }
 
+export interface GatewayRequest {
+  url: string;
+  headers: Record<string, string>;
+}
+
 export class Caracal {
   private agentStartHooks: LifecycleHook[] = [];
   private agentEndHooks: LifecycleHook[] = [];
@@ -390,6 +395,15 @@ export class Caracal {
     return fn;
   }
 
+  gatewayRequest(resourceId: string, path: string = "/"): GatewayRequest {
+    if (!this.config.gatewayUrl) throw new Error("Caracal.gatewayRequest(): gatewayUrl is not configured");
+    if (!resourceId.trim()) throw new Error("Caracal.gatewayRequest(): resourceId is required");
+    return {
+      url: joinGatewayPath(this.config.gatewayUrl, path),
+      headers: { "X-Caracal-Resource": resourceId },
+    };
+  }
+
   private routeThroughGateway(
     input: RequestInfo | URL,
     explicitResource: string | undefined,
@@ -631,6 +645,19 @@ function sameOrigin(a: URL, b: string): boolean {
   } catch {
     return false;
   }
+}
+
+function joinGatewayPath(gatewayUrl: string, path: string): string {
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(path)) {
+    throw new Error("Caracal.gatewayRequest(): path must be relative to the configured gateway");
+  }
+  const gateway = new URL(gatewayUrl);
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  const queryIndex = normalized.indexOf("?");
+  const pathname = queryIndex === -1 ? normalized : normalized.slice(0, queryIndex);
+  const query = queryIndex === -1 ? "" : normalized.slice(queryIndex + 1);
+  const base = gateway.origin + gateway.pathname.replace(/\/$/, "");
+  return `${base}${pathname || "/"}${query ? `?${query}` : ""}`;
 }
 
 function urlMatchesPrefix(target: URL, prefix: string): boolean {

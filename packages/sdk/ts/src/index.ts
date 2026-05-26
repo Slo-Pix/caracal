@@ -6,7 +6,7 @@
  */
 
 export { Caracal } from "./client.js";
-export type { CaracalConfig, SpawnOptions, DelegateOptions, ResourceBinding, LifecycleHook, RootOptions, TokenSource, ClientSecretOptions, ConnectOptions } from "./client.js";
+export type { CaracalConfig, SpawnOptions, DelegateOptions, ResourceBinding, GatewayRequest, LifecycleHook, RootOptions, TokenSource, ClientSecretOptions, ConnectOptions } from "./client.js";
 export { captureContext, describeAuthority } from "./context.js";
 export type { AuthoritySummary, CaracalContext } from "./context.js";
 export type { CoordinatorClient } from "./coordinator.js";

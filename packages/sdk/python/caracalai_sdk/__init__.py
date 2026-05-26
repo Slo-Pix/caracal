@@ -5,7 +5,7 @@ Caracal, a product of Garudex Labs
 Public surface of the Caracal Python SDK.
 """
 
-from .client import Caracal, CaracalConfig, ResourceBinding
+from .client import Caracal, CaracalConfig, GatewayRequest, ResourceBinding
 from .context import AuthoritySummary, CaracalContext, capture_context, describe_authority
 from .coordinator import AgentKind, CoordinatorClient, DelegationConstraints
 from .envelope import Envelope
@@ -25,6 +25,7 @@ __all__ = [
     "CoordinatorClient",
     "DelegationConstraints",
     "Envelope",
+    "GatewayRequest",
     "JsonObject",
     "JsonPrimitive",
     "JsonValue",
