@@ -94,7 +94,7 @@ describe('audit explain entry', () => {
     const client = { audit: { byRequest: vi.fn() } } as unknown as AdminClient
     const menu = new MenuView(client, 'z1')
     const body = menu.render({ app: fakeApp(), size: { rows: 25, cols: 80 }, status: '' }).join('\n')
-    expect(body).toContain('doctor')
+    expect(body).toContain('diagnostics')
     expect(body).toContain('credential')
     expect(body).toContain('control')
   })
