@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package selection.'
+        description: 'Packages to publish.'
         required: true
         default: changed
         type: choice
@@ -25,12 +25,12 @@ on:
           - fastmcp
           - redis
       baseRef:
-        description: 'Optional git diff base. Empty uses the latest reachable release tag.'
+        description: 'Diff base. Empty uses latest release tag.'
         required: false
         default: ''
         type: string
       dryRun:
-        description: 'Build and check distributions without publishing.'
+        description: 'Build only.'
         required: false
         default: false
         type: boolean
