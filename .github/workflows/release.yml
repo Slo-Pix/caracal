@@ -517,16 +517,50 @@ jobs:
     name: Publish PyPI packages
     needs: context
     if: github.repository == 'Garudex-Labs/caracal'
-    uses: ./.github/workflows/publishPypi.yml
-    with:
-      package: changed
-      baseRef: ''
-      dryRun: ${{ needs.context.outputs.dryRun == 'true' }}
-      runner: ubuntu-24.04
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     permissions:
       contents: read
-      id-token: write
-    secrets: inherit
+      actions: write
+    steps:
+      - name: Dispatch PyPI publisher
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REF: ${{ needs.context.outputs.checkoutRef }}
+          REF_NAME: ${{ needs.context.outputs.releaseTag }}
+          DRY_RUN: ${{ needs.context.outputs.dryRun }}
+        run: |
+          set -euo pipefail
+          if [[ "$REF_NAME" == refs/* ]]; then
+            ref_name="${REF_NAME##*/}"
+          fi
+          if [[ -z "${ref_name:-}" ]]; then
+            ref_name="${REF#refs/tags/}"
+            ref_name="${ref_name#refs/heads/}"
+          fi
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run publishPypi.yml \
+            --ref "$REF" \
+            --field package=changed \
+            --field baseRef='' \
+            --field dryRun="$DRY_RUN" \
+            --field runner=ubuntu-24.04
+          deadline=$((SECONDS + 300))
+          run_id=''
+          while [[ -z "$run_id" && $SECONDS -lt $deadline ]]; do
+            sleep 5
+            run_id="$(gh run list \
+              --workflow publishPypi.yml \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,createdAt,headBranch \
+              --jq '.[] | select(.headBranch == "'"$ref_name"'" and .createdAt >= "'"$started"'") | .databaseId' | head -n 1)"
+          done
+          if [[ -z "$run_id" ]]; then
+            echo "::error::Timed out waiting for publishPypi.yml dispatch to appear."
+            exit 1
+          fi
+          gh run watch "$run_id" --exit-status
 
   githubRelease:
     name: Publish GitHub Release

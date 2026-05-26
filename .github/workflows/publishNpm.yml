@@ -206,10 +206,32 @@ jobs:
           }
           NODE
 
+  auth:
+    name: Verify npm token
+    if: github.repository == 'Garudex-Labs/caracal' && needs.select.outputs.hasPackages == 'true' && inputs.dryRun != true
+    needs: select
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify npm scope access
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          npm whoami >/dev/null
+          npm access ls-packages @caracalai >/dev/null
+
   publish:
     name: Publish ${{ matrix.name }}
     if: github.repository == 'Garudex-Labs/caracal' && needs.select.outputs.hasPackages == 'true' && inputs.dryRun != true
-    needs: [select, preflight]
+    needs: [select, preflight, auth]
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 20
     environment:
