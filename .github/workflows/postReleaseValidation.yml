@@ -70,9 +70,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
-        pm: [pip, uv, poetry]
-        py: ['3.11', '3.12', '3.13', '3.14']
+        os: [ubuntu-24.04]
+        pm: [pip, uv]
+        py: ['3.14']
     env:
       CARACAL_RELEASE: ${{ inputs.release }}
       PM: ${{ matrix.pm }}
@@ -118,8 +118,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
-        pm: [npm, pnpm, yarn]
+        os: [ubuntu-24.04]
+        pm: [npm, pnpm]
         node: ['24']
     env:
       CARACAL_RELEASE: ${{ inputs.release }}

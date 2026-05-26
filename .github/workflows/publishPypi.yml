@@ -91,14 +91,14 @@ jobs:
           set -euo pipefail
           args=(--ecosystem pypi --format github-matrix)
           if [[ "$PACKAGE" == 'all' ]]; then
-            args+=(--all)
+            args+=(--all-packages)
           elif [[ -n "$BASE_REF" ]]; then
-            args+=(--base "$BASE_REF")
+            args+=(--since "$BASE_REF")
           fi
           if [[ "$PACKAGE" != 'all' && "$PACKAGE" != 'changed' ]]; then
             args+=(--package "$PACKAGE")
           fi
-          selected="$(node scripts/detectChangedPackages.mjs "${args[@]}")"
+          selected="$(node scripts/releasePlan.mjs "${args[@]}")"
           hasPackages="$(node -e "const m = JSON.parse(process.argv[1]); console.log(m.include.length > 0 ? 'true' : 'false')" "$selected")"
           {
             echo 'matrix<<JSON'
