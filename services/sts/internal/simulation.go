@@ -35,6 +35,15 @@ type policySimulationResponse struct {
 	Result      *OPAResult `json:"result"`
 }
 
+type policyStatusResponse struct {
+	ZoneID             string `json:"zone_id"`
+	Loaded             bool   `json:"loaded"`
+	PolicySetVersionID string `json:"policy_set_version_id,omitempty"`
+	ManifestSHA        string `json:"manifest_sha256,omitempty"`
+	LoadedAt           string `json:"loaded_at,omitempty"`
+	AgeSeconds         int64  `json:"age_seconds,omitempty"`
+}
+
 func (s *Server) handlePolicySimulation(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	body, err := io.ReadAll(r.Body)
@@ -72,6 +81,33 @@ func (s *Server) handlePolicySimulation(w http.ResponseWriter, r *http.Request) 
 		Result:      result,
 	}); err != nil {
 		s.log.Warn().Err(err).Str("policy_set_id", req.PolicySetID).Str("version_id", req.VersionID).Msg("failed to encode policy simulation response")
+	}
+}
+
+func (s *Server) handlePolicyStatus(w http.ResponseWriter, r *http.Request) {
+	if err := s.verifySignedJSONRequest(r, nil); err != nil {
+		writeError(w, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "invalid policy status request signature"))
+		return
+	}
+	zoneID := r.PathValue("zoneID")
+	if zoneID == "" {
+		writeError(w, http.StatusBadRequest, sharederr.New(sharederr.ZoneInvalid, "zone_id required"))
+		return
+	}
+	info := s.opa.BundleInfo(zoneID)
+	response := policyStatusResponse{ZoneID: zoneID}
+	if info.PolicySetVersionID != "" || info.ManifestSHA != "" {
+		response.Loaded = true
+		response.PolicySetVersionID = info.PolicySetVersionID
+		response.ManifestSHA = info.ManifestSHA
+		if !info.LoadedAt.IsZero() {
+			response.LoadedAt = info.LoadedAt.UTC().Format(time.RFC3339)
+			response.AgeSeconds = int64(time.Since(info.LoadedAt) / time.Second)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		s.log.Warn().Err(err).Str("zone", zoneID).Msg("failed to encode policy status response")
 	}
 }
 

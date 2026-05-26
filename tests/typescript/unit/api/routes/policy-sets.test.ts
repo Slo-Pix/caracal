@@ -69,11 +69,59 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/activate', () => {
     expect(res.statusCode).toBe(202)
     expect(JSON.parse(res.body)).toMatchObject({ activated: true, version_id: 'psv-1' })
     expect(JSON.parse(res.body).outbox_id).toEqual(expect.any(String))
+    expect(JSON.parse(res.body).status_url).toContain('/activation-status?version_id=psv-1&outbox_id=')
     const sqls = client.query.mock.calls.map((c) => String(c[0]))
     expect(sqls[0]).toBe('BEGIN')
     expect(sqls.at(-1)).toBe('COMMIT')
     expect(sqls.some((sql) => sql.includes('INSERT INTO event_outbox'))).toBe(true)
     expect(client.release).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('GET /v1/zones/:zoneId/policy-sets/:id/activation-status', () => {
+  it('reports active binding, dispatched outbox, and loaded STS bundle', async () => {
+    const { app, db } = buildRouteApp(policySetsRoutes)
+    app.decorate('cfg', {
+      stsUrl: 'http://sts.local',
+      gatewayStsHmacKey: Buffer.alloc(32, 1),
+    } as never)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ active_version_id: 'psv-1', shadow_version_id: null, manifest_sha256: 'sha-1' }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'outbox-1',
+          stream_name: 'caracal.policy.invalidate',
+          payload_json: { zone_id: 'z1', policy_set_id: 'ps-1', policy_set_version_id: 'psv-1' },
+          attempts: 1,
+          last_error: null,
+          dispatched_at: new Date('2026-01-01T00:00:00Z'),
+          available_at: new Date('2026-01-01T00:00:00Z'),
+        }],
+      })
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      zone_id: 'z1',
+      loaded: true,
+      policy_set_version_id: 'psv-1',
+      manifest_sha256: 'sha-1',
+      loaded_at: '2026-01-01T00:00:01Z',
+      age_seconds: 1,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/policy-sets/ps-1/activation-status?version_id=psv-1&outbox_id=outbox-1',
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toMatchObject({
+      active: true,
+      propagation_status: 'loaded',
+      outbox: { id: 'outbox-1', state: 'dispatched' },
+      sts: { state: 'loaded', policy_set_version_id: 'psv-1' },
+    })
+    expect(String(fetchMock.mock.calls[0][0])).toBe('http://sts.local/internal/policy/status/z1')
+    fetchMock.mockRestore()
   })
 })
 

@@ -222,6 +222,7 @@ func validateOPAResult(result OPAResult) error {
 type ZoneBundleInfo struct {
 	PolicySetVersionID string
 	ManifestSHA        string
+	LoadedAt           time.Time
 }
 
 // BundleInfo returns the manifest SHA and policy_set version ID currently installed
@@ -233,7 +234,7 @@ func (e *OPAEngine) BundleInfo(zoneID string) ZoneBundleInfo {
 	if !ok {
 		return ZoneBundleInfo{}
 	}
-	return ZoneBundleInfo{PolicySetVersionID: state.policySetVersionID, ManifestSHA: state.manifestSHA}
+	return ZoneBundleInfo{PolicySetVersionID: state.policySetVersionID, ManifestSHA: state.manifestSHA, LoadedAt: state.loadedAt}
 }
 
 // MetricsSnapshot returns a point-in-time copy of OPA evaluation and compilation counters.

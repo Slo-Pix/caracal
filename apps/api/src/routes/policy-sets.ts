@@ -38,6 +38,10 @@ const ActivateBody = z.object({
   version_id: z.string().min(1),
   shadow_version_id: z.string().min(1).optional(),
 })
+const ActivationStatusQuery = z.object({
+  version_id: z.string().min(1).optional(),
+  outbox_id: z.string().min(1).optional(),
+})
 const SimulateBody = z.object({
   version_id: z.string().min(1),
   input: z.record(z.string(), z.unknown()).optional(),
@@ -266,7 +270,50 @@ export const policySetsRoutes: FastifyPluginAsync = async (fastify) => {
       version_id: body.version_id,
       shadow_version_id: body.shadow_version_id ?? null,
       outbox_id: outboxId,
+      status_url: `/v1/zones/${encodeURIComponent(params.zoneId)}/policy-sets/${encodeURIComponent(params.id)}/activation-status?version_id=${encodeURIComponent(body.version_id)}&outbox_id=${encodeURIComponent(outboxId)}`,
     })
+  })
+
+  fastify.get('/zones/:zoneId/policy-sets/:id/activation-status', async (req, reply) => {
+    const params = parseParams(ZoneIdParams, req, reply)
+    if (!params) return
+    const query = ActivationStatusQuery.parse(req.query)
+    const { rows } = await fastify.db.query<{
+      active_version_id: string | null
+      shadow_version_id: string | null
+      manifest_sha256: string | null
+    }>(
+      `SELECT psb.active_version_id, psb.shadow_version_id, psv.manifest_sha256
+       FROM policy_set_bindings psb
+       JOIN policy_sets ps ON ps.id = psb.policy_set_id AND ps.zone_id = psb.zone_id
+       LEFT JOIN policy_set_versions psv ON psv.id = psb.active_version_id
+       WHERE psb.zone_id = $1 AND psb.policy_set_id = $2 AND ps.archived_at IS NULL`,
+      [params.zoneId, params.id],
+    )
+    if (!rows[0]) return reply.code(404).send({ error: 'policy_set_binding_not_found' })
+    const versionId = query.version_id ?? rows[0].active_version_id
+    if (!versionId) return reply.code(404).send({ error: 'active_policy_set_version_not_found' })
+    const outbox = await policyActivationOutboxStatus(fastify.db, {
+      zoneId: params.zoneId,
+      policySetId: params.id,
+      versionId,
+      outboxId: query.outbox_id,
+    })
+    const sts = await fetchSTSPolicyStatus(fastify, params.zoneId)
+    const active = rows[0].active_version_id === versionId
+    const stsLoaded = sts.loaded === true && sts.policy_set_version_id === versionId
+    return {
+      zone_id: params.zoneId,
+      policy_set_id: params.id,
+      version_id: versionId,
+      active,
+      active_version_id: rows[0].active_version_id,
+      shadow_version_id: rows[0].shadow_version_id,
+      manifest_sha256: rows[0].manifest_sha256,
+      propagation_status: activationPropagationStatus(active, outbox.state, stsLoaded, sts.state),
+      outbox,
+      sts,
+    }
   })
 
   fastify.post('/zones/:zoneId/policy-sets/:id/simulate', async (req, reply) => {
@@ -352,6 +399,32 @@ interface PolicySimulationExecution {
   warnings: string[]
   explanation: Record<string, unknown>
   result: Record<string, unknown> | null
+}
+
+interface PolicyActivationOutboxRequest {
+  zoneId: string
+  policySetId: string
+  versionId: string
+  outboxId?: string
+}
+
+interface PolicyActivationOutboxStatus {
+  id: string | null
+  state: 'dispatched' | 'pending' | 'dead' | 'missing' | 'mismatch'
+  attempts: number
+  last_error: string | null
+  dispatched_at: string | null
+}
+
+interface STSPolicyStatus {
+  state: 'loaded' | 'not_loaded' | 'not_configured' | 'unreachable' | 'failed'
+  loaded?: boolean
+  zone_id?: string
+  policy_set_version_id?: string
+  manifest_sha256?: string
+  loaded_at?: string
+  age_seconds?: number
+  detail?: string
 }
 
 function collectManifestIds(manifest: string | PolicyManifest): string[] {
@@ -484,6 +557,107 @@ async function executePolicySimulation(
     },
     result: payload.result && typeof payload.result === 'object' ? payload.result as Record<string, unknown> : null,
   }
+}
+
+async function policyActivationOutboxStatus(
+  db: Queryable,
+  request: PolicyActivationOutboxRequest,
+): Promise<PolicyActivationOutboxStatus> {
+  const expected = {
+    zone_id: request.zoneId,
+    policy_set_id: request.policySetId,
+    policy_set_version_id: request.versionId,
+  }
+  const params: string[] = request.outboxId
+    ? [request.outboxId]
+    : [STREAM_POLICY_INVALIDATE, JSON.stringify(expected)]
+  const sql = request.outboxId
+    ? `SELECT id, stream_name, payload_json, attempts, last_error, dispatched_at, available_at
+       FROM event_outbox WHERE id = $1`
+    : `SELECT id, stream_name, payload_json, attempts, last_error, dispatched_at, available_at
+       FROM event_outbox
+       WHERE stream_name = $1 AND payload_json @> $2::jsonb
+       ORDER BY created_at DESC LIMIT 1`
+  const { rows } = await db.query<{
+    id: string
+    stream_name: string
+    payload_json: Record<string, unknown>
+    attempts: number
+    last_error: string | null
+    dispatched_at: Date | string | null
+    available_at: Date | string | null
+  }>(sql, params)
+  const row = rows[0]
+  if (!row) {
+    return { id: request.outboxId ?? null, state: 'missing', attempts: 0, last_error: null, dispatched_at: null }
+  }
+  if (
+    row.stream_name !== STREAM_POLICY_INVALIDATE
+    || row.payload_json.zone_id !== request.zoneId
+    || row.payload_json.policy_set_id !== request.policySetId
+    || row.payload_json.policy_set_version_id !== request.versionId
+  ) {
+    return { id: row.id, state: 'mismatch', attempts: row.attempts, last_error: row.last_error, dispatched_at: formatDate(row.dispatched_at) }
+  }
+  const state = row.dispatched_at
+    ? 'dispatched'
+    : String(row.available_at) === 'infinity'
+      ? 'dead'
+      : 'pending'
+  return { id: row.id, state, attempts: row.attempts, last_error: row.last_error, dispatched_at: formatDate(row.dispatched_at) }
+}
+
+async function fetchSTSPolicyStatus(fastify: FastifyInstance, zoneId: string): Promise<STSPolicyStatus> {
+  if (!fastify.cfg?.gatewayStsHmacKey) return { state: 'not_configured', detail: 'GATEWAY_STS_HMAC_KEY is not configured' }
+  const path = `/internal/policy/status/${encodeURIComponent(zoneId)}`
+  const requestId = uuidv7()
+  const timestamp = Math.floor(Date.now() / 1000)
+  let response: Response
+  try {
+    response = await fetch(new URL(path, fastify.cfg.stsUrl), {
+      method: 'GET',
+      headers: {
+        [GATEWAY_TIMESTAMP_HEADER]: String(timestamp),
+        [GATEWAY_REQUEST_HEADER]: requestId,
+        [GATEWAY_SIGNATURE_HEADER]: signGatewayExchange(fastify.cfg.gatewayStsHmacKey, timestamp, requestId, 'GET', path, Buffer.alloc(0)),
+      },
+    })
+  } catch (err) {
+    return { state: 'unreachable', detail: err instanceof Error ? err.message : String(err) }
+  }
+  const payload = await response.json() as Record<string, unknown>
+  if (!response.ok) {
+    return { state: 'failed', detail: String(payload.detail ?? payload.error ?? response.status) }
+  }
+  const loaded = payload.loaded === true
+  return {
+    state: loaded ? 'loaded' : 'not_loaded',
+    loaded,
+    zone_id: typeof payload.zone_id === 'string' ? payload.zone_id : undefined,
+    policy_set_version_id: typeof payload.policy_set_version_id === 'string' ? payload.policy_set_version_id : undefined,
+    manifest_sha256: typeof payload.manifest_sha256 === 'string' ? payload.manifest_sha256 : undefined,
+    loaded_at: typeof payload.loaded_at === 'string' ? payload.loaded_at : undefined,
+    age_seconds: typeof payload.age_seconds === 'number' ? payload.age_seconds : undefined,
+  }
+}
+
+function activationPropagationStatus(
+  active: boolean,
+  outboxState: PolicyActivationOutboxStatus['state'],
+  stsLoaded: boolean,
+  stsState: STSPolicyStatus['state'],
+): 'loaded' | 'waiting_for_activation' | 'waiting_for_outbox' | 'waiting_for_sts' | 'failed' {
+  if (!active) return 'waiting_for_activation'
+  if (outboxState === 'dead' || outboxState === 'mismatch') return 'failed'
+  if (outboxState !== 'dispatched') return 'waiting_for_outbox'
+  if (stsLoaded) return 'loaded'
+  if (stsState === 'failed') return 'failed'
+  return 'waiting_for_sts'
+}
+
+function formatDate(value: Date | string | null): string | null {
+  if (!value) return null
+  return value instanceof Date ? value.toISOString() : value
 }
 
 function validateSimulationInput(input: Record<string, unknown> | undefined, zoneId: string): string[] {
