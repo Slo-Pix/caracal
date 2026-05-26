@@ -118,7 +118,8 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
   const results = await stackStatus({ probes })
   if (json) {
     printJSON({ mode: kind, services: results })
-    process.exit(results.every((r) => r.ok) ? 0 : 1)
+    process.exitCode = results.every((r) => r.ok) ? 0 : 1
+    return
   }
   printBanner(paths)
   const width = probes.reduce((m, s) => Math.max(m, s.name.length), 0)
@@ -134,7 +135,7 @@ export async function statusCommand(argv: string[] = []): Promise<void> {
       `${r.name.padEnd(width)}  ${String(r.port).padStart(5)}  ${kind.padEnd(6)}  ${mark} ${status}  ${style.label(r.detail)}\n`,
     )
   }
-  process.exit(allOk ? 0 : 1)
+  process.exitCode = allOk ? 0 : 1
 }
 
 function statusHelp(): never {

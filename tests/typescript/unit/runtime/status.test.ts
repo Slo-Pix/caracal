@@ -6,6 +6,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import process from 'node:process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { statusCommand } from '../../../../apps/runtime/src/commands/stack.js'
 
@@ -14,18 +15,18 @@ describe('statusCommand', () => {
 
   beforeEach(() => {
     stdout = ''
+    process.exitCode = undefined
     vi.stubEnv('CARACAL_MODE', 'stable')
     vi.stubEnv('CARACAL_HOME', mkdtempSync(join(tmpdir(), 'caracal-home-')))
     vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
       stdout += chunk.toString()
       return true
     })
-    vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
-      throw new Error(`exit:${code}`)
-    })
+    vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
   })
 
   afterEach(() => {
+    process.exitCode = undefined
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
   })
@@ -33,8 +34,10 @@ describe('statusCommand', () => {
   it('exits zero when all service probes are healthy', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }))
 
-    await expect(statusCommand()).rejects.toThrow('exit:0')
+    await statusCommand()
 
+    expect(process.exitCode).toBe(0)
+    expect(process.exit).not.toHaveBeenCalled()
     expect(stdout).toContain('api          ')
     expect(stdout).toContain(' 3000  ')
     expect(stdout).toContain('ok')
@@ -49,8 +52,10 @@ describe('statusCommand', () => {
       .mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(statusCommand()).rejects.toThrow('exit:1')
+    await statusCommand()
 
+    expect(process.exitCode).toBe(1)
+    expect(process.exit).not.toHaveBeenCalled()
     expect(stdout).toContain('api          ')
     expect(stdout).toContain('sts          ')
     expect(stdout).toContain('down')
@@ -61,8 +66,10 @@ describe('statusCommand', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(statusCommand(['--ready', '--json'])).rejects.toThrow('exit:0')
+    await statusCommand(['--ready', '--json'])
 
+    expect(process.exitCode).toBe(0)
+    expect(process.exit).not.toHaveBeenCalled()
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
       'http://localhost:3000/ready',
       'http://localhost:8080/ready',
@@ -85,8 +92,10 @@ describe('statusCommand', () => {
       .mockResolvedValue({ ok: true, status: 200 })
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(statusCommand(['--ready', '--json'])).rejects.toThrow('exit:1')
+    await statusCommand(['--ready', '--json'])
 
+    expect(process.exitCode).toBe(1)
+    expect(process.exit).not.toHaveBeenCalled()
     const body = JSON.parse(stdout)
     expect(body.services[1]).toMatchObject({
       name: 'sts',
