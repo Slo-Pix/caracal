@@ -128,6 +128,36 @@ describe('FormView validation', () => {
     const status = (app as unknown as { _status: { text: string; kind: string }[] })._status
     expect(status[0]!.text).toBe('no good')
   })
+
+  it('skips hidden fields during rendering, navigation, and validation', async () => {
+    const submit = vi.fn(async () => {})
+    const view = new FormView({
+      title: 't',
+      fields: [
+        { key: 'advanced', label: 'advanced', kind: 'bool', default: 'false' },
+        { key: 'secret', label: 'secret', kind: 'text', required: true, visible: (values) => values.advanced === 'true' },
+      ],
+      onSubmit: submit,
+    })
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 10, cols: 80 }, status: '' }
+
+    expect(view.render(ctx).join('\n')).not.toContain('secret *')
+    await view.onKey('down', ctx)
+    expect((view as unknown as { focus: number }).focus).toBe(1)
+    await view.onKey('enter', ctx)
+    expect(submit).toHaveBeenCalledWith({ advanced: 'false', secret: '' }, expect.anything())
+
+    ;(view as unknown as { submitting: boolean }).submitting = false
+    ;(view as unknown as { focus: number }).focus = 0
+    await view.onKey('enter', ctx)
+    expect(view.values_().advanced).toBe('true')
+    expect(view.render(ctx).join('\n')).toContain('secret *')
+    await view.onKey('down', ctx)
+    await view.onKey('enter', ctx)
+    const status = (app as unknown as { _status: { text: string; kind: string }[] })._status
+    expect(status.some((entry) => entry.text === 'secret is required')).toBe(true)
+  })
 })
 
 describe('FormView secret', () => {

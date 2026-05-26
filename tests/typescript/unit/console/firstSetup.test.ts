@@ -102,6 +102,28 @@ afterEach(async () => {
 })
 
 describe('first setup workflow', () => {
+  it('keeps advanced setup controls hidden until requested', async () => {
+    const view = firstSetupView({
+      client: makeClient() as never,
+      zoneId: 'zone-1',
+    }) as FormView
+    const ctx = { app: fakeApp(), size: { rows: 40, cols: 120 }, status: '' }
+
+    let body = view.render(ctx).join('\n')
+    expect(body).toContain('advanced options')
+    expect(body).not.toContain('provider ID')
+    expect(body).not.toContain('overwrite files')
+    expect(body).not.toContain('profile path')
+
+    ;(view as unknown as { focus: number }).focus = 8
+    await view.onKey('enter', ctx)
+
+    body = view.render(ctx).join('\n')
+    expect(body).toContain('provider ID')
+    expect(body).toContain('overwrite files')
+    expect(body).toContain('profile path')
+  })
+
   it('creates the first zone, app, resource, policy, and generated profile', async () => {
     const client = makeClient()
     const selected: string[] = []
@@ -119,6 +141,7 @@ describe('first setup workflow', () => {
       resource_scopes: 'read',
       upstream_url: 'https://payroll.internal',
       request_path: '/health',
+      advanced_options: 'true',
       provider_id: '',
       activate_policy: 'true',
       generate_profile: 'true',
@@ -128,7 +151,7 @@ describe('first setup workflow', () => {
       secret_file_path: '/secure/caracal/payroll-secret',
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 14
+    ;(view as unknown as { focus: number }).focus = 16
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
@@ -181,6 +204,7 @@ describe('first setup workflow', () => {
       resource_scopes: 'invoke',
       upstream_url: '',
       request_path: '',
+      advanced_options: 'true',
       provider_id: '',
       activate_policy: 'false',
       generate_profile: 'false',
@@ -190,7 +214,7 @@ describe('first setup workflow', () => {
       secret_file_path: '',
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 14
+    ;(view as unknown as { focus: number }).focus = 16
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
@@ -223,6 +247,7 @@ describe('first setup workflow', () => {
       resource_scopes: 'read',
       upstream_url: 'https://payroll.internal',
       request_path: '/health',
+      advanced_options: 'true',
       provider_id: '',
       activate_policy: 'true',
       generate_profile: 'true',
@@ -232,7 +257,7 @@ describe('first setup workflow', () => {
       secret_file_path: secretPath,
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 14
+    ;(view as unknown as { focus: number }).focus = 16
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
@@ -272,6 +297,7 @@ describe('first setup workflow', () => {
       resource_scopes: 'read',
       upstream_url: 'https://payroll.internal',
       request_path: '/health',
+      advanced_options: 'true',
       provider_id: '',
       activate_policy: 'true',
       generate_profile: 'true',
@@ -281,7 +307,7 @@ describe('first setup workflow', () => {
       secret_file_path: join(dir, 'payroll-secret'),
       credential_env: '',
     }
-    ;(view as unknown as { focus: number }).focus = 14
+    ;(view as unknown as { focus: number }).focus = 16
 
     await view.onKey('enter', { app, size: { rows: 40, cols: 120 }, status: '' })
 
