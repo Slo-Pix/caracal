@@ -1,7 +1,7 @@
 {
   "product": {
     "versionScheme": "calver",
-    "version": "2026.05.26-rc.1",
+    "version": "2026.05.27-rc.1",
     "binaries": {
       "shell": {
         "sourceDir": "apps/runtime/dist",

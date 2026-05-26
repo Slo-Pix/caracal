@@ -1,14 +1,14 @@
 {
-  "release": "v2026.05.26-rc.1",
+  "release": "v2026.05.27-rc.1",
   "mode": "rc",
-  "version": "2026.05.26-rc.1",
-  "baseVersion": "2026.05.26",
+  "version": "2026.05.27-rc.1",
+  "baseVersion": "2026.05.27",
   "suffix": "rc.1",
-  "sha": "7cb91095",
-  "generatedAt": "2026-05-26T05:45:15.974Z",
+  "sha": "023b1652",
+  "generatedAt": "2026-05-26T18:37:44.366Z",
   "source": {
-    "gitSha": "7cb91095",
-    "dirty": false
+    "gitSha": "023b1652",
+    "dirty": true
   },
   "registries": {
     "npm": "https://registry.npmjs.org/",
@@ -17,35 +17,35 @@
     "githubReleases": "https://github.com/Garudex-Labs/caracal/releases/download"
   },
   "binaries": {
-    "shell": "2026.05.26-rc.1",
-    "console": "2026.05.26-rc.1"
+    "shell": "2026.05.27-rc.1",
+    "console": "2026.05.27-rc.1"
   },
-  "runtimeImage": "2026.05.26-rc.1",
+  "runtimeImage": "2026.05.27-rc.1",
   "containers": {
-    "api": "2026.05.26-rc.1",
-    "sts": "2026.05.26-rc.1",
-    "gateway": "2026.05.26-rc.1",
-    "audit": "2026.05.26-rc.1",
-    "coordinator": "2026.05.26-rc.1",
-    "control": "2026.05.26-rc.1",
-    "postgres": "2026.05.26-rc.1",
-    "redis": "2026.05.26-rc.1"
+    "api": "2026.05.27-rc.1",
+    "sts": "2026.05.27-rc.1",
+    "gateway": "2026.05.27-rc.1",
+    "audit": "2026.05.27-rc.1",
+    "coordinator": "2026.05.27-rc.1",
+    "control": "2026.05.27-rc.1",
+    "postgres": "2026.05.27-rc.1",
+    "redis": "2026.05.27-rc.1"
   },
   "helm": {
-    "chartVersion": "2026.5.26-rc.1",
-    "appVersion": "2026.05.26-rc.1",
-    "imageTag": "2026.05.26-rc.1"
+    "chartVersion": "2026.5.27-rc.1",
+    "appVersion": "2026.05.27-rc.1",
+    "imageTag": "2026.05.27-rc.1"
   },
   "images": {
-    "api": "ghcr.io/garudex-labs/caracal-api:v2026.05.26-rc.1",
-    "sts": "ghcr.io/garudex-labs/caracal-sts:v2026.05.26-rc.1",
-    "gateway": "ghcr.io/garudex-labs/caracal-gateway:v2026.05.26-rc.1",
-    "audit": "ghcr.io/garudex-labs/caracal-audit:v2026.05.26-rc.1",
-    "coordinator": "ghcr.io/garudex-labs/caracal-coordinator:v2026.05.26-rc.1",
-    "control": "ghcr.io/garudex-labs/caracal-control:v2026.05.26-rc.1",
-    "postgres": "ghcr.io/garudex-labs/caracal-postgres:v2026.05.26-rc.1",
-    "redis": "ghcr.io/garudex-labs/caracal-redis:v2026.05.26-rc.1",
-    "runtime": "ghcr.io/garudex-labs/caracal-runtime:v2026.05.26-rc.1"
+    "api": "ghcr.io/garudex-labs/caracal-api:v2026.05.27-rc.1",
+    "sts": "ghcr.io/garudex-labs/caracal-sts:v2026.05.27-rc.1",
+    "gateway": "ghcr.io/garudex-labs/caracal-gateway:v2026.05.27-rc.1",
+    "audit": "ghcr.io/garudex-labs/caracal-audit:v2026.05.27-rc.1",
+    "coordinator": "ghcr.io/garudex-labs/caracal-coordinator:v2026.05.27-rc.1",
+    "control": "ghcr.io/garudex-labs/caracal-control:v2026.05.27-rc.1",
+    "postgres": "ghcr.io/garudex-labs/caracal-postgres:v2026.05.27-rc.1",
+    "redis": "ghcr.io/garudex-labs/caracal-redis:v2026.05.27-rc.1",
+    "runtime": "ghcr.io/garudex-labs/caracal-runtime:v2026.05.27-rc.1"
   },
   "npm": {
     "@caracalai/core": "0.1.3-rc.1",
@@ -104,7 +104,7 @@
     }
   },
   "githubRelease": {
-    "tag": "v2026.05.26-rc.1",
-    "assets": "https://github.com/Garudex-Labs/caracal/releases/download/v2026.05.26-rc.1"
+    "tag": "v2026.05.27-rc.1",
+    "assets": "https://github.com/Garudex-Labs/caracal/releases/download/v2026.05.27-rc.1"
   }
 }
