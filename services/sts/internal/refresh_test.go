@@ -6,8 +6,12 @@
 package internal
 
 import (
+	"context"
+	"sync"
 	"testing"
 	"time"
+
+	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
 )
 
 func TestCapGrantTTLBounded(t *testing.T) {
@@ -54,5 +58,44 @@ func TestJitteredBackoffDecorrelates(t *testing.T) {
 	}
 	if len(seen) < 50 {
 		t.Errorf("expected wide jitter distribution, got %d unique values across 200 samples", len(seen))
+	}
+}
+
+func TestCoordinatedGrantRefreshCoalescesConcurrentCalls(t *testing.T) {
+	s := &Server{metrics: &STSMetrics{}}
+	start := make(chan struct{})
+	done := make(chan struct{})
+	calls := make(chan struct{}, 4)
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			err := s.coordinatedGrantRefresh(context.Background(), "grant\x00g1", func(context.Context) *sharederr.CaracalError {
+				calls <- struct{}{}
+				<-done
+				return nil
+			})
+			if err != nil {
+				t.Errorf("coordinatedGrantRefresh: %v", err)
+			}
+		}()
+	}
+
+	close(start)
+	<-calls
+	select {
+	case <-calls:
+		t.Fatal("refresh was not coalesced")
+	default:
+	}
+	close(done)
+	wg.Wait()
+	if len(calls) != 0 {
+		t.Fatal("refresh was invoked more than once")
+	}
+	if s.metrics.ProviderRefreshShared.Load() == 0 {
+		t.Fatal("shared refresh metric was not recorded")
 	}
 }

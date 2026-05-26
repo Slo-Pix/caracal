@@ -24,6 +24,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -40,6 +41,7 @@ type Server struct {
 	keys           *KeyCache
 	auditBuffer    *AuditBuffer
 	metrics        *STSMetrics
+	refreshGroup   singleflight.Group
 	stepUpThrottle *stepUpThrottle
 	consumersReady chan struct{}
 	log            zerolog.Logger
@@ -302,6 +304,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 		{Name: "caracal_sts_audit_replay_replayed_total", Help: "STS audit events replayed after sink recovery", Type: coremetrics.Counter, Value: float64(sts.AuditReplayReplayed)},
 		{Name: "caracal_sts_audit_sink_errors_total", Help: "STS audit sink publish errors", Type: coremetrics.Counter, Value: float64(sts.AuditSinkErrors)},
 		{Name: "caracal_sts_jwks_invalid_keys_total", Help: "STS signing keys skipped because JWKS validation failed", Type: coremetrics.Counter, Value: float64(sts.JWKSInvalidKeys)},
+		{Name: "caracal_sts_provider_refresh_shared_total", Help: "STS provider credential refresh calls served by a shared in-process result", Type: coremetrics.Counter, Value: float64(sts.ProviderRefreshShared)},
 		{Name: "caracal_sts_opa_eval_total", Help: "STS OPA policy evaluations", Type: coremetrics.Counter, Value: float64(opa.EvalTotal)},
 		{Name: "caracal_sts_opa_eval_errors_total", Help: "STS OPA policy evaluation errors", Type: coremetrics.Counter, Value: float64(opa.EvalErrors)},
 		{Name: "caracal_sts_opa_eval_duration_seconds_total", Help: "STS cumulative OPA policy evaluation duration", Type: coremetrics.Counter, Value: float64(opa.EvalDurationNs) / float64(time.Second)},
