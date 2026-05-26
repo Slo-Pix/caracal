@@ -22,6 +22,7 @@ const archiveTargets = productArchiveTargets(inventory.config).flatMap((target) 
   `caracal-console-${target.os}-${target.arch}`,
 ])
 const imageBuilds = productImages.map((image) => [image.name, image.context, image.dockerfile])
+const releaseTagPattern = /^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$/
 
 function die(message) {
   process.stderr.write(`release: ${message}\n`)
@@ -428,6 +429,7 @@ function dryRun(options) {
     return
   }
   const ref = options.values.ref ?? process.env.CARACAL_WORKFLOW_REF ?? currentBranch()
+  const checkoutRef = releaseTagPattern.test(ref) ? `refs/tags/${ref}` : ref
   const args = [
     'workflow',
     'run',
@@ -435,7 +437,7 @@ function dryRun(options) {
     '--ref',
     ref,
     '-f',
-    `ref=${ref}`,
+    `ref=${checkoutRef}`,
     '-f',
     `releaseVersion=${manifest.release}`,
     '-f',

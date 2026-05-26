@@ -4,7 +4,7 @@
 // Aggregates JSONL findings and the release manifest into a markdown post-release validation report.
 
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 type Finding = {
   area: string;
@@ -45,6 +45,16 @@ const release = process.env.CARACAL_RELEASE;
 const manifestPath = process.env.MANIFEST;
 if (!findingsDir || !outPath || !release || !manifestPath) {
   console.error("FINDINGS_DIR, REPORT_OUT, CARACAL_RELEASE, MANIFEST required");
+  process.exit(2);
+}
+if (!/^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$/.test(release)) {
+  console.error(`invalid release tag: ${release}`);
+  process.exit(2);
+}
+const repoRoot = resolve(process.env.GITHUB_WORKSPACE ?? process.cwd());
+const releaseDir = resolve(repoRoot, "releases", release);
+if (resolve(dirname(manifestPath)) !== releaseDir || resolve(dirname(outPath)) !== releaseDir) {
+  console.error("MANIFEST and REPORT_OUT must stay under the release directory");
   process.exit(2);
 }
 
@@ -186,7 +196,6 @@ ${topFixes || "_No failing findings._"}
 - [ ] Provenance verified
 `;
 
-const releaseDir = dirname(outPath);
 mkdirSync(releaseDir, { recursive: true });
 writeFileSync(outPath, md);
 

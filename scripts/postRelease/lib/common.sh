@@ -9,6 +9,11 @@ set -euo pipefail
 : "${CARACAL_RELEASE:?CARACAL_RELEASE must be set (e.g. v2026.05.26-rc.1)}"
 : "${FINDINGS_DIR:?FINDINGS_DIR must be set}"
 
+if [[ ! "$CARACAL_RELEASE" =~ ^v[0-9]{4}\.[0-9]{2}\.[0-9]{2}(\.[0-9]+)?(-rc\.(sha[0-9A-Za-z]+|[0-9]+))?$ ]]; then
+  echo "common.sh: invalid release tag: $CARACAL_RELEASE" >&2
+  exit 2
+fi
+
 if command -v python3 >/dev/null 2>&1; then
   readonly CARACAL_PYTHON="python3"
 elif command -v python >/dev/null 2>&1; then
@@ -32,6 +37,11 @@ readonly DRY_RUN="${DRY_RUN:-0}"
 readonly CARACAL_REPO="${CARACAL_REPO:-Garudex-Labs/caracal}"
 readonly CARACAL_REGISTRY="${CARACAL_REGISTRY:-ghcr.io/garudex-labs}"
 readonly CARACAL_IMAGE_PREFIX="${CARACAL_IMAGE_PREFIX:-caracal-}"
+
+if [[ "$CARACAL_REPO" != "Garudex-Labs/caracal" ]]; then
+  echo "common.sh: CARACAL_REPO must be Garudex-Labs/caracal" >&2
+  exit 2
+fi
 
 mkdir -p "$FINDINGS_DIR"
 
