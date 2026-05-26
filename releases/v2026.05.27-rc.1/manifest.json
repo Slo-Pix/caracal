@@ -4,11 +4,11 @@
   "version": "2026.05.27-rc.1",
   "baseVersion": "2026.05.27",
   "suffix": "rc.1",
-  "sha": "023b1652",
-  "generatedAt": "2026-05-26T18:37:44.366Z",
+  "sha": "540573d7",
+  "generatedAt": "2026-05-26T18:40:25.244Z",
   "source": {
-    "gitSha": "023b1652",
-    "dirty": true
+    "gitSha": "540573d7",
+    "dirty": false
   },
   "registries": {
     "npm": "https://registry.npmjs.org/",
