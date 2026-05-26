@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -183,5 +184,30 @@ func TestNilClientEmitIsSafe(t *testing.T) {
 	c.Emit(Event{ID: "ev"}) // must not panic
 	if c.Dropped() != 0 {
 		t.Fatal("nil client should report 0 dropped")
+	}
+}
+
+func TestReplayStatsForDirReportsFilesBytesAndOldestAge(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "pending-1.ndjson"), []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignore.txt"), []byte("not replay"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(filepath.Join(dir, "pending-1.ndjson"), old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := ReplayStatsForDir(dir, time.Now())
+	if stats.Files != 1 {
+		t.Fatalf("expected one replay file, got %d", stats.Files)
+	}
+	if stats.Bytes == 0 {
+		t.Fatal("expected replay bytes")
+	}
+	if stats.OldestAgeSeconds < 7_000 {
+		t.Fatalf("expected oldest replay age near two hours, got %d", stats.OldestAgeSeconds)
 	}
 }

@@ -77,16 +77,16 @@ type Client struct {
 
 // Metrics captures a stable snapshot of audit client counters.
 type Metrics struct {
-	Emitted                 uint64 `json:"emitted"`
-	Dropped                 uint64 `json:"dropped"`
-	Persisted               uint64 `json:"persisted"`
-	Drained                 uint64 `json:"drained"`
-	SinkErrors              uint64 `json:"sink_errors"`
-	QueueDepth              uint64 `json:"queue_depth"`
-	QueueCap                uint64 `json:"queue_cap"`
-	ReplayFiles             uint64 `json:"replay_files"`
-	ReplayBytes             uint64 `json:"replay_bytes"`
-	ReplayOldestAgeSeconds  uint64 `json:"replay_oldest_age_seconds"`
+	Emitted                uint64 `json:"emitted"`
+	Dropped                uint64 `json:"dropped"`
+	Persisted              uint64 `json:"persisted"`
+	Drained                uint64 `json:"drained"`
+	SinkErrors             uint64 `json:"sink_errors"`
+	QueueDepth             uint64 `json:"queue_depth"`
+	QueueCap               uint64 `json:"queue_cap"`
+	ReplayFiles            uint64 `json:"replay_files"`
+	ReplayBytes            uint64 `json:"replay_bytes"`
+	ReplayOldestAgeSeconds uint64 `json:"replay_oldest_age_seconds"`
 }
 
 type ReplayStats struct {
