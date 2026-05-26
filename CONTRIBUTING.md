@@ -113,7 +113,7 @@ scripts/testCi.sh --smoke | --go | --py | --ts
 
 ## Releases
 
-Release artifacts share one CalVer: `vYYYY.MM.DD` (`.N` for same-day re-cuts). Only `.github/MAINTAINERS` can cut releases. Stable releases require `release-approval` from a different maintainer.
+Release artifacts share one CalVer: `vYYYY.MM.DD` (`.N` for same-day re-cuts). Only `.github/MAINTAINERS` can run release workflows. Stable releases require `release-approval` from a different maintainer.
 
 ### Create dev builds
 
@@ -132,24 +132,32 @@ pnpm caracal down                                          # Stop dev before tes
 
 `build:release` stamps dev binaries and local `localhost/caracal-{svc}:<base>-dev.sha<sha>` images. Do not use dev builds downstream.
 
-### Create and publish rc
+### Release flow
 
-Use rc for downstream testing before stable:
+Use the same flow for rc and stable: plan, dry-run, publish, validate. rc proves the exact artifacts downstream; stable promotes the approved release.
+
+| Step | rc | stable |
+| --- | --- | --- |
+| Prepare | `scripts/release.sh rc prepare --base-version 2026.05.26 --suffix rc.1` | `scripts/release.sh stable --dry-run` |
+| Review | Commit the generated manifest and metadata. | Review the stable diff and generated version. |
+| Dry-run | `scripts/release.sh rc dry-run --base-version 2026.05.26 --suffix rc.1 --local` for local simulation; remote dry-run requires the rc commit on the selected ref. | `scripts/release.sh stable --dry-run` |
+| Publish | Tag and push `v2026.05.26-rc.1`. | `scripts/release.sh stable` |
+| Validate | `postReleaseValidation.yml` runs after release. | `postReleaseValidation.yml` gates stable promotion. |
 
 ```bash
-scripts/release.sh rc dry-run --base-version 2026.05.26 --suffix rc.1
+# rc
 scripts/release.sh rc prepare --base-version 2026.05.26 --suffix rc.1
 git add -A && git commit -m "rc: v2026.05.26-rc.1"
+scripts/release.sh rc dry-run --base-version 2026.05.26 --suffix rc.1 --local
 git tag -a v2026.05.26-rc.1 -m v2026.05.26-rc.1
 git push origin HEAD && git push origin v2026.05.26-rc.1
+
+# stable
+scripts/release.sh stable --dry-run
+scripts/release.sh stable
 ```
 
-### Create and publish stable
-
-```bash
-scripts/release.sh stable             # applies changesets, stamps Helm metadata, computes CalVer, tags, pushes stable
-scripts/release.sh stable --dry-run   # preview stable without tagging
-```
+Remote rc dry-runs dispatch `release.yml` without publishing. They only read the default branch or the exact release tag ref, and the working tree must be clean unless `--allow-dirty` is used deliberately.
 
 ### Post-release validation
 
@@ -162,7 +170,7 @@ CARACAL_RELEASE=v2026.05.26-rc.1 FINDINGS_DIR=/tmp/findings \
   bash scripts/postRelease/validateRegistryMetadata.sh
 ```
 
-### Publishing to npm and PyPI
+### Package publishing
 
 ```bash
 pnpm release:plan --since v2026.05.14
@@ -173,7 +181,7 @@ gh workflow run publishPypi.yml -f package=changed -f dryRun=true -f runner=ubun
 gh workflow run publishPypi.yml -f package=changed -f runner=ubuntu-24.04
 ```
 
-Protected workflows are the normal path. They read `release.config.json`, ignore `examples/**`, publish changed packages, include exact-pin dependents, preflight Ubuntu/macOS/Windows, and publish from the selected `runner`. Use `baseRef` to override the diff base and `package=all` only for deliberate full publishes. Local stable publishing requires approval and `CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1`.
+Protected workflows are the normal path for npm and PyPI. They read `release.config.json`, ignore `examples/**`, publish changed packages, include exact-pin dependents, preflight Ubuntu/macOS/Windows, and publish once from the selected `runner`. Use `baseRef` to override the diff base and `package=all` only for deliberate full publishes. Local stable publishing requires approval and `CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1`.
 
 ### Published artifacts
 
