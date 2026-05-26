@@ -146,6 +146,7 @@ describe('POST /v1/zones/:zoneId/resources', () => {
           }],
         })
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] }),
       release: vi.fn(),
     }
@@ -171,6 +172,9 @@ describe('POST /v1/zones/:zoneId/resources', () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO gateway_resource_bindings'),
       ['resource://api', 'z1', 'app-1'],
+    )
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE gateway_binding_revision'),
     )
     expect(client.query).toHaveBeenCalledWith('COMMIT')
     expect(client.release).toHaveBeenCalled()
@@ -257,6 +261,8 @@ describe('PATCH /v1/zones/:zoneId/resources/:id', () => {
         })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] }),
       release: vi.fn(),
     }
@@ -281,6 +287,9 @@ describe('PATCH /v1/zones/:zoneId/resources/:id', () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO gateway_resource_bindings'),
       ['resource://api/v2', 'z1', 'app-1'],
+    )
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE gateway_binding_revision'),
     )
   })
 
@@ -323,6 +332,7 @@ describe('DELETE /v1/zones/:zoneId/resources/:id', () => {
         .mockResolvedValueOnce({ rows: [{ identifier: 'resource://api' }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] }),
       release: vi.fn(),
     }
@@ -338,6 +348,9 @@ describe('DELETE /v1/zones/:zoneId/resources/:id', () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('DELETE FROM gateway_resource_bindings'),
       ['resource://api', 'z1'],
+    )
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE gateway_binding_revision'),
     )
     expect(client.query).toHaveBeenCalledWith('COMMIT')
     expect(client.release).toHaveBeenCalled()

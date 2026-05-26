@@ -112,7 +112,7 @@ func (s *Server) Run(ctx context.Context) error {
 	if err := startRevocationConsumer(ctx, s.redis, s.revocations, s.log); err != nil {
 		return err
 	}
-	startRevocationSnapshotPolling(ctx, s.bindings.pool, s.revocations, s.log)
+	startRevocationSnapshotPolling(ctx, s.pool, s.revocations, s.log)
 	p := newProxy(s.sts, s.jwks, s.guard, s.log, s.cfg.MaxRequestBytes, s.cfg.UpstreamTimeout, s.bindings, s.tracker, s.revocations, s.metrics, s.audit)
 
 	mux := http.NewServeMux()
@@ -190,7 +190,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 		writeReadyFailure(w, "bindings_unavailable")
 		return
 	}
-	if err := s.bindings.Reload(ctx); err != nil {
+	if err := s.bindings.ReloadIfChanged(ctx); err != nil {
 		s.log.Warn().Err(err).Msg("ready: postgres unreachable")
 		writeReadyFailure(w, "postgres_unreachable")
 		return
