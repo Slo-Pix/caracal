@@ -357,7 +357,7 @@ function commandHandler(command: string): Handler | undefined {
     case 'zone': return zoneHandler
     case 'app': return appHandler
     case 'resource': return resourceHandler
-    case 'provider': return providerHandler
+    case 'identity-provider': return providerHandler
     case 'policy': return policyHandler
     case 'policy-set': return policySetHandler
     case 'grant': return grantHandler

@@ -111,7 +111,7 @@ const BASE_ENTRIES: Entry[] = [
   { key: '1', label: 'zone',       group: 'manage', description: 'Manage zones', needsZone: false, open: zonesView },
   { key: '2', label: 'app',        group: 'manage', description: 'Manage applications', needsZone: true, open: applicationsView },
   { key: '3', label: 'resource',   group: 'manage', description: 'Manage protected resources', needsZone: true, open: resourcesView },
-  { key: '4', label: 'provider',   group: 'manage', description: 'Manage identity providers', needsZone: true, open: providersView },
+  { key: '4', label: 'identity-provider', group: 'manage', description: 'Manage identity providers', needsZone: true, open: providersView },
   { key: '5', label: 'policy',     group: 'manage', description: 'Manage policies', needsZone: true, open: policiesView },
   { key: '6', label: 'policy-set', group: 'manage', description: 'Manage policy sets', needsZone: true, open: policySetsView },
   { key: '7', label: 'grant',      group: 'manage', description: 'Manage grants', needsZone: true, open: grantsView },

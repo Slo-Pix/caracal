@@ -199,7 +199,7 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'provider', group: 'admin', summary: 'Manage identity providers',
+    name: 'identity-provider', group: 'admin', summary: 'Manage identity providers',
     subcommands: ['list', 'get', 'create', 'patch', 'delete'], requiresZone: true,
     flags: {
       create: [
