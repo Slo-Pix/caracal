@@ -22,7 +22,7 @@ Keep **runtime profile** enabled. The result view shows:
 - the token environment variable derived from your resource ID
 - the one-time application client secret, masked by default
 
-The Console does not write files or persist secrets for you. Copy the generated profile to the shown profile path. Write the client secret to the shown secret-file path with owner-only permissions.
+Enable **write files** when you want the Console to create the generated profile and one-time secret file locally. Leave it disabled when platform automation or a secret manager will write those files. If you copy the output manually, write the profile to the shown path and write the client secret to the shown secret-file path with owner-only permissions.
 
 ## Run the workload
 

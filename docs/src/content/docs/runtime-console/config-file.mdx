@@ -77,7 +77,20 @@ Credential entries use:
 
 ### Generated profiles
 
-The Console guided setup result shows a complete profile with real values. Copy that generated profile to the profile path shown by Console, store the one-time client secret in the shown secret-file path, and set owner-only permissions on both files. The checked-in `caracal.toml.example` is a reference schema, not an onboarding profile.
+The Console guided setup result shows a complete profile with real values. Enable **write files** when you want the Console to write the profile and one-time secret file locally with owner-only permissions. If you leave file writing disabled, copy the generated profile to the shown profile path, store the one-time client secret in the shown secret-file path, and set owner-only permissions on both files. The checked-in `caracal.toml.example` is a reference schema, not an onboarding profile.
+
+## Diagnose profile and runtime config
+
+Use this sequence when `caracal run` or an SDK cannot find credentials:
+
+1. Check whether `CARACAL_CONFIG` is set. If it is set, that exact file is the only runtime profile considered; a missing path fails instead of falling back.
+2. Confirm the profile or platform environment contains `zone_id`, `application_id`, `app_client_secret_file` or `app_client_secret`, an STS URL, and every required credential resource.
+3. Confirm the secret-file path contains the secret value, not the path variable itself, and that the file is not group- or world-writable.
+4. Confirm each credential `env` is a safe process environment key and each `resource` is the real resource ID from Console.
+5. Run `caracal status --ready` before debugging token exchange; readiness failures mean the stack cannot serve STS, Gateway, or audit reliably.
+6. For SDK Gateway routing, confirm `gateway_url` is present and each Gateway-routed credential has the intended `upstream_prefix`.
+
+Runtime shell errors name the source being validated: `environment`, the explicit `CARACAL_CONFIG` path, or the default profile path. Fix that source first; Caracal does not merge values from the other surfaces after one source wins.
 
 ## CI and secret mounts
 

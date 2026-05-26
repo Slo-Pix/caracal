@@ -103,12 +103,12 @@ See [Implement Multi-Agent Delegation](/guides/delegation/) for the contract.
 
 ## 4. Verify the call landed in audit
 
-Open the Console **Audit** view. Each call produced two events:
+Open the Console **Audit** view. A complete protected call produces two events:
 
 - An authorization event from the STS (allow or deny, with the policy that decided it).
-- An action-result event from the Gateway or connector (status, latency, result class).
+- An action-result event from the Gateway, or from the protected service when a connector-verified boundary emits service-side result audit.
 
-If either event is missing for an accepted call, the enforcement boundary is incomplete — re-check the resource binding and the connector's revocation hook.
+If either event is missing for an accepted call, the enforcement boundary is incomplete. Re-check the Gateway resource binding first; for connector-verified services, confirm the service writes result audit after the connector verifies the mandate.
 
 ## Next step
 
