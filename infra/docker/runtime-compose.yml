@@ -190,6 +190,7 @@ services:
       ZONE_KEK_PROVIDER: local
       ISSUER_URL: ${CARACAL_STS_ISSUER_URL:-http://localhost:8080}
       STS_ADMIN_TOKEN: ${STS_ADMIN_TOKEN:-}
+      METRICS_BEARER: ${METRICS_BEARER:-}
       PORT: 8080
     ports:
       - "127.0.0.1:8080:8080"
@@ -264,6 +265,8 @@ services:
         target: auditHmacKey
       - source: gatewayStsHmacKey
         target: gatewayStsHmacKey
+      - source: caracalAdminToken
+        target: caracalAdminToken
     environment:
       CARACAL_MODE: ${CARACAL_MODE:-stable}
       DATABASE_URL_FILE: /run/secrets/databaseUrl
@@ -272,6 +275,8 @@ services:
       STREAMS_HMAC_KEY_FILE: /run/secrets/streamsHmacKey
       AUDIT_HMAC_KEY_FILE: /run/secrets/auditHmacKey
       GATEWAY_STS_HMAC_KEY_FILE: /run/secrets/gatewayStsHmacKey
+      CARACAL_ADMIN_TOKEN_FILE: /run/secrets/caracalAdminToken
+      METRICS_BEARER: ${METRICS_BEARER:-}
       PORT: 8081
     ports:
       - "127.0.0.1:8081:8081"

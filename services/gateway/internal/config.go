@@ -54,12 +54,13 @@ type Config struct {
 	AuditReplayDir        string
 	JTIFailOpen           bool
 	AdminToken            string
+	MetricsBearer         string
 }
 
 // loadConfig reads configuration from environment variables and returns an
 // error if any required value is missing or invalid.
 func loadConfig() (Config, error) {
-	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY", "AUDIT_HMAC_KEY", "GATEWAY_STS_HMAC_KEY", "CARACAL_ADMIN_TOKEN")
+	config.ResolveFileSecrets("DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY", "AUDIT_HMAC_KEY", "GATEWAY_STS_HMAC_KEY", "CARACAL_ADMIN_TOKEN", "METRICS_BEARER")
 	if missing := config.MissingRequired("STS_URL", "DATABASE_URL", "REDIS_URL", "STREAMS_HMAC_KEY"); len(missing) > 0 {
 		return Config{}, fmt.Errorf("required env vars missing: %s", strings.Join(missing, ", "))
 	}
@@ -90,6 +91,7 @@ func loadConfig() (Config, error) {
 		AuditReplayDir:        config.Getenv("AUDIT_REPLAY_DIR", defaultAuditReplayDir),
 		JTIFailOpen:           config.BoolEnv("JTI_FAIL_OPEN", false),
 		AdminToken:            os.Getenv("CARACAL_ADMIN_TOKEN"),
+		MetricsBearer:         os.Getenv("METRICS_BEARER"),
 	}
 	if raw := os.Getenv("AUDIT_HMAC_KEY"); raw != "" {
 		key, err := hex.DecodeString(raw)

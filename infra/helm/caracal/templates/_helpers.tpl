@@ -58,6 +58,14 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 {{- end -}}
 
+{{- define "caracal.metricsBearerSecretName" -}}
+{{- if .Values.secrets.metricsBearer.secretName -}}
+{{- .Values.secrets.metricsBearer.secretName -}}
+{{- else if and .Values.secrets.create .Values.secrets.plaintext.metricsBearer -}}
+{{- include "caracal.runtimeSecretName" . -}}
+{{- end -}}
+{{- end -}}
+
 {{- define "caracal.image" -}}
 {{- $root := index . "root" -}}
 {{- $image := index . "image" -}}

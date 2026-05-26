@@ -13,6 +13,7 @@ Workload templates for Caracal control-plane services.
 {{- $statefulReplay := and $root.Values.replayPersistence.enabled $replayService -}}
 {{- $stsAdminTokenSecretName := include "caracal.stsAdminTokenSecretName" $root -}}
 {{- $auditAdminTokenSecretName := include "caracal.auditAdminTokenSecretName" $root -}}
+{{- $metricsBearerSecretName := include "caracal.metricsBearerSecretName" $root -}}
 {{- if $service.enabled }}
 apiVersion: apps/v1
 kind: {{ ternary "StatefulSet" "Deployment" $statefulReplay }}
@@ -99,6 +100,10 @@ spec:
             - name: AUDIT_ADMIN_TOKEN_FILE
               value: /run/secrets/audit-admin-token/token
             {{- end }}
+            {{- if and $replayService $metricsBearerSecretName }}
+            - name: METRICS_BEARER_FILE
+              value: /run/secrets/metrics-bearer/bearer
+            {{- end }}
             - name: STS_URL
               value: http://{{ include "caracal.fullname" $root }}-sts:{{ $root.Values.services.sts.port }}
             - name: ISSUER_URL
@@ -143,6 +148,11 @@ spec:
             {{- if and (eq $name "audit") $auditAdminTokenSecretName }}
             - name: audit-admin-token
               mountPath: /run/secrets/audit-admin-token
+              readOnly: true
+            {{- end }}
+            {{- if and $replayService $metricsBearerSecretName }}
+            - name: metrics-bearer
+              mountPath: /run/secrets/metrics-bearer
               readOnly: true
             {{- end }}
             {{- if $replayService }}
@@ -193,6 +203,14 @@ spec:
             items:
               - key: {{ default "auditAdminToken" $root.Values.secrets.auditAdminToken.key | quote }}
                 path: token
+        {{- end }}
+        {{- if and $replayService $metricsBearerSecretName }}
+        - name: metrics-bearer
+          secret:
+            secretName: {{ $metricsBearerSecretName | quote }}
+            items:
+              - key: {{ default "metricsBearer" $root.Values.secrets.metricsBearer.key | quote }}
+                path: bearer
         {{- end }}
         {{- if and $replayService (not $statefulReplay) }}
         - name: replay

@@ -28,6 +28,7 @@ secrets:
     caracalAdminToken: ""
     stsAdminToken: ""
     auditAdminToken: ""
+    metricsBearer: ""
     caracalCoordinatorToken: ""
     zoneKek: ""
     auditHmacKey: ""
@@ -51,6 +52,9 @@ secrets:
   auditAdminToken:
     secretName: ""
     key: auditAdminToken
+  metricsBearer:
+    secretName: ""
+    key: metricsBearer
 
 migrations:
   enabled: true

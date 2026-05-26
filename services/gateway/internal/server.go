@@ -237,7 +237,23 @@ func writeReadyFailure(w http.ResponseWriter, reason string) {
 	})
 }
 
-func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) metricsAuthorized(r *http.Request) bool {
+	if s.cfg.MetricsBearer == "" {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	expected := "Bearer " + s.cfg.MetricsBearer
+	if len(auth) != len(expected) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) == 1
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	s.refreshMetricGauges()
 	snap := s.metrics.Snapshot()
 	samples := []coremetrics.Sample{
@@ -291,7 +307,11 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(coremetrics.Render(samples)))
 }
 
-func (s *Server) handleMetricsJSON(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	if !s.metricsAuthorized(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 	s.refreshMetricGauges()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(s.metrics.Snapshot()) //nolint:errcheck
