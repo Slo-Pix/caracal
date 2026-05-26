@@ -116,7 +116,7 @@ const BASE_ENTRIES: Entry[] = [
   { key: '6', label: 'policy-set', group: 'manage', description: 'Manage policy sets', needsZone: true, open: policySetsView },
   { key: '7', label: 'grant',      group: 'manage', description: 'Manage grants', needsZone: true, open: grantsView },
   { key: '8', label: 'session',    group: 'manage', description: 'List sessions', needsZone: true, open: sessionsView },
-  { key: 'd', label: 'doctor',     group: 'manage', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
+  { key: 'd', label: 'doctor',     group: 'runtime', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
   { key: 't', label: 'control',    group: 'manage', description: 'Manage the Control automation service', needsZone: true, open: controlEntry },
   { key: '9', label: 'audit',      group: 'observe', description: 'Search audit events', needsZone: true, open: auditView },
   { key: 'x', label: 'explain',    group: 'observe', description: 'Explain an audit request', needsZone: true, open: auditExplainEntry },

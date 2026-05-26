@@ -84,18 +84,18 @@ The compact set users learn first. The right column is the precise reference ter
 
 ## Manifests
 
-Caracal uses several manifest formats, each with its own schema under `docs/public/schemas/`. The word "manifest" by itself is always ambiguous; qualify it.
+Caracal uses several manifest formats. The word "manifest" by itself is always ambiguous; qualify it. Public manifest schemas are listed in [Interoperability Contracts](/reference/interoperability-contracts/); the release manifest is an internal release descriptor, not an interoperability contract.
 
-| Term | Meaning |
-| --- | --- |
-| Release manifest | The top-level versioned release descriptor (`releases/schema/manifest.schema.json`). Lists artifacts, binaries, images, and SDK distributions. |
-| Connector manifest | Declares a connector implementation and its capabilities. |
-| Provider manifest | Declares a provider (upstream target) and broker configuration. |
-| Resource manifest | Declares a resource, its scopes, and optional upstream binding. |
-| Policy-pack manifest | Declares the Rego bundle, version, and applicable resources. |
-| Audit-exporter manifest | Declares a destination for streamed audit events. |
-| Gateway-upstream manifest | Declares Gateway routing entries for resources with upstream URLs. |
-| Run credentials manifest | JSON list passed to `caracal run` via `CARACAL_RUN_CREDENTIALS_FILE`. Not a release artifact. |
+| Term | Schema | Meaning |
+| --- | --- | --- |
+| Release manifest | `releases/schema/manifest.schema.json` (internal) | The top-level versioned release descriptor. Lists artifacts, binaries, images, and SDK distributions. |
+| Agent connector manifest | [`caracal-agent-connector-manifest`](/schemas/caracal-agent-connector-manifest-2026-05-21.schema.json) | Declares an agent-framework connector implementation and its capabilities. |
+| Provider credential plugin manifest | [`caracal-provider-credential-plugin-manifest`](/schemas/caracal-provider-credential-plugin-manifest-2026-05-21.schema.json) | Declares a provider credential plugin used by the Gateway to broker upstream credentials. |
+| Resource verifier manifest | [`caracal-resource-verifier-manifest`](/schemas/caracal-resource-verifier-manifest-2026-05-21.schema.json) | Declares a JWT verifier middleware or sidecar that protects a resource. |
+| Policy-pack manifest | [`caracal-policy-pack-manifest`](/schemas/caracal-policy-pack-manifest-2026-05-21.schema.json) | Declares the Rego bundle, version, and applicable resources. |
+| Audit-exporter manifest | [`caracal-audit-exporter-manifest`](/schemas/caracal-audit-exporter-manifest-2026-05-21.schema.json) | Declares a destination for streamed audit events. |
+| Gateway-upstream manifest | [`caracal-gateway-upstream-manifest`](/schemas/caracal-gateway-upstream-manifest-2026-05-21.schema.json) | Declares Gateway routing entries for resources with upstream URLs. |
+| Run credentials manifest | (no schema) | JSON list passed to `caracal run` via `CARACAL_RUN_CREDENTIALS_FILE`. Not a release artifact and not an interoperability contract. |
 
 ## Tokens and credentials
 
