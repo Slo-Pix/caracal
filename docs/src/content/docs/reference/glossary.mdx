@@ -4,14 +4,125 @@ description: Definitions for every term used across Caracal documentation and so
 pageType: reference
 ---
 
-This page no longer documents standalone management command examples. Human-facing management now runs through the Console.
+This page is the canonical vocabulary for Caracal. Where a word means different things in different surfaces (CLI, SDK, manifest, marketing), the entry calls out the surface and the meaning that applies there. Use it to settle terminology disputes and as the source of truth for naming in new docs and code.
 
-Open the interface with:
+## Disambiguated terms
 
-```bash
-caracal console
-```
+Three words in Caracal are overloaded in practice. Treat the following meanings as canonical; anywhere else in the docs that contradicts these entries is wrong and should be corrected.
 
-Use the matching view for the workflow covered by this page. For automation, enable the Control API from the Console Control menu and call the authenticated HTTP surface.
+### Runtime
 
-Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Console](/runtime-console/).
+| Surface | What it means |
+| --- | --- |
+| Runtime shell | The installed binary named `caracal`. Owns `up`, `down`, `status`, `purge`, `run`, `console`. Nothing else. |
+| Runtime execution | Token-injected subprocess execution via `caracal run -- [command]`. |
+| Runtime image | The container image that ships the runtime shell. Refer to it as the **shell image** in user-facing copy; manifest field names that still use `runtimeImage` are deprecated and tracked for rename. |
+| "The runtime" (loose usage) | Avoid. Always say one of the three meanings above. |
+
+### Package
+
+| Surface | What it means |
+| --- | --- |
+| npm / PyPI / Go module | A distributable unit on a language package index (e.g. `@caracalai/sdk`, `caracalai-sdk`, `github.com/garudex-labs/caracal/packages/sdk/go`). |
+| Logical SDK group | A docs-level grouping such as "the TypeScript SDK package" that may span several distributable units. Always qualify ("SDK package", "OAuth package") when ambiguity is possible. |
+| Policy pack | A bundle of Rego policies plus a manifest. Use "policy pack", never "policy package". |
+| OCI artifact | Never call this a "package". Use **image** or **artifact**. |
+
+### Release / artifact / image / binary
+
+| Surface | What it means |
+| --- | --- |
+| Release | A versioned product cut, identified by a release manifest (`releases/schema/manifest.schema.json`). Spans binaries, images, and SDK package versions. |
+| Artifact | A single output of a release: one binary, one image, one published SDK distribution. A release contains many artifacts. |
+| Binary | A platform-specific compiled executable (`caracal`, `caracal-console`). One per OS/arch. |
+| Image | An OCI container image. Always say "image", not "container" or "OCI package". |
+
+## Product vocabulary
+
+The compact set users learn first. The right column is the precise reference term used in APIs, claims, database rows, and architecture pages.
+
+| User-facing term | Precise reference term | Meaning |
+| --- | --- | --- |
+| Agent app | Application / principal | The registered workload identity that asks Caracal for authority. |
+| Agent run | Execution session / agent session | One execution of an agent, tracked for revocation and audit. |
+| Mandate | Caracal access token | The short-lived signed authority Caracal issues after policy allows access. |
+| Resource | Resource identifier | The tool, service, API, provider, or data target an agent requests access to. |
+| Provider route | Gateway binding | The Gateway routing entry derived from a resource that has an upstream URL. |
+| Delegated permission | Delegation edge | A narrower authority from one agent run to another. |
+| Restriction | Constraint | A scope, TTL, hop, budget, resource, or policy limit attached to a delegated permission. |
+| Policy template | OPA policy bundle | The Rego rules and metadata loaded into a policy set. |
+
+## Reference primitives
+
+| Primitive | Meaning |
+| --- | --- |
+| Zone | The isolation boundary. Owns apps, resources, providers, policies, signing keys, and audit data. A mandate issued in one zone is not valid in another. |
+| Principal | The application or workload named in policy. Stored form is an Application. |
+| Execution session | The STS + Coordinator state that anchors an agent run. |
+| Mandate | The signed Caracal access token used for Gateway or direct-resource access. |
+| Resource | A stable authority target with scopes and optional Gateway routing metadata. |
+| Delegation edge | A typed, auditable narrowing of authority between two execution sessions in the same zone. |
+| Policy decision | The OPA result that allows or denies issuance for one resource. |
+| Audit event | The durable record of why authority was issued, denied, used, or revoked. |
+| Session | The Coordinator-tracked lifetime of an agent run, used as a revocation anchor. |
+| Grant | The recorded authority assignment that lets an application use a resource. |
+| Invitation | A consumable one-time grant offer. |
+| Step-up | A re-authentication challenge required by policy for elevated actions. |
+
+## Surfaces and services
+
+| Term | Meaning |
+| --- | --- |
+| STS | The public token endpoint. Issues only Caracal access tokens, never provider-native credentials. |
+| Gateway | The default execution plane. Verifies mandates, checks revocation, resolves provider routes, brokers provider credentials, and writes action-result audit. |
+| Coordinator | The service that owns agent sessions, delegation edges, and revocation propagation. |
+| Audit | The append-only ledger of authorization and action-execution events. |
+| Control plane | The authenticated HTTP management surface (Control API) for automation. |
+| Console | The interactive operational interface (`caracal console` / `caracal-console`). Owns product management workflows. |
+| Connector | An SDK adapter that enforces the mandate / replay / revocation / audit contract at a non-Gateway boundary. |
+| Provider | The upstream target of a Gateway-mediated request (REST API, MCP server, third-party service). Distinct from an **identity provider**, which is an OAuth issuer used during application authentication. |
+
+## Manifests
+
+Caracal uses several manifest formats, each with its own schema under `docs/public/schemas/`. The word "manifest" by itself is always ambiguous; qualify it.
+
+| Term | Meaning |
+| --- | --- |
+| Release manifest | The top-level versioned release descriptor (`releases/schema/manifest.schema.json`). Lists artifacts, binaries, images, and SDK distributions. |
+| Connector manifest | Declares a connector implementation and its capabilities. |
+| Provider manifest | Declares a provider (upstream target) and broker configuration. |
+| Resource manifest | Declares a resource, its scopes, and optional upstream binding. |
+| Policy-pack manifest | Declares the Rego bundle, version, and applicable resources. |
+| Audit-exporter manifest | Declares a destination for streamed audit events. |
+| Gateway-upstream manifest | Declares Gateway routing entries for resources with upstream URLs. |
+| Run credentials manifest | JSON list passed to `caracal run` via `CARACAL_RUN_CREDENTIALS_FILE`. Not a release artifact. |
+
+## Tokens and credentials
+
+| Credential | Holder | Purpose |
+| --- | --- | --- |
+| App client secret | Agent runtime / deployment secret store | Authenticates an application to Caracal during token exchange. |
+| Caracal access token (mandate) | Agent runtime | Short-lived scoped proof that Caracal allowed the action. Carried into Gateway calls. |
+| Provider-native credential | Gateway or contract-complete connector only | Authenticates the upstream call. Never returned to agent-facing callers. |
+| Admin token | Console / Control API caller | Authorizes management actions against the control plane. |
+| Coordinator token | Console / Control API caller | Authorizes session and delegation views and operations. |
+
+## Status labels used in docs
+
+| Label | Meaning |
+| --- | --- |
+| Implemented behavior | Runtime behavior available in the OSS stack today. |
+| Supported pattern | A documented integration path with a clear enforcement contract operators can adopt. |
+| Example-only pattern | Demo or sample-app code; not a production integration contract. |
+| Future direction | Product direction; not current runtime behavior. |
+
+## Where to manage versus where to run
+
+| Action | Surface |
+| --- | --- |
+| Start, stop, probe, or reset the local stack | Runtime shell (`caracal up` / `down` / `status` / `purge`) |
+| Run a workload with injected resource tokens | Runtime shell (`caracal run`) |
+| Create, mutate, or inspect product state | Console |
+| Drive management from scripts or CI | Control API |
+
+See [CLI and Console](/runtime-console/cli-and-console/) for the side-by-side pairing.

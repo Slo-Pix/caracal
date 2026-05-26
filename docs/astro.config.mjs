@@ -106,11 +106,11 @@ export default defineConfig({
           items: [
             { label: 'Overview', link: '/get-started/' },
             { label: 'Welcome', link: '/get-started/welcome/' },
-            { label: 'What Caracal Does', link: '/get-started/what-caracal-does/' },
             { label: 'Installation', link: '/get-started/installation/' },
             { label: 'Quickstart: Run the Stack', link: '/get-started/quickstart/' },
             { label: 'Five-Minute Setup', link: '/get-started/five-minute-setup/' },
             { label: 'First Integration', link: '/get-started/first-integration/' },
+            { label: 'What Caracal Does', link: '/get-started/what-caracal-does/' },
             { label: 'Key Ideas at a Glance', link: '/get-started/key-ideas/' },
           ],
         },
@@ -203,6 +203,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { label: 'Overview', link: '/runtime-console/' },
+            { label: 'CLI and Console', link: '/runtime-console/cli-and-console/' },
             { label: 'Runtime Lifecycle', link: '/runtime-console/stack/' },
             { label: 'Runtime Execution', link: '/runtime-console/runtime/' },
             { label: 'Management Workflows', link: '/runtime-console/admin/' },

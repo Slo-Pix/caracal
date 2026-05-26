@@ -4,7 +4,20 @@ description: Gateway-first access control, credential brokering, audit, and revo
 pageType: concept
 ---
 
-Caracal lets you run agents with scoped, traceable, revocable authority without putting provider secrets in agent code. This page explains the default product path, the few supported alternatives, and what is future direction.
+You have already brought up the stack, registered an app, and issued a Caracal token. This page explains what that token actually represents, what the Gateway did with it, and where audit recorded the result. Read it after [First Integration](./first-integration/) once you have a real run to compare against.
+
+## What just happened
+
+When your agent called the SDK and then the Gateway, six things happened in order:
+
+1. The SDK presented your app's client secret to the public STS.
+2. The STS evaluated the active policy set for the requested resource and scopes.
+3. On allow, the STS signed a short-lived Caracal access token (a **mandate**) and emitted an authorization audit event.
+4. The Gateway verified the mandate, checked replay and revocation, and resolved the upstream provider route.
+5. The internal broker substituted the provider OAuth token or API key onto the upstream request — your agent never saw it.
+6. The Gateway forwarded the call and emitted an action-execution audit event with status, latency, and result class.
+
+The rest of this page expands each of those steps so that the next time you read an audit row you know which surface produced it.
 
 ## The core problem
 
@@ -117,4 +130,4 @@ The docs use these labels intentionally:
 
 ## Next step
 
-Read [Installation](./installation/) to install the Console and bring up the stack, or skip to [Key Ideas at a Glance](./key-ideas/) for the simplified mental model.
+Read [Key Ideas at a Glance](./key-ideas/) for the compact product vocabulary, or jump into [Concepts](/concepts/) for the full reference model.

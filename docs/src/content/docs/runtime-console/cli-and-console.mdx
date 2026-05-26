@@ -1,0 +1,65 @@
+---
+title: CLI and Console
+description: Side-by-side reference pairing every runtime shell command with its Console equivalent.
+pageType: reference
+---
+
+Caracal exposes two installed tools. The runtime shell (`caracal`) owns local stack lifecycle and token-injected workload execution. The Console (`caracal console` or `caracal-console`) owns every product-management workflow: zones, applications, resources, providers, policies, grants, sessions, agents, audit, and diagnostics.
+
+This page is the single-glance reference for which surface owns which workflow. If a workflow exists in only one column, that is the only place it is available.
+
+## Stack lifecycle
+
+| Outcome | Runtime shell | Console |
+| --- | --- | --- |
+| Start the local stack | `caracal up` | — |
+| Stop the local stack | `caracal down` | — |
+| Probe readiness | `caracal status` / `caracal status --ready` | — |
+| Reset local stack state | `caracal purge` | — |
+
+Stack lifecycle is shell-only. The Console attaches to a running stack; it does not start or stop it.
+
+## Workload execution
+
+| Outcome | Runtime shell | Console |
+| --- | --- | --- |
+| Run a process with injected resource tokens | `caracal run -- [command]` | — |
+| Govern an MCP subprocess | `caracal run` with `[mcp_governance]` in `caracal.toml` | — |
+
+`caracal run` is the only execution command. It acquires credentials from the same `caracal.toml` / env / secret-file surface used in production deployments and forwards the subprocess exit code.
+
+## Product management
+
+| Outcome | Runtime shell | Console |
+| --- | --- | --- |
+| Create or list zones | — | Zones view |
+| Register an application (agent app) | — | Applications view |
+| Create the application client secret | — | Application create result |
+| Define a resource (tool, API, MCP, provider target) | — | Resources view |
+| Bind a provider route (upstream URL, broker auth) | — | Providers view |
+| Activate a policy set | — | Policies view |
+| Issue a grant or invitation | — | Grants view |
+| Inspect or revoke a session | — | Sessions view |
+| Inspect an agent run or delegation edge | — | Agents view |
+| Tail the audit ledger | — | Audit view |
+| Run diagnostics (`doctor`, `explain`) | — | Diagnostics view |
+| Enable / inspect the Control API | — | Control menu |
+
+Product management lives entirely in the Console. The runtime shell deliberately does not expose these workflows; this preserves a single source of truth and keeps shell-side automation from drifting against Console state.
+
+## Automation
+
+| Outcome | Runtime shell | Console |
+| --- | --- | --- |
+| Drive product management from scripts or CI | — | Control API (enable from Console Control menu) |
+| Stream audit events to a SIEM | — | Audit exporter manifest + Redis Streams consumer |
+
+For automation, enable the Control API once from the Console and call the authenticated HTTP surface. The shell is not an automation entry point for Console-owned state.
+
+## Choosing between the two
+
+- Reach for the **runtime shell** when the action is local-process lifecycle, readiness, reset, or token-injected execution.
+- Reach for the **Console** for every workflow that creates, mutates, or inspects product state (zones, apps, resources, policies, grants, sessions, audit).
+- Reach for the **Control API** when the same management actions need to run from CI, scripts, or remote tooling.
+
+If you cannot tell which tool owns a workflow, default to the Console — that is where every workflow not in the first two tables lives.
