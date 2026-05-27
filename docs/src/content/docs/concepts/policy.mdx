@@ -1,21 +1,25 @@
 ---
 title: Policy
 description: Versioned Rego documents evaluated by OPA inside the STS at token-exchange time.
-pageType: concept
-keywords: [policy, Rego, OPA, policy set, evaluation, builtins, manifest, SHA, versioned]
+sidebar:
+  order: 7
 ---
 
-A policy is a versioned Rego document that the STS evaluates at token-exchange time to determine whether to issue a mandate. This page covers the policy structure, the OPA evaluation model, policy sets, versioning, and the runtime loading behavior.
+Policies decide whether the STS may issue a mandate. They are written in Rego, versioned immutably, bundled into policy sets, and activated per zone.
 
-## What a policy is
+## Policy objects
 
-A policy is a named Rego document with a fixed entry point. It receives structured input describing the principal, resource, session, and context, and must return a decision object at `data.caracal.authz.result`.
+| Object | Purpose |
+| --- | --- |
+| Policy | Named Rego document with immutable versions. |
+| Policy version | A specific content hash and schema version. |
+| Policy set | A named bundle of policy versions. |
+| Policy set version | A specific manifest of policy versions. |
+| Active policy set version | The version the STS evaluates for a zone. |
 
-Policies are stored in the `policies` table, versioned in `policy_versions` (each version is immutable), and activated through a `policy_set_binding` on the zone.
+## Decision contract
 
-## The required entry point
-
-Every Caracal-compatible Rego policy must produce a result at `data.caracal.authz.result`:
+Caracal policies return a `result` object from `package caracal.authz`.
 
 ```text
 package caracal.authz
@@ -32,159 +36,58 @@ default result := {
 result := {
   "decision": "allow",
   "evaluation_status": "complete",
-  "determining_policies": [{"policy": "my-policy"}],
+  "determining_policies": [{"policy": "baseline-scopes"}],
   "diagnostics": [],
 } if {
-  input.principal.type == "application"
-  input.resource.identifier == "resource://example"
-  "read" in input.resource.scopes
-}
-```
-
-**Required result fields:**
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `decision` | string | `"allow"` or `"deny"` |
-| `evaluation_status` | string | Must be `"complete"` for the STS to accept the result |
-| `determining_policies` | string[] | IDs or names of the rules that determined the decision |
-| `diagnostics` | object[] | Arbitrary metadata; used for step-up signaling (see below) |
-
-## The OPA input object
-
-The full input available to every policy:
-
-```json
-{
-  "schema_version": "2026-05-20",
-  "principal": {
-    "type": "application",
-    "id": "<application_id>",
-    "zone_id": "<zone_id>",
-    "credential_type": "token",
-    "agent_session_id": "<agent_session_id>"
-  },
-  "resource": {
-    "type": "resource",
-    "id": "<resource_id>",
-    "identifier": "resource://payments",
-    "scopes": ["transfer", "read"]
-  },
-  "action": { "id": "token_exchange" },
-  "session": {
-    "id": "<session_id>"
-  },
-  "delegation_edge": {
-    "id": "<edge_id>",
-    "source_session_id": "...",
-    "target_session_id": "...",
-    "issuer_application_id": "...",
-    "receiver_application_id": "...",
-    "resource_id": "...",
-    "scopes": ["read"],
-    "edge_version": 1,
-    "path": ["<session_id_1>", "<session_id_2>"],
-    "graph_epoch": 42,
-    "constraints_json": {
-      "max_hops": 1,
-      "ttl_seconds": 300,
-      "budget": 1
-    }
-  },
-  "context": {
-    "actor_claims": { "sub": "...", "zone_id": "...", "scope": "..." },
-    "subject_claims": { "sub": "...", "zone_id": "...", "scope": "..." },
-    "trace_id": "...",
-    "session_id": "...",
-    "agent_session_id": "...",
-    "delegation_edge_id": "...",
-    "challenge_resolved": false,
-    "requested_scopes": ["read"]
+  # input.principal.id identifies the acting user, service, or agent.
+  # input.resource.identifier names the protected resource.
+  every scope in input.context.requested_scopes {
+    scope in data.allowed_scopes[input.principal.id][input.resource.identifier]
   }
 }
 ```
 
-`schema_version` identifies the STS policy input contract. The current contract is `2026-05-20`. `delegation_edge` is present only when the exchange carries a delegation edge ID. `session` is present only when a session ID is provided.
+Example input values:
 
-## Blocked builtins
+| Input | Example |
+| --- | --- |
+| `input.principal.id` | `user:finance-operator@example.com` |
+| `input.application.id` | `app_lynx_control` |
+| `input.resource.identifier` | `lynx/mercury-bank` |
+| `input.context.requested_scopes` | `["payments:read", "payments:write"]` |
+| `input.delegation_edge` | Present when authority was delegated from another agent session. |
 
-The following Rego builtins are disabled in all Caracal policies:
+## Common input areas
 
-| Builtin | Reason |
-| ------- | ------ |
-| `http.send` | Prevents network calls from policy evaluation |
-| `net.lookup_ip_addr`, `net.cidr_*`, `net.cidr_expand` | Prevents network inspection |
-| `opa.runtime` | Prevents runtime introspection |
-| `rand.intn` | Prevents nondeterministic decisions |
-| `time.now_ns` | Prevents clock-dependent decisions (use `input.context` timestamps if needed) |
+| Input area | Contains | Common check |
+| --- | --- | --- |
+| `input.principal` | Acting subject or agent identity. | Match a user, service, or agent allowlist. |
+| `input.application` | Registered application requesting exchange. | Restrict a client to approved resources. |
+| `input.resource` | Target resource and requested scopes. | Compare requested scopes with resource policy. |
+| `input.context` | Session, requested scopes, exchange metadata, and challenge state. | Require step-up or session freshness. |
+| `input.grant` | Matching grant data when available. | Enforce grant expiry and scope bounds. |
+| `input.delegation_edge` | Delegation path and typed constraints when exchange is delegated. | Enforce hop count, chain match, and constraint limits. |
 
-Policies that reference any blocked builtin fail validation when submitted to the API.
+## Policy outcomes
 
-## Policy versioning
+| Outcome | Effect |
+| --- | --- |
+| `allow` | STS signs a mandate if token and session checks also pass. |
+| `deny` | STS refuses the exchange and records diagnostics. |
+| step-up diagnostic | STS returns `interaction_required` with a challenge ID. |
 
-Each time a policy's Rego source changes, a new version is created in `policy_versions`. Versions are immutable and identified by a content-addressable SHA-256 hash. The API validates Rego syntax and blocked builtins before accepting a new version.
+Step-up is expressed as a diagnostic such as `{"step_up_required": "mfa"}`. The STS creates a challenge and expects a later exchange with the challenge proof.
 
-Creating a policy version:
+## Authoring rules
 
-```
-POST /zones/{zoneId}/policies/{policyId}/versions
-{ "content": "package caracal.authz\n...", "schema_version": "2026-05-20" }
-```
+- Keep policies deterministic and side-effect free.
+- Use the Console or Admin API validation endpoint before activation.
+- Activate through a policy set version, not by editing active content in place.
+- Use diagnostics to explain denies and step-up triggers.
+- Keep reusable decision logic in separate policy versions only when it improves ownership or review.
 
-The `schema_version` field (`"2026-05-20"`) identifies the input schema this policy was written for.
+## Related pages
 
-## Policy sets and manifests
-
-A **policy set** groups one or more policy versions into a bundle evaluated together. The bundle is described by a **manifest**: an ordered list of `policy_version_id` entries. The STS computes a `manifest_sha256` over the manifest content to cache invalidation.
-
-Creating a policy set version:
-
-```
-POST /zones/{zoneId}/policy-sets/{id}/versions
-{ "manifest": [{ "policy_version_id": "<id>" }, ...] }
-```
-
-**Activation**: A zone has one active policy set binding at a time. Activating a policy set version makes it the live enforcement bundle for all subsequent token exchanges in that zone.
-
-```
-POST /zones/{zoneId}/policy-sets/{id}/activate
-{ "version_id": "<version_id>", "shadow_version_id": "<optional_id>" }
-```
-
-The optional `shadow_version_id` registers a shadow binding alongside the active one. The active binding determines all enforcement decisions; the shadow binding can be inspected for testing purposes.
-
-## Runtime loading
-
-The STS loads policies lazily per zone:
-
-1. On first exchange for a zone, the STS queries the active policy set binding and compiles the Rego bundle into memory.
-2. Compiled bundles are cached in an atomic `opaZoneState` per zone. Cache hits are identified by `manifest_sha256`: a bundle with the same SHA is not recompiled.
-3. A background poll refreshes all known zones every 60 seconds as a safety net.
-4. The Redis stream `caracal.policy.invalidate` is the fast path: the STS subscribes to this stream and reloads the affected zone immediately when a new binding is activated, bypassing the 60-second poll.
-
-If policy compilation fails (syntax error, unsatisfiable rule, etc.), the STS installs the deny-all fallback for that zone. It does not crash. The error is visible in STS logs.
-
-## Signaling step-up from policy
-
-A policy can signal that it requires elevated authentication before allowing exchange. It does this by returning a `step_up_required` entry in `diagnostics`:
-
-```text
-result := {
-  "decision": "deny",
-  "evaluation_status": "complete",
-  "determining_policies": [{"policy": "payment-policy"}],
-  "diagnostics": [{"step_up_required": "mfa"}],
-} if {
-  input.resource.identifier == "resource://high-value-payments"
-  not input.context.challenge_resolved
-}
-```
-
-When the STS detects `step_up_required` in diagnostics and the exchange has not already resolved a challenge, it creates a step-up challenge and returns HTTP 401 with a challenge object. See [Step-Up Challenge](./step-up/) for the full flow.
-
-## Next steps
-
-- [Authority Model](./authority-model/): how the STS uses policy results to make decisions
-- [Principal and Application](./principal/): what `input.principal` contains
-- [Resource and Grant](./resource-grant/): what `input.resource` contains
-- [Step-Up Challenge](./step-up/): signaling elevated authentication from a policy
+- [Author a Rego Policy](/guides/author-policy/)
+- [Activate a Policy Set](/guides/activate-policy-set/)
+- [Step-Up Challenge](/concepts/step-up/)

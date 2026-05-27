@@ -1,124 +1,67 @@
 ---
 title: Resource and Grant
-description: Resources expose targets and scopes; grants bind principals to subsets of those scopes.
-pageType: concept
-keywords: [resource, grant, scopes, upstream, credential provider, identifier, binding]
+description: Resources expose protected targets and scopes; grants bind principals to subsets of those scopes.
+sidebar:
+  order: 6
 ---
 
-A **resource** is anything an agent wants to access: an API endpoint, an MCP tool, a data service, or any addressable target. A **grant** is the binding that permits a specific application to access a resource on behalf of a specific user. Together, resources and grants define the access surface that policies evaluate.
+A resource is something Caracal protects. A grant is a configured permission binding that says an application and user may request specific scopes for that resource.
 
 ## Resources
 
-A resource is registered in a zone with these attributes:
+Resources describe protected targets such as:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `id` | UUID | Internal identifier used in grants and delegation constraints |
-| `zone_id` | string | Zone this resource belongs to |
-| `name` | string | Human-readable label |
-| `identifier` | string | Logical name used in policy rules and mandate `target` claims (e.g. `resource://payments`) |
-| `upstream_url` | string \| null | The actual URL the Gateway proxies to, if routing through Gateway |
-| `gateway_application_id` | string \| null | Application identity the Gateway uses when exchanging an inbound mandate for this resource |
-| `prefix` | boolean | If true, `upstream_url` is a URL prefix; path is appended from the request |
-| `scopes` | string[] | Full set of scopes available for this resource |
-| `credential_provider_id` | string \| null | Provider to use for credential substitution, if any |
+- HTTP APIs behind the Gateway;
+- MCP servers and tool groups;
+- internal services protected by Express, FastMCP, or net/http connectors;
+- provider-backed targets that need credential mediation.
 
-The `identifier` is the string that appears in policy rules (`input.resource.identifier`) and in mandate `target` claims. It is a stable logical name, not an internal UUID.
-
-The `scopes` array defines all scopes the resource can grant. A grant can assign any subset of these scopes to an application. A policy can further restrict which scopes are included in the mandate.
+| Resource field | Purpose |
+| --- | --- |
+| Identifier | Stable policy and token audience target, such as `https://api.example.com/payments`. |
+| Upstream URL | Optional Gateway forwarding target. |
+| Scopes | Named actions that policies and mandates can constrain. |
+| Gateway application | Optional application used by Gateway-mediated resources. |
+| Credential provider | Optional provider used when Caracal brokers upstream credentials. |
 
 ## Grants
 
-A grant binds an application and an optional user identity to a resource and a set of scopes:
+A grant binds:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `id` | UUID | Internal identifier |
-| `zone_id` | string | Zone this grant belongs to |
-| `application_id` | string | The application being granted access |
-| `user_id` | string | Opaque user identifier (not validated against any directory) |
-| `resource_id` | string | The resource being granted |
-| `scopes` | string[] | Subset of the resource's scopes being granted |
-| `status` | string | Grant lifecycle status |
+1. a zone;
+2. an application;
+3. a user or subject;
+4. a resource;
+5. one or more scopes.
 
-The `scopes` on a grant must be a subset of the resource's `scopes`. The grant does not itself authorize access: it establishes that the principal has been given permission. The STS policy still evaluates whether to actually issue a mandate. A grant is necessary but not sufficient.
+Grants are not the final decision. They are one input to policy. The active policy set can still deny, require step-up, or constrain the exchange.
 
-The `user_id` is an opaque string. Caracal does not maintain a user directory or authenticate users. The `user_id` is stored for audit purposes and is available to policies via `actor_claims`.
+## Exchange relationship
 
-## Scope flow through the system
-
-```
-Resource defines scopes:        ["read", "write", "transfer"]
-         │
-         ▼
-Grant allows a subset:          ["read", "write"]
-         │
-         ▼
-Exchange requests a subset:     ["read"]
-         │
-         ▼
-Policy decides on the request:  allow / deny
-         │
-         ▼
-Mandate carries granted scope:  "read"
+```mermaid
+flowchart LR
+  App["Application"] --> Grant["Grant"]
+  User["User / subject"] --> Grant
+  Resource["Resource"] --> Grant
+  Grant --> STS["STS policy input"]
+  Policy["Active policy set"] --> STS
+  STS -->|"allow"| Mandate["Mandate with resource and scopes"]
 ```
 
-At each stage, scopes can only be narrowed, never widened. An exchange request cannot ask for scopes the grant does not include. The mandate's `scope` claim contains only what the policy allowed.
+## Scope design
 
-## Credential providers
+Prefer small, action-oriented scopes:
 
-A resource can be associated with a credential provider via `credential_provider_id`. When this is set, the STS retrieves the relevant provider credential for authenticated Gateway broker exchanges and includes it only in the internal upstream directive returned to the Gateway.
+| Good | Avoid |
+| --- | --- |
+| `payments:read` | `admin` |
+| `tickets:comment` | `write_all` |
+| `mcp:tool:call` | `tools` |
 
-The Gateway reads the `upstreams` directive and substitutes the provider credential as the Authorization header sent to the upstream. Normal STS clients do not receive the provider-native credential. The agent only presents its mandate to the Gateway, and the Gateway handles provider authentication. Caracal identity is not forwarded to provider-native upstreams unless provider config explicitly sets `forward_caracal_identity: true` for a trusted service you control.
+Use resource identifiers for targets and scopes for actions. Do not encode environment, tenant, or user identity into scope names when those belong in the zone, principal, or policy input.
 
-Provider `kind` values:
+## Related pages
 
-| Kind | Current runtime behavior |
-| ---- | ----------- |
-| `oauth2` | OAuth 2.0 bearer-style token forwarding and refresh from an active delegated provider grant |
-| `oidc` | OIDC bearer-style token forwarding and refresh from an active delegated provider grant |
-| `apikey` | API-key forwarding from an active delegated provider grant; header shape comes from provider config |
-| `workload` | Registered metadata only; no automatic workload assertion minting in the current OSS runtime |
-
-Provider secrets are encrypted before storage. Any field whose name matches the pattern `/(secret|password|token|api[_-]?key|private[_-]?key|credential|passphrase)/i` is sealed under the zone KEK and never returned in API responses.
-
-STS binds provider-native forwarding to the exact provider configured on the resource. A delegated grant for one provider cannot satisfy a resource configured for another provider. If a provider credential is missing or cannot be refreshed, STS denies the exchange and the Gateway does not call the upstream.
-
-## How the Gateway uses resources
-
-When a request arrives at the Gateway, the Gateway:
-
-1. Reads the bearer token's `zone_id` claim and the `X-Caracal-Resource` header.
-2. Looks up the zone/resource binding in `gateway_resource_bindings` to find the Gateway application identity for that resource.
-3. Verifies the mandate and asks STS for a narrowed per-resource exchange as that Gateway application.
-4. If the resource has a credential provider, reads the STS `upstreams` directive from the internal Gateway exchange response.
-5. Forwards the request to the upstream with the appropriate Authorization header.
-
-The Control-Plane API maintains `gateway_resource_bindings` from resource writes. A resource with `upstream_url` must also specify `gateway_application_id`; deleting the resource or clearing `upstream_url` removes the binding.
-
-Without a `credential_provider_id`, the Gateway forwards the mandate as the `Authorization: Bearer` header to the upstream. The upstream is responsible for verifying the mandate against the zone JWKS.
-
-## Resource identifiers in policies
-
-The `identifier` field is the string that policies inspect. Use logical names that remain stable even if the underlying upstream URL changes:
-
-```text
-# Allow read access to the payments resource
-result := {
-  "decision": "allow",
-  "evaluation_status": "complete",
-  "determining_policies": ["payments-read-policy"],
-  "diagnostics": [],
-} if {
-  input.resource.identifier == "resource://payments"
-  "read" in input.context.requested_scopes
-}
-```
-
-The `input.resource.id` (UUID) is also available, but using `identifier` is more stable and readable.
-
-## Next steps
-
-- [Principal and Application](./principal/): the application that receives access through grants
-- [Policy](./policy/): how policies use resource attributes in decisions
-- [Delegation Graph](./delegation/): how a delegated agent can be restricted to a single resource
+- [Define Resources and Providers](/guides/resources-providers/)
+- [Issue Grants and Invitations](/guides/grants-invitations/)
+- [Policy](/concepts/policy/)

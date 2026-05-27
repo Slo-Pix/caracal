@@ -1,151 +1,64 @@
 ---
 title: Sessions and Revocation
 description: Agent sessions, cascading revocation, and the revocation event stream.
-pageType: concept
-keywords: [session, revocation, suspend, terminate, cascade, Redis stream, lifecycle, agent session]
+sidebar:
+  order: 11
 ---
 
-An agent session is the Coordinator's record of a running agent. It tracks the agent's position in the delegation tree, its lifecycle state, and its relationship to the mandates the STS has issued. Revocation withdraws an agent's authority and propagates the withdrawal in near real-time to every service that might be serving the agent's requests.
+Sessions make Caracal authority temporary and revocable. A mandate includes session anchors, and resource servers check those anchors before accepting the mandate.
 
-## Agent sessions
+## Session types
 
-Agent sessions are stored in the `agent_sessions` table with these fields:
+| Session | Role |
+| --- | --- |
+| Subject session | Original authenticated user or service context. |
+| Agent session | Runtime context for a spawned agent. |
+| Delegated session | Agent session receiving constrained authority through a delegation edge. |
 
-| Field | Description |
-| ----- | ----------- |
-| `id` | UUID; the `agent_session_id` in mandates |
-| `zone_id` | Zone this session belongs to |
-| `application_id` | Application that opened the session |
-| `parent_id` | ID of the parent session (null for root sessions) |
-| `subject_session_id` | STS execution session ID associated with this agent session |
-| `agent_kind` | Session class: `service`, `instance`, or `ephemeral` |
-| `status` | `active`, `suspended`, or `terminated` |
-| `depth` | Depth in the session tree (0 = root) |
-| `child_count` | Number of currently active direct children |
-| `max_children` | Per-session child limit (set to `MAX_CHILDREN = 10` at spawn) |
-| `capabilities` | Policy-visible traits declared by the agent session; not independent authorization |
-| `ttl_seconds` | Optional TTL; session expires after this many seconds from spawn |
-| `last_heartbeat_at` | Last heartbeat received from the agent session |
-| `heartbeat_deadline_at` | Required next heartbeat deadline for `service` sessions |
-| `spawned_at` | When the session was created |
-| `terminated_at` | When the session was terminated (null if active or suspended) |
+## Revocation anchors
 
-## Session states
+Resource servers check every relevant anchor:
 
-A session transitions through three states:
+- session ID;
+- root session ID;
+- agent session ID;
+- delegation edge ID.
 
-```
-spawned → active → suspended ⇄ active
-                ↘
-                  terminated (final)
-```
+If any anchor is revoked, the mandate should be rejected as `session_revoked`.
 
-**`active`**: The session is running. The STS can issue mandates for it. The Coordinator can spawn children under it.
+## Revocation flow
 
-**`suspended`**: The session is paused. Both the session and its entire subtree (all descendants in the session tree) are suspended together via a recursive CTE that updates all `active` or `suspended` descendants. A suspended session's mandates cannot be refreshed because the STS checks session status before issuing tokens. Suspension is reversible.
+```mermaid
+sequenceDiagram
+  participant Control as Console or Admin API
+  participant Store as Postgres
+  participant Stream as Redis revocation stream
+  participant Resource as Gateway or connector
 
-**`terminated`**: The session is permanently ended. Termination cascades: the Coordinator recursively terminates all descendants. Terminated sessions produce revocation events for every affected session ID. Termination is irreversible.
-
-## Agent kinds
-
-The `kind` field on a spawn request is the user-facing session class:
-
-| Kind | Behavior |
-| ---- | -------- |
-| `service` | Long-running authority session. It must heartbeat before `heartbeat_deadline_at`; missed heartbeats suspend the session and revoke its active authority. |
-| `instance` | Interactive or task-instance authority session. It relies on normal TTL and explicit end/suspend/terminate calls. |
-| `ephemeral` | Short-lived default authority session for single-purpose work. It relies on TTL and normal SDK shutdown. |
-
-The kind is available to STS policy input as `principal.agent_kind`. Capabilities are available as `principal.capabilities`, but they do not authorize anything by themselves; policy, grant, resource, session, and delegation checks still determine whether STS issues a mandate.
-
-## Opening a session
-
-The SDK opens a session by calling `POST /v1/begin` on the Coordinator with:
-
-```json
-{
-  "zone_id": "...",
-  "application_id": "...",
-  "subject_session_id": "...",
-  "parent_id": null,
-  "capabilities": [],
-  "ttl_seconds": null
-}
+  Control->>Store: Revoke grant, session, agent, or edge
+  Store->>Stream: Publish revocation anchor
+  Resource->>Stream: Consume caracal.sessions.revoke
+  Resource->>Resource: Cache revoked anchor
+  Resource-->>Resource: Reject matching mandates
 ```
 
-The Coordinator inserts the `agent_sessions` row and returns the agent session ID. The SDK then uses this `agent_session_id` in the session-mandate exchange request to the STS, so the mandate carries the agent-session reference.
+The Redis stream name is `caracal.sessions.revoke`. Redis-backed connector packages can consume the stream and populate local revocation stores.
 
-## Closing a session
+## Cascade behavior
 
-The SDK closes a session by calling `POST /v1/end` on the Coordinator:
+Revocation should follow authority:
 
-```json
-{
-  "zone_id": "...",
-  "agent_session_id": "..."
-}
-```
+- revoking a subject session invalidates derived agent sessions;
+- revoking an agent session invalidates its child edges;
+- revoking a delegation edge invalidates downstream delegated authority;
+- revoking a grant prevents future exchange and can invalidate active sessions depending on workflow.
 
-This transitions the session to `terminated` and triggers cascade termination of all descendants. The Coordinator enqueues revocation events for each terminated session through the outbox.
+## Resource-server responsibility
 
-The Coordinator does not kill an arbitrary AI framework process. It changes Caracal authority state. If the session was opened by `caracal run`, the wrapper process can also manage the child process it launched; if an external framework opened the session through the SDK, that framework remains responsible for process lifecycle. In both cases, Caracal suspension or termination prevents new authority and causes Gateway/STS revocation checks to reject already-issued mandates tied to the revoked session.
+The Gateway and connectors must be configured with a revocation store. For development, an in-memory store can be useful. For production, use a shared store and stream consumer so revocations propagate across resource-server instances.
 
-## Revocation event stream
+## Related pages
 
-When a session is terminated (or when a delegation edge is revoked), the Coordinator writes events to the `caracal_outbox` table. A background publisher reads the outbox and publishes to the `caracal.sessions.revoke` Redis stream.
-
-**Why the outbox**: The Coordinator wraps session operations in a database transaction. Writing the revocation event to the same transaction guarantees that the event is published if and only if the session was actually terminated: no dual-write bugs.
-
-The revocation stream has two consumers:
-
-**`sts-revocation`** (STS): The STS subscribes and marks the STS session row revoked. Subsequent token exchange requests for that session ID are rejected before OPA is called.
-
-**`gateway-revocation`** (Gateway): The Gateway subscribes and updates its `revocationStore`. On every request, the Gateway checks the mandate's `sid`, `root_sid`, `agent_session_id`, and `delegation_edge_id` against the revocation cache. If any authority anchor was revoked, the request returns HTTP 401 before reaching the upstream. If revocation arrives during an in-progress streaming response, the Gateway checks at each 4 KB chunk boundary and truncates the stream.
-
-Revocation entries in the Gateway's store are kept for 24 hours: long enough to outlive any resource mandate's 15-minute TTL.
-
-## Triggers for revocation
-
-Session revocation is triggered by:
-
-| Action | What gets revoked |
-| ------ | ----------------- |
-| `PATCH /zones/{z}/agents/{id}/suspend` | Session + all descendants suspended |
-| `DELETE /zones/{z}/agents/{id}` | Session + all descendants terminated |
-| `PATCH /zones/{z}/delegations/{id}/revoke` | Delegation edge + all downstream edges + all affected sessions terminated |
-| Service heartbeat deadline missed | `service` session + active descendants suspended |
-| Grant revocation | Sessions associated with that grant are terminated |
-| TTL expiry | Coordinator terminates sessions past their `ttl_seconds` |
-
-## The `caracal.policy.invalidate` stream
-
-Policy changes do not affect running sessions directly. When a policy set is activated, the API publishes to `caracal.policy.invalidate`. The STS subscribes and reloads the affected zone's OPA bundle immediately. New token exchange requests use the new policy; mandates already issued continue to be valid until their TTL expires.
-
-## Sessions vs mandates
-
-A session and a mandate are related but distinct:
-
-- An **execution session** is the STS `sessions.id` row referenced by the mandate `sid` claim. It is the session the STS validates before minting more authority.
-- The stored `subject_session_id` on an agent session is that same STS execution-session ID; the Coordinator stores it so authority revocation can reach STS and Gateway.
-- A **root execution session ID** is the mandate `root_sid` claim. Session mandates set it to their own `sid`; derived resource mandates inherit it, so revoking the root authority invalidates descendants.
-- An **agent session ID** is the Coordinator `agent_sessions.id` referenced by the mandate `agent_session_id` claim. It identifies the agent's lifecycle record and position in the delegation tree.
-- A **delegation edge** links a source agent session to a target agent session. A **delegation chain** is the ordered lineage of edges embedded in a delegated mandate.
-- A **mandate** is the JWT the STS issues, carrying a snapshot of the active session, resource, scope, and delegation state at issuance.
-
-Revoking a session does not invalidate already-issued mandates cryptographically (the JWT signature remains valid). Instead, the Gateway and STS check the authority anchors in mandates against revocation state, and reject mandates whose current `sid`, root `root_sid`, agent session, or delegation edge has been revoked. This check runs at request time, not at token issuance.
-
-```text
-sessions.id ("root_sid" on derived resource mandates)
-  └─ sessions.id ("sid" on current mandate)
-       └─ agent_sessions.subject_session_id
-            └─ agent_sessions.id ("agent_session_id" on mandate)
-                 └─ delegation_edges.source_session_id → delegation_edges.target_session_id
-```
-
-When an agent is terminated, the Coordinator publishes both the execution session ID and the agent session ID. When a delegation is revoked, the event also carries the delegation edge ID. The STS persists the execution-session revocation, and the Gateway tracks execution-session, agent-session, and delegation-edge IDs so already-issued mandates are blocked even though their signatures remain valid.
-
-## Next steps
-
-- [Delegation Graph](./delegation/): how cascade revocation propagates through the session tree
-- [Audit Ledger](./audit-ledger/): what gets recorded when a session is revoked
-- [Mandate](./mandate/): the `sid` claim that links mandates to sessions
+- [Mandate](/concepts/mandate/)
+- [Protect an MCP Server](/guides/protect-mcp/)
+- [Tail and Query the Audit Stream](/guides/audit-stream/)

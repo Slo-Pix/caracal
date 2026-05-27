@@ -1,91 +1,59 @@
 ---
 title: Principal and Application
-description: Applications, users, and the session-bound identities that act on their behalf.
-pageType: concept
-keywords: [principal, application, credential type, DCR, session, identity, client secret]
+description: Applications, users, services, and agents that act inside a zone.
+sidebar:
+  order: 5
 ---
 
-A **principal** is the identity that acts in Caracal. At token-exchange time, the principal is always an **application**: a registered client that presents credentials to the STS to obtain a mandate. This page explains how applications are structured, how they authenticate, and how the principal appears in policy input.
+A principal is the acting identity. An application is the registered client or workload that authenticates and requests authority for that principal.
 
-## What an application is
+## Principal types
 
-An application is a Caracal-registered client within a zone. It represents a service, agent process, automation script, or any other system that exchanges credentials for mandates. Applications belong to exactly one zone.
+| Principal | Typical source | How Caracal sees it |
+| --- | --- | --- |
+| User | Login, workforce identity, or upstream IdP. | Subject session with user-bound claims. |
+| Service | Workload credential or client secret. | Application-bound session or exchange subject. |
+| Agent | Spawned runtime session. | Agent session with parent and delegation context. |
 
-Applications are stored in the `applications` table with these attributes:
+Principals are not enough on their own. A request also needs an application, session, resource, scopes, and policy approval.
 
-| Field | Description |
-| ----- | ----------- |
-| `id` | UUID; the `application_id` carried in mandates as `client_id` |
-| `zone_id` | The zone this application belongs to |
-| `name` | Human-readable label |
-| `registration_method` | `"managed"` (created via API) or `"dcr"` (Dynamic Client Registration) |
-| `credential_type` | How the application authenticates; see below |
-| `traits` | Optional string tags used in policy decisions |
-| `consent` | Whether user consent is required for this application |
+## Application roles
 
-## Credential types
+Applications represent software that can participate in Caracal flows:
 
-The `credential_type` field determines how the STS authenticates the application at token exchange:
+- an agent runtime that spawns child agents;
+- a backend service that requests mandates;
+- a Gateway application that fronts protected upstreams;
+- a connector-protected resource server;
+- a managed or dynamically registered client.
 
-| Type | Description |
-| ---- | ----------- |
-| `token` | Bearer token exchanged for a mandate: the default for machine clients |
-| `password` | Client ID + secret (OAuth 2.0 client credentials) |
-| `public-key` | Asymmetric key assertion |
-| `url` | Callback URL-based assertion |
-| `public` | No client authentication: for public clients |
+Applications have registration metadata, credential type, traits, and consent behavior. They are created from the Console or Admin API.
 
-For most agent workloads, `token` or `password` are the appropriate choices.
+## Sessions bind identity to time
 
-## How the application authenticates
-
-At token exchange (`POST /oauth/2/token`), the application presents its credentials in one of:
-
-- `client_secret` form field: symmetric secret stored as a hash in the database
-- `client_assertion` form field: signed assertion for public-key clients
-
-The STS looks up the application by `application_id` and `zone_id`, verifies the credential, and then proceeds to OPA evaluation. No mandate is issued before the application credential is validated.
-
-## The principal in policy input
-
-When the STS runs an OPA evaluation, the `input.principal` object represents the authenticated application:
-
-```json
-{
-  "principal": {
-    "type": "application",
-    "id": "app-uuid",
-    "zone_id": "zone-uuid",
-    "credential_type": "token",
-    "agent_session_id": "session-uuid"
-  }
-}
+```mermaid
+flowchart TD
+  App["Application"] --> Session["Subject session"]
+  Principal["Principal"] --> Session
+  Session --> Spawn["Agent session"]
+  Spawn --> Delegate["Delegated agent session"]
+  Session --> Mandate["Mandate exchange"]
+  Spawn --> Mandate
+  Delegate --> Mandate
 ```
 
-Policies can gate on any of these fields. The `id` is the application UUID; use it when writing policies that restrict access to specific applications. The `agent_session_id` links to the agent session in the Coordinator, useful for policies that gate on session state.
+Sessions make authority revocable. A mandate contains session anchors, and resource servers check those anchors through the revocation layer.
 
-## The `traits` field
+## Naming guidance
 
-Applications have an optional `traits` string array. Traits are arbitrary labels (for example, `["trusted-internal", "finance-team"]`) that the application carries into the OPA input via `actor_claims`. Policies can inspect traits to grant broader access to specific application categories without hardcoding UUIDs.
+- Use **application** for registered software.
+- Use **principal** for the acting identity.
+- Use **agent session** for a spawned agent execution context.
+- Use **subject session** for the original authenticated subject context.
+- Avoid using "client" unless you are describing OAuth protocol fields.
 
-## Users and grants
+## Related pages
 
-Caracal does not include a built-in user directory. A `user_id` is an opaque string passed by the calling application; Caracal stores it in the grant but does not validate it against any identity provider.
-
-A **grant** binds a `(application_id, user_id, resource_id)` triple to a set of scopes, representing that the specified application is authorized to access the resource on behalf of the specified user. Grants are the connection point between an application and a resource: without a grant, the application has no access to the resource regardless of policy.
-
-In a typical agent workflow, the `user_id` in a grant represents the end user who delegated the agent to act on their behalf. The agent application holds the grant; the user identity is carried for audit and policy purposes.
-
-## Dynamic Client Registration
-
-If the zone has `dcr_enabled = true`, applications can be registered dynamically via RFC 7591 Dynamic Client Registration. DCR-registered applications go through the same OPA evaluation as managed applications.
-
-## What a principal is not
-
-The `principal` in Caracal always identifies an application at the time of token exchange, not a human user. Human users are represented indirectly through grants that bind a `user_id` to an application's access rights. The human's identity is present in the OPA context via `actor_claims` if a user session token is carried, but the principal type is still `"application"`.
-
-## Next steps
-
-- [Zone](./zone/): the tenancy boundary each application belongs to
-- [Resource and Grant](./resource-grant/): how grants bind applications to resource access
-- [Policy](./policy/): using `input.principal` in policy rules
+- [Sessions and Revocation](/concepts/sessions-revocation/)
+- [Delegation Graph](/concepts/delegation/)
+- [Integrate the TypeScript SDK](/guides/sdk-typescript/)

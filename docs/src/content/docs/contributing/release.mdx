@@ -1,326 +1,47 @@
 ---
 title: Release and Versioning
-description: dev, rc, stable, and package publishing.
-pageType: workflow
+description: CalVer releases, package publishing, protected workflows, and rollback rules.
+pageType: reference
 ---
 
-Caracal has three release modes: dev, rc, and stable. dev stays local; rc and stable use release registries.
+Caracal release artifacts use CalVer product versions and package versions defined in `release.config.json`.
 
----
+## Release surfaces
 
-## Version scheme
-
-| Mode | Purpose | OCI/binary example | npm example | PyPI example |
-| --- | --- | --- | --- | --- |
-| dev | Development builds | `2026.05.27-dev.shaabc1234` | `0.1.3-dev.shaabc1234` | not published |
-| rc | rc builds | `2026.05.27-rc.1` | `0.1.3-rc.1` | `0.1.3rc1` |
-| stable | Released production versions | `2026.05.27` | `0.1.3` | `0.1.3` |
-
-PyPI rc versions are PEP 440 compatible and match the npm/OCI rc meaning.
-
-Git tags use a leading `v`:
-
-- stable: `vYYYY.MM.DD[.N]`
-- rc: `vYYYY.MM.DD[.N]-rc.<number>` or `vYYYY.MM.DD[.N]-rc.sha<gitsha>`
-
-The tag drives binaries, OCI images, GitHub Releases, Helm, and manifests. npm and PyPI keep independent package versions. `release.config.json` is the release inventory.
-
----
-
-## Source of truth
-
-Every published version comes from `release.config.json`. The file pins:
-
-- `product.version` — the CalVer used for binaries, containers, Helm, and the GitHub tag.
-- `packages.npm[].version` — the human-pinned SemVer for each TypeScript package.
-- `packages.pypi[].version` — always derived from the matching npm pin via the PEP 440 converter; never hand-edited.
-- `packages.go[]` — Go modules (currently unpublished; `publish: false`).
-
-Each package entry carries a `tier` (`core`, `sdk`, `connector`, `runtime`, `internal`, `dev`) and a `publish` flag. Publishers filter by `publish !== false`; internal services and `packages/engine` are excluded.
-
-The stamper is the only writer:
-
-```sh
-pnpm release:stamp         # propagate config to package.json, pyproject.toml, Helm
-pnpm release:stamp:check   # CI gate; fails if any artifact disagrees with config
-```
-
-The Changesets ignore list is generated, never hand-maintained:
-
-```sh
-pnpm release:changesets-ignore         # regenerate .changeset/config.json ignore
-pnpm release:changesets-ignore:check   # CI gate
-```
-
-Both `stamp --check` and `changesets-ignore --check` run on every PR via `test.yml`.
-
----
-
-## rc workflow
-
-Use rc for downstream testing before stable. Consumers change only versions and registry/index endpoints.
-
-```sh
-scripts/release.sh rc dry-run --base-version 2026.05.27 --suffix rc.1
-scripts/release.sh rc prepare --base-version 2026.05.27 --suffix rc.1
-git add -A
-git commit -m "rc: v2026.05.27-rc.1"
-git tag -a v2026.05.27-rc.1 -m v2026.05.27-rc.1
-git push origin HEAD
-git push origin v2026.05.27-rc.1
-```
-
-`rc dry-run` queues `release.yml` without publishing. `rc prepare` writes the manifest and stamps package and Helm metadata. Pushing the rc tag publishes packages, images, and the GitHub prerelease.
-
-The tag workflow publishes changed packages automatically. For manual package-only recovery:
-
-```sh
-pnpm release:plan --since v2026.05.14
-./scripts/publishPackages.sh --ecosystem all       # publish changed rc packages
-```
-
-Switch between rc and stable by changing only Caracal versions:
-
-```sh
-npm install @caracalai/sdk@0.1.3-rc.1             # rc
-npm install @caracalai/sdk@0.1.3                  # stable
-uv add caracalai-sdk==0.1.3rc1                    # rc
-uv add caracalai-sdk==0.1.3                       # stable
-```
-
-For containers, change only `ghcr.io/garudex-labs/caracal-{svc}:v<version>`. For binaries, install with `--version`. Do not consume source paths or editable installs.
-
----
-
-## stable workflow
-
-Stable releases are created from `main` with the release script:
-
-```sh
-scripts/release.sh stable
-scripts/release.sh stable --dry-run
-```
-
-The script applies pending changesets, stamps Helm metadata, writes `releases/<tag>/manifest.json`, tags the release, and pushes `main` plus the tag. The tag triggers the unified `release.yml` workflow in GitHub Actions. The stable pipeline:
-
-1. Verifies the pushing actor is listed in `.github/MAINTAINERS`.
-2. Resolves one release context shared by archive, image, dry-run, and publish jobs.
-3. Builds runtime/console archives and container images in parallel.
-4. Verifies archive assets and checksums through the shared asset verifier.
-5. Waits for the protected `release-approval` environment.
-6. Creates a GitHub Release with generated release notes, binaries, checksums, and provenance attestations.
-7. Runs release validation for rc and stable tags.
-8. Promotes stable images to the `vYYYY.MM` series tag and `latest` only after validation passes.
-
-Only maintainers cut stable releases. Do not push CalVer tags from feature branches.
-
-### Promotion from rc
-
-Stable releases re-tag a validated rc's container digests rather than rebuild. `release.mjs promote --from v2026.05.27-rc.3` reads the rc manifest, strips the `-rc.N` suffix, and writes `releases/<stableTag>/manifest.json` pointing at the same image references. The workflow then retags those digests in the registry; npm and PyPI publish the final SemVer.
-
-```sh
-node scripts/release.mjs promote --from v2026.05.27-rc.3
-```
-
-A promotion is rejected if the source rc tag's manifest is missing, in non-rc mode, or does not match the requested rc.
-
-### Pre-tag gate
-
-Every release run validates locally before any tag is pushed. The `context` job in `release.yml` enforces:
-
-- `release.mjs stamp --check` — no drift between `release.config.json` and stamped artifacts.
-- `generateChangesetsIgnore.mjs --check` — ignore list matches config.
-- `pnpm changeset status` — no orphan or missing changesets.
-- `validateReleaseManifest.mjs` — manifest schema and shape.
-
-The reusable `preReleaseGate.yml` workflow exposes the same checks for external callers.
-
-### Release approval and repository protection
-
-Stable releases are production changes. The `release-approval` environment must require at least one approving maintainer who did not push the release tag. The approval confirms that the tag points to a commit reachable from `main`, the manifest is present under `releases/<tag>/manifest.json`, pending changesets have been applied, and release notes describe migrations, compatibility changes, and rollback constraints.
-
-Configure repository protection with:
-
-| Control | Required setting |
+| Surface | Source |
 | --- | --- |
-| Stable release environment | `release-approval` with required reviewers |
-| RC release environment | `rc-release`; reviewer protection is optional |
-| PyPI publish environment | `pypi` with required reviewers |
-| npm publish environment | `npm-publish` with required reviewers |
-| Protected tags | `v*`; block deletion and force-push |
-| Release branches | `main` requires pull request review and required status checks |
+| Product version | `release.config.json` product version, currently `2026.05.27-rc.1`. |
+| Runtime binary | `apps/runtime/dist/caracal-*`. |
+| Console binary | `apps/console/dist/caracal-console-*`. |
+| Containers | API, STS, Gateway, Audit, Coordinator, Control, Postgres, Redis, Runtime. |
+| Helm | `infra/helm/caracal`. |
+| npm packages | Public `@caracalai/*` packages from `release.config.json`. |
+| PyPI packages | Public `caracalai-*` packages from `release.config.json`. |
 
-The actor who pushes a stable tag must not approve the `release-approval`, `pypi`, or `npm-publish` environment for that release. If an emergency requires bypassing a protection rule, record the reason in the release notes and run the full validation workflow before announcing the release as stable.
+## Build targets
 
----
+Runtime and Console release builds compile Linux x64/arm64, macOS x64/arm64, and Windows x64 binaries through Bun compile scripts.
 
-## Shell, Console, and Console binaries
+## Release flow
 
-The shell (`caracal`) and Console (`caracal-console`) are compiled to self-contained binaries using `bun --compile`. Ten archives are produced per release (five targets x two binaries), each containing one executable:
-
-| Target | Shell archive | Console archive |
-| --- | --- | --- |
-| `linux-amd64` | `caracal-shell-linux-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-amd64-vYYYY.MM.DD.tar.gz` |
-| `linux-arm64` | `caracal-shell-linux-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-linux-arm64-vYYYY.MM.DD.tar.gz` |
-| `darwin-amd64` | `caracal-shell-darwin-amd64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-amd64-vYYYY.MM.DD.tar.gz` |
-| `darwin-arm64` | `caracal-shell-darwin-arm64-vYYYY.MM.DD.tar.gz` | `caracal-console-darwin-arm64-vYYYY.MM.DD.tar.gz` |
-| `windows-amd64` | `caracal-shell-windows-amd64-vYYYY.MM.DD.zip` | `caracal-console-windows-amd64-vYYYY.MM.DD.zip` |
-
-Archives are attached to the GitHub Release with `manifest.json`, release installer copies, a `SHA256SUMS` file covering all release assets, and SLSA provenance attestations. rc tags create GitHub Releases for rc; stable tags create GitHub Releases for stable.
-
-### Install
-
-The Runtime and Console have separate install targets:
-
-```sh
-# Linux/macOS: Console
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.05.27-rc.1 --require-provenance
-
-# Windows: Console
-$installer = "$env:TEMP\install-console.ps1"
-iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 -OutFile $installer
-powershell -ExecutionPolicy Bypass -File $installer -Version v2026.05.27-rc.1 -RequireProvenance
-```
-
-The installers detect OS and architecture, resolve the latest release tag from the GitHub API (or accept `--version`/`-Version`), download the matching shell and selected tool archives, verify them against `SHA256SUMS`, optionally verify GitHub artifact provenance, extract them, and place the binaries on `PATH`.
-
-### Upgrade
-
-Re-run the same install command. The installer overwrites the binary in place with the new version.
-
-### Uninstall
-
-Linux/macOS: remove `caracal` and `caracal-console` from `~/.local/bin`.
-
-Windows: delete `%LOCALAPPDATA%\Programs\caracal` and remove the user PATH entry.
-
----
-
-## Container images
-
-Runtime and service container images are published to GitHub Container Registry on every release:
-
-| Image | Service |
+| Stage | Command pattern |
 | --- | --- |
-| `ghcr.io/garudex-labs/caracal-runtime` | Runtime shell image |
-| `ghcr.io/garudex-labs/caracal-api` | Control-Plane API |
-| `ghcr.io/garudex-labs/caracal-sts` | Security Token Service |
-| `ghcr.io/garudex-labs/caracal-gateway` | Gateway |
-| `ghcr.io/garudex-labs/caracal-coordinator` | Coordinator |
-| `ghcr.io/garudex-labs/caracal-control` | Control service |
-| `ghcr.io/garudex-labs/caracal-audit` | Audit service |
-| `ghcr.io/garudex-labs/caracal-postgres` | PostgreSQL image |
-| `ghcr.io/garudex-labs/caracal-redis` | Redis image |
+| RC prepare | `scripts/release.sh rc prepare --base-version <YYYY.MM.DD> --suffix rc.1` |
+| RC dry run | `scripts/release.sh rc dry-run --base-version <YYYY.MM.DD> --suffix rc.1 --local` |
+| Stable dry run | `scripts/release.sh stable --dry-run` |
+| Stable publish | `scripts/release.sh stable` |
 
-All images are multi-arch (`linux/amd64`, `linux/arm64`). The release workflow pushes the immutable CalVer tag first. Stable releases promote the same image manifests to the `vYYYY.MM` series and `latest` tags only after `release-approval` and release validation pass. rc releases never move `latest`.
+Protected GitHub workflows publish npm and PyPI packages. Local stable publishing requires explicit approval and environment override.
 
----
+## Changesets
 
-## Helm chart metadata
+Only public `@caracalai/*` packages under `packages/` are released through Changesets. Internal-only packages must stay in the Changesets ignore list.
 
-The Helm chart uses SemVer-compatible `Chart.yaml` versions and CalVer application versions. Release automation stamps:
+## Rollback rule
 
-| Field | Stable example | Meaning |
-| --- | --- | --- |
-| `Chart.yaml version` | `2026.5.14` | Helm package version; numeric components are normalized for SemVer compatibility |
-| `Chart.yaml appVersion` | `2026.05.27-rc.1` | Caracal release version without the leading `v` |
-| `values.yaml global.tag` | `2026.05.27-rc.1` | Image tag suffix; templates render images as `v<global.tag>` |
-| `manifest.json helm.imageTag` | `2026.05.27-rc.1` | Source of truth for Helm image alignment |
+Do not delete published tags. Roll forward with a new CalVer tag. Pinned `v<calver>` tags are immutable; floating monthly tags move with the new cut.
 
-Do not edit chart versions by hand during a release. `scripts/release.sh stable` and `scripts/release.sh rc prepare` stamp the chart and manifest from the same release identity. The release workflow rejects tags when `Chart.yaml`, `values.yaml`, and `manifest.json` disagree.
+## Related pages
 
-Validate committed manifests locally:
-
-```sh
-node scripts/validateReleaseManifest.mjs
-```
-
----
-
-## npm and PyPI packages
-
-npm and PyPI stable publishing must use protected workflows. `release.config.json` selects changed packages, ignores `examples/**`, and adds exact-pin dependents. Use `--since`, `--package`, or `--all-packages` for deliberate full publishes. npm rc uses `rc`; stable uses `latest`. npm uses the repository secret `NPM_TOKEN`; PyPI uses trusted publishing from the `pypi` environment.
-
-```sh
-pnpm release:plan --since v2026.05.14
-pnpm release:stamp:check
-gh workflow run publishNpm.yml -f package=changed -f dryRun=true -f runner=ubuntu-24.04
-gh workflow run publishNpm.yml -f package=changed -f runner=ubuntu-24.04
-gh workflow run publishPypi.yml -f package=changed -f dryRun=true -f runner=ubuntu-24.04
-gh workflow run publishPypi.yml -f package=changed -f runner=ubuntu-24.04
-```
-
-Publishing preflights run on Ubuntu, macOS, and Windows with one current Node or Python version. `runner` selects the OS that performs the final publish. Local stable publishing requires `CARACAL_ALLOW_LOCAL_STABLE_PUBLISH=1` and release approval.
-
-**npm packages** (`@caracalai/*`): `core`, `oauth`, `admin`, `identity`, `revocation`, `sdk`, `transport-mcp`, `transport-a2a`, `mcp-express`, `mcp-fastmcp`, `tokenstate-postgres`, `revocation-redis`. Browse at [npmjs.com/~caracal-run](https://www.npmjs.com/~caracal-run).
-
-**PyPI packages** (`caracalai-*`): `core`, `oauth`, `identity`, `revocation`, `sdk`, `transport-mcp`, `mcp-fastmcp`, `revocation-redis`. Browse at [pypi.org/user/CaracalAI](https://pypi.org/user/CaracalAI).
-
----
-
-## SLSA provenance
-
-The release pipeline generates SLSA Level 3 provenance attestations for binaries and container images. Verify an artifact:
-
-```sh
-gh attestation verify caracal-console-linux-amd64-v2026.05.27-rc.1.tar.gz --repo garudex-labs/caracal
-```
-
-High-assurance installs fail closed when provenance cannot be verified:
-
-```sh
-curl -fsSLO https://github.com/Garudex-Labs/caracal/releases/download/v2026.05.27-rc.1/install-console.sh
-sh install-console.sh --version v2026.05.27-rc.1 --require-provenance
-```
-
-```powershell
-.\install-console.ps1 -Version v2026.05.27-rc.1 -RequireProvenance
-```
-
----
-
-## Hotfixes
-
-For a critical fix on an already-released version:
-
-1. Branch from the release tag: `git checkout -b hotfix-jti v2026.05.26`.
-2. Apply the fix and open a PR against `main`.
-3. Merge after review; cherry-pick to `main` if the fix landed elsewhere first.
-4. Run `scripts/release.sh stable --dry-run` from updated `main`.
-5. Cut the recut tag with `scripts/release.sh`; same-day releases use `vYYYY.MM.DD.N`.
-6. Promote only after `release-approval` and release validation pass.
-
-Tags must point to commits reachable from `main`. The release script validates a clean tree, fast-forward remote state, missing remote tag, stamped manifest and Helm metadata, then pushes `main` and the tag atomically. If the atomic push fails, verify branch protection, tag protection, and whether the tag appeared remotely before retrying.
-
-## Rollback policy
-
-| Artifact | Rollback path |
-| --- | --- |
-| Binaries | Reinstall a prior immutable version with `install-console.sh --version vYYYY.MM.DD` or `install-console.ps1 -Version vYYYY.MM.DD`. |
-| Containers | Pin workloads back to the prior immutable `vYYYY.MM.DD` image tag; do not rely on `latest` during rollback. |
-| Helm | Use `helm rollback` only when migration status allows it; after a migration completes, schema reversal requires Postgres restore. |
-| npm | Published versions are immutable; deprecate a bad version and publish a higher patch version after approval. |
-| PyPI | Published versions are immutable; yank only with approval and publish a higher patch version for recovery. |
-
-Rollback notes must be present in release notes whenever a release includes migrations, policy contract changes, persisted data changes, or operator action.
-
----
-
-## Post-release validation
-
-Every release tag has a directory under `caracal/releases/<tag>/` that owns all of its metadata:
-
-- `manifest.json`: pins every artifact (binaries, containers, Helm metadata, PyPI, npm) to a mode and version, committed alongside the changeset version bump or rc preparation commit.
-- `../schema/manifest.schema.json`: documents the manifest shape required for new releases.
-- `validation.md`: the aggregated post-release validation report.
-- `findings/*.jsonl`: raw per-area findings.
-
-`postReleaseValidation.yml` runs after rc and stable releases, or by dispatch. npm, PyPI, binary, and installer checks run on Ubuntu, macOS, and Windows with one current language version. Blockers fail validation and block promotion.
-
-Run a single check locally:
-
-```sh
-CARACAL_RELEASE=v2026.05.27-rc.1 FINDINGS_DIR=/tmp/findings \
-  bash caracal/scripts/postRelease/validateRegistryMetadata.sh
-```
+- [Release and Package Versions](/reference/release-package-runtime-map/)
+- [Upgrade Procedure](/operations/upgrade/)

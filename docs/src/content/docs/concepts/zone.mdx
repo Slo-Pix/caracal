@@ -1,101 +1,60 @@
 ---
 title: Zone
-description: The tenancy boundary that owns policies, keys, resources, and the audit ledger.
-pageType: concept
-keywords: [zone, tenancy, signing key, DEK, KEK, JWKS, ChaCha20, isolation, multi-tenant]
+description: The tenancy boundary that owns policies, keys, resources, sessions, and audit.
+sidebar:
+  order: 4
 ---
 
-A zone is the top-level organizational boundary in Caracal. Everything (applications, resources, policies, grants, sessions, and audit events) belongs to exactly one zone. Zones are independent: a mandate issued in one zone cannot be verified in another, and a policy in one zone has no effect on another.
+A zone is the main isolation boundary in Caracal. It groups the configuration and runtime state needed to decide, issue, verify, revoke, and audit authority.
 
-## What a zone contains
+## What a zone owns
 
-| Item | Scoped to zone |
-| ---- | -------------- |
-| Applications | Yes; each application belongs to one zone |
-| Resources and providers | Yes |
-| Policies and policy sets | Yes; one active policy set per zone at a time |
-| Grants | Yes |
-| Agent sessions | Yes |
-| Audit events | Yes |
-| Signing key pair | Yes; each zone has its own EC P-256 key pair |
+| Area | Zone-owned data |
+| --- | --- |
+| Identity | Applications, credentials, subject sessions, and agent sessions. |
+| Authorization | Resources, providers, grants, policies, policy sets, and step-up challenges. |
+| Cryptography | Zone signing keys and JWKS used to verify mandates. |
+| Delegation | Delegation edges, constraints, depth limits, and cascade revocation state. |
+| Audit | Decision events, diagnostics, request IDs, and explain traces. |
 
-## Zone attributes
+## Why zones exist
 
-A zone is stored with these attributes:
+Zones let teams run separate environments, tenants, or trust domains without mixing authority data.
 
-| Field | Description |
-| ----- | ----------- |
-| `id` | UUID; carried in every mandate as `zone_id` |
-| `org_id` | Organization identifier (default: `"default"`) |
-| `name` | Human-readable label |
-| `slug` | URL-safe identifier (matches `/^[a-z0-9-]+$/`) |
-| `dek_ciphertext` | The zone's data encryption key, encrypted under the KEK |
-| `dcr_enabled` | Whether Dynamic Client Registration is permitted |
-| `pkce_required` | Whether PKCE is required for authorization code flows |
-| `login_flow` | Authentication flow type for this zone |
+Common zone boundaries include:
 
-## The key hierarchy
+- production, staging, and development environments;
+- separate customers in a hosted deployment;
+- isolated product areas with different policy owners;
+- high-sensitivity resources that need distinct keys and audit trails.
 
-Each zone has its own signing key pair used to sign and verify mandates. This isolation means a compromised key in one zone does not affect others, and keys can be rotated per zone independently.
+## Zone lifecycle
 
-The key hierarchy has two levels:
-
-```
-ZONE_KEK (environment variable, 32 bytes)
-    │
-    └─ encrypts → zone Data Encryption Key (DEK, stored as dek_ciphertext in DB)
-                      │
-                      └─ encrypts → zone signing key (EC P-256 private key, stored in secrets table)
+```mermaid
+flowchart LR
+  Create["Create zone"] --> Register["Register applications and resources"]
+  Register --> Policy["Author and activate policy set"]
+  Policy --> Run["Issue mandates and run agents"]
+  Run --> Audit["Review audit and explain traces"]
+  Audit --> Tune["Update grants, policy, and resources"]
+  Tune --> Run
 ```
 
-**ZONE_KEK** is a 32-byte hex-encoded key set in the `ZONE_KEK` environment variable on the STS. It is the root of the key hierarchy. The STS validates on startup that `ZONE_KEK` is present, is 32 bytes, and is not all zeros.
+Zone setup is normally managed through the Console. The Admin API exposes the same objects for automation.
 
-**Zone DEK** (`dek_ciphertext`) is stored in the `zones` table. The DEK is decrypted by the STS using ChaCha20-Poly1305 with the `ZONE_KEK`. The decrypted DEK is then used to decrypt the zone's signing key from the `secrets` table.
+## Key and policy isolation
 
-**Zone signing key** is the EC P-256 private key used to sign mandates. It is stored encrypted under the zone DEK, never in plaintext at rest.
+Each zone has its own signing-key and JWKS context. Resource servers verify mandates against the issuer, audience, and expected zone. Policy activation is also zone-scoped: activating a policy set in one zone does not affect another zone.
 
-The `ZONE_KEK_PROVIDER` environment variable controls where the KEK is sourced. The current supported value is `"local"` (reads from the `ZONE_KEK` env var). Future values may support external KMS providers.
+## Operational guidance
 
-## JWKS endpoint
+- Keep production and non-production authority in separate zones.
+- Name zones after the trust boundary, not a single service.
+- Keep resource identifiers stable because policies, grants, and audit traces refer to them.
+- Rotate zone signing keys using the operations workflow, then confirm resource servers load the current JWKS.
 
-The STS exposes the zone's public key(s) for verification:
+## Related pages
 
-```
-GET /zones/{zoneId}/.well-known/jwks.json
-```
-
-This endpoint returns up to two recent public keys to support key rotation without breaking in-flight tokens that were signed with the previous key. JWKS responses are cached by the Gateway and SDK connectors, refreshed every 5 minutes.
-
-## One active policy set per zone
-
-A zone has exactly one active policy set binding at a time. All token exchanges in the zone are evaluated against the active bundle. A zone with no active binding evaluates with the deny-all fallback.
-
-Policy set activations are propagated to the STS immediately through the `caracal.policy.invalidate` Redis stream, which triggers a bundle reload for the zone.
-
-## Zone isolation in practice
-
-Two zones running on the same stack are as independent as two separate deployments. They share PostgreSQL and Redis infrastructure but maintain separate:
-
-- Signing keys (mandates can only be verified by the issuing zone's JWKS)
-- Policy sets (an activation in zone A does not affect zone B)
-- Session namespaces (agent sessions are keyed by `zone_id`)
-- Audit ledgers (audit events carry `zone_id` and are queryable per zone)
-
-A mandate issued by zone A carries `zone_id = "zone-A"` in its claims. The Gateway verifies the token against the JWKS of the zone specified in the token: a token for zone A cannot be verified against zone B's JWKS.
-
-## When to use multiple zones
-
-Use separate zones when you need:
-
-- Different policy sets for different environments (staging vs production)
-- Different signing keys for different teams or services
-- Audit segregation by organizational unit
-- Independent key rotation schedules
-
-A single zone is sufficient for most deployments where all services share the same policies and trust boundary.
-
-## Next steps
-
-- [Resource and Grant](./resource-grant/): resources and grants within a zone
-- [Policy](./policy/): activating a policy set in a zone
-- [Mandate](./mandate/): how zone signing keys produce mandates
+- [Principal and Application](/concepts/principal/)
+- [Resource and Grant](/concepts/resource-grant/)
+- [Audit Ledger](/concepts/audit-ledger/)

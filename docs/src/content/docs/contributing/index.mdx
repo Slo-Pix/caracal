@@ -1,17 +1,36 @@
 ---
 title: Contributing
-description: How to build, test, and ship changes to Caracal.
+description: Contributor guide for setup, workflow, style, tests, releases, and governance.
 pageType: landing
 ---
 
-This page no longer documents standalone management command examples. Human-facing management now runs through the Console.
+Caracal uses a multi-language workspace: TypeScript apps/packages, Go services/packages, Python packages/examples, Docker/Helm infra, and Astro docs.
 
-Open the interface with:
+## Start here
 
-```bash
-caracal console
-```
+| Need | Page |
+| --- | --- |
+| Prepare your machine | [Local Setup](/contributing/setup/) |
+| Work on an issue or PR | [Development Workflow](/contributing/workflow/) |
+| Match project conventions | [Code Style](/contributing/style/) |
+| Run the right checks | [Testing](/contributing/testing/) |
+| Understand release flow | [Release and Versioning](/contributing/release/) |
+| Understand maintainership | [Governance](/contributing/governance/) |
 
-Use the matching view for the workflow covered by this page. For automation, enable the Control API from the Console Control menu and call the authenticated HTTP surface.
+## Current toolchain
 
-Runtime lifecycle commands (`caracal up`, `caracal down`, `caracal status`, `caracal purge`) and workload execution (`caracal run -- <command>`) remain documented in [Runtime and Console](/runtime-console/).
+| Tool | Version |
+| --- | --- |
+| Node.js | 24+ |
+| pnpm | 11.1.1 |
+| Docker + Compose v2 | 24+ |
+| Go | 1.26+ |
+| Python | 3.14+ |
+| Bun | latest stable used by package scripts |
+
+## Contribution boundaries
+
+- Top-level `caracal` stays limited to runtime lifecycle and `caracal run`.
+- Product management belongs to Console, Admin SDK, or Control API.
+- Security reports must follow [Disclosure Policy](/security/disclosure/), not public issues.
+- Open-source code must not import, reference, or depend on enterprise-only code.

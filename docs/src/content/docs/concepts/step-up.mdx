@@ -1,200 +1,61 @@
 ---
 title: Step-Up Challenge
-description: How policies require fresh proof of authority for sensitive resources, and how the STS mediates that proof before issuing a mandate.
-pageType: concept
-keywords: [step-up, challenge, mfa, human-approval, software-attestation, interaction-required, re-authentication, challenge_resolved]
+description: How policies require fresh proof of authority for sensitive resources.
+sidebar:
+  order: 13
 ---
 
-Some resources are sensitive enough that a policy should require fresh proof before issuing a mandate: even when the requesting session and grant are otherwise valid. Step-up challenges are the mechanism for that. A policy signals that a proof is required; the STS creates a time-limited challenge; an external system satisfies it; the client retries the exchange; and the STS atomically consumes the proof before calling OPA again. OPA's second evaluation sees `challenge_resolved = true` and can allow the request.
+Step-up is Caracal's way to pause a token exchange and require fresh proof before issuing a mandate for a sensitive resource.
 
-## Why step-up exists
-
-Mandate issuance is evaluated against the policy set active at exchange time. A policy can inspect anything in the OPA input (session depth, delegation chain, requested scopes, time of day) but it cannot reach outside OPA to prompt a human, trigger an MFA flow, or call an external approver. Step-up is the bridge: the policy returns a signal, and the STS pauses issuance while the external interaction completes.
-
-The challenge carries no data about what proof means. `challenge_type` tells the client which interaction to initiate, but the STS only verifies that the proof was delivered to the right endpoint and then consumed exactly once.
-
-## Challenge types
-
-| Type | Meaning |
-| ---- | ------- |
-| `mfa` | Multi-factor authentication confirmation |
-| `human_approval` | A human reviewer must approve the action |
-| `software_attestation` | Software identity or attestation assertion |
-
-The challenge type is purely a signal. The STS does not perform the MFA check or contact any approver: it only stores whether the challenge was satisfied through the API.
+Policy triggers step-up by returning a diagnostic such as `{"step_up_required": "mfa"}`. The STS converts that diagnostic into an `interaction_required` error with a challenge ID.
 
 ## Step-up flow
 
-```
-1. Client → STS: exchange request (no challenge fields)
-   ↓
-2. STS evaluates OPA → policy returns:
-   decision = "deny"
-   diagnostics = [{"step_up_required": "mfa"}]
-   ↓
-3. STS creates challenge (UUIDv7 id, 32-byte random secret, 5-minute TTL)
-   ↓
-4. STS → Client: HTTP 401
-   WWW-Authenticate: Bearer error="interaction_required"
-   {
-     "error": "interaction_required",
-     "error_description": "Step-up challenge required",
-     "challenge_id": "...",
-     "challenge_type": "mfa",
-     "challenge_secret": "<base64url 32-byte secret>",
-     "challenge_expires_at": "...",
-     "requestId": "..."
-   }
-   ↓
-5. Client initiates MFA/approval flow out-of-band
-   ↓
-6. External system → API:
-   POST /v1/zones/{zoneId}/step-up-challenges/{id}/satisfy
-   → sets satisfied_at; returns { "id": "...", "satisfied_at": "..." }
-   ↓
-7. Client → STS: retry exchange with challenge_id + challenge_response
-   ↓
-8. STS: rate-limit check → verify + atomically consume challenge
-   ↓
-9. STS evaluates OPA again with challenge_resolved = true in context
-   ↓
-10. OPA → allow → STS issues mandate
+```mermaid
+sequenceDiagram
+  participant App as App or agent
+  participant STS as STS
+  participant Policy as Active policy set
+  participant Control as Console or Admin API
+
+  App->>STS: Exchange for sensitive resource
+  STS->>Policy: Evaluate request
+  Policy-->>STS: deny with step_up_required diagnostic
+  STS-->>App: interaction_required with challenge_id
+  Control->>Control: Complete external proof
+  Control->>STS: Mark challenge satisfied
+  App->>STS: Retry exchange with challenge proof
+  STS-->>App: Mandate
 ```
 
-## How policy signals step-up
+## Components
 
-A step-up policy guards by checking `challenge_resolved` and returning a structured diagnostic when it is not yet set:
+| Component | Responsibility |
+| --- | --- |
+| Policy | Decides when step-up is required. |
+| STS | Creates the challenge, throttles failed attempts, and verifies challenge proof during retry. |
+| Console or Admin API | Lists, inspects, and satisfies challenges after an external proof step. |
+| SDK or OAuth client | Surfaces `interaction_required` so the application can guide the user or operator. |
 
-```text
-result := {
-  "decision": "allow",
-  "evaluation_status": "complete",
-  "determining_policies": ["payments-transfer-policy"],
-  "diagnostics": [],
-} if {
-  input.resource.identifier == "resource://payments"
-  "transfer" in input.context.requested_scopes
-  input.context.challenge_resolved == true
-}
+## Challenge lifecycle
 
-result := {
-  "decision": "deny",
-  "evaluation_status": "complete",
-  "determining_policies": ["payments-transfer-policy"],
-  "diagnostics": [{"step_up_required": "mfa"}],
-} if {
-  input.resource.identifier == "resource://payments"
-  "transfer" in input.context.requested_scopes
-  not input.context.challenge_resolved
-}
-```
+| State | Meaning |
+| --- | --- |
+| Created | STS issued a challenge for a specific zone, session, resource set, and challenge type. |
+| Satisfied | A different approver or external proof completed the requirement. |
+| Consumed | STS accepted the proof during retry and issued the mandate. |
+| Expired or invalid | The challenge can no longer be used. |
 
-The STS detects step-up by scanning `diagnostics` for any object with a `step_up_required` key. The value of that key becomes the `challenge_type`. The STS will only start a challenge when the policy also returns `decision = "deny"`: a policy that returns `"allow"` with a `step_up_required` diagnostic is ignored.
+## Design guidance
 
-## Challenge creation
+- Use step-up for high-risk resources, sensitive scopes, or unusual context.
+- Keep the proof step outside policy; policy should decide that proof is needed, not perform the proof.
+- Prevent self-approval for sensitive challenges.
+- Include enough diagnostics for the Console and audit views to explain the requirement.
+- Retry token exchange only after the challenge is satisfied.
 
-When the STS detects `step_up_required`, it creates a challenge row with:
+## Related pages
 
-| Column | Content |
-| ------ | ------- |
-| `id` | UUIDv7 |
-| `zone_id` | Zone of the exchange |
-| `session_id` | Session ID of the requesting agent |
-| `principal_id` | Application or user ID of the requester |
-| `challenge_type` | Value from the policy diagnostic |
-| `challenge_secret_hash` | SHA-256 of the base64url-encoded 32-byte random secret |
-| `resource_set_hash` | SHA-256 of the canonical (sorted, lowercase) resource list |
-| `expires_at` | Creation time + 5 minutes |
-| `satisfied_at` | Null until satisfied |
-| `consumed_at` | Null until the exchange retry consumes it |
-
-The raw `challenge_secret` (base64url-encoded 32 bytes) is returned in the 401 response and never stored. Only its SHA-256 hash is persisted.
-
-## Satisfying the challenge
-
-The external system (MFA service, approval workflow, or attestation verifier) calls the satisfaction endpoint after the user or reviewer completes the required interaction:
-
-```
-POST /v1/zones/{zoneId}/step-up-challenges/{id}/satisfy
-```
-
-The request body must include `approver_subject_id`, and the approver must not be the same subject that triggered the challenge. This sets `satisfied_at` and `approver_subject_id` on the challenge row. The endpoint returns `400` for an invalid body and `409` if the challenge cannot be satisfied because it is expired, already satisfied, not found in the zone, or self-approved by the triggering subject.
-
-The challenge is **not consumed** at this point. Consumption happens atomically during the exchange retry.
-
-## Retrying the exchange
-
-The client includes two additional fields in the token exchange form body:
-
-| Field | Value |
-| ----- | ----- |
-| `challenge_id` | The UUID from the 401 response |
-| `challenge_response` | The raw `challenge_secret` from the 401 response |
-
-All other exchange parameters must be identical to the original request: same resources, same scopes, same session.
-
-## Challenge verification and atomic consumption
-
-Before calling OPA on the retry, the STS verifies and atomically consumes the challenge with a single UPDATE:
-
-```sql
-UPDATE step_up_challenges
-SET consumed_at = $now
-WHERE id = $challenge_id
-  AND zone_id = $zone_id
-  AND principal_id = $principal_id
-  AND challenge_secret_hash = sha256($challenge_response)
-  AND resource_set_hash = sha256(canonical($resources))
-  AND satisfied_at IS NOT NULL
-  AND consumed_at IS NULL
-  AND expires_at > $now
-  AND EXISTS (
-    SELECT 1 FROM sessions s
-    WHERE s.id = challenge.session_id
-      AND s.zone_id = $zone_id
-      AND s.status = 'active'
-      AND s.expires_at > $now
-  )
-```
-
-All bindings must hold simultaneously. If any check fails (wrong principal, wrong resources, already consumed, expired, or associated session revoked) the UPDATE affects zero rows and the STS returns HTTP 401.
-
-A challenge that passes verification is immediately marked consumed. Replaying the same `challenge_id` + `challenge_response` will always fail because `consumed_at IS NULL` no longer holds.
-
-If verification succeeds, the STS sets `challenge_resolved = true` in `input.context` and calls OPA. The policy sees a fully resolved context and, if correctly written, returns `"allow"`.
-
-## Rate limiting
-
-The STS tracks failed challenge verifications per `(zone_id, principal_id)` in memory. After 5 failures within a 2-minute sliding window, the principal enters a 5-minute cooldown. During cooldown, any exchange request with `challenge_id` set is rejected with HTTP 429 before verification is attempted.
-
-A successful verification resets the failure count for that principal.
-
-Rate-limit state is in-process and does not persist across STS restarts.
-
-## Audit events
-
-The step-up flow produces audit events at each decision point:
-
-| `evaluation_status` | `decision` | HTTP Status | Trigger |
-| ------------------- | ---------- | ----------- | ------- |
-| *(from policy)* | `deny` | 401 | Policy returned `step_up_required`; challenge created |
-| `challenge_invalid` | `deny` | 401 | Verification failed (bad secret, wrong resources, expired, already consumed) |
-| `challenge_cooldown` | `deny` | 429 | Principal exceeded failure threshold and is in cooldown |
-| *(from policy)* | `allow` | 200 | Challenge resolved; OPA allowed the request |
-
-All four outcomes produce events in `caracal.audit.events` that flow into the append-only audit ledger. The original 401 (challenge created) uses the evaluation status the policy returned in its deny result. The mandate-issued event carries `challenge_resolved = true` in the exchange context embedded in the mandate's claims.
-
-## What step-up does not do
-
-Step-up does not:
-
-- Perform MFA, request human approval, or contact any external verifier. The STS only stores the challenge and checks whether `satisfied_at` was set.
-- Guarantee that the entity that satisfied the challenge is the same entity that initiated the exchange. That relationship is enforced by `principal_id` matching, not by authentication of the caller to the satisfaction endpoint. Protect the satisfaction endpoint with appropriate access controls for your deployment.
-- Extend the challenge TTL. A challenge that expires before satisfaction or consumption is lost. The client must restart the exchange to obtain a fresh challenge.
-- Allow the same challenge to be reused for a different resource set. The `resource_set_hash` binds the challenge to the exact set of resources in the original request.
-
-## Next steps
-
-- [Authority Model](./authority-model/): the OPA input structure and how `challenge_resolved` appears in `input.context`
-- [Policy](./policy/): how to write policies that guard high-value scopes behind step-up
-- [Audit Ledger](./audit-ledger/): how step-up events are recorded and chained
+- [Step-Up Re-Authentication](/guides/step-up/)
+- [Policy](/concepts/policy/)
+- [Audit Ledger](/concepts/audit-ledger/)
