@@ -326,6 +326,27 @@ describe('resources actions', () => {
     expect(typeof fields.find((f) => f.key === 'gateway_application_id')?.pick).toBe('function')
     expect(typeof fields.find((f) => f.key === 'credential_provider_id')?.pick).toBe('function')
   })
+
+  it('adapts resource fields to direct versus Gateway mode', async () => {
+    const { ctx } = newCtx()
+    const list = resourcesView(ctx as unknown as Parameters<typeof resourcesView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'n', app) as FormView
+    const ctxView = { app, size: { rows: 30, cols: 100 }, status: '' }
+
+    expect(form.render(ctxView).join('\n')).not.toContain('upstream URL *')
+    ;(form as unknown as { values: Record<string, string> }).values.mode = 'gateway'
+    let body = form.render(ctxView).join('\n')
+    expect(body).toContain('upstream URL *')
+    expect(body).toContain('Advanced options')
+
+    ;(form as unknown as { focus: number }).focus = 4
+    await form.onKey('right', ctxView)
+    const advanced = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as FormView
+    body = advanced.render(ctxView).join('\n')
+    expect(body).toContain('gateway app')
+    expect(body).toContain('credential provider')
+  })
 })
 
 describe('providers actions', () => {
@@ -346,6 +367,36 @@ describe('providers actions', () => {
     expect(keys).toContain('client_id')
   })
 
+  it('adapts provider fields to the selected provider kind', async () => {
+    const { ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const form = await pressKey(list, 'n', fakeApp()) as FormView
+    const ctxView = { app: fakeApp(), size: { rows: 30, cols: 100 }, status: '' }
+
+    let body = form.render(ctxView).join('\n')
+    expect(body).toContain('issuer')
+    expect(body).toContain('authorization endpoint')
+    expect(body).toContain('token endpoint *')
+    expect(body).not.toContain('API key header')
+    expect(body).not.toContain('audience *')
+
+    ;(form as unknown as { values: Record<string, string> }).values.kind = 'apikey'
+    body = form.render(ctxView).join('\n')
+    expect(body).toContain('API key header *')
+    expect(body).not.toContain('issuer')
+    expect(body).not.toContain('authorization endpoint')
+    expect(body).not.toContain('token endpoint *')
+    expect(body).not.toContain('audience *')
+
+    ;(form as unknown as { values: Record<string, string> }).values.kind = 'workload'
+    body = form.render(ctxView).join('\n')
+    expect(body).toContain('issuer *')
+    expect(body).toContain('audience *')
+    expect(body).toContain('token endpoint *')
+    expect(body).not.toContain('API key header')
+    expect(body).not.toContain('authorization endpoint')
+  })
+
   it('creates oauth providers with upstream OAuth scopes separated from Caracal scopes', async () => {
     const { client, ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
@@ -353,7 +404,7 @@ describe('providers actions', () => {
     const pushed = await pressKey(list, 'n', app) as FormView
     ;(pushed as unknown as { values: Record<string, string> }).values = {
       identifier: 'provider-id',
-      name: '',
+      name: 'GitHub OAuth',
       kind: 'oauth2',
       client_id: 'client-id',
       issuer: '',
@@ -386,6 +437,43 @@ describe('providers actions', () => {
     }))
   })
 
+  it('drops stale hidden provider fields when the provider kind changes', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const pushed = await pressKey(list, 'n', app) as FormView
+    ;(pushed as unknown as { values: Record<string, string> }).values = {
+      identifier: 'provider-id',
+      name: 'API key provider',
+      kind: 'apikey',
+      client_id: 'stale-client',
+      issuer: 'https://issuer.example.com',
+      authorization_endpoint: 'https://issuer.example.com/auth',
+      token_endpoint: 'https://provider.example/token',
+      allowed_token_hosts: 'provider.example',
+      upstream_oauth_scopes: 'provider.scope',
+      api_key_header: 'X-Api-Key',
+      auth_scheme: '',
+      workload_audience: 'stale-audience',
+      workload_token_endpoint: 'https://workload.example/token',
+      workload_allowed_token_hosts: 'workload.example',
+      forward_caracal_identity: 'false',
+      config_file: '',
+      config_json: '',
+    }
+    ;(pushed as unknown as { focus: number }).focus = 99
+
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      identifier: 'provider-id',
+      kind: 'apikey',
+      config_json: {
+        header_name: 'X-Api-Key',
+      },
+    }))
+  })
+
   it('rejects provider config that mixes upstream scopes with Caracal scopes', async () => {
     const { client, ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
@@ -393,7 +481,7 @@ describe('providers actions', () => {
     const pushed = await pressKey(list, 'n', app) as FormView
     ;(pushed as unknown as { values: Record<string, string> }).values = {
       identifier: 'provider-id',
-      name: '',
+      name: 'GitHub OAuth',
       kind: 'oauth2',
       client_id: '',
       issuer: '',
@@ -465,14 +553,37 @@ describe('policySets actions', () => {
     const form = await pressKey(list, 's', app) as FormView
     ;(form as unknown as { values: Record<string, string> }).values = {
       version_id: 'v1',
+      source: 'paste',
       input: '{"subject":"u1"}',
       input_file: '',
     }
-    ;(form as unknown as { focus: number }).focus = 3
+    ;(form as unknown as { focus: number }).focus = 4
     await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
     expect(client.policySets.simulate).toHaveBeenCalledWith('z1', 'ps1', 'v1', { subject: 'u1' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     expect(pushed[pushed.length - 1]).toBeInstanceOf(DetailView)
+  })
+
+  it('adapts policy-set simulation input to the selected source', async () => {
+    const { ctx } = newCtx()
+    const list = policySetsView(ctx as unknown as Parameters<typeof policySetsView>[0]) as ListView<unknown>
+    setRows(list, [{ id: 'ps1', name: 'ps', description: null, active_version_id: null }])
+    const form = await pressKey(list, 's', fakeApp()) as FormView
+    const ctxView = { app: fakeApp(), size: { rows: 20, cols: 100 }, status: '' }
+
+    let body = form.render(ctxView).join('\n')
+    expect(body).not.toContain('inline input')
+    expect(body).not.toContain('input file')
+
+    ;(form as unknown as { values: Record<string, string> }).values.source = 'paste'
+    body = form.render(ctxView).join('\n')
+    expect(body).toContain('inline input *')
+    expect(body).not.toContain('input file')
+
+    ;(form as unknown as { values: Record<string, string> }).values.source = 'file'
+    body = form.render(ctxView).join('\n')
+    expect(body).toContain('input file *')
+    expect(body).not.toContain('inline input')
   })
 })
 
@@ -507,6 +618,17 @@ describe('grants actions', () => {
     const fields = (form as unknown as { fields: { key: string; pick?: unknown }[] }).fields
     expect(typeof fields.find((f) => f.key === 'application_id')?.pick).toBe('function')
     expect(typeof fields.find((f) => f.key === 'resource_id')?.pick).toBe('function')
+  })
+
+  it('shows grant scopes only after a resource is selected', async () => {
+    const { ctx } = newCtx()
+    const list = grantsView(ctx as unknown as Parameters<typeof grantsView>[0]) as ListView<unknown>
+    const form = await pressKey(list, 'n', fakeApp()) as FormView
+    const ctxView = { app: fakeApp(), size: { rows: 20, cols: 100 }, status: '' }
+
+    expect(form.render(ctxView).join('\n')).not.toContain('Caracal scopes')
+    ;(form as unknown as { values: Record<string, string> }).values.resource_id = 'res-1'
+    expect(form.render(ctxView).join('\n')).toContain('Caracal scopes *')
   })
 
   it('k revokes selected grant', async () => {

@@ -136,6 +136,50 @@ describe('FormView input UX', () => {
     await picker.onKey('enter', ctx)
     expect(view.values_().credential_type).toBe('public')
   })
+
+  it('submits only fields relevant to the current dynamic selection', async () => {
+    const submit = vi.fn(async () => {})
+    const view = new FormView({
+      title: 't',
+      fields: [
+        { key: 'mode', label: 'mode', kind: 'select', options: ['a', 'b'], default: 'a' },
+        { key: 'a_value', label: 'a value', kind: 'text', visible: (values) => values.mode === 'a' },
+        { key: 'b_value', label: 'b value', kind: 'text', required: true, visible: (values) => values.mode === 'b' },
+      ],
+      onSubmit: submit,
+    })
+    ;(view as unknown as { values: Record<string, string> }).values = {
+      mode: 'b',
+      a_value: 'stale',
+      b_value: 'current',
+    }
+    ;(view as unknown as { focus: number }).focus = 3
+
+    await view.onKey('enter', { app: fakeApp(), size: { rows: 10, cols: 80 }, status: '' })
+
+    expect(submit).toHaveBeenCalledWith({ mode: 'b', a_value: '', b_value: 'current' }, expect.anything())
+  })
+
+  it('uses dependency metadata for live visibility and field info', async () => {
+    const view = new FormView({
+      title: 't',
+      fields: [
+        { key: 'mode', label: 'mode', kind: 'select', options: ['basic', 'gateway'], default: 'basic' },
+        { key: 'url', label: 'upstream URL', kind: 'text', required: true, dependsOn: { mode: 'gateway' } },
+      ],
+      onSubmit: async () => {},
+    })
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 12, cols: 100 }, status: '' }
+
+    expect(view.render(ctx).join('\n')).not.toContain('upstream URL')
+    ;(view as unknown as { values: Record<string, string> }).values.mode = 'gateway'
+    expect(view.render(ctx).join('\n')).toContain('upstream URL *')
+    ;(view as unknown as { focus: number }).focus = 1
+    await view.onKey('?', ctx)
+    const info = vi.mocked(app.push).mock.calls.at(-1)![0] as { render: FormView['render'] }
+    expect(info.render(ctx).join('\n')).toContain('Shown when mode is gateway')
+  })
 })
 
 describe('FormView validation', () => {

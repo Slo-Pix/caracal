@@ -154,8 +154,13 @@ describe('first setup workflow', () => {
     expect(advanced).toBeInstanceOf(FormView)
     const advancedBody = advanced.render(ctx(app)).join('\n')
     expect(advancedBody).toContain('resource identifier')
-    expect(advancedBody).toContain('provider')
     expect(advancedBody).toContain('profile path')
+    expect(advancedBody).not.toContain('provider')
+
+    ;(view as unknown as { values: Record<string, string> }).values.upstream_url = 'https://upstream-url'
+    await view.onKey('A', ctx(app))
+    const gatewayAdvanced = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as FormView
+    expect(gatewayAdvanced.render(ctx(app)).join('\n')).toContain('provider')
   })
 
   it('creates the first zone, app, resource, policy, and generated profile from sequential answers', async () => {

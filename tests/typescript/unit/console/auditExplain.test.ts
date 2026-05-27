@@ -305,8 +305,8 @@ describe('audit explain entry', () => {
     const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
     await credential.onKey('i', { app, size: { rows: 25, cols: 80 }, status: '' })
     const form = pushed[pushed.length - 1] as FormView
-    ;(form as unknown as { values: Record<string, string> }).values = { token, file: '' }
-    ;(form as unknown as { focus: number }).focus = 2
+    ;(form as unknown as { values: Record<string, string> }).values = { source: 'paste', token, file: '' }
+    ;(form as unknown as { focus: number }).focus = 3
     await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
 
     const detail = pushed[pushed.length - 1] as DetailView
