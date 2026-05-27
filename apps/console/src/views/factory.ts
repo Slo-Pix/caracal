@@ -86,7 +86,7 @@ function inferredTokenHosts(endpoint: string | undefined): string {
   if (!value) return ''
   try {
     const url = new URL(value)
-    return url.protocol === 'https:' ? url.host : ''
+    return url.protocol === 'https:' ? url.hostname : ''
   } catch {
     return ''
   }
@@ -99,6 +99,8 @@ function bool(v: string | undefined): boolean | undefined {
 
 const CREDENTIAL_TYPES: CredentialType[] = ['token', 'password', 'public-key', 'url', 'public']
 const PROVIDER_KINDS: ProviderKind[] = ['oauth2', 'oidc', 'apikey', 'workload']
+const RESOURCE_MODES = ['direct', 'gateway'] as const
+const CONTENT_SOURCES = ['paste', 'file'] as const
 
 type PolicyVersionRow = PolicyVersion & { policy_name: string }
 type PolicySetVersionRow = PolicySetVersion & { policy_set_name: string }
@@ -162,24 +164,6 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
 
 function providerKind(value: string | undefined): ProviderKind {
   return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2'
-}
-
-function oauthProviderVisible(values: Readonly<Record<string, string>>): boolean {
-  const kind = providerKind(values.kind)
-  return kind === 'oauth2' || kind === 'oidc'
-}
-
-function apiKeyProviderVisible(values: Readonly<Record<string, string>>): boolean {
-  return providerKind(values.kind) === 'apikey'
-}
-
-function workloadProviderVisible(values: Readonly<Record<string, string>>): boolean {
-  return providerKind(values.kind) === 'workload'
-}
-
-function issuerProviderVisible(values: Readonly<Record<string, string>>): boolean {
-  const kind = providerKind(values.kind)
-  return kind === 'oauth2' || kind === 'oidc' || kind === 'workload'
 }
 
 function mergeConfigText(config: JsonObject, key: string, value: string | undefined): void {
@@ -735,11 +719,12 @@ export function resourcesView(ctx: Ctx): View {
           fields: [
             { key: 'name', label: 'resource name', kind: 'text', required: true, hint: 'human-readable name; identifier is generated when blank' },
             { key: 'scopes', label: 'Caracal scopes', kind: 'list', required: true, hint: 'comma-separated authorization scopes for this resource' },
-            { key: 'upstream_url', label: 'upstream URL', kind: 'text' },
+            { key: 'mode', label: 'integration mode', kind: 'select', options: [...RESOURCE_MODES], default: 'direct', hint: 'direct protects an audience only; gateway adds upstream routing fields' },
+            { key: 'upstream_url', label: 'upstream URL', kind: 'text', required: true, dependsOn: { mode: 'gateway' }, hint: 'Gateway target for REST APIs, gRPC gateways, MCP servers, or SDK-backed services' },
             { key: 'identifier', label: 'identifier', kind: 'text', advanced: true, hint: 'optional; generated as resource://resource-name when blank' },
-            { key: 'gateway_application_id', label: 'gateway app', kind: 'text', advanced: true, pick: applicationPicker(ctx), resolve: applicationResolver(ctx), hint: 'only when Gateway should exchange as a specific app' },
-            { key: 'prefix', label: 'prefix match', kind: 'bool', default: 'true', advanced: true, hint: 'enabled by default for Gateway-routed API, gRPC, and MCP paths' },
-            { key: 'credential_provider_id', label: 'credential provider', kind: 'text', advanced: true, pick: providerPicker(ctx), resolve: providerResolver(ctx), hint: 'only when the upstream service needs provider-side credentials' },
+            { key: 'gateway_application_id', label: 'gateway app', kind: 'text', dependsOn: { mode: 'gateway' }, advanced: true, pick: applicationPicker(ctx), resolve: applicationResolver(ctx), hint: 'only when Gateway should exchange as a specific app' },
+            { key: 'prefix', label: 'prefix match', kind: 'bool', default: 'true', dependsOn: { mode: 'gateway' }, advanced: true, hint: 'enabled by default for Gateway-routed API, gRPC, and MCP paths' },
+            { key: 'credential_provider_id', label: 'credential provider', kind: 'text', dependsOn: { mode: 'gateway' }, advanced: true, pick: providerPicker(ctx), resolve: providerResolver(ctx), hint: 'only when the upstream service needs provider-side credentials' },
           ],
           onSubmit: async (v, app) => {
             await ctx.client.resources.create(ctx.zoneId, {
@@ -763,10 +748,11 @@ export function resourcesView(ctx: Ctx): View {
             fields: [
               { key: 'name', label: 'name', kind: 'text', default: row.name ?? '' },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
-              { key: 'upstream_url', label: 'upstream URL', kind: 'text', default: row.upstream_url ?? '' },
-               { key: 'gateway_application_id', label: 'gateway app', kind: 'text', default: row.gateway_application_id ?? '', pick: applicationPicker(ctx), resolve: applicationResolver(ctx) },
-               { key: 'credential_provider_id', label: 'credential provider', kind: 'text', default: row.credential_provider_id ?? '', pick: providerPicker(ctx), resolve: providerResolver(ctx), hint: 'only when the upstream service needs provider-side credentials' },
-              { key: 'prefix', label: 'prefix match', kind: 'bool', default: String(row.prefix) },
+              { key: 'mode', label: 'integration mode', kind: 'select', options: [...RESOURCE_MODES], default: row.upstream_url ? 'gateway' : 'direct' },
+              { key: 'upstream_url', label: 'upstream URL', kind: 'text', default: row.upstream_url ?? '', required: true, dependsOn: { mode: 'gateway' } },
+              { key: 'gateway_application_id', label: 'gateway app', kind: 'text', default: row.gateway_application_id ?? '', dependsOn: { mode: 'gateway' }, pick: applicationPicker(ctx), resolve: applicationResolver(ctx) },
+              { key: 'credential_provider_id', label: 'credential provider', kind: 'text', default: row.credential_provider_id ?? '', dependsOn: { mode: 'gateway' }, pick: providerPicker(ctx), resolve: providerResolver(ctx), hint: 'only when the upstream service needs provider-side credentials' },
+              { key: 'prefix', label: 'prefix match', kind: 'bool', default: String(row.prefix), dependsOn: { mode: 'gateway' } },
               { key: 'scopes', label: 'Caracal scopes', kind: 'list', default: (row.scopes ?? []).join(','), hint: 'comma-separated authorization scopes for this resource' },
             ],
             onSubmit: async (v, app) => {
@@ -824,20 +810,23 @@ export function providersView(ctx: Ctx): View {
           title: 'create provider',
           submitLabel: 'create provider',
           fields: [
-            { key: 'name', label: 'provider name', kind: 'text', hint: 'human-readable name; identifier is generated when blank' },
+            { key: 'name', label: 'provider name', kind: 'text', required: true, hint: 'human-readable name; identifier is generated when blank' },
             { key: 'kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: 'oauth2' },
-            { key: 'issuer', label: 'issuer', kind: 'text', visible: issuerProviderVisible, hint: 'required for OIDC and workload providers' },
-            { key: 'token_endpoint', label: 'token endpoint', kind: 'text', visible: oauthProviderVisible, required: true },
-            { key: 'upstream_oauth_scopes', label: 'upstream OAuth scopes', kind: 'list', visible: oauthProviderVisible, hint: 'provider-side scopes, separate from Caracal resource scopes' },
-            { key: 'api_key_header', label: 'API key header', kind: 'text', visible: apiKeyProviderVisible, required: true },
-            { key: 'workload_audience', label: 'audience', kind: 'text', visible: workloadProviderVisible, required: true },
-            { key: 'workload_token_endpoint', label: 'token endpoint', kind: 'text', visible: workloadProviderVisible, required: true },
+            { key: 'issuer', label: 'issuer', kind: 'text', dependsOn: { kind: ['oauth2', 'oidc', 'workload'] }, required: (values) => {
+              const kind = providerKind(values.kind)
+              return kind === 'oidc' || kind === 'workload'
+            }, hint: 'issuer URL for OIDC discovery or workload identity trust' },
+            { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', dependsOn: { kind: ['oauth2', 'oidc'] }, hint: 'OAuth authorization endpoint used by browser or consent flows' },
+            { key: 'token_endpoint', label: 'token endpoint', kind: 'text', dependsOn: { kind: ['oauth2', 'oidc'] }, required: true, hint: 'HTTPS endpoint where provider tokens are exchanged or refreshed' },
+            { key: 'upstream_oauth_scopes', label: 'upstream OAuth scopes', kind: 'list', dependsOn: { kind: ['oauth2', 'oidc'] }, hint: 'provider-side scopes, separate from Caracal resource scopes' },
+            { key: 'api_key_header', label: 'API key header', kind: 'text', dependsOn: { kind: 'apikey' }, required: true, hint: 'header where the upstream service expects the API key' },
+            { key: 'workload_audience', label: 'audience', kind: 'text', dependsOn: { kind: 'workload' }, required: true, hint: 'audience value expected by the workload identity provider' },
+            { key: 'workload_token_endpoint', label: 'token endpoint', kind: 'text', dependsOn: { kind: 'workload' }, required: true, hint: 'HTTPS endpoint where workload tokens are exchanged' },
             { key: 'identifier', label: 'identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank' },
-            { key: 'client_id', label: 'client ID', kind: 'text', advanced: true },
-            { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', visible: oauthProviderVisible, advanced: true },
-            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', visible: oauthProviderVisible, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
-            { key: 'auth_scheme', label: 'auth scheme', kind: 'text', visible: apiKeyProviderVisible, advanced: true, hint: 'optional; leave blank when the upstream expects the raw token' },
-            { key: 'workload_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', visible: workloadProviderVisible, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
+            { key: 'client_id', label: 'client ID', kind: 'text', dependsOn: { kind: ['oauth2', 'oidc'] }, advanced: true },
+            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2', 'oidc'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
+            { key: 'auth_scheme', label: 'auth scheme', kind: 'text', dependsOn: { kind: 'apikey' }, advanced: true, hint: 'optional; leave blank when the upstream expects the raw token' },
+            { key: 'workload_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: 'workload' }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
             { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', advanced: true },
             { key: 'config_file', label: 'provider config file', kind: 'file', advanced: true, hint: 'JSON object merged with the structured fields' },
             { key: 'config_json', label: 'advanced provider JSON', kind: 'multiline', advanced: true, hint: 'paste a JSON object; multiline paste is preserved; provider-specific keys are validated' },
@@ -863,7 +852,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'name', label: 'name', kind: 'text', default: row.name },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
               { key: 'kind', label: 'kind', kind: 'select', options: PROVIDER_KINDS, default: row.kind ?? 'oauth2' },
-              { key: 'client_id', label: 'client ID', kind: 'text', default: row.client_id ?? '' },
+              { key: 'client_id', label: 'client ID', kind: 'text', default: row.client_id ?? '', dependsOn: { kind: ['oauth2', 'oidc'] } },
               { key: 'config_file', label: 'merge provider config file', kind: 'file', hint: 'JSON object; leave blank to keep existing config' },
               { key: 'config_json', label: 'merge advanced provider JSON', kind: 'multiline', hint: 'paste JSON object; leave blank to keep existing config' },
             ],
@@ -920,9 +909,9 @@ export function policiesView(ctx: Ctx): View {
           submitLabel: 'validate and create policy',
           fields: [
             { key: 'name', label: 'name', kind: 'text', required: true },
-            { key: 'source', label: 'source', kind: 'select', options: ['paste', 'file'], default: 'paste' },
-            { key: 'content', label: 'policy content', kind: 'multiline', visible: (values) => (values.source || 'paste') === 'paste' },
-            { key: 'file', label: 'policy file', kind: 'file', visible: (values) => values.source === 'file' },
+            { key: 'source', label: 'source', kind: 'select', options: [...CONTENT_SOURCES], default: 'paste' },
+            { key: 'content', label: 'policy content', kind: 'multiline', required: true, dependsOn: { source: 'paste' } },
+            { key: 'file', label: 'policy file', kind: 'file', required: true, dependsOn: { source: 'file' } },
             { key: 'description', label: 'description', kind: 'text', advanced: true },
           ],
           onSubmit: async (v, app) => {
@@ -942,9 +931,9 @@ export function policiesView(ctx: Ctx): View {
           title: 'validate policy',
           submitLabel: 'validate policy',
           fields: [
-            { key: 'source', label: 'source', kind: 'select', options: ['paste', 'file'], default: 'paste' },
-            { key: 'content', label: 'policy content', kind: 'multiline', visible: (values) => (values.source || 'paste') === 'paste' },
-            { key: 'file', label: 'policy file', kind: 'file', visible: (values) => values.source === 'file' },
+            { key: 'source', label: 'source', kind: 'select', options: [...CONTENT_SOURCES], default: 'paste' },
+            { key: 'content', label: 'policy content', kind: 'multiline', required: true, dependsOn: { source: 'paste' } },
+            { key: 'file', label: 'policy file', kind: 'file', required: true, dependsOn: { source: 'file' } },
           ],
           onSubmit: async (v, app) => {
             const content = readPolicyContent(v)
@@ -962,9 +951,9 @@ export function policiesView(ctx: Ctx): View {
             title: `version ${row.name}`,
             submitLabel: 'add policy version',
             fields: [
-              { key: 'source', label: 'source', kind: 'select', options: ['paste', 'file'], default: 'paste' },
-              { key: 'content', label: 'policy content', kind: 'multiline', visible: (values) => (values.source || 'paste') === 'paste' },
-              { key: 'file', label: 'policy file', kind: 'file', visible: (values) => values.source === 'file' },
+              { key: 'source', label: 'source', kind: 'select', options: [...CONTENT_SOURCES], default: 'paste' },
+              { key: 'content', label: 'policy content', kind: 'multiline', required: true, dependsOn: { source: 'paste' } },
+              { key: 'file', label: 'policy file', kind: 'file', required: true, dependsOn: { source: 'file' } },
             ],
             onSubmit: async (v, app) => {
               const content = readPolicyContent(v)
@@ -1016,7 +1005,7 @@ export function policySetsView(ctx: Ctx): View {
           fields: [
             { key: 'name', label: 'name', kind: 'text', required: true },
             { key: 'policy_versions', label: 'policy versions', kind: 'list', pick: policyVersionPicker(ctx), resolve: policyVersionResolver(ctx), hint: 'right arrow adds latest or selected policy versions' },
-            { key: 'activate_now', label: 'activate now', kind: 'bool', default: 'true' },
+            { key: 'activate_now', label: 'activate now', kind: 'bool', default: 'true', dependsOn: 'policy_versions' },
             { key: 'description', label: 'description', kind: 'text', advanced: true },
           ],
           onSubmit: async (v, app) => {
@@ -1069,8 +1058,9 @@ export function policySetsView(ctx: Ctx): View {
             title: `simulate ${row.name}`,
             fields: [
               { key: 'version_id', label: 'version', kind: 'text', required: true, default: row.active_version_id ?? '', pick: policySetVersionPicker(ctx, row), resolve: policySetVersionResolver(ctx, row) },
-              { key: 'input_file', label: 'input file', kind: 'file' },
-              { key: 'input', label: 'inline input', kind: 'multiline', hint: 'JSON object; leave blank for rollout-only simulation' },
+              { key: 'source', label: 'input source', kind: 'select', options: ['none', ...CONTENT_SOURCES], default: 'none' },
+              { key: 'input_file', label: 'input file', kind: 'file', required: true, dependsOn: { source: 'file' } },
+              { key: 'input', label: 'inline input', kind: 'multiline', required: true, dependsOn: { source: 'paste' }, hint: 'JSON object for a concrete simulation input' },
             ],
             onSubmit: async (v, app) => {
               const inputValue = readFileOrInline(v.input_file ?? '', v.input ?? '')
@@ -1130,7 +1120,7 @@ export function grantsView(ctx: Ctx): View {
             { key: 'resource_id', label: 'resource', kind: 'text', required: true, pick: resourcePicker(ctx), resolve: resourceResolver(ctx) },
             { key: 'application_id', label: 'application', kind: 'text', required: true, pick: applicationPicker(ctx), resolve: applicationResolver(ctx) },
             { key: 'user_id', label: 'subject ID', kind: 'text', required: true, hint: 'opaque subject such as user:alice@example.com or service:billing-worker' },
-            { key: 'scopes', label: 'Caracal scopes', kind: 'list', required: true, pick: grantScopePicker(ctx), hint: 'choose from the selected resource scopes or enter comma-separated scopes' },
+            { key: 'scopes', label: 'Caracal scopes', kind: 'list', required: true, dependsOn: 'resource_id', pick: grantScopePicker(ctx), hint: 'choose from the selected resource scopes or enter comma-separated scopes' },
           ],
           onSubmit: async (v, app) => {
             await ctx.client.grants.create(ctx.zoneId, {

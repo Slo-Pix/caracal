@@ -524,10 +524,11 @@ describe('policies actions', () => {
     const app = fakeApp()
     const form = await pressKey(list, 'c', app) as FormView
     ;(form as unknown as { values: Record<string, string> }).values = {
+      source: 'paste',
       file: '',
       content: 'package caracal\nallow := true',
     }
-    ;(form as unknown as { focus: number }).focus = 2
+    ;(form as unknown as { focus: number }).focus = 3
     await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
     expect(client.policies.validate).toHaveBeenCalledWith('package caracal\nallow := true')
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed

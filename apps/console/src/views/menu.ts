@@ -293,13 +293,12 @@ class CredentialMenuView implements View {
     return new FormView({
       title: 'credential inspect',
       fields: [
-        { key: 'token', label: 'token', kind: 'secret' },
-        { key: 'file', label: 'file', kind: 'file' },
+        { key: 'source', label: 'source', kind: 'select', options: ['paste', 'file'], default: 'paste' },
+        { key: 'token', label: 'token', kind: 'secret', required: true, dependsOn: { source: 'paste' } },
+        { key: 'file', label: 'file', kind: 'file', required: true, dependsOn: { source: 'file' } },
       ],
       onSubmit: async (v, app) => {
-        const sources = [v.token, v.file].filter((value) => value && value.length > 0)
-        if (sources.length !== 1) throw new Error('provide exactly one token source: token or file')
-        const token = v.file ? readFileSync(v.file, 'utf8') : v.token!
+        const token = v.source === 'file' ? readFileSync(v.file!, 'utf8') : v.token!
         const result = credentialInspect(token)
         app.pop()
         app.push(new DetailView({
