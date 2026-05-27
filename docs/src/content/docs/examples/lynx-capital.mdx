@@ -89,7 +89,8 @@ pip install -e .
 Install the released Runtime and Console, then start the Caracal stack:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 caracal up
 caracal status --ready
 caracal-console

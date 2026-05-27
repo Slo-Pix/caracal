@@ -74,6 +74,7 @@ More coming soon
 
 The installer provides the thin `caracal` runtime shell and the `caracal-console` management interface.
 
+> Current RC: pin `v2026.05.27-rc.1` until it is promoted to stable. Unpinned installs follow GitHub's latest stable release.  
 > Pin a version: `--version vYYYY.MM.DD` on Unix or `-Version vYYYY.MM.DD` in PowerShell.  
 > Change install directory: `--install-dir /path` on Unix or `-InstallDir C:\path` in PowerShell.
 
@@ -82,7 +83,8 @@ The installer provides the thin `caracal` runtime shell and the `caracal-console
 
 ```bash
 # Console
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 ```
 
 Installs to `~/.local/bin`. Override with `--install-dir /usr/local/bin` (may need `sudo`).
@@ -94,7 +96,8 @@ Installs to `~/.local/bin`. Override with `--install-dir /usr/local/bin` (may ne
 
 ```bash
 # Console
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 ```
 
 If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
@@ -106,7 +109,9 @@ If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/car
 
 ```powershell
 # Console
-iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
+$installer = "$env:TEMP\install-console.ps1"
+iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 -OutFile $installer
+powershell -ExecutionPolicy Bypass -File $installer -Version v2026.05.27-rc.1 -RequireProvenance
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\caracal`. Requires Docker Desktop with WSL2.

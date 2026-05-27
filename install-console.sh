@@ -228,7 +228,11 @@ checkShadow() {
 checkShadow caracal-console
 
 printf 'caracal-install: done. Next steps:\n'
-printf '  installed release %s (mode: stable)\n' "${tag}"
+case "${tag}" in
+    *-rc.*) mode=rc ;;
+    *) mode=stable ;;
+esac
+printf '  installed release %s (mode: %s)\n' "${tag}" "${mode}"
 printf '  hash -r            # refresh your shell command cache\n'
 [ "${installedShell}" = "1" ] && printf '  caracal console        # launch the Console through the shell\n'
 printf '  caracal-console        # launch the Console directly\n'

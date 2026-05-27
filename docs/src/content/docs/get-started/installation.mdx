@@ -13,7 +13,8 @@ The runtime shell and Console are distributed as self-contained binaries for Lin
 ### Linux and macOS
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 ```
 
 Each script:
@@ -35,7 +36,7 @@ Supported platforms:
 
 | Variable | Default | Description |
 | -------- | ------- | ----------- |
-| `CARACAL_VERSION` | `latest` | Specific release tag to download, e.g. `v2026.05.26-rc.1` |
+| `CARACAL_VERSION` | `latest` | Specific release tag to download, e.g. `v2026.05.27-rc.1` |
 | `CARACAL_INSTALL_DIR` | `~/.local/bin` | Directory to install binaries into |
 
 After installation, ensure `~/.local/bin` is on your `PATH`:
@@ -54,7 +55,9 @@ caracal-console --version
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
+$installer = "$env:TEMP\install-console.ps1"
+irm https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 -OutFile $installer
+powershell -ExecutionPolicy Bypass -File $installer -Version v2026.05.27-rc.1 -RequireProvenance
 ```
 
 Binaries are placed in `%LOCALAPPDATA%\Programs\caracal` by default. Set `$env:CARACAL_INSTALL_DIR` to override. Only `x64` is available on Windows.

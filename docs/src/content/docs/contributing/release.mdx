@@ -174,10 +174,13 @@ The Runtime and Console have separate install targets:
 
 ```sh
 # Linux/macOS: Console
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 
 # Windows: Console
-iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 | iex
+$installer = "$env:TEMP\install-console.ps1"
+iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 -OutFile $installer
+powershell -ExecutionPolicy Bypass -File $installer -Version v2026.05.27-rc.1 -RequireProvenance
 ```
 
 The installers detect OS and architecture, resolve the latest release tag from the GitHub API (or accept `--version`/`-Version`), download the matching shell and selected tool archives, verify them against `SHA256SUMS`, optionally verify GitHub artifact provenance, extract them, and place the binaries on `PATH`.
