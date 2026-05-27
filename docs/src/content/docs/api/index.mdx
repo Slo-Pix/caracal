@@ -1,37 +1,42 @@
 ---
 title: API Reference
-description: "HTTP surfaces exposed by the Caracal services: base URLs, authentication methods, and a map of every API."
+description: Current HTTP APIs, Gateway behavior, STS exchange, Coordinator endpoints, and event topics.
 pageType: landing
 ---
 
-Caracal exposes four HTTP services, each with a distinct purpose and authentication model. This section documents every endpoint, request and response schema, and operational behavior for each service.
+Use this section when you need wire-level behavior. For task workflows, start in [Guides](/guides/). For service ownership and operations, use [Services](/services/) and [Operations](/operations/).
 
-## Services
+## API surfaces
 
-| Service | Default port | Purpose | Auth method |
-| --- | --- | --- | --- |
-| [Control-Plane API](./control-plane/) | 3000 | Manage zones, applications, resources, policies, grants, and sessions | Admin bearer token (Argon2id verified, stored in `admin_tokens`) |
-| [STS](./sts/) | 8080 | Issue mandates via RFC 8693 token exchange | Client secret or client assertion per request |
-| [Coordinator](./coordinator/) | 4000 | Manage agent sessions and delegation edges | STS-issued JWT with coordinator scopes |
-| [Gateway](./gateway/) | 8081 | Authenticate and proxy inbound MCP calls to upstream services | Session bearer token issued by STS |
+| Surface | Base | Purpose |
+| --- | --- | --- |
+| [Control-Plane REST](/api/control-plane/) | API service `/v1` | Zones, applications, providers, resources, policies, policy sets, grants, invitations, sessions, audit, step-up, and templates. |
+| [Coordinator REST](/api/coordinator/) | Coordinator service | Agent sessions, agent services, invocations, delegation edges, and SDK lifecycle endpoints. |
+| [STS Token Endpoint](/api/sts/) | STS service | OAuth token exchange, JWKS, step-up status, and internal policy operations. |
+| [Gateway Behavior](/api/gateway/) | Gateway service | Protected reverse-proxy behavior rather than CRUD endpoints. |
+| [Event Topics](/api/event-topics/) | Redis Streams | Audit, invalidation, revocation, agent, invocation, and delegation topics. |
 
-## Base URL conventions
+## Service ports
 
-All services expose `/health` and `/ready` endpoints without authentication. The Control-Plane API and Coordinator prefix their resource routes with `/v1` or `/zones/{zoneId}`. The STS uses `/oauth/2/token` for token exchange and `/.well-known/jwks.json` for JWKS. The Gateway has no resource routes: every path is proxied to the upstream.
+| Service | Local port |
+| --- | --- |
+| API | `3000` |
+| Coordinator | `4000` |
+| STS | `8080` |
+| Gateway | `8081` |
+| Audit | `9090` |
+| Control | `8087` when enabled |
 
-## Error format
+## Error shape
 
-All four services return JSON error bodies on failure:
+Caracal service errors use the shared OAuth-compatible shape:
 
 ```json
 {
-  "error": "error_code",
-  "error_description": "human-readable message"
+  "error": "access_denied",
+  "error_description": "policy denied request",
+  "requestId": "018f..."
 }
 ```
 
-The Control-Plane API adds `"issues"` for Zod validation failures and `"detail"` for elaborated errors. The STS includes `"requestId"` on most error responses. HTTP status codes follow standard semantics: 400 for malformed requests, 401 for authentication failures, 403 for authorization failures, 404 for not-found, 409 for conflicts, 422 for semantic validation failures, and 429 for rate limits.
-
-## Redis event streams
-
-All services participate in a Redis stream architecture for real-time propagation of revocations, policy invalidations, and audit events. Stream topics, message schemas, publishers, consumer groups, and HMAC signing are documented in [Event Topics](./event-topics/).
+See [Error Reference](/reference/errors/) for canonical codes.

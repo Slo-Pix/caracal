@@ -1,199 +1,75 @@
 ---
 title: System Topology
-description: The five core services, optional control surface, shared Postgres and Redis backbone, startup dependency ordering, and the connection matrix between components.
+description: Runtime topology for Caracal services, dependencies, and external clients.
 pageType: architecture
 ---
 
-Caracal runs five core application services plus Postgres and Redis. This page is the operator topology reference; the getting-started path still presents the system as one local stack managed by `caracal up`.
+Caracal has six primary HTTP services plus Postgres and Redis.
 
-Redis stream groups are provisioned by the Redis bootstrap script before Redis reports ready, and database migrations run through a dedicated one-shot migration job before application traffic starts. The Coordinator container also starts its Go relay sidecar. All ports are bound to localhost in development; production deployments place services behind network policies appropriate to the deployment target.
+## Topology
 
-## Services
+```mermaid
+flowchart TB
+  subgraph Clients
+    Console[Console]
+    SDK[SDKs and caracal run]
+    ResourceClient[Protected-resource clients]
+    Automation[Control/Admin automation]
+  end
 
-### STS: Security Token Service
+  subgraph Caracal
+    API[API :3000]
+    STS[STS :8080]
+    Gateway[Gateway :8081]
+    Audit[Audit :9090]
+    Coordinator[Coordinator :4000]
+    Control[Control :8087 optional]
+  end
 
-| Attribute | Value |
-| --------- | ----- |
-| Language | Go |
-| Port | 8080 |
-| Image | `caracal/sts:dev` |
+  Postgres[(Postgres)]
+  Redis[(Redis Streams)]
+  Upstream[Protected upstreams]
 
-The STS is the sole issuer of mandates. It receives RFC 8693 token exchange requests, evaluates the active OPA policy for each requested resource, signs a JWT mandate for resources that are allowed, and emits an audit event for every evaluation. No mandate can be issued without passing through the STS.
-
-**Endpoints:**
-
-| Path | Purpose |
-| ---- | ------- |
-| `POST /oauth/2/token` | RFC 8693 token exchange |
-| `GET /.well-known/jwks.json?zone_id=` | Zone-specific public key set |
-| `GET /step-up/{id}` | Step-up challenge status query |
-| `GET /health` | Liveness probe (always 200) |
-| `GET /ready` | Startup probe (Postgres + Redis) |
-| `GET /metrics` | Prometheus text metrics |
-| `GET /metrics.json` | Compatibility JSON metrics snapshot |
-
-**Connections:** Postgres (read sessions, applications, resources, policies, grants; write sessions, step-up challenges), Redis (consume: `caracal.sessions.revoke`, `caracal.policy.invalidate`, `caracal.keys.invalidate`; publish: `caracal.audit.events`).
-
----
-
-### Gateway: MCP Reverse Proxy
-
-| Attribute | Value |
-| --------- | ----- |
-| Language | Go |
-| Port | 8081 |
-| Image | `caracal/gateway:dev` |
-
-The Gateway is the ingress point for agent calls to Gateway-routable resources. On each inbound request it exchanges the agent's session-scoped mandate with the STS for a resource mandate, verifies the response, checks the JTI replay cache, and forwards the request to the upstream with the appropriate authorization header. The upstream never sees the session-scoped mandate.
-
-**Endpoints:**
-
-| Path | Purpose |
-| ---- | ------- |
-| `GET /health` | Liveness probe |
-| `GET /ready` | Startup probe (Postgres, Redis, STS) |
-| `GET /metrics` | Prometheus text metrics |
-| `GET /metrics.json` | Compatibility JSON metrics snapshot |
-| `/*` | Reverse proxy handler |
-
-**Connections:** Postgres (SELECT: zones, resources, providers, gateway_resource_bindings), Redis (JTI deduplication, stream signature verification, `caracal.sessions.revoke` via `gateway-revocation`), STS (JWKS fetch, resource mandate exchange).
-
----
-
-### API: Control Plane
-
-| Attribute | Value |
-| --------- | ----- |
-| Language | TypeScript / Fastify |
-| Port | 3000 |
-| Image | `caracal/api:dev` |
-
-The API is the admin control plane. It manages zones, applications, resources, credential providers, policies, policy sets, grants, invitations, and teams. All management operations go through the API. It also runs background workers for outbox publishing, session reaping, and DCR garbage collection.
-
-**Key endpoints (v1):** Zones, applications, resources, providers, policies, policy sets, grants, invitations, teams, step-up challenges, policy templates, and zone events.
-
-**Connections:** Postgres (read/write: all control-plane tables), Redis (outbox stream publishing).
-
----
-
-### Coordinator: Agent Session Manager
-
-| Attribute | Value |
-| --------- | ----- |
-| Language | TypeScript / Fastify |
-| Port | 4000 |
-| Image | `caracal/coordinator:dev` |
-
-The Coordinator manages agent session lifecycle and the delegation graph. It exposes a flat-HTTP V1 façade used by the SDKs, and richer internal routes for direct graph access. It runs TTL sweepers, deadline enforcers, and a retention cleaner. A sidecar relay process consumes `caracal.agents.lifecycle` events.
-
-**V1 façade:**
-
-| Route | Purpose |
-| ----- | ------- |
-| `POST /v1/begin` | Open an agent session |
-| `POST /v1/end` | Close a session and cascade-terminate descendants |
-| `POST /v1/exchange` | Create a delegation edge between two agent sessions |
-| `POST /v1/verify` | Verify a bearer mandate (rate-limited: 60/min per IP) |
-
-**Connections:** Postgres (read/write: agent_sessions, delegation_edges, agent_invocations, agent_services, caracal_outbox, delegation_graph_epochs), Redis (outbox stream publishing, `caracal.agents.lifecycle` consumption), STS (bearer token verification).
-
----
-
-### Audit: Event Ingestor
-
-| Attribute | Value |
-| --------- | ----- |
-| Language | Go |
-| Port | 9090 |
-| Image | `caracal/audit:dev` |
-
-The Audit service consumes `caracal.audit.events` and writes HMAC-chained records into the append-only `audit_events` table. It runs tamper detection (startup full-chain sweep and hourly incremental check), drives optional Parquet export to S3, and enforces the retention policy. Leader election via Postgres advisory lock prevents multiple instances from running the exporter or retention job simultaneously.
-
-**Connections:** Postgres (INSERT + SELECT: audit_events, audit_export_watermark, audit_ingest_alerts), Redis (consume `caracal.audit.events` via `audit-ingestor` and `siem-export`).
-
----
-
-## Infrastructure
-
-### PostgreSQL
-
-| Attribute | Value |
-| --------- | ----- |
-| Port | 5432 |
-| Volume | `postgresData:/var/lib/postgresql` |
-| Healthcheck | `pg_isready` (5 s interval, 20 retries) |
-
-Shared by all five services. Each service connects with a dedicated database role scoped to the tables and operations it requires. See [Storage Model](./storage-model/) for the full schema and role permissions.
-
-### Redis
-
-| Attribute | Value |
-| --------- | ----- |
-| Port | 6379 |
-| Auth | Required (`REDIS_PASSWORD`) |
-| Volume | `redisData:/data` |
-| Healthcheck | `redis-cli PING` (5 s interval, 20 retries) |
-
-Shared by all five services for streams, the JTI deduplication cache, and outbox publishing. All messages written to streams include an HMAC-SHA256 signature under `STREAMS_HMAC_KEY`. See [Event Streams and Outbox](./event-streams/) for the full stream inventory.
-
-### Bootstrap jobs
-
-The Redis bootstrap path runs `provision-streams.sh` once per Redis container start. It creates all nine Redis consumer groups with `XGROUP CREATE … MKSTREAM`, ignores existing groups, and writes a readiness marker consumed by the Redis healthcheck.
-
-The database migration path runs `caracal-migrate` as a one-shot Compose service or Helm migration Job. It records applied migration versions in `schema_migrations` and serializes concurrent runners with a Postgres advisory lock.
-
----
-
-## Startup dependency order
-
-```
-postgres ───────────────► dbMigrate (exits)
-   │                          │
-   └──────────────┬───────────┘
-                  ▼
-redis bootstrap ─► redis healthy
-                  │
-      ┌───────────┼───────────┐
-      ▼           ▼           ▼
-     STS        Audit        API
-      │                       │
-      └───────────┬───────────┘
-                  ▼
-             Coordinator
-                  │
-                  ▼
-                Gateway
+  Console --> API
+  Console --> Coordinator
+  SDK --> STS
+  ResourceClient --> Gateway
+  Automation --> Control
+  Control --> API
+  Gateway --> Upstream
+  API --> Postgres
+  STS --> Postgres
+  Gateway --> Postgres
+  Audit --> Postgres
+  Coordinator --> Postgres
+  API --> Redis
+  STS --> Redis
+  Gateway --> Redis
+  Audit --> Redis
+  Coordinator --> Redis
 ```
 
-Each service waits for a `healthy` signal from its dependencies before starting. Gateway waits for both API and STS healthy. Coordinator waits for STS healthy. API, STS, Audit, and Coordinator wait for database migrations and Redis readiness.
+## Service responsibilities
 
----
+| Service | Responsibility |
+| --- | --- |
+| API | Zones, applications, providers, resources, policies, policy sets, grants, invitations, teams, step-up challenges, admin audit, and API outbox. |
+| STS | OAuth token exchange, mandate issuance, policy evaluation, JWKS, step-up status, policy simulation, signing-key rotation internals. |
+| Gateway | Protected reverse proxy, inbound mandate verification, per-request STS exchange, SSRF guard, revocation checks, audit replay. |
+| Audit | Redis audit ingestion, DLQ, tamper checks, retention, search, metrics. |
+| Coordinator | Agent sessions, agent services, delegations, invocations, sweeper jobs, Coordinator outbox. |
+| Control | Optional remote management invoke endpoint gated by token auth, replay protection, rate limiting, and runtime gate file. |
 
-## Connection matrix
+## Deployment shapes
 
-|             | Postgres | Redis | STS | API | Gateway | Audit | Coordinator |
-| ----------- | :------: | :---: | :-: | :-: | :-----: | :---: | :---------: |
-| **STS**         | ✓ | ✓ | None | (| None |) | None |
-| **Gateway**     | ✓ | ✓ | ✓ | None | (| None |) |
-| **API**         | ✓ | ✓ | None | (| None |) | None |
-| **Audit**       | ✓ | ✓ | None | (| None |) | None |
-| **Coordinator** | ✓ | ✓ | ✓ | None | (| None |) |
-| **Console/SDK**     | None |: | ✓ | ✓ | ✓ | None | ✓ |
+| Shape | Source |
+| --- | --- |
+| Local development | `infra/docker/docker-compose.yml` through `caracal up`. |
+| Self-hosted Compose | `infra/docker/runtime-compose.yml`. |
+| Kubernetes | `infra/helm/caracal`. |
 
-No service makes direct HTTP calls to another service except where the matrix shows ✓. The Gateway calls STS for every inbound request. The Coordinator calls STS only for bearer verification. The API publishes to Redis streams via the outbox; it does not call any other service directly.
+## Related pages
 
----
-
-## Port reservation
-
-These localhost ports are reserved for the OSS stack. They must not be reused by the enterprise stack or other co-located services.
-
-| Port | Service |
-| ---- | ------- |
-| 3000 | API |
-| 4000 | Coordinator |
-| 5432 | PostgreSQL |
-| 6379 | Redis |
-| 8080 | STS |
-| 8081 | Gateway |
-| 9090 | Audit |
+- [Services](/services/)
+- [Deployment with Docker Compose](/operations/docker-compose/)
+- [Kubernetes with Helm](/operations/kubernetes-helm/)

@@ -1,240 +1,48 @@
 ---
 title: Gateway Behavior
-description: How the Gateway authenticates inbound requests, exchanges tokens with the STS, proxies to upstream MCP servers, and handles revocation mid-stream.
+description: Protected reverse-proxy behavior, routing headers, denial checks, and upstream forwarding.
 pageType: api
 ---
 
-The Gateway is the network entry point for protected upstream calls, including MCP tool calls. It does not expose a resource API: every inbound path is proxied to a configured upstream. The Gateway runs on port `8081` (fixed). TLS is configured with `TLS_CERT_FILE` and `TLS_KEY_FILE`; plaintext HTTP is allowed only for internal development or internal service-network deployments.
+Gateway is served on port `8081`. It is not a CRUD API; it is a protected reverse proxy for configured resources.
 
----
+## Operator endpoints
 
-## Inbound request authentication
-
-The Gateway applies five checks in order. The first failure halts the request.
-
-### 1. Bearer token extraction
-
-Reads `Authorization: Bearer <token>`. Returns `401` if the header is missing, not in Bearer format, or exceeds 4 096 bytes.
-
-### 2. JWT expiry preflight
-
-Peeks the `exp` claim without signature verification. Rejects the token with `401 CredentialExpired` if it would expire within 35 seconds. This prevents issuing an upstream token that arrives stale.
-
-### 3. Zone/resource binding lookup
-
-Reads the token's `zone_id` claim and the `X-Caracal-Resource` header, then looks up the Gateway binding by `(zone_id, resource_identifier)`. The unverified `zone_id` only selects the binding and JWKS namespace; trust is established by the following signature check. If no binding exists, the Gateway returns `403 AccessDenied`.
-
-### 4. Signature verification
-
-Fetches the zone's JWKS from `{STS_URL}/.well-known/jwks.json?zone_id=<zone>`. Verifies the ES256 signature using the key matching the `kid` header. JWKS responses are cached 5 minutes per zone. Returns `401 InvalidToken` on failure.
-
-### 5. JTI replay detection
-
-Checks whether the token's `jti` claim has been seen. Tokens with `"use": "session"` are reusable; tokens with `"use": "resource"` are single-use. Single-use JTIs are stored in Redis with a TTL equal to the token's remaining lifetime. Returns `401 InvalidToken` if a resource mandate is replayed.
-
-### 6. Authority revocation check
-
-Extracts the `sid`, `agent_session_id`, and `delegation_edge_id` claims and checks the in-memory revocation store. Returns `401 InvalidToken` if the STS session, agent session, or delegation edge is revoked.
-
----
-
-## Required inbound headers
-
-| Header | Required | Description |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| `Authorization` | Yes | `Bearer <session-mandate>` |
-| `X-Caracal-Resource` | Yes | Resource identifier used to look up the upstream binding |
+| `GET` | `/health` | Liveness check. |
+| `GET` | `/ready` | Readiness check. |
+| `GET` | `/metrics` | Prometheus metrics. |
+| `GET` | `/metrics.json` | JSON metrics. |
+| `POST` | `/internal/revocations/reload` | Reload revocation snapshot. |
 
-**Forbidden:** Clients must not send `X-Caracal-Client-ID`. The Gateway strips it and returns `400 InvalidToken` if present.
+## Request requirements
 
-The `X-Request-Id` header is preserved if valid (alphanumeric, dots, hyphens, colons, 1 to 128 characters) or replaced with a generated UUIDv7.
-
----
-
-## Token exchange with the STS
-
-After authentication, the Gateway exchanges the caller's session mandate for a resource mandate by calling the STS.
-
-**Request:**
-
-```
-POST {STS_URL}/oauth/2/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=urn:ietf:params:oauth:grant-type:token-exchange
-subject_token=<session-bearer>
-subject_token_type=urn:ietf:params:oauth:token-type:access_token
-zone_id=<verified-zone>
-application_id=<app-from-binding>
-resource=<resource-identifier>
-```
-
-The Gateway uses the zone/resource binding stored in its database for the resource identified by `X-Caracal-Resource`. The STS exchange is authenticated with the Gateway↔STS HMAC key, so only the Gateway can receive provider-native upstream directives.
-
-**Timeout:** `STS_TIMEOUT` (default `5s`). Returns `504 Gateway Timeout` if exceeded.
-
----
-
-## Headers forwarded to the upstream
-
-After a successful exchange, the Gateway sends the request to the upstream URL returned by the STS.
-
-**Authorization header:**
-
-| `auth_mode` | Header sent |
-| --- | --- |
-| `caracal_jwt` | `Authorization: Bearer <sts-issued-mandate>` |
-| `provider_oauth` | `{auth_header}: {auth_scheme} {provider_token}` |
-| `provider_apikey` | `{auth_header}: {provider_token}`, or `{auth_scheme} {provider_token}` when `auth_scheme` is configured |
-
-When `auth_mode` is `provider_oauth` or `provider_apikey`, the inbound `Authorization` header is removed before forwarding. The Caracal mandate is not forwarded to provider-native upstreams by default. `X-Caracal-Identity: <mandate>` is sent only when the STS upstream directive sets `forward_caracal_identity: true`, which should be reserved for trusted internal services, controlled MCP servers, or sidecars that intentionally verify Caracal identity.
-
-Provider-native credentials are never returned to normal STS clients. They appear only in the internal Gateway-authenticated exchange response and are immediately substituted into the upstream request.
-
-**Additional forwarded headers:**
-
-| Header | Value |
-| --- | --- |
-| `X-Request-Id` | Preserved or generated request ID |
-| `Traceparent` | W3C trace context derived from the request ID |
-| `X-Forwarded-For` | Client IP (replaced, never appended) |
-| `X-Forwarded-Proto` | `https` or `http` |
-| `X-Forwarded-Host` | Original `Host` header |
-| `X-Caracal-Identity` | Optional; forwarded only when `forward_caracal_identity` is true |
-| `X-Caracal-Token-Expires-In` | Seconds until the mandate expires (set on the response) |
-
-**Stripped or replaced before forwarding:** inbound `Authorization`, `X-Caracal-Client-ID`, `X-Caracal-Resource`, `X-Caracal-Upstream`, `X-Caracal-Identity`, the selected upstream auth header, and all RFC 7230 hop-by-hop headers.
-
-The upstream URL is constructed by joining the upstream base path with the inbound request path. Query strings are merged; upstream values take precedence on conflicts. Path traversal attempts (`../`) are rejected with `400 InvalidToken`.
-
----
-
-## Upstream SSRF guard
-
-Before forwarding, the Gateway validates the upstream URL returned by the STS:
-
-- The host must not resolve to a loopback or private IP address (unless `ALLOW_PRIVATE_UPSTREAMS=true`).
-- The host must appear in `UPSTREAM_HOST_ALLOWLIST` if that variable is set.
-
-Violations return `502 Internal` with a sanitized client message.
-
----
-
-## Action audit
-
-For each authorized upstream attempt, the Gateway emits a `gateway_resource_request` audit event to `caracal.audit.events`. The event includes the request ID, zone, resource identifier, Gateway application ID, upstream host, auth mode, HTTP method, gateway/upstream status, latency, and a short subject-token fingerprint.
-
-Audit metadata deliberately excludes authorization headers, provider tokens, request bodies, response bodies, full URLs, and query strings. If Redis is temporarily unavailable, events are buffered and persisted under `AUDIT_REPLAY_DIR` for replay on restart.
-
----
-
-## Error response table
-
-| Condition | Status | Body |
+| Input | Required | Purpose |
 | --- | --- | --- |
-| Missing `Authorization` header | 401 | `{"error": "InvalidToken"}` |
-| Bearer > 4 096 bytes | 401 | `{"error": "InvalidToken"}` |
-| Malformed JWT | 401 | `{"error": "InvalidToken"}` |
-| Token expires within 35 s | 401 | `{"error": "CredentialExpired"}` |
-| JWT signature invalid | 401 | `{"error": "InvalidToken"}` |
-| JTI replay (resource mandate reused) | 401 | `{"error": "InvalidToken"}` |
-| Session revoked | 401 | `{"error": "InvalidToken"}` |
-| `X-Caracal-Client-ID` present | 400 | `{"error": "InvalidToken"}` |
-| Missing `X-Caracal-Resource` | 400 | `{"error": "InvalidToken"}` |
-| Path traversal detected | 400 | `{"error": "InvalidToken"}` |
-| No binding for resource | 403 | `{"error": "AccessDenied"}` |
-| SSRF guard violation | 502 | `{"error": "Internal"}` |
-| STS exchange returned 4xx | 401/403 | STS error forwarded |
-| STS timeout | 504 | `{"error": "GatewayTimeout"}` |
-| Request body > `MAX_REQUEST_BYTES` | 413 | `{"error": "RequestTooLarge"}` |
-| Upstream unreachable | 502 | `{"error": "BadGateway"}` |
-| Upstream timeout | 504 | `{"error": "GatewayTimeout"}` |
-| Client disconnected | 499 | None |
+| `Authorization: Bearer ...` | yes | Inbound Caracal mandate. |
+| `X-Caracal-Resource` | yes | Resource identifier used to find a Gateway binding. |
+| Request path | yes | Forwarded to the configured upstream after traversal checks. |
 
----
+Gateway ignores client attempts to set `X-Caracal-Client-ID`; the client ID is bound by Gateway configuration.
 
-## Response handling and revocation-aware streaming
+## Denial checks
 
-The Gateway streams the upstream response body to the caller. Every 4 KB of streamed body, it checks the session revocation store. If the session is revoked mid-stream:
+Gateway rejects before upstream dispatch. Treat these checks as the safety gate in front of every protected upstream.
 
-- The response body is truncated.
-- The HTTP trailer `X-Caracal-Revoked: true` is set to signal the truncation.
-
-This mechanism is a best-effort guard: clients should check for the trailer and retry if they receive a truncated response.
-
----
-
-## Revocation store
-
-The Gateway maintains an in-memory revocation cache populated from the `caracal.sessions.revoke` Redis stream. Stream consumer details:
-
-| Parameter | Value |
+| Stage | Checks |
 | --- | --- |
-| Stream | `caracal.sessions.revoke` |
-| Consumer group | `gateway-revocation` |
-| Consumer ID | `gateway-{hostname}-{pid}` |
-| Batch size | 50 messages |
-| Block duration | 1 second |
-| Pending reclaim | `XAUTOCLAIM` with 30 s idle window |
+| Request preflight | Bearer token exists, token size is bounded, `X-Caracal-Resource` exists, and request path is not traversal. |
+| Token validation | Token is well formed, not expiring inside the preflight window, signature-valid, not replayed, not revoked, and includes a zone. |
+| Binding resolution | `(zone_id, resource)` has a Gateway binding and the bound upstream passes host safety checks. |
+| STS exchange | Gateway’s STS circuit is closed and the signed exchange succeeds. |
 
-Dead-letter messages (invalid HMAC signatures) are moved to `caracal.sessions.revoke.dead`.
+## Forwarding behavior
 
-In-memory entries are pruned every 30 minutes. Revocation entries have a 24-hour TTL (by which time any mandate referencing the session has expired).
+After checks pass, Gateway performs a signed STS exchange, receives a resource mandate, forwards the request to the bound upstream, and emits audit evidence. Request and upstream timeouts are controlled by Gateway service config.
 
----
+## Related pages
 
-## Environment variables
-
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `STS_URL` | Yes | None | STS base URL for token exchange and JWKS |
-| `DATABASE_URL` | Yes | None | Postgres for resource→binding lookup |
-| `REDIS_URL` | Production | None | Redis for JTI replay detection and revocation |
-| `STREAMS_HMAC_KEY` | Production | None | Hex-encoded HMAC key (≥32 bytes) for stream message verification |
-| `AUDIT_HMAC_KEY` | Production | None | Hex-encoded HMAC key (≥32 bytes) for Gateway audit event signing |
-| `AUDIT_REPLAY_DIR` | No | `/var/lib/caracal/audit-replay` | Durable replay directory for Gateway audit events |
-| `GATEWAY_STS_HMAC_KEY` | Production | None | Hex-encoded HMAC key (≥32 bytes) authenticating internal Gateway↔STS exchanges |
-| `TLS_CERT_FILE` | Production | None | TLS certificate path |
-| `TLS_KEY_FILE` | Production | None | TLS private key path |
-| `UPSTREAM_HOST_ALLOWLIST` | No | None | Comma-separated list of allowed upstream hosts |
-| `ALLOW_PRIVATE_UPSTREAMS` | No | `false` | Permit forwarding to private/loopback IPs |
-| `MAX_REQUEST_BYTES` | No | `10485760` | Maximum request body size (10 MiB) |
-| `STS_TIMEOUT` | No | `5s` | Per-request STS timeout |
-| `UPSTREAM_TIMEOUT` | No | `30s` | Per-request upstream timeout |
-| `JTI_FAIL_OPEN` | No | `false` | If true, allow traffic when Redis is unavailable; forbidden in production |
-
----
-
-## Metrics: `GET /metrics`
-
-`GET /metrics` returns Prometheus text. `GET /metrics.json` returns the compatibility JSON snapshot.
-
-```text
-caracal_gateway_requests_total 10000
-caracal_gateway_requests_allowed_total 9850
-caracal_gateway_requests_denied_total 150
-caracal_gateway_denials_missing_auth_total 20
-caracal_gateway_denials_bad_bearer_total 5
-caracal_gateway_denials_expiring_total 8
-caracal_gateway_denials_bad_routing_total 12
-caracal_gateway_denials_binding_total 15
-caracal_gateway_denials_path_traversal_total 1
-caracal_gateway_denials_signature_total 3
-caracal_gateway_denials_jti_replay_total 2
-caracal_gateway_denials_revoked_total 4
-caracal_gateway_sts_exchange_errors_total 10
-caracal_gateway_upstream_errors_total 30
-caracal_gateway_bindings_loaded 42
-caracal_gateway_revocations_active 0
-```
-
----
-
-## Health and readiness
-
-| Method | Path | Description |
-| --- | --- | --- |
-| `GET` | `/health` | Liveness; always `200` |
-| `GET` | `/ready` | Readiness; `200` when Postgres, Redis, and STS are reachable; `503` otherwise |
-| `GET` | `/metrics` | Prometheus text counters and gauges |
-| `GET` | `/metrics.json` | Compatibility JSON metrics snapshot |
+- [Gateway Service](/services/gateway/)
+- [Trust Boundaries](/architecture/trust-boundaries/)
+- [Protect an MCP Server](/guides/protect-mcp/)
