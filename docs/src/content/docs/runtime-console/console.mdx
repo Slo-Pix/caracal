@@ -56,8 +56,8 @@ The main menu is the root view. Navigate with arrow keys or number shortcuts:
 | `s` | Guided setup | No |
 | `1` | Zones | No |
 | `2` | Applications | Yes |
-| `3` | Protected resources | Yes |
-| `4` | Providers | Yes |
+| `3` | Providers | Yes |
+| `4` | Protected resources | Yes |
 | `5` | Access policies | Yes |
 | `6` | Policy sets | Yes |
 | `7` | Access grants | Yes |
@@ -70,7 +70,7 @@ The main menu is the root view. Navigate with arrow keys or number shortcuts:
 | `d` | Diagnostics | No |
 | `c` | Credential tools | No |
 
-For views that require a zone, press `z` to open the zone picker before navigating. New users should start with guided setup, which asks only for values Caracal cannot already infer: zone when none is selected, the agent app, the protected resource, an optional external upstream URL, the credential provider needed for that upstream, and Caracal scopes. Provider fields adapt to OAuth/OIDC, API-key, and workload identity choices; direct resources can leave the upstream and provider prompts blank. First request examples, policy skipping, local file writes, manual identifiers, and profile paths stay in Advanced settings so the first setup path remains short.
+For views that require a zone, press `z` to open the zone picker before navigating. New users should start with guided setup, which opens real guided pages for the zone, agent app, provider, and protected resource before review. Provider setup comes before resource setup so external OAuth/OIDC, API-key, and workload identity details are available before the resource is linked. Each page has picker-backed fields, adaptive required fields, and `?` info popups with examples; direct resources can choose no provider. Policy skipping, local file writes, profile paths, and final runtime output controls stay in Advanced settings so the object setup remains focused.
 
 ---
 

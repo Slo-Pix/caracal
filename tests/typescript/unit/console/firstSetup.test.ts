@@ -139,22 +139,33 @@ function ctx(app: App): ViewContext {
   return { app, size: { rows: 80, cols: 140 }, status: '' }
 }
 
-async function answer(view: View, app: App, value?: string): Promise<void> {
-  if (value) await view.onKey(value, ctx(app))
+function latestForm(app: App): FormView {
+  const form = (app as unknown as { _pushed: unknown[] })._pushed.at(-1)
+  expect(form).toBeInstanceOf(FormView)
+  return form as FormView
+}
+
+async function submitLatestForm(app: App, values: Record<string, string>): Promise<void> {
+  const form = latestForm(app)
+  Object.assign(form.values_(), values)
+  await (form as unknown as { trySubmit: (app: App) => Promise<void> }).trySubmit(app)
+}
+
+async function openAndSubmit(view: View, app: App, values: Record<string, string>): Promise<void> {
   await view.onKey('enter', ctx(app))
+  await submitLatestForm(app, values)
 }
 
 async function completeMainPath(view: View, app: App): Promise<void> {
-  await answer(view, app, 'zone-name')
-  await answer(view, app, 'agent-app-name')
-  await answer(view, app, 'resource-name')
-  await answer(view, app)
-  await answer(view, app, 'scope-name')
+  await openAndSubmit(view, app, { zone_name: 'zone-name' })
+  await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+  await openAndSubmit(view, app, { provider_mode: 'none' })
+  await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
   await view.onKey('enter', ctx(app))
 }
 
 describe('first setup workflow', () => {
-  it('shows one guided prompt at a time and keeps advanced fields out of the main path', async () => {
+  it('shows guided object pages and keeps advanced fields out of the overview', async () => {
     const app = fakeApp()
     const view = firstSetupView({
       client: makeClient() as never,
@@ -164,19 +175,27 @@ describe('first setup workflow', () => {
 
     const body = view.render(ctx(app)).join('\n')
     expect(body).toContain('Step 1')
-    expect(body).toContain('Create or select an agent app')
-    expect(body).toContain('workload identity')
+    expect(body).toContain('Agent app')
+    expect(body).toContain('Provider')
+    expect(body.indexOf('Provider')).toBeLessThan(body.indexOf('Resource'))
     expect(body).not.toContain('Choose or create a zone')
     expect(body).not.toContain('resource identifier')
     expect(body).not.toContain('profile path')
+
+    await view.onKey('enter', ctx(app))
+    const appForm = latestForm(app)
+    const appBody = appForm.render(ctx(app)).join('\n')
+    expect(appBody).toContain('guided setup / agent app')
+    expect(appBody).toContain('app action')
+    expect(appBody).toContain('app name')
 
     await view.onKey('A', ctx(app))
     const advanced = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as FormView
     expect(advanced).toBeInstanceOf(FormView)
     const advancedBody = advanced.render(ctx(app)).join('\n')
-    expect(advancedBody).toContain('resource identifier')
     expect(advancedBody).toContain('profile path')
-    expect(advancedBody).not.toContain('provider')
+    expect(advancedBody).not.toContain('resource identifier')
+    expect(advancedBody).not.toContain('provider identifier')
   })
 
   it('creates the first zone, app, resource, policy, and generated profile from sequential answers', async () => {
@@ -237,13 +256,17 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
-    await answer(view, app, 'agent-app-name')
-    await answer(view, app, 'resource-name')
-    await answer(view, app, 'https://api.example.com')
-    await answer(view, app, 'provider-name')
-    await answer(view, app)
-    await answer(view, app, 'https://issuer.example.com/oauth/token')
-    await answer(view, app, 'scope-name')
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      provider_name: 'provider-name',
+      provider_kind: 'oauth2',
+      provider_token_endpoint: 'https://issuer.example.com/oauth/token',
+    })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.example.com',
+    })
     await view.onKey('enter', ctx(app))
 
     expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
@@ -272,16 +295,9 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
-    await view.onKey('right', ctx(app))
-    let picker = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as View
-    await picker.init?.(app)
-    await picker.onKey('enter', ctx(app))
-    await answer(view, app)
-    await view.onKey('right', ctx(app))
-    picker = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as View
-    await picker.init?.(app)
-    await picker.onKey('enter', ctx(app))
-    await answer(view, app)
+    await openAndSubmit(view, app, { application_mode: 'select', selected_agent_app_id: 'app-1' })
+    await openAndSubmit(view, app, { provider_mode: 'none' })
+    await openAndSubmit(view, app, { resource_mode: 'select', selected_resource_id: 'res-1', resource_scopes: 'scope-name' })
     await view.onKey('enter', ctx(app))
 
     expect(client.zones.create).not.toHaveBeenCalled()
@@ -311,10 +327,9 @@ describe('first setup workflow', () => {
       generate_profile: 'false',
     })
 
-    await answer(view, app, 'agent-app-name')
-    await answer(view, app, 'resource-name')
-    await answer(view, app)
-    await answer(view, app, 'scope-name')
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, { provider_mode: 'none' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
     await view.onKey('enter', ctx(app))
 
     expect(client.zones.create).not.toHaveBeenCalled()
@@ -347,11 +362,9 @@ describe('first setup workflow', () => {
       write_files: 'true',
     })
 
-    await answer(view, app, 'agent-app-name')
-    await answer(view, app, 'resource-name')
-    await answer(view, app)
-    await answer(view, app)
-    await answer(view, app, 'scope-name')
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, { provider_mode: 'none' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await view.onKey('enter', ctx(app))
 
     const profile = await readFile(profilePath, 'utf8')
@@ -389,10 +402,9 @@ describe('first setup workflow', () => {
       write_files: 'true',
     })
 
-    await answer(view, app, 'agent-app-name')
-    await answer(view, app, 'resource-name')
-    await answer(view, app)
-    await answer(view, app, 'scope-name')
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, { provider_mode: 'none' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
     await view.onKey('enter', ctx(app))
 
     expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('refusing to overwrite existing setup file'), 'error')

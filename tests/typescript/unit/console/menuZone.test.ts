@@ -75,8 +75,8 @@ describe('menu zone hotkey', () => {
     for (const [key, label] of [
       ['1', 'zone'],
       ['2', 'application'],
-      ['3', 'resource'],
-      ['4', 'provider'],
+      ['3', 'provider'],
+      ['4', 'resource'],
       ['5', 'policy'],
       ['6', 'policy set'],
       ['7', 'grant'],
