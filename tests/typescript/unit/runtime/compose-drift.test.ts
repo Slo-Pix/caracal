@@ -98,6 +98,14 @@ describe('runtime-compose default substitutions', () => {
     expect(yaml).toMatch(/\nvolumes:\n  postgresData:\n  redisData:\n  stsReplay:\n  gatewayReplay:\n?$/)
   })
 
+  it('runtime compose initializes replay volumes before non-root services start', () => {
+    const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
+    expect(yaml).toContain('  replayVolumeInit:')
+    expect(yaml).toContain('chown -R 65532:65532 "$$dir"')
+    expect(yaml).toMatch(/  sts:\n[\s\S]*?    depends_on:\n      replayVolumeInit:\n        condition: service_completed_successfully/)
+    expect(yaml).toMatch(/  gateway:\n[\s\S]*?    depends_on:\n      replayVolumeInit:\n        condition: service_completed_successfully/)
+  })
+
   it('runtime compose never exposes container ports on non-loopback addresses', () => {
     const yaml = readFileSync(resolve(repoRoot, 'infra', 'docker', 'runtime-compose.yml'), 'utf8')
     expect(yaml).not.toMatch(/^\s*-\s*"\d+:\d+"/m)

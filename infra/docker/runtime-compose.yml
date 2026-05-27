@@ -57,6 +57,31 @@ secrets:
     file: ./secrets/redisUrl
 
 services:
+  replayVolumeInit:
+    image: busybox:1.37.0@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028
+    restart: "no"
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    read_only: true
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        for dir in /state/sts /state/gateway; do
+          mkdir -p "$$dir/audit-replay"
+          chmod 0750 "$$dir" "$$dir/audit-replay"
+          chown -R 65532:65532 "$$dir"
+        done
+    volumes:
+      - stsReplay:/state/sts
+      - gatewayReplay:/state/gateway
+
   postgres:
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-postgres:v${CARACAL_VERSION}
     restart: unless-stopped
@@ -160,6 +185,8 @@ services:
     <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-sts:v${CARACAL_VERSION}
     depends_on:
+      replayVolumeInit:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -248,6 +275,8 @@ services:
     <<: *appService
     image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-gateway:v${CARACAL_VERSION}
     depends_on:
+      replayVolumeInit:
+        condition: service_completed_successfully
       sts:
         condition: service_healthy
       api:
