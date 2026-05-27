@@ -97,6 +97,8 @@ function cleanBase(version) {
 
 function npmRcBase(version, suffix) {
   if (version.endsWith(`-${suffix}`)) return version.slice(0, -suffix.length - 1)
+  const base = version.replace(/-rc\.(?:sha[0-9A-Za-z]+|[0-9]+)$/, '')
+  if (base !== version) return base
   return cleanBase(version)
 }
 
@@ -105,6 +107,8 @@ function pythonRcBase(version, suffix) {
   const sha = suffix.match(/^rc\.sha([A-Za-z0-9]+)$/)?.[1]
   if (numeric && version.endsWith(`rc${numeric}`)) return version.slice(0, -`rc${numeric}`.length)
   if (sha && version.endsWith(`rc0+sha${sha}`)) return version.slice(0, -`rc0+sha${sha}`.length)
+  const base = version.replace(/rc(?:[0-9]+|0\+sha[0-9A-Za-z]+)$/, '')
+  if (base !== version) return base
   return cleanBase(version)
 }
 
