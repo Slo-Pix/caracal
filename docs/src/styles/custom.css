@@ -1731,3 +1731,81 @@ footer .meta a {
   justify-content: center;
   margin-top: 0.75rem;
 }
+
+/* Mermaid diagram containers */
+.mermaid-diagram {
+  margin: 1.5rem 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.mermaid-zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.mermaid-zoom-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 1px solid var(--caracal-border);
+  border-radius: 0.3rem;
+  background: var(--caracal-panel);
+  color: var(--caracal-text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s, opacity 0.12s;
+  padding: 0;
+  user-select: none;
+}
+
+.mermaid-zoom-btn:hover:not(:disabled) {
+  background: var(--caracal-panel-hover);
+  color: var(--caracal-text);
+  border-color: var(--caracal-border-strong);
+}
+
+.mermaid-zoom-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mermaid-zoom-reset {
+  font-size: 0.75rem;
+  opacity: 0.4;
+}
+
+.mermaid-zoom-reset[data-active="true"] {
+  opacity: 1;
+}
+
+.mermaid-viewport {
+  border: 1px solid var(--caracal-border);
+  border-radius: 0.6rem;
+  background: var(--caracal-panel);
+  overflow: auto;
+  padding: 1rem;
+}
+
+.mermaid-diagram pre.mermaid {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: block;
+  overflow: visible;
+}
+
+.mermaid-diagram svg {
+  max-width: none;
+  display: block;
+  margin: 0;
+  transform-origin: top left;
+  transition: transform 0.15s ease;
+}

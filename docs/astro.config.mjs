@@ -8,6 +8,7 @@
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import sitemap from '@astrojs/sitemap'
+import { remarkMermaid } from './src/plugins/remarkMermaid.mjs'
 
 const site = 'https://docs.caracal.run'
 const ogImage = '/img/caracal.png'
@@ -16,6 +17,9 @@ const description =
 
 export default defineConfig({
   output: 'static',
+  markdown: {
+    remarkPlugins: [remarkMermaid],
+  },
   site,
   trailingSlash: 'always',
   build: {
@@ -94,6 +98,7 @@ export default defineConfig({
       pagination: true,
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 4 },
       components: {
+        Head: './src/components/Head.astro',
         Header: './src/components/Header.astro',
         Hero: './src/components/Hero.astro',
         ThemeSelect: './src/components/ThemeSelect.astro',

@@ -31,6 +31,8 @@
 
 The default product path is intentionally small: register an **agent app**, run an **agent run**, request a short-lived **mandate**, call a **resource** through the **Gateway**, and inspect the resulting **audit** trail. The STS evaluates policy and issues Caracal access tokens, the Gateway enforces token validity and provider routing, the Coordinator tracks runtime and delegation state, and Audit records why access was allowed or denied and what happened upstream.
 
+Read the full documentation at [caracal.run](https://caracal.run). Start with [What Caracal Does](https://caracal.run/get-started/what-caracal-does/) or jump to [Runtime and Console](https://caracal.run/runtime-console/) for setup and management workflows.
+
 -----
 
 ## Community
@@ -74,7 +76,7 @@ More coming soon
 
 The installer provides the thin `caracal` runtime shell and the `caracal-console` management interface.
 
-> Current RC: pin `v2026.05.27-rc.1` until it is promoted to stable. Unpinned installs follow GitHub's latest stable release.  
+> Version examples below pin `v2026.05.27-rc.1`. Check [GitHub Releases](https://github.com/Garudex-Labs/caracal/releases) for the latest available tag. Unpinned installs follow GitHub's latest stable release.
 > Pin a version: `--version vYYYY.MM.DD` on Unix or `-Version vYYYY.MM.DD` in PowerShell.  
 > Change install directory: `--install-dir /path` on Unix or `-InstallDir C:\path` in PowerShell.
 
@@ -125,7 +127,7 @@ caracal up                            # start all services, override with `CARAC
 caracal status [--ready]              # probe all services
 caracal down                          # stop; add -v to remove volumes
 caracal purge                         # interactive cleanup (containers, volumes, config, runtime, caches)
-caracal console                       # Launch Interface
+caracal console                       # launch Console
 caracal run -- node worker.js         # workload execution
 ```
 
@@ -139,7 +141,7 @@ caracal run -- node worker.js         # workload execution
 ### Prerequisites
 
 - Node.js 24+
-- pnpm 10+
+- pnpm 11.1.1
 - Docker Engine 24+ with Compose v2 (or Docker Desktop 4.x)
 - Git 2.x
 - Go 1.26+ (only when changing Go services or shared Go packages)

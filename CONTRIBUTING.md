@@ -78,9 +78,9 @@ pnpm caracal run -- node -e "if (!process.env.RESOURCE_TOKEN) process.exit(1)"
 
 #### Control API (optional)
 
-The control service is an OAuth-protected HTTP API hosted by the engine for any external client that needs to drive Caracal programmatically.
+The Console is the primary human product-management surface. The control service is an optional OAuth-protected HTTP API for approved external clients that need to drive Caracal programmatically.
 
-Clients authenticate by exchanging the Control key credentials for a token whose resource matches the control audience (`caracal control`). Create the key from the Console Control menu; Caracal generates `client_secret` and shows it once in the create result. Store it, then drive the enabled Control API from the workflow or client that will use it in production.
+Clients authenticate by exchanging the Control key credentials for a token whose audience matches `CONTROL_AUDIENCE`, which defaults to `caracal-control`. Create the key from the Console Control menu; Caracal generates `client_secret` and shows it once in the create result. Store it, then drive the enabled Control API from the workflow or client that will use it in production.
 
 ## Tests
 

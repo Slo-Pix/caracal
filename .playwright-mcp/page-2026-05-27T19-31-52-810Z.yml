@@ -1,0 +1,368 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2]:
+    - /url: "#_top"
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - link "Caracal" [ref=e7]:
+          - /url: /
+          - generic [ref=e8]: Caracal
+        - button "Search" [ref=e11]:
+          - img [ref=e12]
+          - generic [ref=e14]: Search
+          - generic [ref=e15]:
+            - generic [ref=e16]: Ctrl
+            - generic [ref=e17]: K
+        - button "Switch to light theme" [pressed] [ref=e21] [cursor=pointer]:
+          - img [ref=e22]
+    - navigation "Main":
+      - list [ref=e27]:
+        - listitem [ref=e28]:
+          - group [ref=e29]:
+            - generic "Get Started" [ref=e30]:
+              - generic [ref=e31]: Get Started
+              - img [ref=e32]
+            - list [ref=e34]:
+              - listitem [ref=e35]:
+                - link "Overview" [ref=e36]:
+                  - /url: /get-started/
+              - listitem [ref=e37]:
+                - link "Welcome" [ref=e38]:
+                  - /url: /get-started/welcome/
+              - listitem [ref=e39]:
+                - link "Installation" [ref=e40]:
+                  - /url: /get-started/installation/
+              - listitem [ref=e41]:
+                - 'link "Quickstart: Released Product" [ref=e42]':
+                  - /url: /get-started/quickstart/
+              - listitem [ref=e43]:
+                - link "Five-Minute Setup" [ref=e44]:
+                  - /url: /get-started/five-minute-setup/
+              - listitem [ref=e45]:
+                - link "First Integration" [ref=e46]:
+                  - /url: /get-started/first-integration/
+              - listitem [ref=e47]:
+                - link "Key Ideas at a Glance" [ref=e48]:
+                  - /url: /get-started/key-ideas/
+              - listitem [ref=e49]:
+                - link "What Caracal Does" [ref=e50]:
+                  - /url: /get-started/what-caracal-does/
+              - listitem [ref=e51]:
+                - link "Contributor Quickstart" [ref=e52]:
+                  - /url: /get-started/contributor-quickstart/
+        - listitem [ref=e53]:
+          - group [ref=e54]:
+            - generic "Tutorials" [ref=e55]:
+              - generic [ref=e56]: Tutorials
+              - img [ref=e57]
+            - list [ref=e59]:
+              - listitem [ref=e60]:
+                - link "Overview" [ref=e61]:
+                  - /url: /tutorials/
+              - listitem [ref=e62]:
+                - link "Protect an API" [ref=e63]:
+                  - /url: /tutorials/protect-an-api/
+              - listitem [ref=e64]:
+                - link "Connect an Agent" [ref=e65]:
+                  - /url: /tutorials/connect-an-agent/
+              - listitem [ref=e66]:
+                - link "Inspect a Run" [ref=e67]:
+                  - /url: /tutorials/inspect-a-run/
+        - listitem [ref=e68]:
+          - group [ref=e69]:
+            - generic "Guides" [ref=e70]:
+              - generic [ref=e71]: Guides
+              - img [ref=e72]
+            - list [ref=e74]:
+              - listitem [ref=e75]:
+                - link "Overview" [ref=e76]:
+                  - /url: /guides/
+              - listitem [ref=e77]:
+                - link "Integrate the TypeScript SDK" [ref=e78]:
+                  - /url: /guides/sdk-typescript/
+              - listitem [ref=e79]:
+                - link "Integrate the Python SDK" [ref=e80]:
+                  - /url: /guides/sdk-python/
+              - listitem [ref=e81]:
+                - link "Integrate the Go SDK" [ref=e82]:
+                  - /url: /guides/sdk-go/
+              - listitem [ref=e83]:
+                - link "Protect an MCP Server" [ref=e84]:
+                  - /url: /guides/protect-mcp/
+              - listitem [ref=e85]:
+                - link "Protect an Express App" [ref=e86]:
+                  - /url: /guides/protect-express/
+              - listitem [ref=e87]:
+                - link "Protect a FastMCP App" [ref=e88]:
+                  - /url: /guides/protect-fastmcp/
+              - listitem [ref=e89]:
+                - link "Protect a Go net/http Service" [ref=e90]:
+                  - /url: /guides/protect-nethttp/
+              - listitem [ref=e91]:
+                - link "Enterprise Runtime Patterns" [ref=e92]:
+                  - /url: /guides/enterprise-runtime-patterns/
+              - listitem [ref=e93]:
+                - link "Author a Rego Policy" [ref=e94]:
+                  - /url: /guides/author-policy/
+              - listitem [ref=e95]:
+                - link "Activate a Policy Set" [ref=e96]:
+                  - /url: /guides/activate-policy-set/
+              - listitem [ref=e97]:
+                - link "Define Resources and Providers" [ref=e98]:
+                  - /url: /guides/resources-providers/
+              - listitem [ref=e99]:
+                - link "Issue Grants and Invitations" [ref=e100]:
+                  - /url: /guides/grants-invitations/
+              - listitem [ref=e101]:
+                - link "Implement Multi-Agent Delegation" [ref=e102]:
+                  - /url: /guides/delegation/
+              - listitem [ref=e103]:
+                - link "Tail and Query the Audit Stream" [ref=e104]:
+                  - /url: /guides/audit-stream/
+              - listitem [ref=e105]:
+                - link "Run an Agent with caracal run" [ref=e106]:
+                  - /url: /guides/runtime-run/
+              - listitem [ref=e107]:
+                - link "Step-Up Re-Authentication" [ref=e108]:
+                  - /url: /guides/step-up/
+        - listitem [ref=e109]:
+          - group [ref=e110]:
+            - generic "SDKs" [ref=e111]:
+              - generic [ref=e112]: SDKs
+              - img [ref=e113]
+        - listitem [ref=e115]:
+          - group [ref=e116]:
+            - generic "Runtime and Console" [ref=e117]:
+              - generic [ref=e118]: Runtime and Console
+              - img [ref=e119]
+        - listitem [ref=e121]:
+          - group [ref=e122]:
+            - generic "Concepts" [ref=e123]:
+              - generic [ref=e124]: Concepts
+              - img [ref=e125]
+        - listitem [ref=e127]:
+          - group [ref=e128]:
+            - generic "Operations" [ref=e129]:
+              - generic [ref=e130]: Operations
+              - img [ref=e131]
+        - listitem [ref=e133]:
+          - group [ref=e134]:
+            - generic "Security" [ref=e135]:
+              - generic [ref=e136]: Security
+              - img [ref=e137]
+        - listitem [ref=e139]:
+          - group [ref=e140]:
+            - generic "Examples" [ref=e141]:
+              - generic [ref=e142]: Examples
+              - img [ref=e143]
+        - listitem [ref=e145]:
+          - group [ref=e146]:
+            - generic "Contributing" [ref=e147]:
+              - generic [ref=e148]: Contributing
+              - img [ref=e149]
+        - listitem [ref=e151]:
+          - group [ref=e152]:
+            - generic "Reference" [ref=e153]:
+              - generic [ref=e154]: Reference
+              - img [ref=e155]
+        - listitem [ref=e157]:
+          - group [ref=e158]:
+            - generic "Architecture" [ref=e159]:
+              - generic [ref=e160]: Architecture
+              - img [ref=e161]
+            - list [ref=e163]:
+              - listitem [ref=e164]:
+                - link "Overview" [ref=e165]:
+                  - /url: /architecture/
+              - listitem [ref=e166]:
+                - link "System Topology" [ref=e167]:
+                  - /url: /architecture/system-topology/
+              - listitem [ref=e168]:
+                - link "Token Exchange Flow" [ref=e169]:
+                  - /url: /architecture/token-exchange-flow/
+              - listitem [ref=e170]:
+                - link "Delegation and Coordinator Flow" [ref=e171]:
+                  - /url: /architecture/delegation-flow/
+              - listitem [ref=e172]:
+                - link "Event Streams and Outbox" [ref=e173]:
+                  - /url: /architecture/event-streams/
+              - listitem [ref=e174]:
+                - link "Storage Model" [ref=e175]:
+                  - /url: /architecture/storage-model/
+              - listitem [ref=e176]:
+                - link "Cryptography and Keys" [ref=e177]:
+                  - /url: /architecture/crypto-keys/
+              - listitem [ref=e178]:
+                - link "Trust Boundaries" [ref=e179]:
+                  - /url: /architecture/trust-boundaries/
+        - listitem [ref=e180]:
+          - group [ref=e181]:
+            - generic "Services" [ref=e182]:
+              - generic [ref=e183]: Services
+              - img [ref=e184]
+        - listitem [ref=e186]:
+          - group [ref=e187]:
+            - generic "API Reference" [ref=e188]:
+              - generic [ref=e189]: API Reference
+              - img [ref=e190]
+    - generic [ref=e193]:
+      - complementary [ref=e194]:
+        - navigation "On this page" [ref=e198]:
+          - group [ref=e199]:
+            - generic "On this page" [ref=e200]:
+              - generic [ref=e201] [cursor=pointer]:
+                - text: On this page
+                - img [ref=e202]
+      - main [ref=e205]:
+        - heading "Delegation and Coordinator Flow" [level=1] [ref=e208]
+        - generic [ref=e210]:
+          - generic [ref=e211]:
+            - paragraph [ref=e212]: Coordinator owns agent runtime state. It records agent sessions, service leases, invocation lifecycle, and delegation edges that STS later uses to validate delegated exchanges.
+            - generic [ref=e213]:
+              - heading "Flow" [level=2] [ref=e214]
+              - link "Section titled “Flow”" [ref=e215]:
+                - /url: "#flow"
+                - img [ref=e217]
+                - generic [ref=e219]: Section titled “Flow”
+            - generic [ref=e220]:
+              - generic [ref=e221]:
+                - button "Zoom out" [ref=e222] [cursor=pointer]: −
+                - button "Reset zoom" [ref=e223] [cursor=pointer]: ✕
+                - button "Zoom in" [ref=e224] [cursor=pointer]: +
+              - document [ref=e227]:
+                - generic [ref=e230]: STS
+                - generic [ref=e233]: Redis Streams
+                - generic [ref=e236]: Postgres
+                - generic [ref=e239]: Coordinator
+                - generic [ref=e242]: Agent SDK
+                - generic [ref=e246]: STS
+                - generic [ref=e250]: Redis Streams
+                - generic [ref=e254]: Postgres
+                - generic [ref=e258]: Coordinator
+                - generic [ref=e262]: Agent SDK
+                - generic [ref=e263]: create or update agent session
+                - generic [ref=e264]: persist session and leases
+                - generic [ref=e265]: publish caracal.agents.lifecycle
+                - generic [ref=e266]: create delegation edge
+                - generic [ref=e267]: persist edge and graph epoch
+                - generic [ref=e268]: publish delegation invalidation
+                - generic [ref=e269]: exchange with agent_session_id/delegation_edge_id
+                - generic [ref=e270]: validate session, edge, constraints, and graph state
+            - generic [ref=e271]:
+              - heading "Coordinator state" [level=2] [ref=e272]
+              - link "Section titled “Coordinator state”" [ref=e273]:
+                - /url: "#coordinator-state"
+                - img [ref=e275]
+                - generic [ref=e277]: Section titled “Coordinator state”
+            - table [ref=e278]:
+              - rowgroup [ref=e279]:
+                - row "State Purpose" [ref=e280]:
+                  - columnheader "State" [ref=e281]
+                  - columnheader "Purpose" [ref=e282]
+              - rowgroup [ref=e283]:
+                - row "agent_sessions Agent session tree, parent-child relationships, status, leases, and root subject session." [ref=e284]:
+                  - cell "agent_sessions" [ref=e285]:
+                    - code [ref=e286]: agent_sessions
+                  - cell "Agent session tree, parent-child relationships, status, leases, and root subject session." [ref=e287]
+                - row "agent_services Service agents and heartbeat health." [ref=e288]:
+                  - cell "agent_services" [ref=e289]:
+                    - code [ref=e290]: agent_services
+                  - cell "Service agents and heartbeat health." [ref=e291]
+                - row "delegation_edges Source/target sessions, resource/scope bounds, expiry, constraints, and status." [ref=e292]:
+                  - cell "delegation_edges" [ref=e293]:
+                    - code [ref=e294]: delegation_edges
+                  - cell "Source/target sessions, resource/scope bounds, expiry, constraints, and status." [ref=e295]
+                - row "agent_invocations Invocation lifecycle and deadline tracking." [ref=e296]:
+                  - cell "agent_invocations" [ref=e297]:
+                    - code [ref=e298]: agent_invocations
+                  - cell "Invocation lifecycle and deadline tracking." [ref=e299]
+                - row "delegation_graph_epochs Graph invalidation and traversal consistency." [ref=e300]:
+                  - cell "delegation_graph_epochs" [ref=e301]:
+                    - code [ref=e302]: delegation_graph_epochs
+                  - cell "Graph invalidation and traversal consistency." [ref=e303]
+                - row "caracal_outbox Durable event publication for Coordinator-produced topics." [ref=e304]:
+                  - cell "caracal_outbox" [ref=e305]:
+                    - code [ref=e306]: caracal_outbox
+                  - cell "Durable event publication for Coordinator-produced topics." [ref=e307]
+            - generic [ref=e308]:
+              - heading "Event topics" [level=2] [ref=e309]
+              - link "Section titled “Event topics”" [ref=e310]:
+                - /url: "#event-topics"
+                - img [ref=e312]
+                - generic [ref=e314]: Section titled “Event topics”
+            - table [ref=e315]:
+              - rowgroup [ref=e316]:
+                - row "Topic Meaning" [ref=e317]:
+                  - columnheader "Topic" [ref=e318]
+                  - columnheader "Meaning" [ref=e319]
+              - rowgroup [ref=e320]:
+                - row "caracal.agents.lifecycle Agent session lifecycle." [ref=e321]:
+                  - cell "caracal.agents.lifecycle" [ref=e322]:
+                    - code [ref=e323]: caracal.agents.lifecycle
+                  - cell "Agent session lifecycle." [ref=e324]
+                - row "caracal.invocations.lifecycle Invocation lifecycle." [ref=e325]:
+                  - cell "caracal.invocations.lifecycle" [ref=e326]:
+                    - code [ref=e327]: caracal.invocations.lifecycle
+                  - cell "Invocation lifecycle." [ref=e328]
+                - row "caracal.delegations.invalidate Delegation graph invalidation." [ref=e329]:
+                  - cell "caracal.delegations.invalidate" [ref=e330]:
+                    - code [ref=e331]: caracal.delegations.invalidate
+                  - cell "Delegation graph invalidation." [ref=e332]
+                - row "caracal.sessions.revoke Session, agent, and delegation revocation propagation." [ref=e333]:
+                  - cell "caracal.sessions.revoke" [ref=e334]:
+                    - code [ref=e335]: caracal.sessions.revoke
+                  - cell "Session, agent, and delegation revocation propagation." [ref=e336]
+            - generic [ref=e337]:
+              - heading "Operator boundaries" [level=2] [ref=e338]
+              - link "Section titled “Operator boundaries”" [ref=e339]:
+                - /url: "#operator-boundaries"
+                - img [ref=e341]
+                - generic [ref=e343]: Section titled “Operator boundaries”
+            - paragraph [ref=e344]:
+              - text: Human operators use Console
+              - code [ref=e345]: agent run
+              - text: and
+              - code [ref=e346]: delegation
+              - text: views. Automation uses Coordinator API/Admin SDK surfaces. Top-level
+              - code [ref=e347]: caracal
+              - text: runtime commands do not manage agent sessions or delegation.
+            - generic [ref=e348]:
+              - heading "Related pages" [level=2] [ref=e349]
+              - link "Section titled “Related pages”" [ref=e350]:
+                - /url: "#related-pages"
+                - img [ref=e352]
+                - generic [ref=e354]: Section titled “Related pages”
+            - list [ref=e355]:
+              - listitem [ref=e356]:
+                - link "Coordinator Service" [ref=e357]:
+                  - /url: /services/coordinator/
+              - listitem [ref=e358]:
+                - link "Delegation Graph" [ref=e359]:
+                  - /url: /concepts/delegation/
+              - listitem [ref=e360]:
+                - link "Agents and Delegation" [ref=e361]:
+                  - /url: /runtime-console/agents/
+          - generic [ref=e362]:
+            - generic [ref=e363]:
+              - link "Edit page" [ref=e364]:
+                - /url: https://github.com/Garudex-Labs/caracal/edit/main/docs/src/content/docs/architecture/delegation-flow.mdx
+                - img [ref=e365]
+                - text: Edit page
+              - paragraph [ref=e367]:
+                - text: "Last updated:"
+                - time [ref=e368]: May 27, 2026
+            - generic [ref=e369]:
+              - link "Previous Token Exchange Flow" [ref=e370]:
+                - /url: /architecture/token-exchange-flow/
+                - img [ref=e371]
+                - generic [ref=e373]:
+                  - text: Previous
+                  - text: Token Exchange Flow
+              - link "Next Event Streams and Outbox" [ref=e374]:
+                - /url: /architecture/event-streams/
+                - img [ref=e375]
+                - generic [ref=e377]:
+                  - text: Next
+                  - text: Event Streams and Outbox
+  - button "Back to top":
+    - img
