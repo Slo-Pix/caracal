@@ -3,7 +3,8 @@
 //
 // Guided first setup workflow for production-shaped Caracal onboarding.
 
-import type { Application, PolicyVersion, Provider, Resource, ResourceInput, Zone } from '@caracalai/admin'
+import type { Application, PolicyVersion, Provider, ProviderKind, Resource, ResourceInput, Zone } from '@caracalai/admin'
+import type { JsonObject } from '@caracalai/core'
 import { DEFAULT_CONTROL_AUDIENCE, generateClientSecret } from '@caracalai/engine'
 import {
   DEFAULT_COORDINATOR_URL,
@@ -17,12 +18,13 @@ import type { Key } from '../keys.ts'
 import { maskSecretField, scrubTokens } from '../errors.ts'
 import type { App, View, ViewContext } from '../screen.ts'
 import { DetailView } from './detail.ts'
-import { FormView, type Field } from './form.ts'
+import { FormView } from './form.ts'
 import { infoPage, openInfo } from './info.ts'
 import { EntityPickerView } from './picker.ts'
 import type { Ctx } from './factory.ts'
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:8081'
+const PROVIDER_KINDS: ProviderKind[] = ['oauth2', 'oidc', 'apikey', 'workload']
 const BRACKETED_PASTE_PATTERN = /\u001b\[(?:200|201)~/g
 const ANSI_SEQUENCE_PATTERN = /\u001b\[[0-9;?]*[A-Za-z~]/g
 const NAMED_KEYS = new Set([
@@ -54,7 +56,20 @@ interface SetupValues {
   upstream_url?: string
   request_path?: string
   advanced_options?: string
-  provider_id?: string
+  selected_provider_id?: string
+  provider_name?: string
+  provider_identifier?: string
+  provider_kind?: string
+  provider_issuer?: string
+  provider_authorization_endpoint?: string
+  provider_token_endpoint?: string
+  provider_upstream_oauth_scopes?: string
+  provider_api_key_header?: string
+  provider_workload_audience?: string
+  provider_client_id?: string
+  provider_allowed_token_hosts?: string
+  provider_auth_scheme?: string
+  provider_forward_caracal_identity?: string
   activate_policy?: string
   generate_profile?: string
   write_files?: string
@@ -111,6 +126,13 @@ type SetupStepKey =
   | 'zone'
   | 'application'
   | 'resource'
+  | 'upstream'
+  | 'provider'
+  | 'provider_kind'
+  | 'provider_issuer'
+  | 'provider_token_endpoint'
+  | 'provider_api_key_header'
+  | 'provider_workload_audience'
   | 'scopes'
   | 'review'
 
@@ -122,6 +144,7 @@ interface SetupStep {
   kind?: 'text' | 'bool'
   required?: boolean
   picker?: boolean
+  options?: string[]
 }
 
 class FirstSetupWizardView implements View {
@@ -135,10 +158,13 @@ class FirstSetupWizardView implements View {
     write_files: 'false',
     overwrite_files: 'false',
     profile_path: defaultRuntimeConfigPath(),
+    provider_kind: 'oauth2',
+    provider_forward_caracal_identity: 'false',
   }
   private selectedZone: Zone | undefined
   private selectedApplication: Application | undefined
   private selectedResource: Resource | undefined
+  private selectedProvider: Provider | undefined
   private submitting = false
 
   constructor(ctx: Ctx) {
@@ -158,8 +184,10 @@ class FirstSetupWizardView implements View {
     const step = this.currentStep()
     const hints = ['enter:next', 'left:back', 'A:advanced', '?:info', 'esc:cancel']
     if (step.kind === 'bool') hints.unshift('space:toggle')
+    else if (step.options) hints.unshift('→:option')
     else hints.unshift('type:answer')
-    if (step.picker) hints.push('→:select')
+    if (step.options) hints.push('→:option')
+    else if (step.picker) hints.push('→:select')
     return hints
   }
 
@@ -176,7 +204,8 @@ class FirstSetupWizardView implements View {
       ` ${ui.muted('Answer')} ${this.renderInput(step)}`,
     ]
     if (step.required) lines.push(' ' + ui.muted('Required for first success.'))
-    if (step.picker) lines.push(' ' + ui.muted('Press right arrow to choose an existing item, or type a name to create one.'))
+    if (step.options) lines.push(' ' + ui.muted('Press right arrow to cycle options.'))
+    else if (step.picker) lines.push(' ' + ui.muted('Press right arrow to choose an existing item, or type a name to create one.'))
     if (this.submitting) lines.push('', ' ' + ui.muted('creating setup...'))
     return lines.map((line) => truncate(line, ctx.size.cols))
   }
@@ -205,6 +234,10 @@ class FirstSetupWizardView implements View {
       return
     }
     const step = this.currentStep()
+    if (key === 'right' && step.options) {
+      this.cycleOption(step)
+      return
+    }
     if (key === 'right' && step.picker) {
       await this.openPicker(ctx.app)
       return
@@ -218,7 +251,7 @@ class FirstSetupWizardView implements View {
       this.nextStep(ctx.app)
       return
     }
-    if (step.kind === 'bool') return
+    if (step.kind === 'bool' || step.options) return
     if (key === 'backspace') {
       const valueKey = stepValueKey(step.key)
       this.setTextValue(step.key, ((valueKey ? this.values[valueKey] : '') ?? '').slice(0, -1))
@@ -254,6 +287,55 @@ class FirstSetupWizardView implements View {
         required: true,
         picker: this.hasExistingZone(),
       },
+      upstream: {
+        key: 'upstream',
+        question: 'Enter external upstream URL',
+        explanation: 'Most first setups protect an external API, gRPC service, MCP server, or SDK endpoint through Gateway. Leave blank only for a direct Caracal resource.',
+        emptyLabel: 'https://api.example.com',
+      },
+      provider: {
+        key: 'provider',
+        question: 'Choose or create a credential provider',
+        explanation: 'A provider supplies upstream OAuth/OIDC, API-key, or workload identity context for this Gateway-routed resource. Leave blank only when the upstream needs no provider credentials.',
+        emptyLabel: 'provider name',
+        picker: this.hasExistingZone(),
+      },
+      provider_kind: {
+        key: 'provider_kind',
+        question: 'Choose provider type',
+        explanation: 'Provider type controls the credential fields needed below.',
+        emptyLabel: 'oauth2',
+        required: true,
+        options: [...PROVIDER_KINDS],
+      },
+      provider_issuer: {
+        key: 'provider_issuer',
+        question: 'Enter provider issuer',
+        explanation: 'Issuer identifies the OIDC or workload identity trust authority.',
+        emptyLabel: 'https://issuer.example.com',
+        required: true,
+      },
+      provider_token_endpoint: {
+        key: 'provider_token_endpoint',
+        question: 'Enter provider token endpoint',
+        explanation: 'Gateway uses this HTTPS endpoint to exchange or refresh upstream provider tokens.',
+        emptyLabel: 'https://issuer.example.com/oauth/token',
+        required: true,
+      },
+      provider_api_key_header: {
+        key: 'provider_api_key_header',
+        question: 'Enter API key header',
+        explanation: 'This is the HTTP header where the upstream service expects its API key.',
+        emptyLabel: 'X-API-Key',
+        required: true,
+      },
+      provider_workload_audience: {
+        key: 'provider_workload_audience',
+        question: 'Enter workload audience',
+        explanation: 'Audience is the exact value the workload identity provider expects for exchanged tokens.',
+        emptyLabel: 'api://payments',
+        required: true,
+      },
       scopes: {
         key: 'scopes',
         question: 'Enter Caracal scopes',
@@ -275,6 +357,18 @@ class FirstSetupWizardView implements View {
     const steps: SetupStepKey[] = []
     if (!this.selectedZone) steps.push('zone')
     steps.push('application', 'resource')
+    if (!this.selectedResource) steps.push('upstream')
+    if (this.needsProviderStep()) {
+      steps.push('provider')
+      if (this.needsProviderCreateSteps()) {
+        steps.push('provider_kind')
+        const kind = providerKind(this.values.provider_kind)
+        if (kind === 'oidc' || kind === 'workload') steps.push('provider_issuer')
+        if (kind === 'oauth2' || kind === 'oidc' || kind === 'workload') steps.push('provider_token_endpoint')
+        if (kind === 'apikey') steps.push('provider_api_key_header')
+        if (kind === 'workload') steps.push('provider_workload_audience')
+      }
+    }
     if (this.needsScopesStep()) steps.push('scopes')
     steps.push('review')
     return steps
@@ -289,6 +383,14 @@ class FirstSetupWizardView implements View {
     return !this.selectedResource || splitList(this.values.resource_scopes).length === 0
   }
 
+  private needsProviderStep(): boolean {
+    return !this.selectedResource && Boolean(trimmed(this.values.upstream_url))
+  }
+
+  private needsProviderCreateSteps(): boolean {
+    return this.needsProviderStep() && !this.selectedProvider && Boolean(trimmed(this.values.provider_name))
+  }
+
   private renderInput(step: SetupStep): string {
     const key = stepValueKey(step.key)
     if (step.kind === 'bool') return ui.input((key && this.values[key] === 'true') ? '[ yes ]' : '[ no ]')
@@ -300,6 +402,8 @@ class FirstSetupWizardView implements View {
     if (step === 'zone' && this.selectedZone && !this.values.zone_name) return `${zoneLabel(this.selectedZone)} (selected)`
     if (step === 'application' && this.selectedApplication && !this.values.agent_app_name) return `${this.selectedApplication.name} (selected)`
     if (step === 'resource' && this.selectedResource && !this.values.resource_name) return `${resourceLabel(this.selectedResource)} (selected)`
+    if (step === 'provider' && this.selectedProvider && !this.values.provider_name) return `${providerLabel(this.selectedProvider)} (selected)`
+    if (step === 'provider_kind') return providerKind(this.values.provider_kind)
     if (step === 'resource' && this.values.resource_name && !this.selectedResource) {
       return this.values.resource_name
     }
@@ -319,6 +423,7 @@ class FirstSetupWizardView implements View {
       ` ${ui.muted('Agent app')} ${this.selectedApplication ? `${this.selectedApplication.name} (selected)` : `${this.values.agent_app_name} (create)`}`,
       ` ${ui.muted('Resource')} ${resourceName}${this.selectedResource ? ' (selected)' : ' (create)'}`,
       ` ${ui.muted('Resource identifier')} ${resourceIdentifier}`,
+      ` ${ui.muted('Credential provider')} ${this.providerReviewLabel()}`,
       ` ${ui.muted('Caracal scopes')} ${splitList(this.values.resource_scopes).join(', ') || '<required>'}`,
       ` ${ui.muted('Access policy')} ${bool(this.values.activate_policy) ? 'create and activate real Rego allow-list' : 'skip'}`,
       ` ${ui.muted('Gateway')} ${trimmed(this.values.upstream_url) ? `${this.values.upstream_url}${normalizeRequestPath(this.values.request_path) ?? ''}` : 'skip for now'}`,
@@ -347,10 +452,24 @@ class FirstSetupWizardView implements View {
     this.step = steps[Math.max(0, index - 1)] ?? 'review'
   }
 
+  private cycleOption(step: SetupStep): void {
+    if (!step.options || step.options.length === 0) return
+    const key = stepValueKey(step.key)
+    if (!key) return
+    const current = this.values[key] || step.options[0]!
+    const index = step.options.indexOf(current)
+    this.setTextValue(step.key, step.options[(index + 1) % step.options.length]!)
+  }
+
   private validateStep(): string | undefined {
     if (this.step === 'zone' && !this.selectedZone && !trimmed(this.values.zone_name)) return 'zone is required'
     if (this.step === 'application' && !this.selectedApplication && !trimmed(this.values.agent_app_name)) return 'agent app is required'
     if (this.step === 'resource' && !this.selectedResource && !trimmed(this.values.resource_name)) return 'resource is required'
+    if (this.step === 'provider_kind' && !PROVIDER_KINDS.includes(providerKind(this.values.provider_kind))) return 'provider type is required'
+    if (this.step === 'provider_issuer' && !trimmed(this.values.provider_issuer)) return 'provider issuer is required'
+    if (this.step === 'provider_token_endpoint' && !trimmed(this.values.provider_token_endpoint)) return 'provider token endpoint is required'
+    if (this.step === 'provider_api_key_header' && !trimmed(this.values.provider_api_key_header)) return 'API key header is required'
+    if (this.step === 'provider_workload_audience' && !trimmed(this.values.provider_workload_audience)) return 'workload audience is required'
     if (this.step === 'scopes' && splitList(this.values.resource_scopes).length === 0) return 'at least one Caracal scope is required'
     return undefined
   }
@@ -406,6 +525,23 @@ class FirstSetupWizardView implements View {
           this.values.resource_name = ''
           this.values.resource_scopes = (this.selectedResource.scopes ?? []).join(',')
           this.values.upstream_url = this.selectedResource.upstream_url ?? ''
+          this.values.selected_provider_id = this.selectedResource.credential_provider_id ?? ''
+        },
+      }))
+      return
+    }
+    if (this.step === 'provider') {
+      app.push(new EntityPickerView<Provider>({
+        title: 'choose provider',
+        load: () => this.ctx.client.providers.list(zoneId),
+        value: (row) => row.id,
+        label: providerLabel,
+        description: (row) => [row.identifier, row.kind ?? undefined].filter(Boolean).join('  '),
+        onPick: async (id) => {
+          this.selectedProvider = await this.ctx.client.providers.get(zoneId, id)
+          this.values.selected_provider_id = id
+          this.values.provider_name = ''
+          this.clearProviderCreateValues()
         },
       }))
     }
@@ -415,6 +551,8 @@ class FirstSetupWizardView implements View {
     if (step === 'zone' && this.selectedZone) this.clearZoneSelection()
     if (step === 'application' && this.selectedApplication) this.clearApplicationSelection()
     if (step === 'resource' && this.selectedResource) this.clearResourceSelection()
+    if (step === 'provider' && this.selectedProvider) this.clearProviderSelection()
+    if (step === 'provider_kind') this.clearProviderTypeValues()
     const key = stepValueKey(step)
     if (key) this.values[key] = (this.values[key] ?? '') + text
   }
@@ -423,6 +561,8 @@ class FirstSetupWizardView implements View {
     if (step === 'zone' && this.selectedZone) this.clearZoneSelection()
     if (step === 'application' && this.selectedApplication) this.clearApplicationSelection()
     if (step === 'resource' && this.selectedResource) this.clearResourceSelection()
+    if (step === 'provider' && this.selectedProvider) this.clearProviderSelection()
+    if (step === 'provider_kind') this.clearProviderTypeValues()
     const key = stepValueKey(step)
     if (key) this.values[key] = value
   }
@@ -436,6 +576,7 @@ class FirstSetupWizardView implements View {
   private clearZoneDependents(): void {
     this.clearApplicationSelection()
     this.clearResourceSelection()
+    this.clearProviderSelection()
   }
 
   private clearApplicationSelection(): void {
@@ -449,6 +590,33 @@ class FirstSetupWizardView implements View {
     this.values.selected_resource_id = ''
     this.values.resource_scopes = ''
     this.values.upstream_url = ''
+    this.clearProviderSelection()
+  }
+
+  private clearProviderSelection(): void {
+    this.selectedProvider = undefined
+    this.values.selected_provider_id = ''
+    this.values.provider_name = ''
+    this.clearProviderCreateValues()
+  }
+
+  private clearProviderCreateValues(): void {
+    this.values.provider_identifier = ''
+    this.values.provider_kind = 'oauth2'
+    this.clearProviderTypeValues()
+  }
+
+  private clearProviderTypeValues(): void {
+    this.values.provider_issuer = ''
+    this.values.provider_token_endpoint = ''
+    this.values.provider_api_key_header = ''
+    this.values.provider_workload_audience = ''
+    this.values.provider_client_id = ''
+    this.values.provider_authorization_endpoint = ''
+    this.values.provider_upstream_oauth_scopes = ''
+    this.values.provider_allowed_token_hosts = ''
+    this.values.provider_auth_scheme = ''
+    this.values.provider_forward_caracal_identity = 'false'
   }
 
   private hasExistingZone(): boolean {
@@ -460,11 +628,17 @@ class FirstSetupWizardView implements View {
     app.push(new FormView({
       title: 'guided setup advanced',
       submitLabel: 'save',
+      initialValues: { upstream_url: values.upstream_url ?? '' },
       fields: [
         { key: 'resource_identifier', label: 'resource identifier', kind: 'text', default: values.resource_identifier ?? '', visible: () => !this.selectedResource, hint: 'optional; generated from the resource name when blank' },
-        { key: 'upstream_url', label: 'Gateway upstream URL', kind: 'text', default: values.upstream_url ?? '', hint: 'optional; blank skips Gateway route setup' },
         { key: 'request_path', label: 'first request path', kind: 'text', default: values.request_path ?? '', dependsOn: 'upstream_url', hint: 'optional; used only to show an exact first Gateway curl example' },
-        { key: 'provider_id', label: 'credential provider', kind: 'text', default: values.provider_id ?? '', dependsOn: 'upstream_url', hint: 'third-party credential source; select one only when this resource needs upstream credentials', pick: providerPicker(this.ctx), resolve: providerResolver(this.ctx) },
+        { key: 'provider_identifier', label: 'provider identifier', kind: 'text', default: values.provider_identifier ?? '', visible: () => this.needsProviderCreateSteps(), hint: 'optional; generated from provider name when blank' },
+        { key: 'provider_client_id', label: 'provider client ID', kind: 'text', default: values.provider_client_id ?? '', visible: () => this.needsProviderCreateSteps() && ['oauth2', 'oidc'].includes(providerKind(this.values.provider_kind)), hint: 'optional OAuth client identifier when the upstream provider requires one' },
+        { key: 'provider_authorization_endpoint', label: 'authorization endpoint', kind: 'text', default: values.provider_authorization_endpoint ?? '', visible: () => this.needsProviderCreateSteps() && ['oauth2', 'oidc'].includes(providerKind(this.values.provider_kind)), hint: 'optional OAuth browser authorization endpoint' },
+        { key: 'provider_upstream_oauth_scopes', label: 'upstream OAuth scopes', kind: 'list', default: values.provider_upstream_oauth_scopes ?? '', visible: () => this.needsProviderCreateSteps() && ['oauth2', 'oidc'].includes(providerKind(this.values.provider_kind)), hint: 'provider-side scopes; Caracal scopes stay in the main setup step' },
+        { key: 'provider_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: values.provider_allowed_token_hosts ?? '', visible: () => this.needsProviderCreateSteps() && ['oauth2', 'oidc', 'workload'].includes(providerKind(this.values.provider_kind)), hint: 'optional; inferred from token endpoint when blank' },
+        { key: 'provider_auth_scheme', label: 'auth scheme', kind: 'text', default: values.provider_auth_scheme ?? '', visible: () => this.needsProviderCreateSteps() && providerKind(this.values.provider_kind) === 'apikey', hint: 'optional; leave blank when the upstream expects the raw API key' },
+        { key: 'provider_forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: values.provider_forward_caracal_identity ?? 'false', visible: () => this.needsProviderCreateSteps() },
         { key: 'activate_policy', label: 'activate policy', kind: 'bool', default: values.activate_policy ?? 'true' },
         { key: 'generate_profile', label: 'runtime profile', kind: 'bool', default: values.generate_profile ?? 'true' },
         { key: 'write_files', label: 'write profile files', kind: 'bool', default: values.write_files ?? 'false', dependsOn: { generate_profile: 'true' } },
@@ -487,7 +661,7 @@ class FirstSetupWizardView implements View {
       title: step.question,
       meaning: step.explanation,
       when: step.key === 'review' ? 'Use this after checking the plan and advanced settings.' : 'Use this step to give Console the smallest value needed for the first working setup.',
-      valid: step.kind === 'bool' ? 'Toggle yes or no.' : step.picker ? 'Select an existing object or type a name to create one.' : 'Plain text; comma-separated where the prompt asks for scopes.',
+      valid: step.kind === 'bool' ? 'Toggle yes or no.' : step.options ? `Choose one of: ${step.options.join(', ')}.` : step.picker ? 'Select an existing object or type a name to create one.' : 'Plain text; comma-separated where the prompt asks for scopes.',
       after: step.key === 'review' ? 'Console creates only missing objects, activates the selected policy path, and shows setup output.' : 'Console carries this value forward and resolves internal IDs in the background.',
     }))
   }
@@ -536,7 +710,18 @@ class FirstSetupWizardView implements View {
       agent_app_name: this.selectedApplication ? '' : this.values.agent_app_name,
       selected_resource_id: this.selectedResource?.id,
       resource_name: this.selectedResource ? '' : this.values.resource_name,
+      selected_provider_id: this.selectedProvider?.id ?? this.values.selected_provider_id,
+      provider_name: this.selectedProvider ? '' : this.values.provider_name,
     }
+  }
+
+  private providerReviewLabel(): string {
+    if (this.selectedResource?.credential_provider_id) return this.selectedResource.credential_provider_id
+    if (this.selectedProvider) return `${providerLabel(this.selectedProvider)} (selected)`
+    if (trimmed(this.values.provider_name)) return `${this.values.provider_name} (${providerKind(this.values.provider_kind)} create)`
+    const selectedProviderId = trimmed(this.values.selected_provider_id)
+    if (selectedProviderId) return selectedProviderId
+    return trimmed(this.values.upstream_url) ? 'none selected' : 'not needed'
   }
 }
 
@@ -561,7 +746,8 @@ async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<S
   const zoneResult = await ensureZone(ctx, values, app)
   const applicationResult = await ensureApplication(ctx, zoneResult.zone.id, values)
   const upstreamUrl = trimmed(values.upstream_url)
-  const resourceResult = await ensureResource(ctx, zoneResult.zone.id, applicationResult.application.id, values, scopes, upstreamUrl)
+  const providerId = await ensureProvider(ctx, zoneResult.zone.id, values, upstreamUrl)
+  const resourceResult = await ensureResource(ctx, zoneResult.zone.id, applicationResult.application.id, values, scopes, upstreamUrl, providerId)
 
   const policy = bool(values.activate_policy)
     ? await createFirstPolicy(ctx, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, scopes)
@@ -650,6 +836,26 @@ async function setupResourceIdentifier(ctx: Ctx, zoneId: string | undefined, val
   return resourceIdentifierFor(values)
 }
 
+async function ensureProvider(
+  ctx: Ctx,
+  zoneId: string,
+  values: SetupValues,
+  upstreamUrl: string | undefined,
+): Promise<string | undefined> {
+  if (!upstreamUrl) return undefined
+  const selectedProviderId = trimmed(values.selected_provider_id)
+  if (selectedProviderId) return selectedProviderId
+  if (!trimmed(values.provider_name)) return undefined
+  const provider = await ctx.client.providers.create(zoneId, {
+    identifier: providerIdentifierFor(values),
+    name: trimmed(values.provider_name),
+    kind: providerKind(values.provider_kind),
+    client_id: trimmed(values.provider_client_id),
+    config_json: providerConfigFromValues(values),
+  })
+  return provider.id
+}
+
 async function ensureResource(
   ctx: Ctx,
   zoneId: string,
@@ -657,6 +863,7 @@ async function ensureResource(
   values: SetupValues,
   scopes: string[],
   upstreamUrl: string | undefined,
+  providerId: string | undefined,
 ): Promise<{ resource: Resource; created: boolean; updated: boolean }> {
   const selectedResourceId = trimmed(values.selected_resource_id)
   if (!selectedResourceId) {
@@ -667,7 +874,7 @@ async function ensureResource(
         scopes,
         upstream_url: upstreamUrl,
         gateway_application_id: upstreamUrl ? applicationId : undefined,
-        credential_provider_id: trimmed(values.provider_id),
+        credential_provider_id: providerId,
         prefix: upstreamUrl ? true : undefined,
       }),
       created: true,
@@ -681,7 +888,6 @@ async function ensureResource(
   if (upstreamUrl && current.upstream_url !== upstreamUrl) patch.upstream_url = upstreamUrl
   if (upstreamUrl && current.gateway_application_id !== applicationId) patch.gateway_application_id = applicationId
   if (upstreamUrl && current.prefix !== true) patch.prefix = true
-  const providerId = trimmed(values.provider_id)
   if (providerId && current.credential_provider_id !== providerId) patch.credential_provider_id = providerId
   const updated = Object.keys(patch).length > 0
   return {
@@ -698,6 +904,13 @@ function stepValueKey(step: SetupStepKey): keyof SetupValues | undefined {
     case 'zone': return 'zone_name'
     case 'application': return 'agent_app_name'
     case 'resource': return 'resource_name'
+    case 'upstream': return 'upstream_url'
+    case 'provider': return 'provider_name'
+    case 'provider_kind': return 'provider_kind'
+    case 'provider_issuer': return 'provider_issuer'
+    case 'provider_token_endpoint': return 'provider_token_endpoint'
+    case 'provider_api_key_header': return 'provider_api_key_header'
+    case 'provider_workload_audience': return 'provider_workload_audience'
     case 'scopes': return 'resource_scopes'
     case 'review': return undefined
   }
@@ -705,6 +918,75 @@ function stepValueKey(step: SetupStepKey): keyof SetupValues | undefined {
 
 function resourceIdentifierFor(values: SetupValues): string {
   return trimmed(values.resource_identifier) ?? `resource://${safeName(requiredText(values.resource_name, 'resource is required'))}`
+}
+
+function providerIdentifierFor(values: SetupValues): string {
+  return trimmed(values.provider_identifier) ?? `provider://${safeName(requiredText(values.provider_name, 'provider is required'))}`
+}
+
+function providerKind(value: string | undefined): ProviderKind {
+  return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2'
+}
+
+function providerConfigFromValues(values: SetupValues): JsonObject {
+  const kind = providerKind(values.provider_kind)
+  const config: JsonObject = {}
+  mergeConfigText(config, 'issuer', values.provider_issuer)
+  mergeConfigText(config, 'authorization_endpoint', values.provider_authorization_endpoint)
+  mergeConfigText(config, 'token_endpoint', values.provider_token_endpoint)
+  mergeConfigList(config, 'allowed_token_hosts', values.provider_allowed_token_hosts || inferredTokenHosts(values.provider_token_endpoint))
+  mergeConfigList(config, 'upstream_oauth_scopes', values.provider_upstream_oauth_scopes)
+  mergeConfigText(config, 'header_name', values.provider_api_key_header)
+  mergeConfigText(config, 'auth_scheme', values.provider_auth_scheme)
+  mergeConfigText(config, 'audience', values.provider_workload_audience)
+  if (values.provider_forward_caracal_identity === 'true') config.forward_caracal_identity = true
+  validateProviderConfig(kind, config)
+  return config
+}
+
+function mergeConfigText(config: JsonObject, key: string, value: string | undefined): void {
+  const text = value?.trim()
+  if (text) config[key] = text
+}
+
+function mergeConfigList(config: JsonObject, key: string, value: string | undefined): void {
+  const items = splitList(value)
+  if (items.length > 0) config[key] = items
+}
+
+function inferredTokenHosts(endpoint: string | undefined): string {
+  const value = trimmed(endpoint)
+  if (!value) return ''
+  try {
+    return new URL(value).host
+  } catch {
+    return ''
+  }
+}
+
+function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
+  if (kind === 'apikey') {
+    requireString(config, 'header_name', 'apikey provider config requires header_name')
+    return
+  }
+  if (kind === 'workload') {
+    requireString(config, 'issuer', 'workload provider config requires issuer')
+    requireString(config, 'audience', 'workload provider config requires audience')
+  }
+  if (kind === 'oidc') requireString(config, 'issuer', 'oidc provider config requires issuer')
+  requireString(config, 'token_endpoint', `${kind} provider config requires token_endpoint`)
+  requireStringList(config, 'allowed_token_hosts', `${kind} provider config requires allowed_token_hosts`)
+}
+
+function requireString(config: JsonObject, key: string, message: string): void {
+  if (typeof config[key] !== 'string' || config[key].trim().length === 0) throw new Error(message)
+}
+
+function requireStringList(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string' || item.trim().length === 0)) {
+    throw new Error(message)
+  }
 }
 
 function userResources(resources: Resource[]): Resource[] {
@@ -722,27 +1004,6 @@ function resourceLabel(resource: Resource): string {
 
 function providerLabel(provider: Provider): string {
   return provider.name || provider.identifier || provider.id
-}
-
-function providerPicker(ctx: Ctx): Field['pick'] {
-  return (app, setValue) => {
-    app.push(new EntityPickerView<Provider>({
-      title: 'choose provider',
-      load: () => ctx.client.providers.list(ctx.zoneId),
-      value: (row) => row.id,
-      label: providerLabel,
-      description: (row) => [row.identifier, row.kind ?? undefined].filter(Boolean).join('  '),
-      onPick: setValue,
-    }))
-  }
-}
-
-function providerResolver(ctx: Ctx): Field['resolve'] {
-  let cached: Map<string, string> | undefined
-  return async (id) => {
-    cached = cached ?? new Map((await ctx.client.providers.list(ctx.zoneId)).map((provider) => [provider.id, providerLabel(provider)]))
-    return cached.get(id)
-  }
 }
 
 function sameList(left: string[], right: string[]): boolean {

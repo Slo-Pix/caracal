@@ -54,6 +54,21 @@ function makeClient() {
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
   }
+  const provider = {
+    id: 'provider-1',
+    zone_id: 'zone-1',
+    name: 'provider-name',
+    identifier: 'provider://provider-name',
+    kind: 'oauth2',
+    owner_type: 'customer',
+    client_id: null,
+    config_json: {
+      token_endpoint: 'https://issuer.example.com/oauth/token',
+      allowed_token_hosts: ['issuer.example.com'],
+    },
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-01T00:00:00.000Z',
+  }
   return {
     zones: {
       list: vi.fn(async () => [zone]),
@@ -75,6 +90,11 @@ function makeClient() {
         gateway_application_id: input.gateway_application_id ?? null,
       })),
       patch: vi.fn(async (_zoneId: string, _id: string, patch: Partial<typeof resource>) => ({ ...resource, ...patch })),
+    },
+    providers: {
+      list: vi.fn(async () => [provider]),
+      get: vi.fn(async () => provider),
+      create: vi.fn(async (_zoneId: string, input: Partial<typeof provider>) => ({ ...provider, ...input })),
     },
     policies: {
       create: vi.fn(async () => ({
@@ -128,6 +148,7 @@ async function completeMainPath(view: View, app: App): Promise<void> {
   await answer(view, app, 'zone-name')
   await answer(view, app, 'agent-app-name')
   await answer(view, app, 'resource-name')
+  await answer(view, app)
   await answer(view, app, 'scope-name')
   await view.onKey('enter', ctx(app))
 }
@@ -147,7 +168,6 @@ describe('first setup workflow', () => {
     expect(body).toContain('workload identity')
     expect(body).not.toContain('Choose or create a zone')
     expect(body).not.toContain('resource identifier')
-    expect(body).not.toContain('provider ID')
     expect(body).not.toContain('profile path')
 
     await view.onKey('A', ctx(app))
@@ -155,14 +175,8 @@ describe('first setup workflow', () => {
     expect(advanced).toBeInstanceOf(FormView)
     const advancedBody = advanced.render(ctx(app)).join('\n')
     expect(advancedBody).toContain('resource identifier')
-    expect(advancedBody).toContain('Gateway upstream URL')
     expect(advancedBody).toContain('profile path')
     expect(advancedBody).not.toContain('provider')
-
-    ;(view as unknown as { values: Record<string, string> }).values.upstream_url = 'https://upstream-url'
-    await view.onKey('A', ctx(app))
-    const gatewayAdvanced = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as FormView
-    expect(gatewayAdvanced.render(ctx(app)).join('\n')).toContain('provider')
   })
 
   it('creates the first zone, app, resource, policy, and generated profile from sequential answers', async () => {
@@ -212,6 +226,41 @@ describe('first setup workflow', () => {
     expect(body).toContain('deny by default')
     expect(body).toContain('••••')
     expect(body).not.toContain('cs_')
+  })
+
+  it('adds provider setup to the guided Gateway path and links the resource to the provider', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    })
+    await view.init?.(app)
+
+    await answer(view, app, 'agent-app-name')
+    await answer(view, app, 'resource-name')
+    await answer(view, app, 'https://api.example.com')
+    await answer(view, app, 'provider-name')
+    await answer(view, app)
+    await answer(view, app, 'https://issuer.example.com/oauth/token')
+    await answer(view, app, 'scope-name')
+    await view.onKey('enter', ctx(app))
+
+    expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      identifier: 'provider://provider-name',
+      name: 'provider-name',
+      kind: 'oauth2',
+      config_json: expect.objectContaining({
+        token_endpoint: 'https://issuer.example.com/oauth/token',
+        allowed_token_hosts: ['issuer.example.com'],
+      }),
+    }))
+    expect(client.resources.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      upstream_url: 'https://api.example.com',
+      gateway_application_id: 'app-1',
+      credential_provider_id: 'provider-1',
+      prefix: true,
+    }))
   })
 
   it('selects existing objects without asking for their IDs in the main flow', async () => {
@@ -264,6 +313,7 @@ describe('first setup workflow', () => {
 
     await answer(view, app, 'agent-app-name')
     await answer(view, app, 'resource-name')
+    await answer(view, app)
     await answer(view, app, 'scope-name')
     await view.onKey('enter', ctx(app))
 
@@ -299,6 +349,8 @@ describe('first setup workflow', () => {
 
     await answer(view, app, 'agent-app-name')
     await answer(view, app, 'resource-name')
+    await answer(view, app)
+    await answer(view, app)
     await answer(view, app, 'scope-name')
     await view.onKey('enter', ctx(app))
 
@@ -339,6 +391,7 @@ describe('first setup workflow', () => {
 
     await answer(view, app, 'agent-app-name')
     await answer(view, app, 'resource-name')
+    await answer(view, app)
     await answer(view, app, 'scope-name')
     await view.onKey('enter', ctx(app))
 
