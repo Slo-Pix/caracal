@@ -1,62 +1,74 @@
 ---
 title: Five-Minute Setup
-description: Start the released local stack, protect one HTTP resource, call it through the Gateway, and explain the audit trail.
+description: Protect one HTTP resource, call it through the Gateway, and explain the audit trail.
 pageType: workflow
 ---
 
-This path starts the released local stack, creates one protected resource from the Console, calls it through Gateway, and explains the audit evidence. Use a real upstream service that is reachable from the Gateway container or process.
+This walkthrough creates one Caracal-protected resource and verifies the first call. Use a real upstream URL reachable from the local Gateway container or process.
 
-## Prerequisites
-
-- Docker 24+ with the Compose v2 plugin
-- `caracal` and `caracal-console` installed from [Installation](../installation/)
-
-## Start the stack
+## 1. Start the stack
 
 ```bash
 caracal up
 caracal status --ready
-```
-
-`status --ready` must return success before you configure resources. If it fails, inspect `caracal status --ready --json` and the service logs from Docker Compose.
-
-## Configure the first resource with Console
-
-Open the Console:
-
-```bash
 caracal console
 ```
 
-In the Console:
+Create product objects only after readiness succeeds.
 
-1. Choose **guided setup**.
-2. Choose the selected zone, pick an existing zone, or type a new zone name.
-3. Create a new agent app by typing its name, or press the picker key to select an existing app in the chosen zone.
-4. Create a new protected resource by typing a plain resource name, or select an existing resource.
-5. Enter only the Caracal scopes needed for the first successful call.
-6. Confirm whether Console should create and activate the first access policy.
-7. Optionally enter the upstream URL and first request path when you want Gateway routing and an exact generated Gateway check.
-8. Optionally turn on **write files** when you want Console to create the runtime profile and secret file on this machine.
-9. Review the setup plan, then create it.
+## 2. Run guided setup
 
-Guided setup asks one question at a time and keeps internal IDs out of the main path. Leave **advanced** closed for the first run unless you need a credential provider, a custom resource identifier, custom profile paths, a custom token environment variable, or file overwrite behavior.
+In the Console, choose **guided setup**.
 
-The result view shows which objects were created or selected, the one-time client secret for a newly created app, the access policy status, the active policy set, the generated runtime profile, local setup commands, file-write status, and first-success commands. If file writing was skipped, run the local setup commands, paste the revealed one-time client secret or selected app secret as the only line in the secret file, and keep the profile and secret files owner-readable only.
+| Wizard step | Recommended first-run choice |
+| --- | --- |
+| Zone | Create a local evaluation zone or select an existing one. |
+| Agent app | Create a confidential app for the workload. |
+| Provider | Create a provider only if the resource needs a brokered upstream credential. |
+| Resource | Enter a stable resource identifier, required scopes, external upstream URL, and first request path. |
+| Access policy | Let the Console create and activate the starter policy. |
+| Review | Enable **write profile files** if this machine should receive the runtime profile and secret file. |
 
-## Call the protected resource
+The result view shows the zone ID, application ID, resource ID, app client secret, active policy set, profile path, secret-file path, generated profile, and first-success commands.
 
-Use the generated `CARACAL_CONFIG=... caracal run --` command prefix with the real command that starts your workload.
+If the Console does not write files, create the files manually from the result view and keep them owner-readable only. The app client secret is shown once for a newly created app.
 
-The token environment variable in the generated profile is derived from the resolved resource identifier. Use that injected token when your workload calls Gateway or the protected service. For Gateway-routed resources, the result view includes an exact `curl` command when first request path was provided; otherwise it shows the required Gateway URL and headers so you can run the request against a real protected path.
+## 3. Run the workload
 
-## Explain the first success
+Use the generated profile path with the command that starts your workload:
 
-Return to the Console **audit** view after the first request. Select the request and open **explain** with its request ID. The explanation should show the created application, protected resource, Caracal scopes, policy version, policy set version, Gateway result, and final decision. If the request failed, use the same explanation to identify whether the next correction belongs in runtime config, policy, resource routing, or the upstream service.
+```bash
+CARACAL_CONFIG=/path/to/caracal.toml caracal run -- ./start-agent.sh
+```
 
-## Validate the path repeatably
+`caracal run` exchanges the configured application secret for resource-specific Caracal access tokens and injects them into the environment variables named in the profile. The workload reads those variables and presents the token to the Gateway or protected service.
 
-Use the repository validator when you need a CI-friendly first-success check for a real environment. The validator checks STS and Gateway readiness, sends a real mandate through Gateway to the resource path you provide, and confirms the Gateway success counter advanced. It does not create objects, mint tokens, or substitute a demo upstream.
+For SDK-based workloads, the same generated profile is read by `Caracal.connect()` or `caracal.Connect()`.
+
+## 4. Call through the Gateway
+
+For a Gateway-routed HTTP resource, send the request to the Gateway URL from the result view and include:
+
+| Header | Value |
+| --- | --- |
+| `Authorization` | `Bearer <Caracal access token>` |
+| `X-Caracal-Resource` | The resource ID from guided setup. |
+
+If the wizard generated an exact `curl` command, run that first. Otherwise use the real protected path you configured.
+
+## 5. Explain the result
+
+Return to the Console:
+
+1. Open **audit**.
+2. Find the request you just made.
+3. Press Enter on the event or open **explain** and paste its request ID.
+
+The explanation should show the application, resource, requested scopes, policy version, policy set version, Gateway result, and final decision. If the request failed, the explanation tells you whether to fix runtime config, policy, resource routing, or the upstream service.
+
+## Optional repeatable validation
+
+Use the repository validator when you already have a real short-lived mandate and need a CI-friendly proof that STS, Gateway, routing, and metrics work together:
 
 ```bash
 CARACAL_TOKEN="$(cat ./runtime-token.txt)" \
@@ -68,10 +80,12 @@ node scripts/validateFirstSuccess.mjs \
   --path /real/protected/path
 ```
 
-Run it after Console guided setup or after your automation has created the zone, application, resource binding, active policy set, and short-lived mandate. Keep the token in your local shell or CI secret store; do not pass long-lived secrets in command history.
+The script checks STS and Gateway readiness, sends a real Gateway request, and confirms the Gateway success counter advanced. It does not create objects or mint tokens.
 
 ## Shut down
 
 ```bash
 caracal down
 ```
+
+Next, use [First Integration](./first-integration/) to wire the same profile into application code.

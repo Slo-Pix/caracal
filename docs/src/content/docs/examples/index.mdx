@@ -1,40 +1,28 @@
 ---
 title: Examples
-description: End-to-end scenarios that demonstrate Caracal authorization patterns in real application contexts.
+description: Runnable examples and reference labs for learning Caracal integration patterns.
 pageType: landing
 ---
 
-The examples in this section are complete, runnable applications that show how Caracal's authorization patterns (agent sessions, delegation hierarchies, scoped mandates, and provider-specific transport) apply to realistic workloads. Use [Five-Minute Setup](../get-started/five-minute-setup/) for first success; examples are reference applications after the local stack and real resources are configured.
+Examples show Caracal integrated into concrete applications. Use them after completing the introductory tutorials and before building your own production flow.
 
-## What the examples demonstrate
+## Available example
 
-Each example focuses on patterns that are difficult to grasp from documentation alone:
+| Example | What it demonstrates |
+| --- | --- |
+| [Lynx Capital: Autonomous Payouts](/examples/lynx-capital/) | FastAPI + LangGraph agent swarm, Console setup, Control key, runtime profile, provider resources, Caracal SDK, Gateway, STS, Coordinator, and live run inspection. |
 
-- How delegation chains form when one agent spawns another
-- How scope enforcement works across a hierarchy of agents with different authorities
-- How transport works across heterogeneous protocols (REST, gRPC, MCP, SSE) within the same orchestration
-- How the session lifecycle integrates with long-running agent workflows
-- How ephemeral agents with constrained, single-operation authority differ from long-lived session agents
+## How to read examples
 
-## Available examples
+1. Read the scenario and architecture first.
+2. Start Caracal with the released runtime/Console path described by the example.
+3. Use Console to create real zones, resources, credentials, and profiles.
+4. Run the example tests before changing behavior.
+5. Keep provider fixtures separate from Caracal product state.
 
-| Example | Scenario | Key patterns |
-| --- | --- | --- |
-| [Lynx Capital: Autonomous Payouts](./lynx-capital/) | Multi-agent swarm processing a weekly invoice batch across 5 regions | Hierarchical spawning, delegation scope, ephemeral payment agents, multi-protocol transport |
+## Related sections
 
-## Prerequisites for all examples
-
-All examples assume a running Caracal stack. Start it with:
-
-```bash
-caracal up
-caracal status --ready
-```
-
-Verify all services are healthy:
-
-```bash
-caracal status --ready --json
-```
-
-Each example includes its own setup instructions and environment configuration. Dependencies and startup commands are in the example's own directory under `examples/`.
+- [Tutorials](/tutorials/)
+- [Guides](/guides/)
+- [SDKs](/sdks/)
+- [Runtime and Console](/runtime-console/)

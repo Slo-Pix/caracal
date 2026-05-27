@@ -1,18 +1,21 @@
 ---
 title: Contributor Quickstart
-description: Run Caracal from the source tree with pnpm for development and local validation.
+description: Run Caracal from the source tree with pnpm for local development.
 pageType: workflow
 ---
 
-Use this path when you are developing Caracal itself or validating source-tree changes. Product users should start with [Quickstart: Released Product](../quickstart/) so onboarding uses installed commands and released artifacts.
+Use this page only when you are developing Caracal itself. Product users should follow [Quickstart: Released Product](./quickstart/) so they use installed tools and released artifacts.
 
 ## Prerequisites
 
-- Docker 24+ with the Compose v2 plugin
-- Node 24
-- pnpm 11.1.1
-- Bun 1.3.14
-- Go 1.26 and Python 3.14 when running the full test suite
+| Tool | Required version |
+| --- | --- |
+| Docker | 24+ with Compose v2 |
+| Node.js | 24+ |
+| pnpm | 11.1.1 |
+| Bun | 1.3.14 when building distributable runtime or Console binaries |
+| Go | 1.26 when running Go tests or changing Go services/packages |
+| Python | 3.14 when running Python tests or changing Python packages |
 
 ## Install dependencies
 
@@ -30,13 +33,25 @@ pnpm caracal status --ready
 pnpm caracal-console
 ```
 
-`pnpm caracal` runs the workspace runtime shim. `pnpm caracal-console` runs the workspace Console shim. These commands are for contributors; released-product docs use `caracal` and `caracal console`.
+`pnpm caracal` runs the workspace runtime shim. `pnpm caracal-console` runs the workspace Console shim. These commands mirror the released `caracal` and `caracal-console` tools but resolve from the repository.
 
-## Use the same product setup
+## Create product objects
 
-In the Console, choose **guided setup**. The setup flow is identical to the released product: it creates real Caracal objects, generates a runtime profile, keeps optional provider and Gateway fields skippable, and ends with audit explanation guidance.
+Inside the Console, choose **guided setup**. The source-tree flow creates the same real objects as the released flow:
 
-Set `CARACAL_CONFIG` to the generated profile path, then run source-tree workloads with `pnpm caracal run --` followed by the workload command.
+- zone
+- confidential agent app
+- provider, when needed
+- protected resource
+- active starter policy
+- runtime profile and secret-file instructions
+- first-success and audit explanation commands
+
+Set `CARACAL_CONFIG` to the generated profile path before running source-tree workloads:
+
+```bash
+CARACAL_CONFIG=/path/to/caracal.toml pnpm caracal run -- ./start-agent.sh
+```
 
 ## Stop the stack
 
@@ -44,4 +59,6 @@ Set `CARACAL_CONFIG` to the generated profile path, then run source-tree workloa
 pnpm caracal down
 ```
 
-For contributor workflow, tests, release checks, and repository conventions, continue with [Contributing](../../contributing/).
+## Next step
+
+For repository workflow, tests, releases, and pull request expectations, continue with [Contributing](/contributing/).

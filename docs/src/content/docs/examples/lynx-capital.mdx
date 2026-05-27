@@ -1,543 +1,90 @@
 ---
 title: "Lynx Capital: Autonomous Payouts"
-description: A FastAPI and LangGraph multi-agent swarm that processes a weekly invoice batch across 5 regions through 14 financial provider fixtures while demonstrating Caracal delegation and ephemeral agent authority patterns.
+description: Reference lab for a FastAPI and LangGraph payout workflow protected by Caracal.
 pageType: workflow
 ---
 
-The Lynx Capital example is a complete Python reference lab at `examples/lynxCapital/` that runs a realistic weekly payout cycle: 4,200 invoices, 5 geographic regions, approximately $8.5M USD in payments, multi-currency settlement, regional tax compliance, vendor contract verification, and threshold-based routing across banking rails. Caracal is real in this example: the Python SDK, STS token exchange, coordinator sessions, gateway resource routing, Console, and control API are the actual integration path. Local provider fixtures are isolated under `_mock/`; application code treats providers through normal clients and transports.
+Lynx Capital is a runnable reference lab under `examples/lynxCapital`. It models an autonomous financial execution workflow that processes a global SaaS payout cycle with a live agent topology view and SSE log stream.
 
-The application is not a tutorial scaffold. It is a production-pattern reference that demonstrates how Caracal's authorization model maps to real enterprise workloads: specifically the patterns of hierarchical agent spawning, delegation scope enforcement, ephemeral single-operation agents, and application-level provider clients across REST, gRPC, MCP, and SSE fixtures.
+## What it uses
 
-The fixture providers are only the local lab boundary. Production use must replace `_mock/` with real provider endpoints, real provider credentials from the platform secret manager, measured provider rate limits, and incident-owned rollback paths. Do not treat fixture response timing, fixture credentials, or fixture data volume as production evidence; use them only to exercise Caracal's real runtime, policy, Gateway, STS, and audit paths.
+| Area | Current implementation |
+| --- | --- |
+| App framework | FastAPI on port `8000`. |
+| Agent workflow | LangGraph/LangChain-based swarm. |
+| Python runtime | Python `>=3.14`. |
+| Caracal package | `caracalai-sdk==0.1.3rc1`. |
+| Provider fixtures | Local REST, SSE, gRPC, and MCP fixtures under `_mock/`. |
+| Caracal services | Released runtime/Console, API, Coordinator, Gateway, STS, Redis. |
 
----
+## Setup flow
 
-## What this example demonstrates
-
-**Delegation hierarchy.** The Finance Control agent holds global authority and delegates regional authority to Regional Orchestrator agents. Each Regional Orchestrator further delegates domain-scoped authority to agents that perform specific tasks (invoice extraction, ledger matching, compliance screening, payment execution). The hierarchy mirrors the organizational authority model that Caracal is designed to enforce.
-
-**Ephemeral payment agents.** The Payment Execution agent is spawned for a single transaction: one vendor, one amount, one payment rail, one time window. It terminates immediately on completion. This is the pattern for operations that should have tightly bounded, non-transferable authority.
-
-**Exception agents.** When anomalies are detected, an Exception agent is spawned with investigative-only scope. It can read vendor and compliance data but is explicitly not permitted to execute payments. The scope boundary is enforced at the authorization layer.
-
-**Application-level provider transport.** Within the same orchestration run, agents call local provider fixtures over REST (Mercury Bank, Wise, NetSuite), gRPC (Treasury Operations), MCP (Vendor Portal), and SSE streaming (FX rates). Caracal enforces the agent/session authority before those calls; non-HTTP transports are application connector examples, not automatic Gateway brokering paths.
-
-**Full traceability.** Every action (spawn, delegation, tool call, service call, result) emits a typed event. The complete lineage of who spawned whom, what tools they called, and what the external services returned is reconstructable from the event log.
-
----
-
-## Application layout
-
-```
-examples/lynxCapital/
-├── app/
-│   ├── main.py                 # FastAPI entry point; lifespan setup
-│   ├── config.py               # Loads config/company.yaml
-│   ├── agents/
-│   │   ├── roles.py            # 9 agent role definitions with scope templates
-│   │   ├── tools.py            # 40+ tool functions (one per provider action)
-│   │   └── runner.py           # AgentHandle, AgentRunner: session lifecycle
-│   ├── orchestration/
-│   │   ├── swarm.py            # LLM orchestration loop (Finance Control + Regional)
-│   │   └── topology.py         # Agent topology graph for visualization
-│   ├── services/
-│   │   ├── registry.py         # Central dispatch: call(service_id, action, payload)
-│   │   └── transport/
-│   │       ├── rest.py         # HTTP via httpx; retry, circuit breaker
-│   │       ├── grpc_client.py  # gRPC unary calls with metadata auth
-│   │       ├── mcp.py          # MCP tool invocation for vendor-portal
-│   │       └── sse.py          # SSE streaming for FX rates
-│   ├── events/
-│   │   ├── bus.py              # Event pub/sub for SSE streaming to UI
-│   │   └── types.py            # Typed event factories
-│   └── api/
-│       ├── run.py              # POST /api/run/start, GET /api/run/{id}/events
-│       └── ...
-├── config/
-│   └── company.yaml            # Regions, providers, agent layers, system prompts
-├── _mock/
-│   ├── docker-compose.yml      # 5 local provider service containers
-│   ├── rest/                   # Single FastAPI app fronting 13 REST providers
-│   ├── grpc/                   # gRPC servers: treasury-ops (50051), compliance (50052)
-│   ├── mcp/                    # MCP vendor portal (7800)
-│   └── streaming/              # SSE FX rates stream (8810)
-├── pyproject.toml
-└── .env.example
+```mermaid
+flowchart LR
+  Install[Install Python deps] --> Env[Copy .env and set OpenAI key]
+  Env --> Caracal[caracal up and Console setup]
+  Caracal --> Profile[Write caracal.toml and secret file]
+  Profile --> Providers[Start _mock provider network]
+  Providers --> App[Run Lynx app]
+  App --> Inspect[Inspect sessions and delegation in Console]
 ```
 
----
-
-## Setup
-
-### Requirements
-
-- Python 3.14+
-- Docker and Docker Compose
-- An OpenAI API key (`OPENAI_API_KEY`): the application fails at startup if this is absent
-
-### Install dependencies
+## Commands
 
 ```bash
 cd examples/lynxCapital
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
+pip install -e _mock/sdk/lynx_sdk_stripe_treasury -e _mock/sdk/lynx_sdk_tax
+cp .env.example .env
 ```
 
-### Start Caracal through Console + control API
-
-Install the released Runtime and Console, then start the Caracal stack:
+Start Caracal with the released runtime and Console, then use Console to enable Control, create the Lynx zone, create a control key, and register provider resources.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.05.27-rc.1 --require-provenance
 caracal up
 caracal status --ready
 caracal-console
 ```
 
-In the Console, open **Control**, confirm **enable endpoint**, then create or inspect:
-
-| Caracal object | Lynx value | Purpose |
-| --- | --- | --- |
-| Zone | `Lynx Capital` | Groups the Lynx resources and applications |
-| Control key | `lynx-control` | Real application credential used by Lynx as `application_id` + `app_client_secret` |
-| Resources | `lynx/<provider>` | One protected resource per provider in `config/company.yaml` |
-
-After creating the Lynx zone, control key, and resources in the Console, use the Console-generated runtime profile contract. Enable **write files** when you want the Console to create the profile and one-time secret file locally; otherwise write the control key secret to an owner-only file and write `~/.config/caracal/caracal.toml` from the Console values. Add one SDK resource binding per Lynx provider:
-
-```toml
-[[credentials]]
-env = "LYNX_MERCURY_BANK_TOKEN"
-resource = "lynx/mercury-bank"
-upstream_prefix = "http://127.0.0.1:8800"
-```
-
-Repeat `[[credentials]]` for every `lynx/<provider>` resource in
-`config/company.yaml`. REST provider bindings use
-`upstream_prefix = "http://127.0.0.1:8800"` for local Python runs; direct
-protocol providers use their own local endpoints, such as
-`http://127.0.0.1:50051` for `lynx/treasury-ops` and
-`http://127.0.0.1:7800` for `lynx/vendor-portal`.
-
-### Start local providers
-
-All 14 external providers run through deterministic local fixtures in Docker. They are reference-lab fixtures, not Caracal product defaults. The provider network joins `caracalData` so the real Caracal Gateway can forward REST resource calls to provider aliases such as `mercury-bank.mock`:
+Start local provider fixtures:
 
 ```bash
 docker compose -f _mock/docker-compose.yml up -d --build --wait
 ```
 
-This starts:
-
-| Container | Port | Provides |
-| --- | --- | --- |
-| `rest` | 8800 | 13 REST providers on a single port, routed by path |
-| `fx-stream` | 8810 | FX rate stream over SSE |
-| `treasury-grpc` | 50051 | Treasury operations over gRPC |
-| `compliance-grpc` | 50052 | Compliance streaming over gRPC |
-| `vendor-mcp` | 7800 | Vendor portal over MCP |
-
-### Configure environment
+Run the app:
 
 ```bash
-cp .env.example .env
+python -m uvicorn app.main:app --reload --port 8000
 ```
 
-Edit `.env` and set `OPENAI_API_KEY`. All other variables have defaults that point to the local provider containers:
+Open `http://localhost:8000`.
 
-```bash
-OPENAI_API_KEY=sk-...
+## App routes
 
-# Provider URLs (defaults shown: no change needed for local setup)
-LYNX_MERCURY_URL=http://127.0.0.1:8800
-LYNX_WISE_URL=http://127.0.0.1:8800
-LYNX_FX_STREAM_URL=http://127.0.0.1:8810/v1/stream
-LYNX_TREASURY_GRPC=127.0.0.1:50051
-LYNX_MCP_HOST=127.0.0.1
-LYNX_MCP_PORT=7800
-
-# Provider credentials for local setup
-LYNX_MERCURY_KEY=local-mercury-bank-key
-LYNX_WISE_KEY=local-wise-payouts-key
-# ... (see .env.example for the full list)
-```
-
-Provider credentials are not Caracal credentials and should be replaced if you
-point Lynx at hosted provider APIs.
-
-For production-shaped validation, replace each fixture URL with the provider endpoint approved for the target environment, store provider credentials outside the repository, and run the first-success validator against a real protected path. A production acceptance run should record Gateway success, STS decision evidence, provider response status, and Audit traceability for the same request ID.
-
-### Start the application
-
-```bash
-uvicorn app.main:app --reload --port 8000
-```
-
-Open `http://localhost:8000`. The landing page shows the scenario summary.
-Navigate to `/setup` first: validate the OpenAI key, Caracal service URLs,
-`caracal.toml` resource bindings, gateway/coordinator health, and webhook
-secrets. Then open `/demo` to interact with the agent swarm while
-`caracal-console` remains open for live session inspection.
-
----
-
-## Agent hierarchy
-
-The swarm has 9 agent layers. Each layer is defined in `app/agents/roles.py` with a role name, scope template, and permitted tools.
-
-```
-Finance Control              global scope
-└── Regional Orchestrator    region:{region}
-    ├── Invoice Intake        invoice-batch:{region}
-    ├── Ledger Match          ledger-batch:{region}
-    ├── Policy Check          policy-batch:{region}
-    ├── Route Optimization    route-batch:{region}
-    ├── Payment Execution *   payment:{vendor_id}:{invoice_id}
-    ├── Audit                 audit:{region}
-    └── Exception *           exception:{vendor_id}
-```
-
-`*`: Ephemeral agents. They are spawned for a single operation and terminated on completion.
-
-**Scope templates determine tool authority.** The Payment Execution agent's scope is `payment:{vendor_id}:{invoice_id}`: scoped to exactly one vendor and one invoice. It is the only agent permitted to call `submit_payment`, `submit_payout`, and `create_outbound_payment`. No other agent has these tools. The Exception agent's scope explicitly excludes all payment tools; it can only call `check_vendor` and `get_vendor_profile`.
-
----
-
-## Providers
-
-14 external providers are integrated, covering banking, ERP, compliance, document processing, FX, gRPC treasury operations, MCP vendor management, and regulatory filing.
-
-| Provider | Category | Protocol | Actions |
-| --- | --- | --- | --- |
-| `mercury-bank` | Banking | REST | `get_account_balance`, `submit_payment` |
-| `wise-payouts` | Payouts | REST | `get_quote`, `submit_payout` |
-| `stripe-treasury` | Banking | SDK (REST) | `get_financial_account`, `create_outbound_payment` |
-| `netsuite` | ERP | REST + async job | `get_vendor_record`, `match_invoice` |
-| `sap-erp` | ERP | REST + async job | `get_vendor_record`, `match_invoice` |
-| `quickbooks` | ERP | REST | `get_vendor`, `match_bill` |
-| `compliance-nexus` | Compliance | REST | `check_vendor`, `check_transaction`, `get_withholding_rate`, `validate_tax_id` |
-| `ocr-vision` | Document | REST + async job | `extract_invoice` |
-| `vendor-portal` | Vendor | MCP | `get_vendor_profile`, `get_contract_terms`, `register_vendor` |
-| `tax-rules` | Tax | SDK | `get_withholding_rate`, `validate_tax_id` |
-| `fx-rates` | FX | REST + SSE stream | `get_rate`, live rate stream |
-| `treasury-ops` | Treasury | gRPC | `get_cash_position`, `forecast_liquidity`, `place_fx_hedge`, `transfer_funds` |
-| `close-engine` | Accounting | REST + async job | `post_journal_entry`, `reconcile_account`, `close_period` |
-| `regulatory-filings` | Regulatory | REST + async job | `aml_monitor_transaction`, `sanctions_screen_batch`, `prepare_regulatory_filing` |
-
-All providers route through the service registry at `app/services/registry.py`:
-
-```python
-result = registry.call("mercury-bank", "submit_payment", {
-    "vendor_id": "us-axiom-cloud",
-    "amount": 50000,
-    "currency": "USD",
-    "rail": "ACH",
-    "reference": "INV001",
-})
-```
-
-The registry dispatches to the appropriate transport client (REST, gRPC, MCP, or SDK) based on the service ID.
-
----
-
-## Local provider fixtures
-
-For local runs, every external provider call goes to a deterministic fixture under `_mock/`. Fixture responses are defined in `cases.json` files keyed by a primary identifier (usually `vendor_id`):
-
-```json
-{
-  "service": "mercury-bank",
-  "actions": {
-    "get_account_balance": {
-      "match_key": "vendor_id",
-      "cases": {
-        "us-axiom-cloud": {
-          "account_id": "acct-MCY-AXM-001",
-          "balance": 487500.00,
-          "currency": "USD",
-          "status": "active"
-        },
-        "default": { ... }
-      }
-    }
-  }
-}
-```
-
-The same input always produces the same output. This makes the example fully reproducible and testable without real credentials.
-
-Payment submission fixtures also emit webhooks with configurable delays, simulating the asynchronous settlement flow of real banking APIs:
-
-```python
-# In _mock/rest/routers/mercury_bank.py
-deliver("mercury-bank", "transaction.posted",  {...}, delay_s=0.5)
-deliver("mercury-bank", "transaction.settled", {...}, delay_s=1.5)
-```
-
-The application handles these callbacks at its webhook endpoint, updating payment status in the event stream.
-
----
-
-## Request flow
-
-The following traces a complete execution from user input to completion.
-
-### 1. User submits a prompt
-
-```http
-POST /api/run/start
-Content-Type: application/json
-
-{"prompt": "Process US payouts for this week"}
-```
-
-Response:
-
-```json
-{"runId": "019500a2-..."}
-```
-
-The application starts a background task and returns immediately. The client connects to the SSE stream to receive real-time events:
-
-```http
-GET /api/run/019500a2-.../events
-Accept: text/event-stream
-```
-
-### 2. Finance Control spawns and plans
-
-The swarm runner spawns the Finance Control agent with global scope. It receives the user prompt and builds a dispatch plan:
-
-```
-event: agent_spawn
-data: {"agent_id": "fc-001", "role": "finance-control", "scope": "global", "parent_id": null}
-
-event: agent_start
-data: {"agent_id": "fc-001"}
-
-event: tool_call
-data: {"agent_id": "fc-001", "tool": "dispatch_region", "args": {"region": "US", "focus": "Process payout cycle"}}
-
-event: tool_result
-data: {"agent_id": "fc-001", "tool": "dispatch_region", "result": {"job_id": "job-us-001"}}
-```
-
-Finance Control calls `await_jobs(["job-us-001"])` and waits.
-
-### 3. Regional Orchestrator executes
-
-A Regional Orchestrator agent is spawned as a child of Finance Control with `region:US` scope:
-
-```
-event: agent_spawn
-data: {"agent_id": "ro-us-001", "role": "regional-orchestrator", "scope": "region:US", "parent_id": "fc-001"}
-
-event: delegation
-data: {"from": "fc-001", "to": "ro-us-001", "scope": "region:US"}
-
-event: agent_start
-data: {"agent_id": "ro-us-001"}
-```
-
-The Regional Orchestrator works through its invoice batch. For each invoice, it spawns the appropriate domain agent, awaits its result, and moves to the next step.
-
-### 4. Invoice Intake processes a document
-
-```
-event: agent_spawn
-data: {"agent_id": "ii-001", "role": "invoice-intake", "scope": "invoice-batch:US", "parent_id": "ro-us-001"}
-
-event: tool_call
-data: {"agent_id": "ii-001", "tool": "extract_invoice", "args": {"invoice_id": "INV001", "doc_id": "doc-INV001"}}
-
-event: service_call
-data: {"agent_id": "ii-001", "service": "ocr-vision", "action": "extract_invoice", "protocol": "REST"}
-
-event: service_result
-data: {"agent_id": "ii-001", "service": "ocr-vision", "status": 200, "result": {"vendor": "Axiom Cloud", "amount": 50000, "currency": "USD"}}
-
-event: tool_result
-data: {"agent_id": "ii-001", "tool": "extract_invoice", "result": {...}}
-
-event: agent_terminate
-data: {"agent_id": "ii-001", "status": "completed"}
-```
-
-The Invoice Intake agent terminates immediately after returning its result. Its authority ends when the tool call completes.
-
-### 5. Policy Check screens the vendor
-
-```
-event: agent_spawn
-data: {"agent_id": "pc-001", "role": "policy-check", "scope": "policy-batch:US", "parent_id": "ro-us-001"}
-
-event: service_call
-data: {"service": "compliance-nexus", "action": "check_vendor", "args": {"vendor_id": "us-axiom-cloud"}}
-
-event: service_result
-data: {"status": 200, "result": {"vendor_id": "us-axiom-cloud", "status": "cleared", "risk_score": 0.15}}
-
-event: agent_terminate
-data: {"agent_id": "pc-001", "status": "completed"}
-```
-
-### 6. Payment Execution submits the payment
-
-The Payment Execution agent is spawned with scope `payment:us-axiom-cloud:INV001`. This is the narrowest possible authority: one vendor, one invoice.
-
-```
-event: agent_spawn
-data: {"agent_id": "pe-001", "role": "payment-execution", "scope": "payment:us-axiom-cloud:INV001", "parent_id": "ro-us-001"}
-
-event: service_call
-data: {"service": "mercury-bank", "action": "submit_payment", "args": {"vendor_id": "us-axiom-cloud", "amount": 50000, "currency": "USD", "rail": "ACH", "reference": "INV001"}}
-
-event: service_result
-data: {"status": 200, "result": {"tx_id": "TX-MCY-AXM-001", "status": "submitted"}}
-
-event: agent_terminate
-data: {"agent_id": "pe-001", "status": "completed"}
-```
-
-Mercury Bank enqueues two webhook callbacks (`transaction.posted` (0.5 seconds) and `transaction.settled` (1.5 seconds)) which arrive asynchronously and update the event stream.
-
-### 7. Finance Control receives the result
-
-When the Regional Orchestrator finishes all invoices, its job completes and Finance Control's `await_jobs` resolves:
-
-```
-event: agent_terminate
-data: {"agent_id": "ro-us-001", "status": "completed"}
-
-event: tool_result
-data: {"agent_id": "fc-001", "tool": "await_jobs", "result": {"status": "completed", "summary": {...}}}
-
-event: agent_terminate
-data: {"agent_id": "fc-001", "status": "completed"}
-
-event: run_end
-data: {"run_id": "019500a2-...", "status": "completed"}
-```
-
----
-
-## Multi-protocol transport
-
-The same orchestration run calls providers over four different protocols. The transport client is selected by the service registry based on the service ID:
-
-**REST (Mercury Bank, Wise, NetSuite, etc.):**
-```python
-# app/services/transport/rest.py
-client = RestClient(base_url="http://127.0.0.1:8800", auth=AuthSpec("Bearer", key))
-response = await client.post("/v1/payments", payload)
-```
-
-Includes retry logic with exponential backoff, circuit breaker, and idempotency key support for write operations.
-
-**gRPC (Treasury Operations):**
-```python
-# app/services/transport/grpc_client.py
-client = GrpcClient("127.0.0.1:50051", metadata={"authorization": f"Bearer {token}"})
-response = await client.call("GetCashPosition", request)
-```
-
-**MCP (Vendor Portal):**
-```python
-# app/services/transport/mcp.py
-client = McpClient(host="127.0.0.1", port=7800)
-result = await client.call_tool("vendor.get_profile", {"vendor_id": "us-axiom-cloud"})
-```
-
-**SSE streaming (FX rates):**
-```python
-# app/services/transport/sse.py
-async for rate_update in sse_stream("http://127.0.0.1:8810/v1/stream"):
-    update_cached_rate(rate_update["pair"], rate_update["rate"])
-```
-
----
-
-## Observing a run
-
-### Live event stream
-
-All events are available over SSE at `/api/run/{run_id}/events`. The event types in emission order:
-
-| Event type | Description |
+| Path | Purpose |
 | --- | --- |
-| `agent_spawn` | Agent created; includes role, scope, parent ID |
-| `delegation` | Authority delegated from parent to child |
-| `agent_start` | Agent begins executing |
-| `tool_call` | Agent invokes a tool; includes tool name and args |
-| `service_call` | Tool dispatches to an external service; includes protocol |
-| `service_result` | External service responds; includes HTTP/gRPC status |
-| `tool_result` | Tool returns to agent |
-| `agent_end` | Agent signals completion |
-| `agent_terminate` | Agent session cleaned up; includes final status |
-| `run_end` | Run complete |
+| `/` | Scenario landing page. |
+| `/setup` | Validates OpenAI and Caracal connectivity. |
+| `/demo` | Chat interface and live agent topology graph. |
+| `/logs` | Runtime activity stream. |
+| `/prompts` | Ready-to-run prompts. |
 
-### Agent lineage
-
-```http
-GET /api/run/{run_id}/lineage
-```
-
-Returns the complete agent spawn tree with delegation edges, timing, and per-agent status. Use this to verify the hierarchy formed correctly and to trace which agent called which service.
-
-### Logs
-
-`GET /api/run/{run_id}/events` streams structured logs alongside agent events. The web UI at `/logs` shows them color-coded by category: service calls in teal, agent actions in blue, errors in red.
-
-### Control API reference
-
-The browser demo uses the FastAPI control routes under `/api/run`:
-
-| Route | Method | Purpose |
-| --- | --- | --- |
-| `/api/run/start` | `POST` | Starts a run from `{ "prompt": "..." }` and returns `{ "runId": "..." }` |
-| `/api/run/{run_id}/events` | `GET` | Streams typed lifecycle, tool, service, and chat events over SSE |
-| `/api/run/{run_id}/status` | `GET` | Returns whether the run exists, is active, and how many events were emitted |
-| `/api/run/{run_id}/cancel` | `POST` | Cooperatively cancels a running swarm |
-| `/api/run/{run_id}/lineage` | `GET` | Returns the agent spawn tree with timing and status |
-| `/api/run/{run_id}/graph` | `GET` | Returns graph nodes and edges for the topology view |
-
-Setup routes live under `/api/setup`: `GET /api/setup/validate` checks
-configuration after the user creates the Console objects and writes
-`caracal.toml`.
-
----
-
-## Resilience behavior
-
-**Tool retries.** Each tool call retries up to 3 times on transient errors before propagating the failure to the agent.
-
-**Circuit breaker.** `app/services/resilience.py` tracks error rates per provider. A provider that fails repeatedly trips its circuit breaker, causing subsequent calls to fail immediately rather than waiting for timeouts. This prevents one degraded provider from stalling the entire run.
-
-**Partial completion.** A failed invoice does not abort the entire regional batch. The Regional Orchestrator continues processing remaining invoices and reports failures in its result. Finance Control aggregates partial results across regions.
-
-**Cancellation.** `POST /api/run/{run_id}/cancel` triggers `runner.cancel_subtree(root_agent_id)`, which terminates all running agents in the tree from the bottom up.
-
----
-
-## Running the tests
+## Tests
 
 ```bash
-pytest tests/ -v
+pytest tests/
 ```
 
-Tests cover agent lifecycle behavior, topology graph correctness, provider
-transport logic, and the Caracal boundary. Provider tests use the local
-fixtures and do not require hosted third-party credentials.
+The tests cover provider transports, topology, lifecycle behavior, and Caracal boundary assumptions.
 
----
+## Teardown
 
-## Adapting this example
+```bash
+docker compose -f _mock/docker-compose.yml down
+caracal down
+```
 
-The Lynx Capital application demonstrates the authorization patterns that Caracal enforces:
-
-**To add a new agent layer:** Define a role in `app/agents/roles.py` with a scope template and permitted tools. Add the spawn logic to the orchestrator that should create it. The scope template becomes the Caracal scope claim when delegation is used.
-
-**To add a new provider:** Add the provider to `config/company.yaml`, create a `cases.json` in `_mock/`, add a router in `_mock/rest/routers/`, register the dispatch handler in `app/services/registry.py`, and add a `lynx/<provider>` resource to Caracal with an SDK `upstream_prefix` binding.
-
-**To keep Caracal minimal:** Keep SDK usage at the application boundary: `app/caracal.py` loads `caracal.toml`, orchestration opens `caracal.spawn()` or `caracal.delegate_to_spawn()` contexts, and transports pass Caracal envelopes plus `X-Caracal-Resource` for gateway-routed calls. Provider-specific behavior belongs in `app/services/registry.py` or `_mock/`, not in the Caracal wrapper.
+Use `caracal purge` only when you intentionally want to remove local runtime state and generated profile material.

@@ -1,118 +1,56 @@
 ---
 title: Audit Ledger
-description: Append-only audit events flowing from Redis stream into Postgres with HMAC-chained integrity.
-pageType: concept
-keywords: [audit, ledger, HMAC, chain, append-only, tamper detection, Redis stream, audit events]
+description: Decision events and diagnostics that explain Caracal authority.
+sidebar:
+  order: 12
 ---
 
-The audit ledger is Caracal's tamper-evident record of every authorization decision. Every token exchange and OPA evaluation (whether allowed or denied) produces an audit event that flows from the STS through a Redis stream into an append-only PostgreSQL table. Events are HMAC-chained so that any modification or deletion is detectable.
+The audit ledger records what Caracal decided, why it decided it, and which request or run produced the event.
 
-## What triggers an audit event
+## What gets audited
 
-The STS emits an audit event for every OPA evaluation it performs:
+| Event area | Examples |
+| --- | --- |
+| Token exchange | Allow, deny, step-up required, policy diagnostics. |
+| Gateway and connector use | Resource decision, mandate verification failure, request correlation. |
+| Policy lifecycle | Policy creation, validation, policy-set activation, simulation. |
+| Delegation | Edge creation, traversal, impact, revocation cascade. |
+| Sessions | Spawn, terminate, revoke, expire. |
+| Administration | Zone, application, resource, provider, grant, invitation, and challenge changes. |
 
-- **On allow**: one event per resource granted, with `decision = "allow"` and the full OPA result
-- **On deny**: one event per resource denied, with `decision = "deny"` and the OPA diagnostics that caused it
-- **On challenge required**: an event with the step-up challenge type
-- **On JTI collision**: an event with `event_type = "jti_collision"`
-- **On challenge cooldown or invalid challenge**: events with the corresponding denial reason
+## Audit flow
 
-Every exchange that touches the STS produces at least one audit event. An exchange requesting three resources produces three events.
-
-## Audit event structure
-
-Each event contains:
-
-| Field | Description |
-| ----- | ----------- |
-| `id` | UUID |
-| `zone_id` | Zone the exchange occurred in |
-| `event_type` | Classification of the event (e.g., `"token_issued"`, `"deny"`, `"jti_collision"`) |
-| `request_id` | Trace ID from the exchange request |
-| `decision` | `"allow"` or `"deny"` |
-| `policy_set_id` | ID of the policy set that was active |
-| `policy_set_version_id` | Specific version of the policy set that evaluated the exchange |
-| `manifest_sha` | SHA-256 of the policy set version manifest |
-| `evaluation_status` | `"complete"` or another status from OPA |
-| `determining_policies` | JSON array of policy IDs/names that caused the decision |
-| `diagnostics` | JSON array of arbitrary diagnostic metadata from the policy |
-| `metadata` | Additional context (principal ID, resource identifier, session ID, etc.) |
-| `occurred_at` | Timestamp at microsecond precision |
-
-The combination of `policy_set_version_id` and `manifest_sha` uniquely identifies exactly which version of which policies produced a given decision. This makes audit events reproducible: given the same inputs and the same policy version, the decision should be identical.
-
-## The event pipeline
-
-```
-STS (evaluation)
-  │
-  ├─ emits to AuditBuffer (in-process, capacity 10,000 events)
-  │     flushed every 1,000 events or every 50ms
-  │
-  ▼
-Redis stream: caracal.audit.events
-  │
-  ├─ consumer group: audit-ingestor → Audit service → PostgreSQL
-  └─ consumer group: siem-export    → (external SIEM, if configured)
+```mermaid
+flowchart LR
+  STS["STS"] --> Redis["Audit stream"]
+  Gateway["Gateway / connectors"] --> Redis
+  Admin["Admin API"] --> Redis
+  Redis --> Worker["Ingestion worker"]
+  Worker --> Postgres["Audit tables"]
+  Postgres --> Console["Console audit and explain views"]
+  Postgres --> API["Admin API audit endpoints"]
 ```
 
-**AuditBuffer**: The STS does not write to Redis synchronously per evaluation. It enqueues events to an in-process buffer that batches flushes. If Redis is unavailable, events are written to an on-disk NDJSON fallback file with HMAC-SHA256 per event. The fallback prevents data loss during Redis outages.
+## How to use audit
 
-**Dead letter queue**: Events that the Audit service cannot process after retries are routed to `caracal.audit.events.dlq`, consumed by the `audit-dlq-observer` consumer group. The DLQ is monitored separately.
+| Question | Where to look |
+| --- | --- |
+| Why was a request denied? | Console `explain` or Admin API explain endpoint by request ID. |
+| Which policy caused the decision? | Determining policies and diagnostics. |
+| Did revocation propagate? | Session, delegation, and resource decision events. |
+| Which run made a request? | Request ID, session ID, agent session ID, and trace context. |
+| Was step-up required or satisfied? | Step-up challenge and exchange events. |
 
-**XACK semantics**: The Audit service sends `XACK` only after a Console outcome: successful insert into PostgreSQL, or a detected benign duplicate. Transient errors cause the event to remain pending in the stream for retry.
+## Request IDs
 
-## HMAC chain integrity
+Request IDs tie multiple events together. Keep the request ID from an SDK, Gateway, STS error, or Console trace whenever debugging. The explain view uses it to collect related decision events and diagnostics.
 
-The Audit service writes events to PostgreSQL with a cryptographic chain that enables tamper detection. For each event, the service computes:
+## Integrity and retention
 
-**Content hash** (SHA-256):  
-The SHA-256 over all audit event fields, concatenated with `0x1f` (ASCII unit separator) between each field, in a fixed order. Fields included: `id`, `zone_id`, `event_type`, `request_id`, `decision`, `policy_set_id`, `policy_set_version_id`, `manifest_sha`, `evaluation_status`, `determining_policies_json`, `diagnostics_json`, `metadata_json`, then `occurred_at` as Unix nanoseconds.
+Audit events should be treated as operational evidence. Configure retention, export, and SIEM forwarding according to your deployment requirements. Do not rely on local process logs as the only authority trail.
 
-**Chain HMAC** (HMAC-SHA256):  
-```
-chain_hmac = HMAC-SHA256(
-  key  = AUDIT_HMAC_KEY,
-  data = hex(content_sha256) || "|" || hex(prev_content_sha256)
-)
-```
+## Related pages
 
-Each event stores:
-- `content_sha256`: hash of this event's fields
-- `prev_content_sha256`: hash of the previous event in the sequence
-- `chain_hmac`: HMAC linking this event to the previous one
-- `chain_seq`: monotonic sequence number
-
-An attacker who modifies an event's content cannot forge a valid `content_sha256` without the HMAC key. An attacker who deletes an event breaks the chain because the next event's `prev_content_sha256` will not match. Inserting a fake event also breaks the chain because the HMAC key is required to produce a valid `chain_hmac`.
-
-**Tamper detection runs**:
-- At startup: a full retention sweep validates the chain from beginning to end
-- Every hour: an incremental check validates recent events
-
-Detection results are logged. No automatic remediation is performed: the ledger is append-only and the chain is evidence, not a correctable state.
-
-## Append-only guarantee
-
-The Audit service never executes `UPDATE` or `DELETE` on the audit table. The PostgreSQL user used by the Audit service has `INSERT` and `SELECT` permissions only. This is enforced at the database layer, not just by application code.
-
-Per-zone writes are serialized with `pg_advisory_xact_lock` to maintain chain ordering within a zone.
-
-## Querying the audit ledger
-
-The Runtime and Console provide two views:
-
-**Live tail** (the Console Audit view): streams events from the Redis stream in near real-time. Filter by decision (`allow` / `deny`), pause and resume the stream.
-
-**Request trace** (the Console audit detail view): retrieves all audit events for a specific `request_id`, showing the full OPA evaluation: which resources were requested, which were allowed, which were denied, and which policy versions determined each decision.
-
-The admin SDK exposes the same queries via `adminClient.audit.list(zoneId, query)` and `adminClient.audit.byRequest(zoneId, requestId)`.
-
-## AUDIT_HMAC_KEY
-
-The `AUDIT_HMAC_KEY` environment variable is a 32-byte hex-encoded key required by both the STS (which signs events before emitting to Redis) and the Audit service (which verifies on ingest and uses for chain HMAC). Both services must use the same key. Changing this key after events have been written breaks tamper detection for historical events.
-
-## Next steps
-
-- [Authority Model](./authority-model/): what decisions produce audit events
-- [Sessions and Revocation](./sessions-revocation/): how revocation events appear in the audit stream
-- [Step-Up Challenge](./step-up/): how step-up events are recorded
+- [Tail and Query the Audit Stream](/guides/audit-stream/)
+- [Inspect a Run](/tutorials/inspect-a-run/)
+- [Operations](/operations/)

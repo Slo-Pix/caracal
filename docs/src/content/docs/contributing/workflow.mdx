@@ -1,143 +1,35 @@
 ---
 title: Development Workflow
-description: Branching, commits, Changesets, code review, and DCO sign-off for Caracal contributions.
+description: How to plan, implement, validate, and submit Caracal changes.
 pageType: workflow
 ---
 
-This page describes the full workflow for landing a change: from creating a branch to getting it merged.
+## Standard flow
 
----
+1. Start from `main`.
+2. Keep the change focused on one component or workflow.
+3. Read the relevant service/package instructions before editing.
+4. Update docs when behavior, APIs, commands, config, examples, or operations change.
+5. Run targeted tests first, then broader checks when shared boundaries changed.
+6. Open a pull request with the problem, solution, validation, and risk notes.
 
-## Branch strategy
+## Work by area
 
-All work branches from `main`. Use short, lowercase, hyphen-free descriptive names:
+| Area | Common sources |
+| --- | --- |
+| Runtime shell | `apps/runtime`, `packages/engine`, runtime tests. |
+| Console | `apps/console`, Admin SDK, Console tests. |
+| API | `apps/api`, migrations, Admin package, API tests. |
+| Coordinator | `apps/coordinator`, Coordinator tests, SDK tests. |
+| STS/Gateway/Audit | `services/*`, Go tests, operations docs. |
+| SDKs/connectors | `packages/*`, language-specific tests, interoperability fixtures. |
+| Infra | `infra/docker`, `infra/helm`, Postgres/Redis scripts. |
+| Docs | `docs/src/content/docs`, `docs/astro.config.mjs`, generated docs pages. |
 
-```sh
-git checkout -b fix-gateway-jti-replay
-git checkout -b add-python-revocation-consumer
-```
+## Product-management boundary
 
-There is no required prefix (no `feature/`, `fix/`, `chore/`). Keep branch names clear and direct. Branch directly from the latest `main`: do not stack branches on other feature branches.
+Do not add top-level runtime shell commands for zones, policies, grants, audit, agents, delegation, or Control. Human workflows belong to Console; automation belongs to Control/Admin APIs.
 
-`main` is always in a deployable state. The smoke CI suite runs on every push to `main`. Breaking `main` is treated as a priority incident.
+## Security workflow
 
----
-
-## Commits and DCO sign-off
-
-All commits require a Developer Certificate of Origin (DCO) sign-off:
-
-```sh
-git commit -s -m "fix gateway JTI replay on cold start"
-```
-
-The `-s` flag appends `Signed-off-by: Your Name <you@example.com>` to the commit message. This certifies that you have the right to submit the contribution under the project's license.
-
-Commit messages follow standard imperative form: short subject line, optional body for the *why*:
-
-```
-fix gateway JTI replay on cold start
-
-When a Gateway replica starts cold with an empty revocation set,
-JTI entries written before startup were being accepted. This reads
-existing JTI keys from Redis on startup to populate the local set.
-```
-
-Rebase to keep your branch history clean before opening a PR.
-
----
-
-## Package version changes (npm Changesets)
-
-TypeScript packages published to npm are versioned by [Changesets](https://github.com/changesets/changesets). Before opening a PR for any change that affects a published package, add a changeset:
-
-```sh
-pnpm changeset add
-```
-
-Follow the prompts: select the affected packages, choose the change type (`patch`, `minor`, or `major`), and write a one-line description. Commit the generated `.changeset/*.md` file alongside your code changes.
-
-Pull requests that touch published packages without a changeset file will fail CI.
-
-Go modules and Python packages are not managed by Changesets: they follow the CalVer release flow described in [Release and Versioning](./release).
-
----
-
-## Opening a pull request
-
-Push your branch and open a PR against `main`:
-
-```sh
-git push -u origin fix-gateway-jti-replay
-```
-
-PR description should include:
-
-- **What changed**: a brief summary of what the PR does.
-- **Why**: the motivation or issue being fixed.
-- **How to test**: steps a reviewer can follow to verify the change.
-
-Link to an open issue if one exists. If the change is large or architectural, open an issue or RFC first (see [Governance](./governance)) before investing in implementation.
-
----
-
-## CI checks
-
-Two CI pipelines run on every PR:
-
-**Smoke suite** (runs on every push):
-- TypeScript build and type-check across all packages
-- Go build for all modules
-- Python syntax and import checks
-- Docs Astro build
-
-**Full suite** (runs on schedule at 06:17 UTC and on `workflow_dispatch`):
-- Unit, integration, and e2e tests (TS, Go, Python)
-- Contract, property, security, and performance tests
-- Fuzz targets
-- Coverage upload to Codecov
-
-PRs must pass the smoke suite to merge. If you need the full suite to run on a PR, trigger it manually via `workflow_dispatch`.
-
-### Running CI checks locally
-
-**TypeScript:**
-```sh
-pnpm typecheck          # type-check all packages
-pnpm lint               # ESLint across workspace
-pnpm test               # Vitest unit tests
-pnpm test:integration   # integration tests
-```
-
-**Go:**
-```sh
-go vet ./...
-go test -race ./...
-```
-
-**Python:**
-```sh
-python -m pytest
-python -m coverage run -m pytest && python -m coverage report
-```
-
-**Docs:**
-```sh
-cd docs && pnpm build
-```
-
----
-
-## Code review
-
-All PRs require at least one maintainer approval before merging. Maintainers are listed in `governance/CODEOWNERS`. Reviews are expected to cover correctness, test coverage, adherence to code style, and alignment with existing architecture.
-
-When a review requests changes, address each comment and re-request review. Avoid force-pushing while a review is in progress: add fixup commits and squash at the end.
-
-Maintainers merge PRs. Contributors do not merge their own PRs.
-
----
-
-## Merging
-
-PRs merge via squash or merge commit, maintainer's choice. After merging, delete your branch. The release process picks up merged commits automatically on the next CalVer tag.
+Do not discuss suspected vulnerabilities in public issues. Use GitHub private advisories or the email path in [Disclosure Policy](/security/disclosure/).
