@@ -1,218 +1,60 @@
 ---
 title: Cloud-Native Deployment Profiles
-description: Local, shared Gateway, sidecar, Kubernetes, and SPIFFE/SPIRE profiles for operating Caracal without inventing a custom platform model.
-pageType: config
+description: Configure Caracal for managed Kubernetes, managed Postgres, Redis, ingress, secrets, and observability.
+pageType: reference
 ---
 
-Caracal should fit into existing platform patterns: Kubernetes deployments, standard Services, readiness probes, Prometheus scraping, OpenTelemetry collection, TLS or mesh mTLS, file-backed secrets, and Gateway or sidecar enforcement. This page defines the supported deployment profiles and the boundaries each profile must preserve.
+Cloud-native Caracal deployments should use the Helm chart with externalized state: managed Postgres, managed Redis, platform secrets, ingress, NetworkPolicy, and cluster observability.
 
-## Profile summary
+## Profile map
 
-| Profile | Primary use | Enforcement boundary | Operational shape |
-| --- | --- | --- | --- |
-| Local stack | Developer setup and demos | Shared Gateway on localhost | Docker Compose, generated secrets, local Postgres and Redis |
-| Shared Gateway | Default production path | Central Gateway deployment per cluster, namespace, or trust boundary | Kubernetes Deployments behind internal Services and ingress |
-| Sidecar Gateway | Team-owned protected workloads | Gateway instance adjacent to the protected workload | Pod sidecar or workload-local Deployment with the same token and audit contracts |
-| Verified adapter | Services that cannot route through Gateway | Resource service verifies bearer mandates directly | Framework connector plus revocation consumer and audit emitter |
-
-The shared Gateway profile is the default production recommendation. Sidecars and verified adapters are narrower profiles for teams that need local routing control or cannot put the resource behind the shared Gateway.
-
----
-
-## Local stack profile
-
-Use the local stack for development and evaluation:
-
-```bash
-caracal up
-# Register the zone, Gateway app, resource, policy set, grant, and caracal.toml
-# with the admin commands or Control API before running Gateway-mediated calls.
-the Console
-```
-
-Local profile requirements:
-
-| Concern | Requirement |
+| Profile | Values to adjust |
 | --- | --- |
-| Secrets | Generated file-backed secrets under the local Caracal home or `infra/secrets/files` |
-| Identity | HMAC service credentials are acceptable for local-only Gateway↔STS authentication |
-| Metrics | Scrape service `/metrics` endpoints directly or through a local OpenTelemetry Collector |
-| Traces | Set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` to export spans |
-| Network | Bind service ports to localhost; do not expose the stack directly to the public internet |
+| Evaluation | `global.mode=rc`, short retention, limited replicas, temporary secrets, no public ingress unless required. |
+| Production | `global.mode=stable`, managed Postgres/Redis, TLS ingress, NetworkPolicy, PDB/HPA, ServiceMonitor, PrometheusRule. |
+| Private cluster | Disable public ingress; expose API/Gateway through internal load balancers or service mesh. |
+| Regulated workload | Enforce external secret manager, immutable backups, audit export, restricted egress, and incident evidence retention. |
 
-The local example uses a public HTTPS upstream because the Gateway blocks private and loopback upstreams by default. If you need to proxy to a local tool during development, enable private upstreams intentionally and set a narrow host allowlist. See [TLS and Production Hardening](./tls-hardening/#ssrf-defenses).
+## Managed dependency contract
 
-Local HMAC authentication is intentionally not a workload identity standard. Production deployments should move service-to-service identity to platform TLS, mesh mTLS, or SPIFFE/SPIRE as those bindings are enabled.
-
----
-
-## Shared Gateway production profile
-
-The shared Gateway profile centralizes resource enforcement so resource teams do not need to embed policy, token exchange, provider credential brokering, revocation, and audit logic in every service.
-
-### Components
-
-| Component | Kubernetes shape | Notes |
-| --- | --- | --- |
-| STS | Deployment + internal Service | Exposes `/oauth/2/token`, JWKS, readiness, metrics |
-| API | Deployment + internal Service | Admin/control-plane API; keep behind operator auth |
-| Gateway | Deployment + Service + ingress or internal load balancer | Only entry point for protected upstream calls |
-| Coordinator | Deployment + internal Service | Agent and delegation lifecycle |
-| Audit | Deployment + internal Service | Audit stream consumer and export worker |
-| Postgres | Managed database or StatefulSet | Managed Postgres is preferred for production durability |
-| Redis | Managed Redis or StatefulSet | Required for revocation streams, outbox, and replay controls |
-| OpenTelemetry Collector | DaemonSet or Deployment | Receives OTLP traces and scrapes Prometheus metrics |
-
-### Required Kubernetes controls
-
-| Control | Requirement |
+| Dependency | Requirements |
 | --- | --- |
-| Probes | Map `/health` to liveness and `/ready` to readiness for every service |
-| Secrets | Mount `*_FILE` values from Kubernetes Secrets or an external secret operator |
-| NetworkPolicy | Allow Gateway→STS, services→Postgres/Redis as needed, and deny arbitrary egress from STS/API/Audit |
-| Ingress | Expose only Gateway to protected clients; expose API only to operators |
-| Resource limits | Set CPU/memory requests and limits for every service before production traffic |
-| Pod disruption | Use PodDisruptionBudgets for STS, Gateway, API, Coordinator, and Audit |
-| Autoscaling | Scale Gateway by request rate and STS by token exchange latency; do not autoscale Postgres/Redis inside Caracal |
+| Postgres | TLS-capable connection, migration role, durable backups, point-in-time recovery, sufficient connection capacity. |
+| Redis | Streams support, authentication, memory policy sized for audit/revocation/outbox traffic, persistence according to recovery goals. |
+| Secrets | Runtime Secret with database, Redis, admin, Coordinator, zone KEK, audit HMAC, stream HMAC, and Gateway-STS HMAC keys. |
+| Observability | Metrics scraping for all services and alerts equivalent to the chart PrometheusRule. |
 
-### Request flow
+## Network stance
 
-1. Client or agent sends a bearer mandate to the Gateway with `X-Caracal-Resource`.
-2. Gateway verifies the inbound mandate, checks replay and revocation, and exchanges it with STS.
-3. STS evaluates the active policy set, issues a resource mandate, and emits audit.
-4. Gateway injects the resource mandate or provider credential into the upstream request.
-5. Gateway emits action audit and propagates W3C `traceparent`, `tracestate`, and `baggage`.
-
-This profile keeps provider-native credentials and policy evaluation out of agent code and preserves a single enforcement boundary.
-
----
-
-## Sidecar Gateway profile
-
-Use a sidecar when a team needs workload-local routing but still wants Gateway semantics.
-
-Supported shapes:
-
-| Shape | When to use |
-| --- | --- |
-| Same-pod sidecar | One protected upstream per workload and strict localhost-only forwarding |
-| Namespace-local Gateway Deployment | Several resources in one namespace share routing and revocation cache |
-| Node-local Gateway DaemonSet | Only when low-latency local enforcement is required and routing rules are uniform |
-
-Sidecar requirements:
-
-- The sidecar must call the same STS token exchange endpoint and verify the same JWT/JWKS profile.
-- The sidecar must subscribe to the same revocation stream or use an equivalent revocation verifier contract.
-- The sidecar must emit the same audit event schema as the shared Gateway.
-- The sidecar must rewrite trusted `caracal.*` baggage from verified claims before forwarding to the upstream.
-- The upstream should listen only on localhost or a private pod network address reachable by the sidecar.
-
-Do not fork the Gateway protocol for sidecars. A sidecar is a deployment shape, not a separate authority model.
-
----
-
-## Verified adapter profile
-
-Use verified adapters only when routing through Gateway is not possible. A verified adapter runs inside the resource server process or framework middleware and must satisfy the same production invariants as the Gateway:
-
-1. Verify ES256 JWT signatures through JWKS.
-2. Enforce issuer, audience, zone, token use, target resource, and scope.
-3. Check `sid`, `root_sid`, `agent_session_id`, and `delegation_edge_id` revocation anchors.
-4. Preserve W3C trace context and baggage.
-5. Emit action-result audit using the public audit event schema.
-6. Fail closed when verification, revocation, or audit requirements cannot be met.
-
-Adapters that attach Caracal context but do not enforce before action are attribution-only and must not be presented as production enforcement.
-
----
-
-## Kubernetes reference configuration
-
-A production Kubernetes deployment should be generated from a Helm chart or equivalent GitOps templates, but the resource boundaries should remain predictable:
+The chart NetworkPolicy allows Caracal pod-to-pod traffic and storage egress. Add explicit DNS, HTTPS, identity provider, object store, and provider API egress only as needed.
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: caracal-gateway
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: caracal-gateway
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: caracal-gateway
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8081"
-        prometheus.io/path: /metrics
-    spec:
-      containers:
-        - name: gateway
-          image: ghcr.io/garudex-labs/caracal-gateway:<version>
-          ports:
-            - containerPort: 8081
-          env:
-            - name: STS_URL
-              value: http://caracal-sts:8080
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: http://otel-collector:4318
-            - name: OTEL_EXPORTER_OTLP_PROTOCOL
-              value: http/protobuf
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 8081
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8081
+networkPolicy:
+  enabled: true
+  allowOpenDns: false
+  allowOpenHttps: false
+  dnsEgress: []
+  extraEgress: []
+  extraIngress: []
 ```
 
-The same probe and telemetry pattern applies to STS, API, Coordinator, Audit, and Control. Secrets should be mounted as files and referenced through the existing `*_FILE` variables instead of plaintext environment values.
+## Ingress stance
 
----
+Expose only the endpoints required by your environment:
 
-## SPIFFE/SPIRE and mTLS profile
-
-Caracal should not invent workload identity. Production deployments should use platform identity:
-
-| Layer | Recommendation |
+| Endpoint | When to expose |
 | --- | --- |
-| Service mesh mTLS | Use mesh-issued workload certificates for service-to-service encryption and peer identity |
-| SPIFFE/SPIRE | Map SPIFFE IDs to Caracal applications and zones when direct SVID validation is enabled |
-| Gateway↔STS authentication | Prefer mTLS/SVID-backed identity when available; keep HMAC as local/simple deployment mode |
-| Upstream identity | Keep provider-native credentials inside Gateway or verified adapters; do not pass them to agents |
+| Gateway | Required for protected resource traffic through Caracal Gateway. |
+| API | Required for Console/Admin clients outside the cluster. |
+| STS | Expose only when token exchange clients cannot reach it privately. |
+| Audit/Coordinator/Control | Prefer private access. |
 
-Until direct SPIFFE validation is enabled, treat SPIFFE/SPIRE as the platform transport identity layer around Caracal services, not as a replacement for mandates. Mandates remain the authorization evidence for resource calls.
+The chart currently has optional Ingress templates for Gateway and API.
 
----
+## Validation
 
-## Required runbooks
-
-Production operators should keep these runbooks linked from their on-call system:
-
-| Runbook | Documentation |
-| --- | --- |
-| Key rotation | [Key Management and Rotation](./key-management/) |
-| Policy rollback and activation mistakes | [Activate a Policy Set](../guides/activate-policy-set/) |
-| Audit replay and DLQ growth | [Incident Response](./incident-response/) and [Backup and Retention](./backup-retention/) |
-| Revocation lag | [Incident Response](./incident-response/) and [Redis Streams](./redis/) |
-| Redis loss | [Redis Streams](./redis/) |
-| Postgres restore | [PostgreSQL](./postgres/) and [Backup and Retention](./backup-retention/) |
-| JWKS rotation | [Key Management and Rotation](./key-management/) |
-
----
-
-## Deployment anti-patterns
-
-Avoid these shapes because they weaken interoperability or enforcement:
-
-- Exposing STS token exchange directly to untrusted agent workloads without Gateway or verified-adapter enforcement.
-- Passing provider OAuth tokens or API keys to agents instead of brokering them at Gateway.
-- Building a custom service mesh, ingress abstraction, or trace propagation protocol for Caracal.
-- Running connector integrations that only add audit metadata but do not verify, revoke, and enforce before action.
-- Treating JSON `/metrics.json` snapshots as the production monitoring surface when Prometheus `/metrics` is available.
-- Using local HMAC service credentials as the only production workload identity control when mTLS or SPIFFE/SPIRE is available.
+1. Render manifests with production values.
+2. Confirm no plaintext secrets are committed.
+3. Confirm NetworkPolicy egress covers required provider APIs and object stores.
+4. Confirm ServiceMonitor or equivalent metrics scraping is active.
+5. Confirm backup and restore evidence exists for Postgres and runtime secrets.

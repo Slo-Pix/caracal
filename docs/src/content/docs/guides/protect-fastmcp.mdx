@@ -1,160 +1,62 @@
 ---
 title: Protect a FastMCP App
-description: Attach CaracalAuth to a FastMCP server so every tool call is mandate-verified before the handler runs.
-pageType: workflow
+description: Attach CaracalAuth to a FastMCP server so tool calls are mandate-verified before handlers run.
 ---
 
-FastMCP accepts an `auth` callable in its `Server` constructor. `CaracalAuth` from `caracalai_mcp_fastmcp` is a callable that takes a bearer token string and returns the validated `Claims` on success or raises `CaracalAuthError` on failure. FastMCP calls it with the token extracted from the `Authorization` header before invoking any tool handler.
-
-## Prerequisites
-
-- A FastMCP server.
-- The STS JWKS endpoint reachable from the Python process.
-- `pip install fastmcp` (FastMCP is not bundled with the Caracal connector).
+Use `caracalai-mcp-fastmcp` when a Python FastMCP app should reject invalid, expired, insufficient, or revoked Caracal mandates.
 
 ## Install
 
 ```bash
-pip install caracalai-mcp-fastmcp caracalai-revocation
+pip install "caracalai-mcp-fastmcp[fastmcp]" caracalai-revocation
 ```
 
-## Attach auth to a FastMCP server
+Use `caracalai-revocation-redis` for shared production revocation. The in-memory store is only for local development and tests.
+
+## Create an authenticator
 
 ```python
-from fastmcp.server import Server
 from caracalai_mcp_fastmcp import CaracalAuth
 from caracalai_revocation import InMemoryRevocationStore
 
-revocations = InMemoryRevocationStore()
-
 auth = CaracalAuth(
-    issuer='http://sts:8080',
-    audience='resource://my-mcp-server',
-    revocations=revocations,
-    required_scopes=['tool:call'],
-    expected_zone_id='my-zone',
+    issuer="https://sts.example.com",
+    audience="https://mcp.example.com",
+    expected_zone_id="zone_prod",
+    required_scopes=["mcp:tool:call"],
+    required_targets=["https://mcp.example.com"],
+    revocations=InMemoryRevocationStore(),
     require_agent=True,
 )
-
-server = Server('my-server', auth=auth)
 ```
 
-Every tool registered on this server is now protected. Calls without a valid mandate are rejected before any tool code runs.
-
-## Register tools
-
-Tool handlers receive the FastMCP context. The authenticated claims are not automatically injected into the handler argument list; access them via the context if FastMCP exposes it, or read them from the lifespan state you set up:
+## Verify before running a tool
 
 ```python
-@server.tool()
-async def search_documents(query: str, limit: int = 10) -> list[dict]:
-    # Mandate is already verified at this point
-    results = await document_store.search(query, limit=limit)
-    return results
+from caracalai_mcp_fastmcp import CaracalAuthError
 
-@server.tool()
-async def submit_order(order_id: str, amount: float) -> dict:
-    # Only callers with 'tool:call' scope reach here
-    result = await orders.submit(order_id, amount)
-    return {'submitted': True, 'result': result}
+async def handle_tool_call(token: str, payload: dict):
+    try:
+        claims = await auth(token)
+    except CaracalAuthError as err:
+        return {"error": err.code, "error_description": err.description}
+
+    return {
+        "subject": claims.sub,
+        "result": await run_tool(payload),
+    }
 ```
 
-## Auth options
+Wire this check into the FastMCP auth or request hook used by your server. The important boundary is that the mandate is verified before the tool handler performs work.
 
-| Parameter | Type | Required | Description |
-| --------- | ---- | -------- | ----------- |
-| `issuer` | `str` | Yes | STS base URL; JWKS at `{issuer}/.well-known/jwks.json` |
-| `audience` | `str` | Yes | Must match the `aud` claim in the mandate |
-| `revocations` | `RevocationStore` | Yes | Checked against the `sid` claim |
-| `required_scopes` | `list[str]` | No | All listed scopes must be in the mandate |
-| `expected_zone_id` | `str` | No | Rejects mandates from a different zone |
-| `require_agent` | `bool` | No | Rejects mandates without `agent_session_id` |
-| `require_delegation` | `bool` | No | Rejects mandates without `delegation_edge_id` |
-| `require_chain_contains` | `list[str]` | No | All listed application IDs must be in `delegation_chain` |
-| `max_hop_count` | `int` | No | Rejects mandates where `hop_count` exceeds this value |
+## Validate
 
-## Error handling
+| Test | Expected result |
+| --- | --- |
+| Missing bearer token | `missing_token` or framework 401. |
+| Wrong audience | `invalid_token`. |
+| Missing scope | `insufficient_scope`. |
+| Revoked session | `session_revoked`. |
+| Non-agent token with `require_agent=True` | `agent_required`. |
 
-`CaracalAuth.__call__` raises `CaracalAuthError` on any verification failure. FastMCP maps this to an appropriate error response. The error has two attributes:
-
-```python
-class CaracalAuthError(Exception):
-    code: str        # e.g. 'insufficient_scope', 'session_revoked'
-    description: str # Human-readable explanation
-```
-
-Possible `code` values: `missing_token`, `invalid_token`, `invalid_zone`, `insufficient_scope`, `session_revoked`, `agent_required`, `delegation_required`, `chain_mismatch`, `hop_count_exceeded`.
-
-## Production revocation
-
-Replace `InMemoryRevocationStore` with the Redis-backed store and subscribe to the revocation stream:
-
-```python
-import redis
-from caracalai_revocation_redis import RedisRevocationStore, RedisRevocationConsumer
-import threading
-
-r = redis.Redis.from_url(os.environ['REDIS_URL'])
-revocations = RedisRevocationStore(redis=r, fail_closed=True)
-
-consumer = RedisRevocationConsumer(
-    redis=r,
-    store=revocations,
-    consumer='fastmcp-server-1',
-)
-consumer.ensure_group()
-
-def poll_revocations():
-    while True:
-        consumer.poll_once()
-
-threading.Thread(target=poll_revocations, daemon=True).start()
-
-auth = CaracalAuth(
-    issuer=os.environ['CARACAL_STS_URL'],
-    audience='resource://my-mcp-server',
-    revocations=revocations,
-    required_scopes=['tool:call'],
-)
-
-server = Server('my-server', auth=auth)
-```
-
-## Complete example
-
-```python
-import os
-import asyncio
-from fastmcp.server import Server
-from caracalai_mcp_fastmcp import CaracalAuth
-from caracalai_revocation import InMemoryRevocationStore
-
-revocations = InMemoryRevocationStore()
-
-auth = CaracalAuth(
-    issuer=os.environ['CARACAL_STS_URL'],
-    audience='resource://documents',
-    revocations=revocations,
-    required_scopes=['tool:call'],
-    expected_zone_id=os.environ['CARACAL_ZONE_ID'],
-    require_agent=True,
-)
-
-server = Server('documents-mcp', auth=auth)
-
-@server.tool()
-async def search(query: str) -> list[dict]:
-    return [{'id': '1', 'title': f'Result for: {query}'}]
-
-@server.tool()
-async def get_document(doc_id: str) -> dict:
-    return {'id': doc_id, 'content': 'Document content here'}
-
-if __name__ == '__main__':
-    asyncio.run(server.run())
-```
-
-## What to read next
-
-- [Integrate the Python SDK](./sdk-python/): make outbound calls from tool handlers using the Python SDK
-- [Protect an MCP Server](./protect-mcp/): low-level `authenticate()` for custom server frameworks
+Related pages: [Protect an MCP Server](/guides/protect-mcp/) and [Step-Up Re-Authentication](/guides/step-up/).

@@ -1,204 +1,75 @@
 ---
 title: Protect a Go net/http Service
-description: Wrap Go HTTP handlers with the mcp-nethttp middleware to verify mandates and enforce scope requirements using Go context.Context.
-pageType: workflow
+description: Wrap Go HTTP handlers with the mcp-nethttp middleware to verify mandates and attach claims to context.Context.
 ---
 
-The `mcp-nethttp` package provides `Middleware`: a standard `func(http.Handler) http.Handler` adapter. It extracts the bearer mandate from the `Authorization` header, verifies the ES256 signature against the zone JWKS, checks revocation, and enforces scope and agent requirements. Validated claims are stored in the request context and retrieved with `ClaimsFromContext`.
-
-## Prerequisites
-
-- A Go HTTP service receiving requests from Caracal agents.
-- The STS JWKS endpoint reachable from the Go process.
+Use the Go net/http connector when a Go service should verify Caracal mandates at the handler boundary.
 
 ## Install
 
 ```bash
 go get github.com/garudex-labs/caracal/packages/connectors/nethttp/go
-go get github.com/garudex-labs/caracal/packages/identity/go
+go get github.com/garudex-labs/caracal/packages/revocation/go
 ```
 
-## Add the middleware
+## Wrap a handler
 
 ```go
 package main
 
 import (
-    "net/http"
-    "os"
+	"encoding/json"
+	"net/http"
+	"time"
 
-    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
+	mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
+	revocation "github.com/garudex-labs/caracal/packages/revocation/go"
 )
 
 func main() {
-    opts := mcpnethttp.Options{
-        Issuer:         os.Getenv("CARACAL_STS_URL"),  // e.g. http://sts:8080
-        Audience:       "resource://inventory",
-        ZoneID:         os.Getenv("CARACAL_ZONE_ID"),
-        RequiredScopes: []string{"inventory:read"},
-        RequireAgent:   true,
-    }
+	revocations := revocation.NewInMemoryStore(24 * time.Hour)
 
-    auth := mcpnethttp.Middleware(opts)
+	protected := mcpnethttp.Middleware(mcpnethttp.Options{
+		Issuer:          "https://sts.example.com",
+		Audience:        "https://api.example.com",
+		ZoneID:          "zone_prod",
+		RequiredScopes:  []string{"tickets:read"},
+		RequiredTargets: []string{"https://api.example.com/tickets"},
+		Revocations:     revocations,
+	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := mcpnethttp.ClaimsFromContext(r.Context())
+		if !ok {
+			http.Error(w, "missing claims", http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"subject": claims.Sub})
+	}))
 
-    mux := http.NewServeMux()
-    mux.Handle("/inventory", auth(http.HandlerFunc(listInventory)))
-    mux.Handle("/inventory/", auth(http.HandlerFunc(getItem)))
-
-    http.ListenAndServe(":8080", mux)
+	http.Handle("/tickets", protected)
+	_ = http.ListenAndServe(":8080", nil)
 }
 ```
 
-## Read claims from context
+## Enforce constraints
 
-`ClaimsFromContext` retrieves the validated `identity.Claims` from the request context. It returns `(claims, true)` on success and `(zero, false)` when no claims are present (caller not behind the middleware):
+| Option | Use it for |
+| --- | --- |
+| `RequiredScopes` | Route or operation permission. |
+| `RequiredTargets` | Resource target matching. |
+| `RequireAgent` | Agent-only endpoints. |
+| `RequireDelegation` | Delegated-only endpoints. |
+| `RequireChainContains` | Application path requirements. |
+| `MaxHopCount` | Delegation depth limit. |
 
-```go
-import (
-    "net/http"
-    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
-)
+## Production revocation
 
-func listInventory(w http.ResponseWriter, r *http.Request) {
-    claims, ok := mcpnethttp.ClaimsFromContext(r.Context())
-    if !ok {
-        http.Error(w, "unauthorized", http.StatusUnauthorized)
-        return
-    }
+The in-memory store does not share revocations across instances. Use the Redis revocation connector and consume `caracal.sessions.revoke` for production resource servers.
 
-    // claims.Sub: principal subject
-    // claims.ZoneID: zone the mandate was issued in
-    // claims.Scope: space-separated scopes
-    // claims.Sid: session ID (for revocation lookup)
-    // claims.AgentSessionID: set when called from a spawned agent
-    // claims.HopCount: delegation depth
-    w.Header().Set("Content-Type", "application/json")
-    w.Write([]byte(`{"principal":"` + claims.Sub + `"}`))
-}
-```
+## Validate
 
-## Middleware options
+1. Call without a bearer token and expect `401`.
+2. Call with a valid mandate and expect the handler response.
+3. Remove a required scope and expect `403`.
+4. Mark the session revoked and expect `session_revoked`.
 
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `Issuer` | `string` | Yes | STS base URL; JWKS fetched from `{Issuer}/.well-known/jwks.json` |
-| `Audience` | `string` | Yes | Must match the `aud` claim in the mandate |
-| `ZoneID` | `string` | No | Rejects mandates from a different zone |
-| `RequiredScopes` | `[]string` | No | All listed scopes must be in the mandate |
-| `RequireAgent` | `bool` | No | Rejects mandates without `agent_session_id` |
-| `RequireDelegation` | `bool` | No | Rejects mandates without `delegation_edge_id` |
-| `RequireChainContains` | `[]string` | No | All listed application IDs must appear in `delegation_chain` |
-| `MaxHopCount` | `int` | No | Rejects mandates with `hop_count` above this value |
-| `Revocations` | `revocation.Store` | No | Checked against the mandate's `sid` claim |
-
-## Per-route scope requirements
-
-Apply different scopes per route by creating separate middleware instances:
-
-```go
-readAuth := mcpnethttp.Middleware(mcpnethttp.Options{
-    Issuer:         stsURL,
-    Audience:       "resource://inventory",
-    RequiredScopes: []string{"inventory:read"},
-})
-
-writeAuth := mcpnethttp.Middleware(mcpnethttp.Options{
-    Issuer:         stsURL,
-    Audience:       "resource://inventory",
-    RequiredScopes: []string{"inventory:write"},
-})
-
-mux := http.NewServeMux()
-mux.Handle("GET /inventory", readAuth(http.HandlerFunc(listInventory)))
-mux.Handle("POST /inventory", writeAuth(http.HandlerFunc(createItem)))
-```
-
-## Manual verification with the identity package
-
-For services that do not use `net/http` (e.g., gRPC interceptors or custom servers), use `identity.Verify` directly:
-
-```go
-import "github.com/garudex-labs/caracal/packages/identity/go"
-
-func verifyMandate(tokenStr string) (identity.Claims, error) {
-    return identity.Verify(tokenStr, identity.Config{
-        Issuer:         "http://sts:8080",
-        Audience:       "resource://inventory",
-        ZoneID:         "my-zone",
-        RequiredScopes: []string{"inventory:read"},
-        RequireAgent:   true,
-        MaxHopCount:    identity.DefaultMaxHopCount,
-    })
-}
-```
-
-Error types returned by `identity.Verify`:
-
-| Error | Meaning |
-| ----- | ------- |
-| `identity.ErrTokenInvalid` | JWT signature invalid, expired, or malformed |
-| `identity.ErrZoneInvalid` | Zone claim mismatch |
-| `identity.ErrAgentIdentityRequired` | `RequireAgent` is true but `agent_session_id` absent |
-| `identity.ErrDelegationRequired` | `RequireDelegation` is true but `delegation_edge_id` absent |
-| `identity.ErrHopCountExceeded` | `hop_count` exceeds `MaxHopCount` |
-| `identity.ScopeMissingError{Scope: "…"}` | Mandate is missing the named scope |
-| `identity.ChainMismatchError{ApplicationID: "…"}` | Required application not in delegation chain |
-
-## Complete example
-
-```go
-package main
-
-import (
-    "encoding/json"
-    "log"
-    "net/http"
-    "os"
-
-    "github.com/garudex-labs/caracal/packages/identity/go"
-    mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
-)
-
-type Item struct {
-    ID   string `json:"id"`
-    Name string `json:"name"`
-}
-
-func listInventory(w http.ResponseWriter, r *http.Request) {
-    claims, ok := mcpnethttp.ClaimsFromContext(r.Context())
-    if !ok {
-        http.Error(w, "unauthorized", http.StatusUnauthorized)
-        return
-    }
-
-    if !identity.HasScope(claims.Scope, "inventory:read") {
-        http.Error(w, "forbidden", http.StatusForbidden)
-        return
-    }
-
-    items := []Item{{ID: "1", Name: "Widget"}, {ID: "2", Name: "Gadget"}}
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(items)
-}
-
-func main() {
-    auth := mcpnethttp.Middleware(mcpnethttp.Options{
-        Issuer:         os.Getenv("CARACAL_STS_URL"),
-        Audience:       "resource://inventory",
-        ZoneID:         os.Getenv("CARACAL_ZONE_ID"),
-        RequiredScopes: []string{"inventory:read"},
-        RequireAgent:   true,
-    })
-
-    mux := http.NewServeMux()
-    mux.Handle("GET /inventory", auth(http.HandlerFunc(listInventory)))
-
-    log.Println("listening on :8080")
-    log.Fatal(http.ListenAndServe(":8080", mux))
-}
-```
-
-## What to read next
-
-- [Integrate the Go SDK](./sdk-go/): make outbound calls from protected handlers
-- [Author a Rego Policy](./author-policy/): write the policy controlling which scopes are granted
+Related pages: [Mandate](/concepts/mandate/) and [Sessions and Revocation](/concepts/sessions-revocation/).

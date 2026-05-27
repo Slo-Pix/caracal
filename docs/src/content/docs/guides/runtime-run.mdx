@@ -1,44 +1,45 @@
 ---
 title: Run an Agent with caracal run
-description: Use a generated runtime profile to inject scoped Caracal access tokens into a subprocess.
-pageType: workflow
+description: Use a generated runtime profile to inject scoped Caracal access into a subprocess.
 ---
 
-`caracal run` starts your command with resource tokens that were exchanged from a confidential Caracal application. The simplest path is to let the Console generate the runtime profile after first setup, then store the one-time client secret in the secret file named by that profile.
+`caracal run` starts a local subprocess with Caracal runtime environment variables and profile-backed credentials. Use it for development, demos, and controlled local runs.
 
-## Generate the profile
+## Prepare a profile
 
-Open the Console and choose **guided setup**:
+1. Run `caracal up`.
+2. Open `caracal console`.
+3. Select `guided setup`.
+4. Fill in the external upstream URL, resource identifier, runtime profile, profile path, secret file, and first request path.
+5. Enable **write profile files**.
+6. Save the generated profile and secret file.
+
+The generated profile is the source for SDK `connect()` calls and `caracal run`.
+
+## Run a command
 
 ```bash
-caracal console
+caracal run -- npm start
 ```
 
-Keep **runtime profile** enabled. The result view shows:
+The child process receives the Caracal variables needed to locate the profile, exchange credentials, and route configured resources through the Gateway.
 
-- the profile path
-- the secret-file path
-- the generated TOML profile
-- the token environment variable derived from your resource ID
-- the one-time application client secret, masked by default
+## Validate the run
 
-Enable **write files** when you want the Console to create the generated profile and one-time secret file locally. Leave it disabled when platform automation or a secret manager will write those files. If you copy the output manually, write the profile to the shown path and write the client secret to the shown secret-file path with owner-only permissions.
+| Check | Command or surface |
+| --- | --- |
+| Runtime is ready | `caracal status --ready` |
+| Profile is readable | `caracal run -- env | grep CARACAL` |
+| First request succeeds | Use the guided setup first request path. |
+| Audit captured the request | Console `audit` or `explain`. |
 
-## Run the workload
+## Troubleshooting
 
-Set `CARACAL_CONFIG` to the generated profile path, then run the command you normally use for the workload after `caracal run --`.
+| Symptom | Fix |
+| --- | --- |
+| SDK cannot find config | Confirm `CARACAL_CONFIG` points to the generated profile. |
+| Secret file rejected | Restrict file permissions and avoid setting both inline and file secrets. |
+| Gateway routing misses the resource | Confirm resource bindings and upstream prefixes in the profile. |
+| Request denied | Check grant, policy-set activation, scopes, and audit diagnostics. |
 
-At runtime, Caracal reads the profile, exchanges each configured resource credential through STS, and injects each access token into the environment variable shown in the Console result. Your process reads that variable and sends the token to the protected service or Gateway.
-
-## Gateway-routed resources
-
-If first setup included an upstream URL, send requests through Gateway with:
-
-- `Authorization: Bearer` followed by the injected resource token
-- `X-Caracal-Resource` set to the resource ID from the Console result
-
-Gateway verifies the token, checks revocation, evaluates the active policy set, proxies to the configured upstream, and writes audit evidence for the request.
-
-## Finish with audit explanation
-
-After the first successful protected call, open **audit** in the Console. Select the request and use **explain** with its request ID. The explanation should show the application, resource, scopes, active policy version, policy set version, and final decision. If the call fails, use the same explanation path to identify whether the failure came from token exchange, policy, Gateway routing, or upstream response.
+Related pages: [Quickstart](/get-started/quickstart/), [First Integration](/get-started/first-integration/), and [Audit Ledger](/concepts/audit-ledger/).

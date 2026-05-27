@@ -1,227 +1,43 @@
 ---
 title: Alerting Recipes
-description: PromQL, impact, triage, and runbook actions for Caracal production alerts.
+description: Alert names, meanings, and first-response actions for Caracal operations.
 pageType: reference
 ---
 
-The Helm chart can install these alerts through `alertRules.enabled=true`. Every alert is actionable: acknowledge it, identify the affected component, collect evidence, apply the recovery action, and verify the alert clears before closing the incident.
-
-## Alert matrix
-
-| Alert | Severity | Component | Primary impact |
-| --- | --- | --- | --- |
-| [CaracalSTSOPACompileErrors](#caracalstsopacompileerrors) | warning | STS | New or changed policies fail to compile; affected loads fail closed. |
-| [CaracalSTSPolicyBundleStale](#caracalstspolicybundlestale) | warning | STS | Policy invalidation is delayed; decisions may use an older active bundle. |
-| [CaracalSTSProviderRefreshErrors](#caracalstsproviderrefresherrors) | warning | STS | Provider-backed grants can fail closed when refresh coordination cannot use Redis. |
-| [CaracalSTSProviderCircuitOpen](#caracalstsprovidercircuitopen) | warning | STS | Provider-backed resources fail closed while an upstream provider refresh circuit is open. |
-| [CaracalAuditDLQNonEmpty](#caracalauditdlqnonempty) | warning | Audit | Failed audit events need replay before evidence is complete. |
-| [CaracalAuditDLQGrowth](#caracalauditdlqgrowth) | critical | Audit | Audit failure backlog is increasing and release/rollout activity should stop. |
-| [CaracalAuditConsumerLagHigh](#caracalauditconsumerlaghigh) | warning | Audit | Audit ingestion is behind Redis stream production. |
-| [CaracalGatewayAuditReplayBacklogOld](#caracalgatewayauditreplaybacklogold) | warning | Gateway | Gateway audit evidence is buffered on disk and aging. |
-| [CaracalSTSAuditReplayBacklogOld](#caracalstsauditreplaybacklogold) | warning | STS | STS audit evidence is buffered on disk and aging. |
-| [CaracalAuditTamperDetected](#caracalaudittamperdetected) | critical | Audit | Audit chain integrity failed; treat as a security incident. |
-| [CaracalAPIOutboxDeadMessages](#caracalapioutboxdeadmessages) | critical | API | Control-plane events exhausted delivery attempts and require reconciliation. |
-| [CaracalAPIOutboxPendingOldest](#caracalapioutboxpendingoldest) | warning | API | Control-plane event publication is delayed. |
-| [CaracalGatewaySTSExchangeErrors](#caracalgatewaystsexchangeerrors) | warning | Gateway | Protected requests can fail before upstream dispatch. |
-| [CaracalGatewaySTSCircuitOpen](#caracalgatewaystscircuitopen) | critical | Gateway | Gateway is fast-failing STS exchanges after repeated STS-unavailable failures. |
-| [CaracalGatewayRevocationSnapshotStale](#caracalgatewayrevocationsnapshotstale) | critical | Gateway | Gateway cannot prove it has a fresh revocation baseline. |
-| [CaracalGatewayRevocationPropagationLag](#caracalgatewayrevocationpropagationlag) | critical | Gateway | Revocation stream messages are reaching Gateway outside the safety window. |
-| [CaracalGatewayRevocationReloadErrors](#caracalgatewayrevocationreloaderrors) | critical | Gateway | Gateway cannot refresh its revocation snapshot from Postgres. |
-| [CaracalPostgresPoolSaturation](#caracalpostgrespoolsaturation) | warning | Database | Services are close to exhausting DB connections. |
-| [CaracalReadinessFlapping](#caracalreadinessflapping) | warning | Platform | Pods repeatedly transition Ready/NotReady. |
-
-## CaracalSTSOPACompileErrors
-
-**PromQL:** `increase(caracal_sts_opa_compile_errors_total[5m]) > 0`
-
-**Likely causes:** invalid Rego, incompatible policy bundle schema, missing referenced policy version, or corrupt activation metadata.
-
-**Immediate action:** pause policy rollout, open the Console policy activation history, and inspect STS logs for the compile error. Keep the current active bundle in place until the replacement compiles.
-
-**Verification:** the PromQL expression returns `0`, STS readiness is green, and a policy simulation for the changed policy returns a complete allow/deny decision.
-
-## CaracalSTSPolicyBundleStale
-
-**PromQL:** `caracal_sts_opa_max_policy_age_seconds > <threshold>`
-
-**Likely causes:** Redis invalidation stream outage, STS polling delay, database latency, or a stuck STS replica.
-
-**Immediate action:** check Redis health, confirm STS can read Postgres, and restart only the stale STS replica if one replica is isolated. Do not activate additional policies while the bundle age is increasing.
-
-**Verification:** policy age drops below the threshold and all STS replicas report the same active policy set version.
-
-## CaracalSTSProviderRefreshErrors
-
-**PromQL:** `increase(caracal_sts_provider_refresh_errors_total[5m]) > <threshold>`
-
-**Likely causes:** Redis lease/result write failure, Redis timeout, inconsistent Redis connectivity between STS replicas, or an STS replica that cannot publish the distributed refresh result.
-
-**Immediate action:** check Redis availability and latency from every STS replica, confirm `REDIS_URL_FILE` is identical across replicas, and pause large provider-backed agent launches until coordination errors stop. Do not bypass coordination by increasing STS replicas; that can increase provider stampede pressure.
-
-**Verification:** the error counter stops increasing, `caracal_sts_provider_refresh_leased_total` and `caracal_sts_provider_refresh_waited_total` advance during a controlled provider-backed exchange, and provider token refresh succeeds without duplicate upstream bursts.
-
-## CaracalSTSProviderCircuitOpen
-
-**PromQL:** `increase(caracal_sts_provider_circuit_open_total[5m]) > <threshold>`
-
-**Likely causes:** provider token endpoint outage, rotated provider client secret, provider rate limit, provider DNS/TLS failure, or repeated refresh response errors.
-
-**Immediate action:** identify the provider from STS logs, verify provider credentials and endpoint reachability, and slow or stop agent workflows that depend on that provider. Keep STS fail-closed; do not serve stale provider tokens to mask the outage.
-
-**Verification:** provider refresh attempts succeed, circuit-open increments stop, and a Gateway request for the affected provider-backed resource receives a fresh upstream directive.
-
-## CaracalAuditDLQNonEmpty
-
-**PromQL:** `caracal_audit_dlq_size > <threshold>`
-
-**Likely causes:** Audit write failure, invalid producer HMAC, Redis stream replay failure, or Postgres latency.
-
-**Immediate action:** inspect Audit logs, Redis stream health, and producer HMAC configuration. Browse `/api/audit/dlq` with `AUDIT_ADMIN_TOKEN` to classify reasons before replay. Keep services running if replay is draining; pause deployments if the queue is growing.
-
-**Verification:** DLQ size returns to `0`, replay logs report success, `/api/audit/dlq` returns an empty list, and recent Gateway requests have matching audit records.
-
-## CaracalAuditDLQGrowth
-
-**PromQL:** `increase(caracal_audit_dlq_size[10m]) > <threshold>`
-
-**Likely causes:** sustained Audit outage, Redis pressure, Postgres outage, incompatible audit schema, or rotated HMAC keys not deployed consistently.
-
-**Immediate action:** declare an incident, freeze rollouts, preserve Audit and Redis logs, browse `/api/audit/dlq` to separate replayable transient rows from forensic rows, restore the failed dependency, and replay only replayable DLQ entries. If HMAC mismatch is suspected, follow [Incident Response](./incident-response/#audit-tamper-or-hmac-failure).
-
-**Verification:** DLQ growth stops, queue drains, tamper alerts stay clear, and synthetic Gateway requests produce complete audit events.
-
-## CaracalAuditConsumerLagHigh
-
-**PromQL:** `caracal_audit_consumer_lag > <threshold>`
-
-**Likely causes:** Audit under-provisioning, slow Postgres commits, Redis memory pressure, or oversized audit payloads.
-
-**Immediate action:** scale Audit replicas if DB capacity allows, inspect Postgres write latency, and check Redis memory/eviction. Avoid scaling producers until consumers catch up.
-
-**Verification:** lag trends down for two scrape intervals and Postgres pool saturation remains below threshold.
-
-## CaracalGatewayAuditReplayBacklogOld
-
-**PromQL:** `caracal_gateway_audit_replay_oldest_age_seconds > <threshold>`
-
-**Likely causes:** Redis unavailable from Gateway, Audit ingestion outage, Gateway replay volume I/O failure, or a restarted Gateway replica replaying a large backlog.
-
-**Immediate action:** preserve Gateway replay volumes, restore Redis and Audit health, and keep Gateway running so replay can drain. Pause high-risk rollouts if audit evidence is aging faster than replay drains.
-
-**Verification:** `caracal_gateway_audit_replay_files` and `caracal_gateway_audit_replay_bytes` return to zero and recent Gateway requests have matching Audit records.
-
-## CaracalSTSAuditReplayBacklogOld
-
-**PromQL:** `caracal_sts_audit_replay_oldest_age_seconds > <threshold>`
-
-**Likely causes:** Redis unavailable from STS, Audit ingestion outage, STS replay volume I/O failure, or a restarted STS replica replaying a large backlog.
-
-**Immediate action:** preserve STS replay volumes, restore Redis and Audit health, and keep STS running so replay can drain. Do not rotate audit HMAC keys while replay files from the prior key are still pending.
-
-**Verification:** `caracal_sts_audit_replay_files` and `caracal_sts_audit_replay_bytes` return to zero and recent STS decisions have matching Audit records.
-
-## CaracalAuditTamperDetected
-
-**PromQL:** `increase(caracal_audit_tamper_mismatch_total[5m]) + increase(caracal_audit_tamper_chain_breaks_total[5m]) + increase(caracal_audit_tamper_hmac_failures_total[5m]) > 0`
-
-**Likely causes:** unauthorized DB mutation, corrupted replay, wrong HMAC key, out-of-order chain repair attempt, or software defect in audit signing.
-
-**Immediate action:** declare a security incident, restrict write access to Postgres, snapshot the database and Audit logs, stop audit repair attempts, and preserve Redis stream data.
-
-**Verification:** forensic review identifies the affected chain range, new events validate cleanly, and recovery is approved by the incident commander.
-
-## CaracalAPIOutboxDeadMessages
-
-**PromQL:** `caracal_api_outbox_dead_total > <threshold>`
-
-**Likely causes:** Redis outage, Redis stream write denial, stream memory exhaustion, HMAC configuration error, or an API outbox worker that repeatedly failed the same row until `OUTBOX_MAX_ATTEMPTS`.
-
-**Immediate action:** treat this as control-plane event loss risk. Check API logs for the abandoned row IDs, restore Redis write health, and reconcile each affected control-plane change with dependent consumers before continuing rollout activity.
-
-**Verification:** dead count returns below threshold, API readiness is green, and a fresh resource/policy change reaches the expected Redis stream and dependent service cache.
-
-## CaracalAPIOutboxPendingOldest
-
-**PromQL:** `caracal_api_outbox_oldest_pending_age_seconds > <threshold>`
-
-**Likely causes:** Redis latency, API DB pool saturation, stuck dispatcher loop, undersized `OUTBOX_BATCH_SIZE`, or stream trimming pressure.
-
-**Immediate action:** check Redis latency and memory, API logs, DB pool saturation, and outbox worker throughput. Scale API only if Postgres and Redis have headroom.
-
-**Verification:** oldest pending age trends back toward zero and new control-plane changes are published within the expected window.
-
-## CaracalGatewaySTSExchangeErrors
-
-**PromQL:** `increase(caracal_gateway_sts_exchange_errors_total[5m]) > <threshold>`
-
-**Likely causes:** STS unavailable, service-to-service secret mismatch, route binding error, policy-denied exchange, or network policy blocking Gateway to STS.
-
-**Immediate action:** check Gateway and STS readiness, compare `GATEWAY_STS_HMAC_KEY_FILE` rollout state, inspect NetworkPolicy, and confirm the resource binding still points to the intended STS issuer.
-
-**Verification:** a synthetic Gateway request succeeds and emits an audit event.
-
-## CaracalGatewaySTSCircuitOpen
-
-**PromQL:** `caracal_gateway_sts_circuit_open > <threshold>`
-
-**Likely causes:** STS outage, STS readiness failure, network policy blocking Gateway-to-STS traffic, service-to-service HMAC mismatch, or a rollout that changed STS URL/secret state on only part of the fleet.
-
-**Immediate action:** treat protected Gateway traffic as fail-closed. Check STS `/ready`, Gateway logs, NetworkPolicy, `GATEWAY_STS_HMAC_KEY_FILE`, and the STS Service endpoints. Restore STS health before scaling Gateway; more Gateway replicas will only fast-fail more requests while the circuit is open.
-
-**Verification:** `caracal_gateway_sts_circuit_open` returns to `0`, `caracal_gateway_sts_circuit_fast_fail_total` stops increasing, and the first-success validator passes against a real protected resource.
-
-## CaracalGatewayRevocationSnapshotStale
-
-**PromQL:** `caracal_gateway_revocation_snapshot_fresh <= <threshold>`
-
-**Likely causes:** Postgres unavailable, revocation query failure, Gateway cannot reload snapshots, or revocation polling is blocked by network policy.
-
-**Immediate action:** treat this as an access-safety incident. Confirm Gateway readiness output, restore Postgres connectivity, inspect revocation reload logs, and pause high-risk access changes until the snapshot is fresh.
-
-**Verification:** `caracal_gateway_revocation_snapshot_fresh` returns to `1`, snapshot age resets, and a revoked grant is denied by Gateway.
-
-## CaracalGatewayRevocationPropagationLag
-
-**PromQL:** `caracal_gateway_revocation_propagation_seconds > <threshold>`
-
-**Likely causes:** Redis stream consumer stalls, Gateway replica crash while holding pending messages, Redis latency, or network policy delaying stream reads.
-
-**Immediate action:** inspect Gateway revocation consumer logs, Redis consumer group pending entries, and `caracal_gateway_revocation_pending_replayed_total`. Keep Gateway replicas running so the periodic pending-entry reaper can reclaim stalled messages.
-
-**Verification:** propagation age returns below the threshold and a newly revoked session is denied by every Gateway replica.
-
-## CaracalGatewayRevocationReloadErrors
-
-**PromQL:** `increase(caracal_gateway_revocation_reload_errors_total[5m]) > <threshold>`
-
-**Likely causes:** Postgres outage, schema drift, slow revocation queries, or Gateway DB credentials/network policy failure.
-
-**Immediate action:** restore Postgres connectivity and query performance, then force a snapshot reload with the Gateway admin endpoint once the dependency is healthy:
-
-```bash
-curl -fsS -X POST \
-  -H "Authorization: Bearer $CARACAL_ADMIN_TOKEN" \
-  http://gateway.internal:8081/internal/revocations/reload
-```
-
-**Verification:** reload errors stop, `caracal_gateway_revocation_reloads_total` increments, snapshot freshness returns to `1`, and a revoked grant is denied by Gateway.
-
-## CaracalPostgresPoolSaturation
-
-**PromQL:** `max by (service) (caracal_db_pool_in_use_ratio) > <threshold>`
-
-**Likely causes:** long-running queries, missing indexes, connection leak, database failover, or undersized `max_connections`.
-
-**Immediate action:** inspect active Postgres queries, identify the service label, reduce traffic if request latency is rising, and scale only after confirming the database has headroom.
-
-**Verification:** pool usage falls below threshold, request latency recovers, and no service is repeatedly reconnecting.
-
-## CaracalReadinessFlapping
-
-**PromQL:** `changes(kube_pod_container_status_ready{pod=~"caracal-.*"}[10m]) > <threshold>`
-
-**Likely causes:** dependency instability, CPU throttling, OOM kills, slow probes, replay backlog, or config drift between replicas.
-
-**Immediate action:** inspect pod events, resource usage, readiness endpoint output, and dependency alerts. Roll back the last deployment if flapping started immediately after a rollout.
-
-**Verification:** readiness transitions stop, all pods stay Ready for two rollout windows, and synthetic requests succeed.
+The Helm chart can render PrometheusRule alerts for policy freshness, audit health, outbox health, Gateway exchange, revocation safety, database saturation, and readiness flapping.
+
+## Built-in alerts
+
+| Alert | Severity | First response |
+| --- | --- | --- |
+| `CaracalSTSOPACompileErrors` | warning | Inspect policy activation history and STS logs; affected policy loads fail closed. |
+| `CaracalSTSPolicyBundleStale` | warning | Check Redis policy invalidation and STS policy age. |
+| `CaracalSTSProviderRefreshErrors` | warning | Check Redis coordination and upstream provider availability. |
+| `CaracalSTSProviderCircuitOpen` | warning | Restore provider or credential health; provider-backed grants fail closed. |
+| `CaracalAuditDLQNonEmpty` | warning | Inspect Audit DLQ records and producer HMAC/signature failures. |
+| `CaracalAuditDLQGrowth` | critical | Stop risky rollouts and recover Audit/Redis/Postgres. |
+| `CaracalAuditConsumerLagHigh` | warning | Scale Audit or restore Postgres/Redis performance. |
+| `CaracalGatewayAuditReplayBacklogOld` | warning | Recover Redis/Audit and confirm Gateway replay drains. |
+| `CaracalSTSAuditReplayBacklogOld` | warning | Recover Redis/Audit and confirm STS replay drains. |
+| `CaracalAuditTamperDetected` | critical | Treat as a security incident. |
+| `CaracalAPIOutboxDeadMessages` | critical | Reconcile outbox rows and Redis consumers before continuing rollouts. |
+| `CaracalAPIOutboxPendingOldest` | warning | Check Redis health, API outbox workers, DB pool, and stream memory. |
+| `CaracalGatewaySTSExchangeErrors` | warning | Check Gateway readiness, STS readiness, bindings, and service exchange key. |
+| `CaracalGatewaySTSCircuitOpen` | critical | Restore STS or service exchange before routing protected traffic. |
+| `CaracalGatewayRevocationSnapshotStale` | critical | Treat as access-safety incident until snapshot freshness returns. |
+| `CaracalGatewayRevocationPropagationLag` | critical | Restore revocation stream consumers and pending-entry reclamation. |
+| `CaracalGatewayRevocationReloadErrors` | critical | Fix Postgres/Redis snapshot load before relying on protected routes. |
+| `CaracalPostgresPoolSaturation` | warning | Inspect long queries, pool sizing, and connection leaks. |
+| `CaracalReadinessFlapping` | warning | Check dependencies, throttling, OOM, and probe timeouts. |
+
+## Alert routing
+
+| Severity | Route |
+| --- | --- |
+| Critical access-safety or tamper alerts | Security incident response. |
+| Critical data-flow alerts | On-call plus release owner; freeze rollouts. |
+| Warning readiness/capacity alerts | Service owner or platform queue. |
+
+## First-response rule
+
+When an alert involves audit, revocation, or policy freshness, prefer fail-closed recovery over traffic continuation. Restore evidence and revocation guarantees before resuming high-risk changes.

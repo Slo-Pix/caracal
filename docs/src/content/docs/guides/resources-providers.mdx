@@ -1,82 +1,49 @@
 ---
 title: Define Resources and Providers
 description: Register protected upstream resources and optional provider credentials from the Console.
-pageType: workflow
 ---
 
-Resources describe what an application can request through Caracal. Providers describe where Caracal can obtain provider credentials when a protected resource needs them. Scopes on resources and policies are **Caracal scopes**; provider OAuth scopes are **upstream OAuth scopes** and belong in provider configuration. Start with a resource; add a provider only when the upstream service needs an external credential source.
+Resources tell Caracal what can be protected. Providers describe optional upstream credential systems that a resource may use.
 
-## Guided first setup
+## When to create each object
 
-Open the Console and choose **guided setup**:
+| Object | Create it when |
+| --- | --- |
+| Resource | You need a stable protected target with scopes. |
+| Provider | The target needs brokered OAuth, OIDC, API key, workload, or similar upstream credentials. |
+| Gateway application | You want the Gateway to front an HTTP upstream. |
 
-```bash
-caracal console
-```
+## Console workflow
 
-The guided setup creates the required production objects in one path:
+1. Start the local runtime with `caracal up`.
+2. Open `caracal console`.
+3. Select `resource`.
+4. Create a resource with a stable identifier, such as `https://api.example.com/payments`.
+5. Add action-oriented scopes, such as `payments:read` and `payments:refund`.
+6. Set the upstream URL if the Gateway should forward requests to the service.
+7. Select `provider` only when the resource needs upstream credential brokering.
+8. Attach the provider to the resource if applicable.
 
-1. A zone, or the selected zone if one is already active.
-2. A confidential agent application with a one-time client secret.
-3. A protected resource with the Caracal scopes you enter.
-4. An active policy that only allows the created application to request that resource.
-5. A runtime profile that uses the real zone, application, resource, and secret-file path.
+## Identifier and scope guidance
 
-Optional fields can be left blank. Leave **upstream URL** blank when the resource is not Gateway-routed yet. Leave **credential provider** blank when the resource does not need provider-side credentials. Turn off **activate policy** only when your platform team will attach an existing policy set.
+| Field | Good pattern |
+| --- | --- |
+| Resource identifier | URL-shaped or URN-shaped stable target. |
+| Scope | `domain:action`, such as `tickets:read`. |
+| Upstream URL | The internal service URL the Gateway can reach. |
+| Provider identifier | Stable name for the upstream credential system. |
 
-## Resource fields
+Do not use mutable deployment hostnames as policy identifiers unless they are the actual authority boundary. Keep the identifier stable even if the upstream URL changes.
 
-| Field | Required | Meaning |
-| --- | --- | --- |
-| Resource identifier | Yes | Stable resource identifier used by STS, policies, runtime profiles, SDKs, and audit. |
-| Resource name | No | Human-readable display name in the Console. |
-| Caracal scopes | Yes | Authorization permissions the resource accepts. Keep the first set narrow and add more scopes only when policy should allow more actions. |
-| Upstream URL | No | Enables a Gateway route for the resource. Use the real upstream endpoint reachable from Gateway. |
-| Credential provider | No | Existing provider credential source for resources that need provider-side credentials. |
+## Validate the setup
 
-When an upstream URL is set, the Console binds the resource to the created confidential application so Gateway can validate the request and exchange authority before proxying. Without an upstream URL, the resource still exists for token exchange and direct SDK use, but Gateway routing is not configured.
+- Open the resource in the Console and confirm scopes are present.
+- Create a grant for the application and subject that will request the scopes.
+- Activate a policy set that allows the resource.
+- Send a Gateway request or connector-protected request and inspect the audit event.
 
-## Provider setup
+## Related guides
 
-Create a provider only after the resource path is clear. In the Console, open **provider** and register the real provider metadata supplied by your platform or identity team. Then edit the resource and set **credential provider** to that provider.
-
-Provider credentials should come from the platform secret store, vault, or orchestrator. Do not copy temporary credentials into resource definitions. The Console records provider configuration and identifiers; secret material should remain in the provider integration path.
-
-Provider config is provider-kind-specific:
-
-| Provider kind | Required config | Scope boundary |
-| --- | --- | --- |
-| OAuth2 | Token endpoint and allowed token hosts. Authorization endpoint, issuer, and upstream OAuth scopes can be supplied when the provider requires them. | Upstream OAuth scopes belong on the provider; Caracal scopes stay on the resource and policy. |
-| OIDC | Issuer, token endpoint, and allowed token hosts. | OIDC issuer metadata identifies the provider; Caracal scopes still authorize access to the resource. |
-| API key | API key header. Auth scheme is optional. | API key placement belongs on the provider; Caracal scopes decide whether the app may call the resource. |
-| Workload identity | Issuer, audience, token endpoint, and allowed token hosts. | Workload exchange metadata belongs on the provider; Caracal scopes stay on the resource and policy. |
-
-Use the structured provider fields for common settings. Use **advanced provider JSON** only when the provider needs a supported provider-kind key that is not exposed as a separate field. Multiline JSON paste is preserved, and Console validates that the object matches the selected provider kind. Use **provider config file** for larger JSON objects managed outside the Console.
-
-## Google Calendar mapping
-
-For Google Calendar, use a Google OAuth2 provider, a Calendar resource, and Caracal scopes that match what your policy will authorize.
-
-| Console object | Field | Value |
-| --- | --- | --- |
-| Provider | identifier | `google-oauth` |
-| Provider | kind | `oauth2` |
-| Provider | client ID | OAuth client ID issued by Google Cloud |
-| Provider | token endpoint | `https://oauth2.googleapis.com/token` |
-| Provider | authorization endpoint | `https://accounts.google.com/o/oauth2/v2/auth` |
-| Provider | issuer | `https://accounts.google.com` |
-| Provider | allowed token hosts | `oauth2.googleapis.com` |
-| Provider | upstream OAuth scopes | `https://www.googleapis.com/auth/calendar.readonly` |
-| Resource | identifier | `resource://google-calendar` |
-| Resource | upstream URL | `https://www.googleapis.com/calendar/v3/` |
-| Resource | credential provider | `google-oauth` |
-| Resource | Caracal scopes | `calendar.events.readonly` |
-| Policy | app | Jarvis |
-| Policy | resource | `resource://google-calendar` |
-| Policy | allowed Caracal scopes | `calendar.events.readonly` |
-
-Do not add a write Caracal scope until the Google provider can obtain an upstream OAuth scope that supports writing. Caracal scopes authorize the app inside Caracal; upstream OAuth scopes decide what the Google token can do at Google.
-
-## Verify with audit
-
-After the first real request, open **audit** in the Console and select the request. Use **explain** with the request ID to see the policy version, policy set version, resource, application, Gateway outcome, and decision reason. Treat this audit explanation as the completion signal for onboarding.
+- [Issue Grants and Invitations](/guides/grants-invitations/)
+- [Protect an API](/tutorials/protect-an-api/)
+- [Activate a Policy Set](/guides/activate-policy-set/)

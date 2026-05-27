@@ -1,16 +1,9 @@
 ---
 title: Integrate the Python SDK
-description: Install caracalai-sdk, use async context managers to spawn and delegate agent sessions, wire ASGI middleware, and make outbound calls with auto-injected headers.
-pageType: workflow
+description: Install caracalai-sdk, load a generated profile, spawn agents with async context managers, delegate authority, and use httpx transport injection.
 ---
 
-The Python SDK uses async context managers for session lifecycle. `Caracal.connect()` reads the generated Caracal profile first, then falls back to environment variables. `spawn()` and `delegate()` are async context managers that open and close sessions automatically. `transport()` returns an `httpx.AsyncClient` with Caracal access headers injected on every request.
-
-## Prerequisites
-
-- Python 3.14 or later.
-- A registered application in a Caracal zone with a `client_secret`.
-- The Caracal stack running with the Coordinator reachable.
+Use `caracalai-sdk` in Python services and agents that need async session lifecycle, delegation, Gateway routing, or ASGI context propagation.
 
 ## Install
 
@@ -18,177 +11,82 @@ The Python SDK uses async context managers for session lifecycle. `Caracal.conne
 pip install caracalai-sdk
 ```
 
-## Configuration
-
-Use the Console-generated `caracal.toml` profile for the first integration. `Caracal.connect()` reads `config_path` when passed, then `CARACAL_CONFIG`, then the default profile at `$XDG_CONFIG_HOME/caracal/caracal.toml` or `~/.config/caracal/caracal.toml`, then environment variables.
-
-For platform-managed workloads, set these environment variables instead of mounting a profile:
-
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `CARACAL_COORDINATOR_URL` | Yes | Base URL of the Coordinator service (e.g., `http://localhost:4000`) |
-| `CARACAL_ZONE_ID` | Yes | Zone identifier |
-| `CARACAL_APPLICATION_ID` | Yes | Registered application ID |
-| `CARACAL_APP_CLIENT_SECRET_FILE` | Preferred | Secret-file path used to refresh session authority through STS |
-| `CARACAL_APP_CLIENT_SECRET` | Local development | Application secret used to refresh session authority through STS |
-| `CARACAL_STS_URL` | Client-secret mode | STS base URL |
-| `CARACAL_APP_RESOURCES` | Client-secret mode if `CARACAL_RESOURCES` is unset | Comma-separated resource IDs for token exchange |
-| `CARACAL_GATEWAY_URL` | No | Gateway base URL for resource-routed calls |
-| `CARACAL_RESOURCES` | No | Comma-separated bindings: `resourceId=upstreamPrefix,other=prefix` |
-| `CARACAL_RESOURCES_FILE` | No | JSON resource-binding file |
-
-## Construct the client
+## Connect
 
 ```python
 from caracalai_sdk import Caracal
 
-# Reads the generated profile first, then falls back to CARACAL_* env vars.
 caracal = Caracal.connect()
 ```
 
-To configure programmatically:
+`connect()` loads `CARACAL_CONFIG`, the default generated profile, or environment variables. Generated profiles are created by Console guided setup.
+
+## Spawn and call a resource
 
 ```python
-import os
-from caracalai_sdk import Caracal, CaracalConfig
-from caracalai_sdk.advanced import CoordinatorClient, AgentKind, ResourceBinding
+import httpx
+from caracalai_sdk import Caracal
 
-caracal = Caracal(CaracalConfig(
-    coordinator=CoordinatorClient(base_url='http://coordinator:4000'),
-    zone_id='my-zone',
-    application_id='my-app',
-    token_source=lambda: os.environ['MY_APP_TOKEN'],
-    gateway_url='http://gateway:8081',
-    resources=[
-        ResourceBinding(
-            resource_id='resource://inventory',
-            upstream_prefix='http://inventory:8080',
-        ),
-    ],
-    default_kind=AgentKind.INSTANCE,
-))
+caracal = Caracal.connect()
+
+async with caracal.spawn():
+    headers = caracal.headers()
+    async with httpx.AsyncClient() as client:
+        await client.get("https://api.example.com/tickets", headers=headers)
 ```
 
-## Spawn an agent session
+`spawn()` is an async context manager. It binds the agent context inside the block and releases the session when the block exits.
 
-`spawn()` is an async context manager. It opens an agent session on the Coordinator at entry, binds it to the current async task via Python context vars, and closes the session at exit.
-
-```python
-async def main():
-    async with caracal.spawn() as ctx:
-        print('agent session:', ctx.agent_session_id)
-        # All awaits inside this block share the agent session.
-```
-
-Options:
-
-```python
-from caracalai_sdk.advanced import AgentKind
-
-async with caracal.spawn(
-    kind=AgentKind.EPHEMERAL,
-    ttl_seconds=600,
-    metadata={'purpose': 'invoice-batch'},
-) as ctx:
-    ...
-```
-
-## Access session context
-
-Inside a `spawn()` block, `caracal.current()` returns the live context:
-
-```python
-async def process_invoice(invoice_id: str):
-    ctx = caracal.current()
-    # ctx.agent_session_id, ctx.zone_id, ctx.delegation_edge_id, ctx.hop
-```
-
-## Delegate authority
-
-`delegate()` creates a delegation edge from the current session to a target session. All calls inside the block carry the delegated authority.
+## Delegate while spawning
 
 ```python
 from caracalai_sdk import DelegationConstraints
 
-async with caracal.spawn() as source:
-    async with caracal.delegate(
-        to=target_agent_session_id,
-        to_application_id='payments-service',
-        scopes=['payment:submit', 'payment:read'],
-        constraints=DelegationConstraints(resources=['resource://payments'], max_depth=2),
-        ttl_seconds=300,
-    ) as delegated:
-        print('delegation edge:', delegated.delegation_edge_id)
-        # Outbound calls carry this edge in W3C Baggage
+async with caracal.spawn() as parent:
+    async with caracal.delegate_to_spawn(
+        parent_ctx=parent,
+        resource_id="https://api.example.com/tickets",
+        scopes=["tickets:read"],
+        constraints=DelegationConstraints(max_hops=1, budget=5),
+        delegation_ttl_seconds=600,
+    ):
+        headers = caracal.headers()
 ```
 
-## Make outbound calls
+Use `async with caracal.bind(ctx)` before handing a captured context to a background task.
 
-`caracal.transport()` returns an `httpx.AsyncClient`. It reads the current context from Python context vars and injects:
-
-- `Authorization: Bearer <access_token>`
-- `traceparent: 00-{traceId}-{spanId}-01`
-- `baggage: caracal.agent_session=…;caracal.delegation_edge=…;caracal.hop=N`
+## Use httpx transport injection
 
 ```python
 async with caracal.spawn():
     async with caracal.transport() as client:
-        response = await client.get('http://inventory:8080/items')
-        items = response.json()
+        await client.get("https://api.example.com/tickets")
 ```
 
-## Receive inbound context
+The transport injects Caracal envelope headers and rewrites configured resource-bound URLs through the Gateway.
 
-After a request has been verified by Gateway or a trusted adapter, bind context from inbound HTTP headers to propagate the calling agent's identity into the current task:
+## ASGI propagation
 
-```python
-async with caracal.bind_from_headers(request.headers):
-    ctx = caracal.current()
-    # ctx is populated from the inbound Authorization and baggage headers
-```
-
-## ASGI middleware
-
-For FastAPI and Starlette, attach the ASGI middleware to bind already-verified inbound context automatically on every request:
+After a verifier boundary, use the SDK middleware to bind an inbound Caracal envelope into request context:
 
 ```python
 from fastapi import FastAPI
-
-app = FastAPI()
-app.add_middleware(caracal.context_middleware())
-
-@app.get('/items')
-async def list_items():
-    ctx = caracal.current()
-    return {'agent': ctx.agent_session_id if ctx else None}
-```
-
-The SDK ASGI context middleware is not a verifier. It does not check JWT signatures, audience, scopes, token use, or revocation. Use Gateway for the default protected-resource path. If the service must verify directly, build the adapter around `caracalai_transport_mcp.authenticate()` and a production revocation store.
-
-## Complete example
-
-```python
-import asyncio
 from caracalai_sdk import Caracal
-from caracalai_sdk.advanced import AgentKind
 
 caracal = Caracal.connect()
-
-async def run_batch(invoice_ids: list[str]):
-    async with caracal.spawn(kind=AgentKind.EPHEMERAL, ttl_seconds=120) as ctx:
-        print(f'processing {len(invoice_ids)} invoices in session {ctx.agent_session_id}')
-
-        async with caracal.transport() as client:
-            for invoice_id in invoice_ids:
-                response = await client.get(f'http://invoices:8080/invoices/{invoice_id}')
-                response.raise_for_status()
-                print(response.json())
-
-asyncio.run(run_batch(['inv-001', 'inv-002', 'inv-003']))
+app = FastAPI()
+app.add_middleware(caracal.context_middleware())
 ```
 
-## What to read next
+The middleware propagates context. It does not verify JWT signatures or revocation; use a connector or transport verifier at the trust boundary.
 
-- [Protect a FastMCP App](./protect-fastmcp/): gate FastMCP tool calls with mandate auth
-- [Implement Multi-Agent Delegation](./delegation/): deeper delegation graph patterns
-- [Protect an MCP Server](./protect-mcp/): low-level mandate verification for custom servers
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| `Caracal.from_env: missing ...` | Confirm profile or required environment variables. |
+| `headers()` refuses root identity | Bind a context or pass `allow_root=True` only for trusted service-root calls. |
+| Background task loses context | Capture the context and rebind with `async with caracal.bind(ctx)`. |
+| Gateway routing misses | Confirm resource bindings and `gateway_url`. |
+
+Related pages: [Protect a FastMCP App](/guides/protect-fastmcp/) and [Run an Agent with caracal run](/guides/runtime-run/).

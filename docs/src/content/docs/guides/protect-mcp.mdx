@@ -1,98 +1,47 @@
 ---
 title: Protect an MCP Server
-description: Gate MCP tool calls with Caracal mandate verification using the transport-mcp package for TypeScript or Python.
-pageType: workflow
+description: Gate MCP tool calls with Caracal mandate verification using framework-neutral transport packages.
 ---
 
-The MCP transport packages provide `authenticate()` and `extractBearer()` as the two building blocks for mandate-gated MCP servers. Every tool call must arrive with an `Authorization: Bearer <mandate>` header. The mandate is verified against the zone's JWKS and checked against the revocation store before the tool handler runs.
+Use the MCP transport packages when your MCP framework does not have a dedicated Caracal connector or when you want to build your own boundary.
 
-## Prerequisites
-
-- An MCP server that receives HTTP requests (not stdio transport: stdio has no auth header).
-- A Caracal zone with the STS JWKS endpoint reachable from the server process.
-- A revocation store (in-memory for development; Redis-backed for production).
-
-## TypeScript
-
-### Install
+## TypeScript verifier
 
 ```bash
 npm install @caracalai/transport-mcp @caracalai/revocation
 ```
 
-### Wire verification into the request path
-
-```typescript
-import { authenticate, extractBearer } from '@caracalai/transport-mcp';
-import { InMemoryRevocationStore } from '@caracalai/revocation';
+```ts
+import { authenticate, extractBearer } from "@caracalai/transport-mcp";
+import { InMemoryRevocationStore } from "@caracalai/revocation";
 
 const revocations = new InMemoryRevocationStore();
 
-async function handleToolCall(req: Request): Promise<Response> {
-  const token = extractBearer(req.headers.get('Authorization') ?? undefined);
-  if (!token) {
-    return Response.json({ error: 'missing_token' }, { status: 401 });
-  }
-
-  const result = await authenticate(token, {
-    issuer: process.env.CARACAL_STS_URL!,       // e.g. http://sts:8080
-    audience: 'resource://my-mcp-server',
-    zoneId: process.env.CARACAL_ZONE_ID!,
-    requiredScopes: ['tool:call'],
-    requireAgent: true,
+export async function verifyToolRequest(authorization: string | undefined) {
+  const token = extractBearer(authorization);
+  const result = await authenticate(token ?? "", {
+    issuer: "https://sts.example.com",
+    audience: "https://mcp.example.com",
+    zoneId: "zone_prod",
+    requiredScopes: ["mcp:tool:call"],
+    requiredTargets: ["https://mcp.example.com"],
     revocations,
+    requireAgent: true,
   });
 
   if (!result.ok) {
-    const status = result.error.code === 'missing_token' ? 401 : 403;
-    return Response.json({ error: result.error.code }, { status });
+    throw new Error(`${result.error.code}: ${result.error.description}`);
   }
 
-  const claims = result.principal;
-  // claims.sub, claims.agentSessionId, claims.scope, claims.zoneId, ...
-  return runTool(claims, req);
+  return result.principal;
 }
 ```
 
-### AuthDeps reference
-
-| Field | Type | Required | Description |
-| ----- | ---- | -------- | ----------- |
-| `issuer` | `string` | Yes | STS base URL; JWKS fetched from `{issuer}/.well-known/jwks.json` |
-| `audience` | `string` | Yes | Must match the `aud` claim in the mandate |
-| `zoneId` | `string` | No | Rejects mandates from a different zone |
-| `requiredScopes` | `string[]` | No | All listed scopes must be present in the mandate |
-| `requireAgent` | `boolean` | No | Rejects mandates without `agent_session_id` |
-| `requireDelegation` | `boolean` | No | Rejects mandates without `delegation_edge_id` |
-| `requireChainContains` | `string[]` | No | All listed application IDs must appear in `delegation_chain` |
-| `maxHopCount` | `number` | No | Rejects mandates with `hop_count` above this value (default: 10) |
-| `revocations` | `RevocationStore` | Yes | Checked against the mandate's `sid` claim |
-
-### Error codes
-
-| Code | HTTP | Meaning |
-| ---- | ---- | ------- |
-| `missing_token` | 401 | No `Authorization` header or not a bearer token |
-| `invalid_token` | 401 | JWT signature invalid, expired, or malformed |
-| `invalid_zone` | 401 | `zone_id` claim does not match `zoneId` option |
-| `insufficient_scope` | 403 | Mandate is missing one or more `requiredScopes` |
-| `session_revoked` | 403 | The mandate's `sid` is in the revocation store |
-| `agent_required` | 403 | `requireAgent` is true but `agent_session_id` is absent |
-| `delegation_required` | 403 | `requireDelegation` is true but `delegation_edge_id` is absent |
-| `chain_mismatch` | 403 | A required application ID is not in `delegation_chain` |
-| `hop_count_exceeded` | 403 | `hop_count` exceeds `maxHopCount` |
-
----
-
-## Python
-
-### Install
+## Python verifier
 
 ```bash
 pip install caracalai-transport-mcp caracalai-revocation
 ```
-
-### Wire verification into the request path
 
 ```python
 from caracalai_transport_mcp import authenticate, extract_bearer
@@ -100,92 +49,41 @@ from caracalai_revocation import InMemoryRevocationStore
 
 revocations = InMemoryRevocationStore()
 
-async def handle_tool_call(request) -> dict:
-    token = extract_bearer(request.headers.get('Authorization'))
-    if not token:
-        return {'error': 'missing_token'}, 401
-
+async def verify_tool_request(authorization: str | None):
+    token = extract_bearer(authorization)
     result = await authenticate(
-        token,
-        issuer='http://sts:8080',
-        audience='resource://my-mcp-server',
-        expected_zone_id='my-zone',
-        required_scopes=['tool:call'],
-        require_agent=True,
+        token or "",
+        issuer="https://sts.example.com",
+        audience="https://mcp.example.com",
+        required_scopes=["mcp:tool:call"],
+        expected_zone_id="zone_prod",
         revocations=revocations,
+        require_agent=True,
+        required_targets=["https://mcp.example.com"],
     )
-
-    if not result.ok:
-        status = 401 if result.error.code in ('missing_token', 'invalid_token') else 403
-        return {'error': result.error.code, 'description': result.error.description}, status
-
-    claims = result.principal
-    # claims.sub, claims.agent_session_id, claims.scope, claims.zone_id, ...
-    return await run_tool(claims, request)
+    if result.error is not None:
+        raise RuntimeError(f"{result.error.code}: {result.error.description}")
+    return result.principal
 ```
 
-### `AuthResult` type
+## Verification checklist
 
-```python
-@dataclass(frozen=True)
-class AuthResult:
-    principal: Claims | None   # Populated on success
-    error: AuthError | None    # Populated on failure
-    
-    @property
-    def ok(self) -> bool: ...
-
-@dataclass(frozen=True)
-class AuthError:
-    code: str        # One of the error codes listed above
-    description: str
-```
-
----
+| Check | Why it matters |
+| --- | --- |
+| Issuer and audience | Prevents accepting mandates from the wrong zone or target. |
+| Required scopes | Enforces tool-level authority. |
+| Required targets | Prevents cross-resource token reuse. |
+| Agent or delegation requirements | Keeps user-root and delegated calls separate. |
+| Revocation store | Rejects revoked sessions and delegation edges. |
 
 ## Production revocation
 
-In production, replace `InMemoryRevocationStore` with the Redis-backed store so all replicas share revocation state:
+Use Redis-backed revocation packages for multi-instance MCP servers:
 
-**TypeScript:**
+- TypeScript: `@caracalai/revocation-redis`
+- Python: `caracalai-revocation-redis`
+- Go: `github.com/garudex-labs/caracal/packages/connectors/redis/go`
 
-```typescript
-import { RedisRevocationStore } from '@caracalai/revocation-redis';
-import { createClient } from 'redis';
+Run a consumer for the `caracal.sessions.revoke` stream so every resource server instance learns about revoked anchors.
 
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
-
-const revocations = new RedisRevocationStore(redis, {
-  keyPrefix: 'caracal:revoked:sessions:',
-  defaultTtlMs: 24 * 60 * 60 * 1000,
-  failClosed: true,
-});
-```
-
-**Python:**
-
-```python
-import redis
-from caracalai_revocation_redis import RedisRevocationStore, RedisRevocationConsumer
-
-r = redis.Redis.from_url(os.environ['REDIS_URL'])
-revocations = RedisRevocationStore(redis=r, fail_closed=True)
-
-consumer = RedisRevocationConsumer(
-    redis=r,
-    store=revocations,
-    consumer='mcp-server-1',
-)
-consumer.ensure_group()
-
-# Run consumer.poll_once() in a background thread/task
-```
-
-`fail_closed=True` means any Redis error during `is_revoked()` is treated as revoked: the mandate is rejected rather than let through. Set `fail_closed=False` only if availability is more important than security in your threat model.
-
-## What to read next
-
-- [Protect a FastMCP App](./protect-fastmcp/): CaracalAuth middleware for FastMCP servers
-- [Protect an Express App](./protect-express/): Express middleware approach
-- [Trust Boundaries](../architecture/trust-boundaries/): what mandate verification actually guarantees
+Related pages: [Protect Express](/guides/protect-express/) and [Protect a FastMCP App](/guides/protect-fastmcp/).
