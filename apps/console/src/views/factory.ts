@@ -311,12 +311,8 @@ async function loadGrants(ctx: Ctx): Promise<GrantRow[]> {
 }
 
 async function loadAgents(ctx: Ctx): Promise<AgentRow[]> {
-  const [agents, applications] = await Promise.all([
-    ctx.client.agents.list(ctx.zoneId),
-    ctx.client.applications.list(ctx.zoneId),
-  ])
-  const applicationNames = labelMap(applications, (row) => row.id, (row) => row.name)
-  return agents.map((agent) => ({ ...agent, application_name: applicationNames.get(agent.application_id) ?? agent.application_id }))
+  const agents = await ctx.client.agents.list(ctx.zoneId)
+  return agents.map((agent) => ({ ...agent, application_name: agent.application_id }))
 }
 
 async function labelDelegations(ctx: Ctx, rows: DelegationEdge[]): Promise<DelegationRow[]> {

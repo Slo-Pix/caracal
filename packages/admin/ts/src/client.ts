@@ -58,6 +58,11 @@ interface RequestOptions {
   headers?: Record<string, string>
 }
 
+interface AgentListResponse {
+  items: AgentSession[]
+  next_cursor: string | null
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000
 const DEFAULT_RETRIES = 3
 const MAX_RETRY_AFTER_MS = 30_000
@@ -324,8 +329,11 @@ export class AdminClient {
 
   // Agents (coordinator)
   agents = {
-    list: (zoneId: string) =>
-      this.request<AgentSession[]>(`/zones/${zoneId}/agents`, { base: 'coordinator' }),
+    list: async (zoneId: string) => {
+      const response = await this.request<AgentListResponse>(`/zones/${zoneId}/agents`, { base: 'coordinator' })
+      if (!Array.isArray(response.items)) throw new Error('agents response missing items')
+      return response.items
+    },
     get: (zoneId: string, id: string) =>
       this.request<AgentSession>(`/zones/${zoneId}/agents/${id}`, { base: 'coordinator' }),
     children: (zoneId: string, id: string) =>
