@@ -38,7 +38,7 @@ runProbe() {
       ;;
     uv)
       runOrEcho uv init --quiet --no-readme --no-workspace "$dir/p"
-      ( runOrEcho cd "$dir/p" && runOrEcho uv add --quiet "$pkg==$ver" && runOrEcho uv run --quiet python -c "import $mod" )
+      ( runOrEcho cd "$dir/p" && runOrEcho uv add --quiet --prerelease allow "$pkg==$ver" && runOrEcho uv run --quiet python -c "import $mod" )
       ;;
     poetry)
       runOrEcho poetry --directory "$dir" new --quiet probe
