@@ -226,7 +226,6 @@ jobs:
         run: |
           set -euo pipefail
           npm whoami >/dev/null
-          npm access ls-packages @caracalai >/dev/null
 
   publish:
     name: Publish ${{ matrix.name }}
