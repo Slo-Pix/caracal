@@ -497,13 +497,13 @@ class FirstSetupWizardView implements View {
       submitLabel: 'save',
       fields: [
         { key: 'resource_identifier', label: 'resource identifier', kind: 'text', default: values.resource_identifier ?? '', hint: 'optional; generated from the resource name when blank' },
-        { key: 'provider_id', label: 'credential provider', kind: 'text', default: values.provider_id ?? '', hint: 'third-party credential source; select one only when this resource needs upstream credentials', pick: providerPicker(this.ctx), resolve: providerResolver(this.ctx) },
+        { key: 'provider_id', label: 'credential provider', kind: 'text', default: values.provider_id ?? '', visible: () => Boolean(trimmed(this.values.upstream_url)), hint: 'third-party credential source; select one only when this resource needs upstream credentials', pick: providerPicker(this.ctx), resolve: providerResolver(this.ctx) },
         { key: 'activate_policy', label: 'activate policy', kind: 'bool', default: values.activate_policy ?? 'true' },
         { key: 'generate_profile', label: 'runtime profile', kind: 'bool', default: values.generate_profile ?? 'true' },
-        { key: 'overwrite_files', label: 'overwrite files', kind: 'bool', default: values.overwrite_files ?? 'false', hint: 'kept off unless replacing existing generated setup files is intended' },
-        { key: 'profile_path', label: 'profile path', kind: 'text', default: values.profile_path ?? defaultRuntimeConfigPath() },
-        { key: 'secret_file_path', label: 'secret file', kind: 'text', default: values.secret_file_path ?? '', hint: 'optional; derived from profile path when blank' },
-        { key: 'credential_env', label: 'token env', kind: 'text', default: values.credential_env ?? '', hint: 'optional; derived from the resource identifier when blank' },
+        { key: 'overwrite_files', label: 'overwrite files', kind: 'bool', default: values.overwrite_files ?? 'false', dependsOn: { generate_profile: 'true', write_files: 'true' }, hint: 'kept off unless replacing existing generated setup files is intended' },
+        { key: 'profile_path', label: 'profile path', kind: 'text', default: values.profile_path ?? defaultRuntimeConfigPath(), dependsOn: { generate_profile: 'true' } },
+        { key: 'secret_file_path', label: 'secret file', kind: 'text', default: values.secret_file_path ?? '', dependsOn: { generate_profile: 'true' }, hint: 'optional; derived from profile path when blank' },
+        { key: 'credential_env', label: 'token env', kind: 'text', default: values.credential_env ?? '', dependsOn: { generate_profile: 'true' }, hint: 'optional; derived from the resource identifier when blank' },
       ],
       onSubmit: async (raw, advancedApp) => {
         Object.assign(this.values, raw)

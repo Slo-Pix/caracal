@@ -12,6 +12,8 @@ import type { App, View, ViewContext } from '../screen.ts'
 import { actionInfo, fieldInfo, infoPage, openInfo, type InfoPage } from './info.ts'
 
 type FieldKind = 'text' | 'multiline' | 'secret' | 'bool' | 'list' | 'file' | 'select'
+type RequiredValue = boolean | ((values: Readonly<Record<string, string>>) => boolean)
+type FieldDependency = string | string[] | Record<string, string | string[] | boolean>
 type FormRow =
   | { kind: 'field'; field: Field }
   | { kind: 'advanced' }
@@ -20,11 +22,12 @@ export interface Field {
   key: string
   label: string
   kind: FieldKind
-  required?: boolean
+  required?: RequiredValue
   default?: string
   options?: string[]
   validate?: (v: string) => string | undefined
   visible?: (values: Readonly<Record<string, string>>) => boolean
+  dependsOn?: FieldDependency
   advanced?: boolean
   section?: string
   hint?: string
@@ -137,7 +140,7 @@ export class FormView implements View {
       }
       const focused = i === this.focus
       const display = this.displayValue(f)
-      const label = pad(f.required ? `${f.label} *` : f.label, 18)
+      const label = pad(this.isRequired(f) ? `${f.label} *` : f.label, 18)
       const cursorMark = focused ? (this.multilineMode ? '* ' : '> ') : '  '
       const text = focused
         ? ` ${ui.accent(cursorMark)}${ui.muted(label)}${display}`
@@ -232,7 +235,13 @@ export class FormView implements View {
     if (key === 'right' && f?.kind === 'select') {
       ctx.app.push(new OptionPickerView(f.label, f.options ?? [], this.values[f.key] ?? '', (value) => {
         this.values[f.key] = value
-      }, f.info ?? fieldInfo(f.label, f.kind, f.hint)))
+      }, f.info ?? fieldInfo(f.label, f.kind, f.hint, {
+        required: this.isRequired(f),
+        picker: Boolean(f.pick),
+        options: f.options,
+        advanced: Boolean(f.advanced),
+        dependency: this.dependencyText(f),
+      })))
       return
     }
     if (key === 'right' && f?.kind === 'secret') {
@@ -322,19 +331,19 @@ export class FormView implements View {
   }
 
   private async trySubmit(app: App): Promise<void> {
-    const fields = this.visibleFields()
+    const fields = this.activeFields()
     for (const f of fields) {
       const v = (this.values[f.key] ?? '').trim()
-      if (f.required && v.length === 0) {
+      if (this.isRequired(f) && v.length === 0) {
         app.setStatus(`${f.label} is required`, 'error')
-        this.focus = fields.indexOf(f)
+        this.focusField(f)
         return
       }
       if (f.validate) {
         const msg = f.validate(this.values[f.key] ?? '')
         if (msg) {
           app.setStatus(scrubTokens(msg), 'error')
-          this.focus = fields.indexOf(f)
+          this.focusField(f)
           return
         }
       }
@@ -342,7 +351,7 @@ export class FormView implements View {
     this.submitting = true
     app.invalidate()
     try {
-      await this.submit({ ...this.values }, app)
+      await this.submit(this.submitValues(), app)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       app.setStatus(scrubTokens(msg), 'error')
@@ -357,10 +366,21 @@ export class FormView implements View {
       .map((row) => row.field)
   }
 
+  private activeFields(): Field[] {
+    return this.fields.filter((field) => this.isVisible(field))
+  }
+
+  private submitValues(): Record<string, string> {
+    return Object.fromEntries(this.fields.map((field) => [
+      field.key,
+      this.isVisible(field) ? this.values[field.key] ?? '' : '',
+    ]))
+  }
+
   private visibleRows(): FormRow[] {
     const common = this.fields
       .filter((field) => !field.advanced)
-      .filter((field) => field.visible ? field.visible(this.values) : true)
+      .filter((field) => this.isVisible(field))
       .map((field): FormRow => ({ kind: 'field', field }))
     const advanced = this.advancedFields()
     if (advanced.length === 0) return common
@@ -372,7 +392,7 @@ export class FormView implements View {
   }
 
   private advancedFields(): Field[] {
-    return this.fields.filter((field) => field.advanced && (!field.visible || field.visible(this.values)))
+    return this.fields.filter((field) => field.advanced && this.isVisible(field))
   }
 
   private rowInfo(row: FormRow | undefined): InfoPage | undefined {
@@ -391,7 +411,57 @@ export class FormView implements View {
 
   private fieldInfo(field: Field | undefined): InfoPage | undefined {
     if (!field) return this.info
-    return field.info ?? fieldInfo(field.label, field.kind, field.hint)
+    return field.info ?? fieldInfo(field.label, field.kind, field.hint, {
+      required: this.isRequired(field),
+      picker: Boolean(field.pick),
+      options: field.options,
+      advanced: Boolean(field.advanced),
+      dependency: this.dependencyText(field),
+    })
+  }
+
+  private isRequired(field: Field): boolean {
+    return typeof field.required === 'function' ? field.required(this.values) : field.required === true
+  }
+
+  private isVisible(field: Field): boolean {
+    if (!this.matchesDependency(field)) return false
+    return field.visible ? field.visible(this.values) : true
+  }
+
+  private matchesDependency(field: Field): boolean {
+    const dependency = field.dependsOn
+    if (!dependency) return true
+    if (typeof dependency === 'string') return this.hasValue(dependency)
+    if (Array.isArray(dependency)) return dependency.every((key) => this.hasValue(key))
+    return Object.entries(dependency).every(([key, expected]) => {
+      const value = this.values[key] ?? ''
+      if (typeof expected === 'boolean') return (value === 'true') === expected
+      if (Array.isArray(expected)) return expected.includes(value)
+      return value === expected
+    })
+  }
+
+  private hasValue(key: string): boolean {
+    return (this.values[key] ?? '').trim().length > 0
+  }
+
+  private dependencyText(field: Field): string | undefined {
+    const dependency = field.dependsOn
+    if (!dependency) return undefined
+    if (typeof dependency === 'string') return `Shown after ${dependency} has a value.`
+    if (Array.isArray(dependency)) return `Shown after ${dependency.join(', ')} have values.`
+    const parts = Object.entries(dependency).map(([key, expected]) => {
+      if (typeof expected === 'boolean') return `${key} is ${expected ? 'enabled' : 'disabled'}`
+      if (Array.isArray(expected)) return `${key} is ${expected.join(' or ')}`
+      return `${key} is ${expected}`
+    })
+    return `Shown when ${parts.join(' and ')}.`
+  }
+
+  private focusField(field: Field): void {
+    const rowIndex = this.visibleRows().findIndex((row) => row.kind === 'field' && row.field.key === field.key)
+    this.focus = rowIndex >= 0 ? rowIndex : Math.min(this.focus, this.visibleRows().length)
   }
 
   private openAdvanced(app: App): void {
