@@ -61,11 +61,16 @@ function repoRoot(): string | undefined {
 
 function readGeneratedSecret(fileName: string): string | undefined {
   const root = repoRoot();
-  if (root) {
-    const dev = readSecretFile(join(root, 'infra', 'secrets', 'files', fileName));
-    if (dev) return dev;
+  const installedPath = join(installedHome(), 'secrets', fileName);
+  const devPath = root ? join(root, 'infra', 'secrets', 'files', fileName) : undefined;
+  const preferDev = process.env.CARACAL_MODE === 'dev' || (!process.env.CARACAL_HOME && process.env.CARACAL_REPO_ROOT !== undefined);
+  const paths = preferDev ? [devPath, installedPath] : [installedPath, devPath];
+  for (const path of paths) {
+    if (!path) continue;
+    const value = readSecretFile(path);
+    if (value) return value;
   }
-  return readSecretFile(join(installedHome(), 'secrets', fileName));
+  return undefined;
 }
 
 export function discoverAdminToken(explicit?: string, opts: DiscoverTokenOptions = {}): string | undefined {

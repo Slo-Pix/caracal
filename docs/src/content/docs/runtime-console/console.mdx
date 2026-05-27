@@ -53,7 +53,7 @@ The main menu is the root view. Navigate with arrow keys or number shortcuts:
 
 | Key | View | Zone required |
 | --- | --- | --- |
-| `f` | Guided setup | No |
+| `s` | Guided setup | No |
 | `1` | Zones | No |
 | `2` | Applications | Yes |
 | `3` | Protected resources | Yes |
@@ -62,8 +62,13 @@ The main menu is the root view. Navigate with arrow keys or number shortcuts:
 | `6` | Policy sets | Yes |
 | `7` | Access grants | Yes |
 | `8` | Authority sessions | Yes |
-| `9` | Audit | Yes |
-| `0` | Agent runs | Yes + Coordinator token |
+| `9` | Control API | Yes |
+| `a` | Audit | Yes |
+| `e` | Explain audit decision | Yes |
+| `r` | Agent runs | Yes + Coordinator token |
+| `g` | Delegation graph | Yes + Coordinator token |
+| `d` | Diagnostics | No |
+| `c` | Credential tools | No |
 
 For views that require a zone, press `z` to open the zone picker before navigating. New users should start with guided setup, which can create the first zone and then generate the application, resource, policy, and runtime profile from real values.
 
@@ -85,6 +90,9 @@ For views that require a zone, press `z` to open the zone picker before navigati
 | `enter` | Open selected row |
 | `r` | Reload data from the API |
 | `z` | Open zone picker |
+| `?` | Open focused contextual info |
+
+Forms also use `A` to show or hide advanced fields when a section has uncommon options. Advanced fields include manual identifiers, raw JSON, shadow versions, overwrite flags, and other settings that are useful for enterprise or non-standard cases but not required for the common path.
 
 ---
 
@@ -116,17 +124,17 @@ Each entity type opens its own list view with fixed-width columns and an expandi
 
 | View | Columns |
 | --- | --- |
-| Zones | `slug` (18), `name` (24), `login_flow` (12), `dcr` (5), `pkce` (5), `id` |
-| Applications | `name` (24), `method` (8), `credential` (12), `traits` (24), `id` |
-| Protected resources | `identifier` (32), `name` (18), `upstream` (32), `scopes` |
-| Providers | `identifier` (24), `name` (24), `kind` (10), `owner` (10), `id` |
-| Policies | `name` (28), `owner` (10), `description` (32), `id` |
-| Policy-sets | `name` (24), `active_version` (36), `description` |
-| Grants | `app` (36), `user` (36), `resource` (36), `status` (10), `scopes` |
-| Sessions | `subject` (36), `type` (10), `status` (10), `expires_at` (24), `id` |
-| Agents | `application` (36), `parent` (36), `status` (10), `depth` (6), `spawned_at` (24), `id` |
+| Zones | `name` (24), `slug` (18), `login_flow` (12), `dcr` (5), `pkce` (5) |
+| Applications | `name` (24), `method` (8), `cred` (12), `traits` (24) |
+| Protected resources | `name` (24), `identifier` (30), `upstream` (32), `Caracal scopes` |
+| Providers | `name` (24), `identifier` (24), `kind` (10), `owner` (10) |
+| Policies | `name` (28), `owner` (10), `description` (32) |
+| Policy sets | `name` (24), `active version` (16), `description` |
+| Grants | `app` (28), `subject` (36), `resource` (28), `status` (10), `Caracal scopes` |
+| Sessions | `subject` (36), `type` (10), `status` (10), `expires_at` (24) |
+| Agents | `application` (28), `parent` (36), `status` (10), `depth` (6), `spawned_at` (24) |
 
-Text that exceeds a column's width is truncated with `…`.
+Text that exceeds a column's width is truncated with `…`. Internal IDs are hidden by default; use the reveal/copy shortcuts only when another system needs the exact ID.
 
 ---
 

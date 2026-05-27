@@ -8,6 +8,7 @@ import { explainError } from '../errors.ts'
 import type { Key } from '../keys.ts'
 import type { App, View, ViewContext } from '../screen.ts'
 import type { ConsoleStateStore } from '../state.ts'
+import { actionInfo, openInfo, type InfoPage } from './info.ts'
 
 export interface Column<T> {
   header: string
@@ -19,6 +20,7 @@ export interface ListAction<T> {
   key: string
   label: string
   build: (row: T | undefined, app: App) => View | Promise<View>
+  info?: InfoPage
 }
 
 export interface ListOptions<T> {
@@ -33,6 +35,7 @@ export interface ListOptions<T> {
   rowKey?: (row: T) => string
   rowId?: (row: T) => string
   rowName?: (row: T) => string
+  info?: InfoPage
 }
 
 export class ListView<T> implements View {
@@ -47,6 +50,7 @@ export class ListView<T> implements View {
   private readonly rowKey?: (row: T) => string
   private readonly rowId?: (row: T) => string
   private readonly rowName?: (row: T) => string
+  private readonly info: InfoPage
   private rows: T[] = []
   private cursor = 0
   private offset = 0
@@ -68,12 +72,13 @@ export class ListView<T> implements View {
     this.rowKey = opts.rowKey
     this.rowId = opts.rowId
     this.rowName = opts.rowName
+    this.info = opts.info ?? actionInfo(opts.title, 'Opening a row shows details; action keys create, edit, delete, or operate on the selected record.')
   }
 
   selected(): T | undefined { return this.rows[this.cursor] }
 
   hints(): string[] {
-    const base = ['↑/↓:move', 'enter:open', 'r:reload', 'esc:back']
+    const base = ['↑/↓:move', 'enter:open', 'r:reload', '?:info', 'esc:back']
     for (const a of this.actions) base.push(`${a.key}:${a.label}`)
     if (this.rowId) base.push('V:reveal-id', 'I:copy-id')
     if (this.rowName) base.push('N:copy-name')
@@ -164,6 +169,10 @@ export class ListView<T> implements View {
     if (key === 'home' || key === 'g') { this.cursor = 0; this.persistSelection(); return }
     if (key === 'end' || key === 'G') { this.cursor = last; this.persistSelection(); return }
     if (key === 'r') return this.reload()
+    if (key === '?') {
+      openInfo(ctx.app, this.selectedInfo())
+      return
+    }
     if (key === 'V' && this.rowId) { this.showIds = !this.showIds; return }
     if (key === 'I' && this.rowId) { this.copyId(ctx.app); return }
     if (key === 'N' && this.rowName) { this.copyName(ctx.app); return }
@@ -195,5 +204,17 @@ export class ListView<T> implements View {
     const name = this.rowName(row)
     copyToClipboard(name)
     app.setStatus(`copied name ${name}`)
+  }
+
+  private selectedInfo(): InfoPage {
+    const row = this.selected()
+    const name = row && this.rowName ? this.rowName(row) : this.title
+    return {
+      ...this.info,
+      title: row ? `${this.title}: ${name}` : this.info.title,
+      after: row
+        ? 'Press enter for details, use action keys for changes, or reveal/copy the internal ID only when another system needs it.'
+        : this.info.after,
+    }
   }
 }

@@ -40,6 +40,7 @@ import type { ConsoleStateStore } from '../state.ts'
 import { DetailView } from './detail.ts'
 import { DoctorView } from './doctor.ts'
 import { ConfirmView, FormView, type Field } from './form.ts'
+import { actionInfo, infoPage, openInfo, type InfoPage } from './info.ts'
 import { firstSetupView } from './setup.ts'
 import { appendCsv, EntityPickerView, pickFromList } from './picker.ts'
 import {
@@ -66,6 +67,7 @@ interface Entry {
   description: string
   needsZone: boolean
   open: (ctx: Ctx, app: App) => View
+  info?: InfoPage
 }
 
 function credentialConfig(ctx: Ctx, values: Record<string, string>): RuntimeConfig {
@@ -237,7 +239,7 @@ class CredentialMenuView implements View {
     this.ctx = ctx
   }
 
-  hints(): string[] { return ['↑/↓:select', 'enter:open', 'esc:back'] }
+  hints(): string[] { return ['↑/↓:select', 'enter:open', '?:info', 'esc:back'] }
 
   render(): string[] {
     const lines = ['', ' ' + ui.title('Credential'), '']
@@ -253,6 +255,11 @@ class CredentialMenuView implements View {
     if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); return }
     if (key === 'down' || key === 'j') { this.cursor = Math.min(this.items.length - 1, this.cursor + 1); return }
     if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
+    if (key === '?') {
+      const item = this.items[this.cursor]
+      if (item) openInfo(ctx.app, actionInfo(`Credential ${item.label}`, 'The selected credential tool opens a focused form for reading or inspecting protected-resource tokens.'))
+      return
+    }
     const direct = this.items.findIndex((item) => item.key === key)
     if (direct >= 0) { ctx.app.push(this.items[direct]!.build()); return }
     if (key === 'enter') ctx.app.push(this.items[this.cursor]!.build())
@@ -357,7 +364,7 @@ class ControlMenuView implements View {
     }
   }
 
-  hints(): string[] { return ['↑/↓:select', 'enter:open', 'esc:back'] }
+  hints(): string[] { return ['↑/↓:select', 'enter:open', '?:info', 'esc:back'] }
 
   render(_ctx: ViewContext): string[] {
     const lines: string[] = [
@@ -381,6 +388,11 @@ class ControlMenuView implements View {
     if (key === 'up') { this.cursor = Math.max(0, this.cursor - 1); return }
     if (key === 'down' || key === 'j') { this.cursor = Math.min(items.length - 1, this.cursor + 1); return }
     if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
+    if (key === '?') {
+      const item = items[this.cursor]
+      if (item) openInfo(ctx.app, actionInfo(`Control ${item.label}`, 'The selected Control action changes runtime exposure or manages Control API credentials.'))
+      return
+    }
     const direct = items.findIndex((it) => it.key === key)
     if (direct >= 0) { ctx.app.push(items[direct]!.build()); return }
     if (key === 'enter') { ctx.app.push(items[this.cursor]!.build()) }
@@ -762,7 +774,7 @@ export class MenuView implements View {
   }
 
   hints(): string[] {
-    return ['↑/↓ or hot-key:select', 'enter:open', 'z:set-zone']
+    return ['↑/↓ or hot-key:select', 'enter:open', 'z:set-zone', '?:info']
   }
 
   currentZoneId(): string | undefined { return this.zoneId }
@@ -794,10 +806,8 @@ export class MenuView implements View {
   render(_ctx: ViewContext): string[] {
     const lines: string[] = []
     lines.push('')
-    lines.push(' ' + ui.title('Caracal') + '  ' + ui.muted('Set up and operate protected agent access.'))
     const zone = this.zoneId ? ui.success(this.zoneLabel ?? this.zoneId) : ui.warn('no zone selected')
     lines.push(' ' + ui.muted('zone') + '  ' + zone)
-    lines.push(' ' + ui.muted('Use arrow keys or hotkeys. Press z to choose a zone.'))
     lines.push('')
     let group = ''
     const entries = menuEntries()
@@ -823,6 +833,11 @@ export class MenuView implements View {
     if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); this.state?.setMenuCursor(this.cursor); return }
     if (key === 'down' || key === 'j') { this.cursor = Math.min(entries.length - 1, this.cursor + 1); this.state?.setMenuCursor(this.cursor); return }
     if (key === 'z' || key === 'Z') return this.promptZone(ctx.app)
+    if (key === '?') {
+      const entry = entries[this.cursor]
+      if (entry) openInfo(ctx.app, entry.info ?? menuInfo(entry))
+      return
+    }
     const direct = entries.findIndex((e) => e.key === key)
     if (direct >= 0) { this.cursor = direct; this.state?.setMenuCursor(this.cursor); this.open(ctx.app); return }
     if (key === 'enter') { this.state?.setMenuCursor(this.cursor); this.open(ctx.app); return }
@@ -864,4 +879,15 @@ export class MenuView implements View {
       app.setStatus(`zone list: ${explainError(err)}`, 'error')
     }
   }
+}
+
+function menuInfo(entry: Entry): InfoPage {
+  return infoPage({
+    title: entry.label,
+    meaning: entry.description,
+    when: entry.needsZone ? 'Use this after selecting the zone that owns the objects you want to manage.' : 'Use this from any Console state.',
+    example: entry.label === 'guided setup' ? 'Create first app, resource, policy, and profile.' : `Open ${entry.label}`,
+    valid: entry.needsZone ? 'Requires an active zone; press z to select one.' : 'No active zone is required.',
+    after: 'Console opens the selected section. Object IDs stay hidden unless you reveal or copy them.',
+  })
 }
