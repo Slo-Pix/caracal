@@ -20,8 +20,8 @@ Resources tell Caracal what can be protected. Providers describe optional upstre
 3. Select `resource`.
 4. Create a resource with a stable identifier, such as `https://api.example.com/payments`.
 5. Add action-oriented scopes, such as `payments:read` and `payments:refund`.
-6. Set the upstream URL if the Gateway should forward requests to the service.
-7. Select `provider` only when the resource needs upstream credential brokering.
+6. Set the upstream URL and Gateway application when the Gateway should forward requests to the service.
+7. Select `provider` only for Gateway resources that need upstream credential brokering.
 8. Attach the provider to the resource if applicable.
 
 ## Identifier and scope guidance
@@ -31,6 +31,7 @@ Resources tell Caracal what can be protected. Providers describe optional upstre
 | Resource identifier | URL-shaped or URN-shaped stable target. |
 | Scope | `domain:action`, such as `tickets:read`. |
 | Upstream URL | The internal service URL the Gateway can reach. |
+| Gateway application | The application identity Gateway uses for upstream exchanges. |
 | Provider identifier | Stable name for the upstream credential system. |
 
 Do not use mutable deployment hostnames as policy identifiers unless they are the actual authority boundary. Keep the identifier stable even if the upstream URL changes.
