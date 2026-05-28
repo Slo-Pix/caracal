@@ -62,7 +62,7 @@ export function actionInfo(label: string, after = 'After confirmation, Console s
     meaning: actionMeaning(normalized, label),
     when: actionWhen(normalized),
     impact: actionImpact(normalized),
-    example: label.toLowerCase().includes('create') ? 'Create resource' : label,
+    example: label.toLowerCase().includes('create') ? 'Create PiperNet resource' : label,
     valid: 'The action is valid when required fields are complete and selected objects still exist.',
     after,
     notes: actionNotes(normalized),
@@ -246,13 +246,13 @@ function exampleFor(kind: string, label: string, options?: readonly string[]): s
   if (kind === 'bool') return 'yes'
   if (kind === 'list') return 'read,write'
   if (kind === 'secret') return '••••'
-  if (kind === 'file') return '/home/team/policy.rego'
+  if (kind === 'file') return '/home/richard/pied-piper/policies/pipernet.rego'
   if (kind === 'select') return options?.find((option) => option.length > 0) ?? 'Choose one of the listed options.'
-  if (label.toLowerCase().includes('url')) return 'https://api.example.com'
-  if (label.toLowerCase().includes('identifier')) return 'resource://payments-api'
-  if (label.toLowerCase().includes('subject')) return 'user:alice@example.com'
-  if (label.toLowerCase().includes('token endpoint')) return 'https://idp.example.com/oauth/token'
-  return 'payments-api'
+  if (label.toLowerCase().includes('token endpoint')) return 'https://login.hooli.example/oauth/token'
+  if (label.toLowerCase().includes('url')) return 'https://api.pipernet.example'
+  if (label.toLowerCase().includes('identifier')) return 'resource://pipernet'
+  if (label.toLowerCase().includes('subject')) return 'user:richard.hendricks@piedpiper.example'
+  return 'Son of Anton'
 }
 
 function validFor(kind: string, options?: readonly string[]): string {
