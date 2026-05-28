@@ -44,6 +44,23 @@ const claims = await verify(token, {
 });
 ```
 
+## JWKS caching
+
+TypeScript verifiers use an in-memory JWKS cache by default. Build a cache explicitly when a resource server wants shorter local-development TTLs, a custom fetch implementation, or warmup during service boot.
+
+```ts
+import { createJwksCache, verify } from "@caracalai/identity";
+
+const jwksCache = createJwksCache({ ttlMs: 300_000, fetchTimeoutMs: 5_000 });
+await jwksCache.warm("https://sts.example.com");
+
+const claims = await verify(token, {
+  issuer: "https://sts.example.com",
+  audience: "https://api.example.com",
+  jwksCache,
+});
+```
+
 ## Failure classes
 
 | Error | Meaning |

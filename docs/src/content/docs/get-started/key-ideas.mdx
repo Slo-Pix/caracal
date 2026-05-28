@@ -60,9 +60,9 @@ An agent app is the workload identity. It authenticates to Caracal with an app s
 
 ### Resource
 
-A resource is the protected target. It includes scopes and, when Gateway routing is needed, an upstream URL and Gateway application binding. Stable scope names such as `calendar:read` or `payments:submit` are easier to govern than prose-like scopes.
+A resource is the protected target. It includes scopes, an upstream URL, and a Gateway application binding. Stable scope names such as `calendar:read` or `payments:submit` are easier to govern than prose-like scopes.
 
-Gateway resources can also bind to a provider when the upstream API requires provider-native authentication. Direct resources continue to use Caracal mandates; provider credentials are only brokered inside the trusted Gateway/STS boundary.
+Gateway resources can also bind to a provider when the upstream API requires provider-native authentication. Internal Caracal-aware resources use the same Gateway path with the Caracal mandate forwarded to the upstream verifier; provider-native credentials stay inside the trusted Gateway/STS boundary.
 
 ### Policy
 

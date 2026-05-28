@@ -12,20 +12,20 @@ npm install @caracalai/transport-mcp @caracalai/revocation
 ```
 
 ```ts
-import { authenticate, extractBearer } from "@caracalai/transport-mcp";
+import { createMandateVerifier } from "@caracalai/transport-mcp";
 import { InMemoryRevocationStore } from "@caracalai/revocation";
 
-const revocations = new InMemoryRevocationStore();
+const verifier = createMandateVerifier({
+  issuer: "https://sts.example.com",
+  audience: "https://mcp.example.com",
+  zoneId: "zone_prod",
+  revocations: new InMemoryRevocationStore(),
+});
 
 export async function verifyToolRequest(authorization: string | undefined) {
-  const token = extractBearer(authorization);
-  const result = await authenticate(token ?? "", {
-    issuer: "https://sts.example.com",
-    audience: "https://mcp.example.com",
-    zoneId: "zone_prod",
+  const result = await verifier.authorization(authorization, {
     requiredScopes: ["mcp:tool:call"],
     requiredTargets: ["https://mcp.example.com"],
-    revocations,
     requireAgent: true,
   });
 

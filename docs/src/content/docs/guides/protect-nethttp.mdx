@@ -24,19 +24,23 @@ import (
 
 	mcpnethttp "github.com/garudex-labs/caracal/packages/connectors/nethttp/go"
 	revocation "github.com/garudex-labs/caracal/packages/revocation/go"
+	transportmcp "github.com/garudex-labs/caracal/packages/transport/mcp/go"
 )
 
 func main() {
 	revocations := revocation.NewInMemoryStore(24 * time.Hour)
 
-	protected := mcpnethttp.Middleware(mcpnethttp.Options{
-		Issuer:          "https://sts.example.com",
-		Audience:        "https://api.example.com",
-		ZoneID:          "zone_prod",
+	verifier := transportmcp.NewVerifier(transportmcp.Options{
+		Issuer:      "https://sts.example.com",
+		Audience:    "https://api.example.com",
+		ZoneID:      "zone_prod",
+		Revocations: revocations,
+	})
+
+	protected := mcpnethttp.VerifierMiddleware(verifier.Require(transportmcp.Options{
 		RequiredScopes:  []string{"tickets:read"},
 		RequiredTargets: []string{"https://api.example.com/tickets"},
-		Revocations:     revocations,
-	})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	}))(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		claims, ok := mcpnethttp.ClaimsFromContext(r.Context())
 		if !ok {
 			http.Error(w, "missing claims", http.StatusUnauthorized)

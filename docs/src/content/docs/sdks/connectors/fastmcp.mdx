@@ -9,25 +9,30 @@ FastMCP connectors expose small verifier APIs that delegate to the MCP transport
 
 | Ecosystem | Package |
 | --- | --- |
-| TypeScript | `npm install @caracalai/mcp-fastmcp` |
+| TypeScript | `npm install @caracalai/mcp-fastmcp @caracalai/transport-mcp @caracalai/revocation` |
 | Python | `pip install caracalai-mcp-fastmcp` |
 
 ## TypeScript verifier
 
 ```ts
 import { extractBearer, verifyFastMcpToken } from "@caracalai/mcp-fastmcp";
+import { createMandateVerifier } from "@caracalai/transport-mcp";
+import { InMemoryRevocationStore } from "@caracalai/revocation";
+
+const verifier = createMandateVerifier({
+  issuer: "https://sts.example.com",
+  audience: "https://mcp.example.com",
+  zoneId: "zone_prod",
+  revocations: new InMemoryRevocationStore(),
+});
 
 const token = extractBearer(request.headers.get("authorization") ?? "");
 if (!token) throw new Error("missing bearer token");
 
-const context = await verifyFastMcpToken(token, {
-  issuer: "https://sts.example.com",
-  audience: "https://mcp.example.com",
-  zoneId: "zone_prod",
+const context = await verifyFastMcpToken(token, verifier, {
   requiredScopes: ["mcp:tool:call"],
   requiredTargets: ["https://mcp.example.com"],
   requireAgent: true,
-  revocations,
 });
 
 console.log(context.sub, context.zoneId, context.scope);

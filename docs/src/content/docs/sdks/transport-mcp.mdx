@@ -18,34 +18,39 @@ The MCP transport packages verify Caracal mandates without tying the check to Ex
 | API | Purpose |
 | --- | --- |
 | `extractBearer` / `extract_bearer` / `ExtractBearer` | Parse a bearer token from an `Authorization` header. |
-| `authenticate` / `Authenticate` | Verify identity claims and revocation anchors. |
+| `createMandateVerifier` / `NewVerifier` | Build a reusable verifier with secure defaults, JWKS caching, revocation checks, and per-route overrides. |
+| `authenticate` / `Authenticate` | Verify one token against identity claims and revocation anchors. |
 | `checkActiveAuthority` / `check_active_authority` / `CheckActiveAuthority` | Check expiry and revoked anchors for verified claims. |
 
 ## TypeScript example
 
 ```ts
-import { authenticate, extractBearer } from "@caracalai/transport-mcp";
+import { createMandateVerifier } from "@caracalai/transport-mcp";
 import { InMemoryRevocationStore } from "@caracalai/revocation";
 
-const token = extractBearer(req.headers.authorization);
-const result = await authenticate(token ?? "", {
+const verifier = createMandateVerifier({
   issuer: "https://sts.example.com",
   audience: "https://mcp.example.com",
   zoneId: "zone_prod",
+  revocations: new InMemoryRevocationStore(),
+});
+
+const result = await verifier.authorization(req.headers.authorization, {
   requiredScopes: ["mcp:tool:call"],
   requiredTargets: ["https://mcp.example.com"],
-  revocations: new InMemoryRevocationStore(),
   requireAgent: true,
 });
 
 if (!result.ok) {
-  throw new Error(result.error.code);
+  throw new Error(`${result.error.code}: ${result.error.hint}`);
 }
 ```
 
+Use one verifier per resource server and add route-level scopes or targets through `verifier.authorization(..., overrides)` or `verifier.require(overrides)`. The verifier defaults to resource mandates, checks the STS issuer and audience, enforces zone/scopes/targets/agent/delegation/hop constraints, checks expiry, and queries all revocation anchors for the session, root session, agent session, and delegation edge.
+
 ## Error codes
 
-`authenticate` normalizes failures into transport error codes: `missing_token`, `invalid_token`, `invalid_zone`, `insufficient_scope`, `session_revoked`, `agent_required`, `delegation_required`, `chain_mismatch`, and `hop_count_exceeded`.
+`authenticate` and reusable verifiers normalize failures into transport error codes: `missing_token`, `invalid_token`, `invalid_zone`, `insufficient_scope`, `session_revoked`, `agent_required`, `delegation_required`, `chain_mismatch`, and `hop_count_exceeded`. Each error includes an `error.hint` value that is safe to log for operator debugging.
 
 ## Related pages
 
