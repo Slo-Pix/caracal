@@ -25,6 +25,12 @@ import type { Ctx } from './factory.ts'
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:8081'
 const PROVIDER_KINDS: ProviderKind[] = ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
+const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
+  oauth2_authorization_code: 'OAuth2 auth code',
+  oauth2_client_credentials: 'OAuth2 client creds',
+  api_key: 'API key',
+  bearer_token: 'Bearer token',
+}
 
 interface SetupValues {
   zone_mode?: string
@@ -442,7 +448,7 @@ class FirstSetupWizardView implements View {
         { key: 'provider_mode', label: 'provider action', kind: 'select', options: ['create', 'select', 'none'], default: this.values.provider_mode ?? 'create', info: guidedInfo('Provider action', 'Most external resources need a provider; direct resources can choose none.', 'create for Hooli OAuth2', 'create, select, or none', 'Console either creates a provider, links an existing provider, or leaves the resource direct.') },
         { key: 'selected_provider_id', label: 'existing provider', kind: 'text', required: true, default: this.values.selected_provider_id ?? '', dependsOn: { provider_mode: 'select' }, pick: providerPicker(this.ctx, () => this.currentZoneId()), resolve: providerResolver(this.ctx, () => this.currentZoneId()), info: guidedInfo('Existing provider', 'Pick the provider that supplies upstream credentials.', 'Hooli OAuth2', 'Use the picker instead of typing an ID.', 'The resource page can attach this provider to the Gateway route.') },
         { key: 'provider_name', label: 'provider name', kind: 'text', required: true, default: this.values.provider_name ?? '', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider name', 'Human-readable name for the upstream credential source.', 'Hooli PiperNet OAuth2', 'Short text, not an internal ID.', 'Console creates this provider before creating the resource.') },
-        { key: 'provider_kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: this.values.provider_kind ?? 'oauth2_authorization_code', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider type', 'Type controls which credential fields are required.', 'Hooli OAuth2 authorization code', 'Choose the real upstream auth mode.', 'The form hides irrelevant fields and validates only the selected provider type.') },
+        { key: 'provider_kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, optionLabels: PROVIDER_KIND_LABELS, default: this.values.provider_kind ?? 'oauth2_authorization_code', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider type', 'Type controls which credential fields are required.', 'Hooli OAuth2 auth code', 'Choose the real upstream auth mode.', 'The form hides irrelevant fields and validates only the selected provider type.') },
         { key: 'provider_authorization_endpoint', label: 'authorization endpoint', kind: 'text', required: true, default: this.values.provider_authorization_endpoint ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_authorization_code' }, info: guidedInfo('Authorization endpoint', 'Endpoint where users approve delegated provider access.', 'https://login.hooli.example/oauth/authorize', 'Absolute HTTPS URL.', 'Authorization-code providers use this with a callback URI.') },
         { key: 'provider_token_endpoint', label: 'token endpoint', kind: 'text', required: true, default: this.values.provider_token_endpoint ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, info: guidedInfo('Token endpoint', 'Endpoint where Gateway obtains or refreshes upstream OAuth tokens.', 'https://login.hooli.example/oauth/token', 'Absolute HTTPS URL.', 'Console infers allowed token hosts from this URL unless Advanced overrides them.') },
         { key: 'provider_redirect_uri', label: 'redirect URI', kind: 'text', required: true, default: this.values.provider_redirect_uri ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_authorization_code' }, info: guidedInfo('Redirect URI', 'Callback URI registered with the provider.', 'http://localhost:3000/oauth/callback', 'Absolute callback URI.', 'The provider sends authorization results to this URI.') },

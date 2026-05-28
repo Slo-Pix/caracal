@@ -25,6 +25,7 @@ export interface Field {
   required?: RequiredValue
   default?: string
   options?: string[]
+  optionLabels?: Record<string, string>
   validate?: (v: string) => string | undefined
   visible?: (values: Readonly<Record<string, string>>) => boolean
   dependsOn?: FieldDependency
@@ -161,7 +162,7 @@ export class FormView implements View {
   private displayValue(f: Field): string {
     const raw = this.values[f.key] ?? ''
     if (f.kind === 'bool') return raw === 'true' ? '[x]' : '[ ]'
-    if (f.kind === 'select') return ui.input(`[ ${sanitizeAnsi(raw || '<choose>')} ]`)
+    if (f.kind === 'select') return ui.input(`[ ${sanitizeAnsi(this.selectLabel(f, raw) || '<choose>')} ]`)
     if (f.pick && raw.length > 0) {
       const label = this.displayLabels[f.key]
       if (!label) return ui.input(`[ ${sanitizeAnsi(raw)} ]`)
@@ -192,6 +193,10 @@ export class FormView implements View {
     if (this.isRequired(field)) parts.push('*')
     if (this.controlsFields(field)) parts.push(FLOW_MARKER)
     return parts.join(' ')
+  }
+
+  private selectLabel(field: Field, value: string): string {
+    return field.optionLabels?.[value] ?? value
   }
 
   async onKey(key: Key, ctx: ViewContext): Promise<void> {
@@ -251,12 +256,12 @@ export class FormView implements View {
       return
     }
     if (key === 'right' && f?.kind === 'select') {
-      ctx.app.push(new OptionPickerView(f.label, f.options ?? [], this.values[f.key] ?? '', (value) => {
+      ctx.app.push(new OptionPickerView(f.label, f.options ?? [], f.optionLabels ?? {}, this.values[f.key] ?? '', (value) => {
         this.values[f.key] = value
       }, f.info ?? fieldInfo(f.label, f.kind, f.hint, {
         required: this.isRequired(f),
         picker: Boolean(f.pick),
-        options: f.options,
+        options: f.options?.map((value) => this.selectLabel(f, value)),
         advanced: Boolean(f.advanced),
         dependency: this.dependencyText(f),
       })))
@@ -697,14 +702,16 @@ class OptionPickerView implements View {
   readonly title: string
   readonly isTextEntry = true
   private readonly options: string[]
+  private readonly optionLabels: Record<string, string>
   private readonly pick: (value: string) => void
   private readonly info: InfoPage
   private cursor = 0
   private query = ''
 
-  constructor(label: string, options: string[], currentValue: string, pick: (value: string) => void, info: InfoPage) {
+  constructor(label: string, options: string[], optionLabels: Record<string, string>, currentValue: string, pick: (value: string) => void, info: InfoPage) {
     this.title = `${label} options`
     this.options = options
+    this.optionLabels = optionLabels
     this.pick = pick
     this.info = info
     const index = options.indexOf(currentValue)
@@ -729,7 +736,7 @@ class OptionPickerView implements View {
     this.cursor = Math.min(this.cursor, filtered.length - 1)
     for (let i = 0; i < Math.min(filtered.length, visible); i++) {
       const value = filtered[i]!
-      const label = value || '<empty>'
+      const label = value ? this.optionLabels[value] ?? value : '<empty>'
       const text = sanitizeAnsi(label)
       lines.push(i === this.cursor ? ui.selected(' ' + text + ' ') : ' ' + text)
     }
@@ -755,8 +762,8 @@ class OptionPickerView implements View {
       const value = filtered[this.cursor]
       openInfo(ctx.app, {
         ...this.info,
-        title: value ? `${this.info.title}: ${value || '<empty>'}` : this.info.title,
-        after: `Selecting this option sets ${this.info.title} to ${value || '<empty>'}.`,
+        title: value ? `${this.info.title}: ${this.optionLabel(value)}` : this.info.title,
+        after: `Selecting this option sets ${this.info.title} to ${value ? this.optionLabels[value] ?? value : '<empty>'}.`,
       })
       return
     }
@@ -765,7 +772,7 @@ class OptionPickerView implements View {
       if (value === undefined) return
       this.pick(value)
       ctx.app.pop()
-      ctx.app.setStatus(`selected ${value || '<empty>'}`)
+      ctx.app.setStatus(`selected ${value ? this.optionLabels[value] ?? value : '<empty>'}`)
       return
     }
     const text = textInput(key, false)
@@ -778,7 +785,11 @@ class OptionPickerView implements View {
   private filtered(): string[] {
     const query = this.query.trim().toLowerCase()
     if (!query) return this.options
-    return this.options.filter((option) => option.toLowerCase().includes(query))
+    return this.options.filter((option) => option.toLowerCase().includes(query) || (this.optionLabels[option] ?? '').toLowerCase().includes(query))
+  }
+
+  private optionLabel(value: string): string {
+    return this.optionLabels[value] ?? value
   }
 }
 

@@ -180,6 +180,12 @@ function bool(v: string | undefined): boolean | undefined {
 
 const APPLICATION_REGISTRATION_METHODS = ['managed', 'dcr'] as const
 const PROVIDER_KINDS: ProviderKind[] = ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
+const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
+  oauth2_authorization_code: 'OAuth2 auth code',
+  oauth2_client_credentials: 'OAuth2 client creds',
+  api_key: 'API key',
+  bearer_token: 'Bearer token',
+}
 const RESOURCE_MODES = ['direct', 'gateway'] as const
 const CONTENT_SOURCES = ['paste', 'file'] as const
 
@@ -439,6 +445,10 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
 
 function providerKind(value: string | undefined): ProviderKind {
   return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2_authorization_code'
+}
+
+function providerKindLabel(value: string): string {
+  return PROVIDER_KIND_LABELS[value as ProviderKind] ?? value
 }
 
 function mergeConfigText(config: JsonObject, key: string, value: string | undefined): void {
@@ -1134,7 +1144,7 @@ export function providersView(ctx: Ctx): View {
     columns: [
       { header: 'name', width: 24, value: named },
       { header: 'identifier', width: 24, value: (r) => r.identifier },
-      { header: 'kind', width: 10, value: (r) => r.kind },
+      { header: 'kind', width: 18, value: (r) => providerKindLabel(r.kind) },
     ],
     load: () => ctx.client.providers.list(ctx.zoneId),
     state: ctx.state,
@@ -1151,7 +1161,7 @@ export function providersView(ctx: Ctx): View {
           submitLabel: 'create provider',
           fields: [
             { key: 'name', label: 'provider name', kind: 'text', required: true, hint: 'human-readable name; identifier is generated when blank' },
-            { key: 'kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: 'oauth2_authorization_code' },
+            { key: 'kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, optionLabels: PROVIDER_KIND_LABELS, default: 'oauth2_authorization_code' },
             { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', dependsOn: { kind: 'oauth2_authorization_code' }, required: true, hint: 'HTTPS endpoint where users approve delegated access' },
             { key: 'token_endpoint', label: 'token endpoint', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true, hint: 'HTTPS endpoint where provider tokens are issued or refreshed' },
             { key: 'redirect_uri', label: 'redirect URI', kind: 'text', dependsOn: { kind: 'oauth2_authorization_code' }, required: true, hint: 'callback URI registered with the provider' },
@@ -1187,7 +1197,7 @@ export function providersView(ctx: Ctx): View {
             fields: [
               { key: 'name', label: 'name', kind: 'text', default: row.name },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
-              { key: 'kind', label: 'kind', kind: 'select', options: PROVIDER_KINDS, default: row.kind },
+              { key: 'kind', label: 'kind', kind: 'select', options: PROVIDER_KINDS, optionLabels: PROVIDER_KIND_LABELS, default: row.kind },
               { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', default: configString(row.config_json, 'authorization_endpoint'), dependsOn: { kind: 'oauth2_authorization_code' }, required: true },
               { key: 'token_endpoint', label: 'token endpoint', kind: 'text', default: configString(row.config_json, 'token_endpoint'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true },
               { key: 'redirect_uri', label: 'redirect URI', kind: 'text', default: configString(row.config_json, 'redirect_uri'), dependsOn: { kind: 'oauth2_authorization_code' }, required: true },
