@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { Request, Response, NextFunction } from 'express'
 import { InMemoryRevocationStore } from '../../../../../packages/revocation/ts/src/inmem.js'
 import { caracalAuth } from '../../../../../packages/connectors/express/ts/src/middleware.js'
+import type { MandateVerifier } from '../../../../../packages/transport/mcp/ts/src/authenticate.js'
 
 vi.mock('@caracalai/transport-mcp', async () => ({
   authenticate: vi.fn().mockResolvedValue({ ok: false, error: { code: 'invalid_token', description: 'Token validation failed' } }),
@@ -60,5 +61,41 @@ describe('caracalAuth middleware', () => {
     await middleware(req, res as Response, next as unknown as NextFunction)
     expect(res.status).toHaveBeenCalledWith(401)
     expect(next).not.toHaveBeenCalled()
+  })
+
+  it('supports reusable verifier instances and attaches claims aliases', async () => {
+    const verifier: MandateVerifier = {
+      defaults: { issuer: 'https://sts.zone1', audience: 'resource://api', revocations },
+      authenticate: vi.fn().mockResolvedValue({
+        ok: true,
+        principal: {
+          sub: 'user-1',
+          zoneId: 'zone-1',
+          clientId: 'app-1',
+          sid: 'sid-1',
+          rootSid: 'root-1',
+          use: 'resource',
+          subType: 'user',
+          jti: 'jti-1',
+          issuedAt: 1,
+          expiresAt: 2,
+          scope: 'tickets:read',
+        },
+      }),
+      authorization: vi.fn(),
+      require: vi.fn(),
+      warmup: vi.fn(),
+    }
+    const middleware = caracalAuth({ verifier, bindContext: false }, { requiredScopes: ['tickets:read'] })
+    const req = { headers: { authorization: 'Bearer valid.jwt.token' } } as Request
+    const res = makeMockRes()
+    const next = vi.fn()
+
+    await middleware(req, res as Response, next as unknown as NextFunction)
+
+    expect(verifier.authenticate).toHaveBeenCalledWith('valid.jwt.token', { requiredScopes: ['tickets:read'] })
+    expect((req as Request & { caracal?: { sub: string }; caracalClaims?: { sub: string } }).caracal?.sub).toBe('user-1')
+    expect((req as Request & { caracal?: { sub: string }; caracalClaims?: { sub: string } }).caracalClaims?.sub).toBe('user-1')
+    expect(next).toHaveBeenCalledOnce()
   })
 })

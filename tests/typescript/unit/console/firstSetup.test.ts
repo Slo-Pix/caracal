@@ -158,7 +158,7 @@ async function completeMainPath(view: View, app: App): Promise<void> {
   await openAndSubmit(view, app, { zone_name: 'zone-name' })
   await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
   await openAndSubmit(view, app, { provider_mode: 'none' })
-  await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
+  await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
   await openAndSubmit(view, app, { policy_mode: 'create' })
   await view.onKey('enter', ctx(app))
 }
@@ -220,8 +220,8 @@ describe('first setup workflow', () => {
     expect(client.resources.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
       identifier: 'resource://resource-name',
       name: 'resource-name',
-      upstream_url: undefined,
-      gateway_application_id: undefined,
+      upstream_url: 'https://upstream-url',
+      gateway_application_id: 'app-1',
       scopes: ['scope-name'],
     }))
     expect(client.policies.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
@@ -238,7 +238,7 @@ describe('first setup workflow', () => {
     expect(body).toContain('created')
     expect(body).toContain('CARACAL_RESOURCE_RESOURCE_NAME_TOKEN')
     expect(body).toContain('caracal run --')
-    expect(body).toContain('Gateway routing was not configured')
+    expect(body).toContain('Use CARACAL_RESOURCE_RESOURCE_NAME_TOKEN as the bearer token for Gateway requests.')
     expect(body).toContain('Audit Explanation')
     expect(body).toContain('starter least-privilege allow-list')
     expect(body).toContain('Denies by default')
@@ -338,15 +338,15 @@ describe('first setup workflow', () => {
 
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
     await openAndSubmit(view, app, { provider_mode: 'none' })
-    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await openAndSubmit(view, app, { policy_mode: 'skip' })
     await view.onKey('enter', ctx(app))
 
     expect(client.zones.create).not.toHaveBeenCalled()
     expect(client.resources.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
       identifier: 'resource://resource-name',
-      upstream_url: undefined,
-      gateway_application_id: undefined,
+      upstream_url: 'https://upstream-url',
+      gateway_application_id: 'app-1',
       scopes: ['scope-name'],
     }))
     expect(client.policies.create).not.toHaveBeenCalled()
@@ -417,7 +417,7 @@ describe('first setup workflow', () => {
 
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
     await openAndSubmit(view, app, { provider_mode: 'none' })
-    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await openAndSubmit(view, app, { policy_mode: 'create' })
     await view.onKey('enter', ctx(app))
 

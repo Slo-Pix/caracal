@@ -540,21 +540,19 @@ describe('resources actions', () => {
     expect(typeof fields.find((f) => f.key === 'credential_provider_id')?.pick).toBe('function')
   })
 
-  it('adapts resource fields to direct versus Gateway mode', async () => {
+  it('keeps resource routing Gateway-based with provider options advanced', async () => {
     const { ctx } = newCtx()
     const list = resourcesView(ctx as unknown as Parameters<typeof resourcesView>[0]) as ListView<unknown>
     const app = fakeApp()
     const form = await pressKey(list, 'n', app) as FormView
     const ctxView = { app, size: { rows: 30, cols: 100 }, status: '' }
 
-    expect(form.render(ctxView).join('\n')).not.toContain('upstream URL *')
-    ;(form as unknown as { values: Record<string, string> }).values.mode = 'gateway'
     let body = form.render(ctxView).join('\n')
     expect(body).toContain('upstream URL *')
     expect(body).toContain('gateway app *')
     expect(body).toContain('Advanced options')
 
-    ;(form as unknown as { focus: number }).focus = 5
+    ;(form as unknown as { focus: number }).focus = 4
     await form.onKey('right', ctxView)
     const advanced = (app as unknown as { _pushed: unknown[] })._pushed.at(-1) as FormView
     body = advanced.render(ctxView).join('\n')
@@ -596,6 +594,7 @@ describe('providers actions', () => {
     const form = await pressKey(list, 'n', fakeApp()) as FormView
     const ctxView = { app: fakeApp(), size: { rows: 30, cols: 100 }, status: '' }
 
+    ;(form as unknown as { values: Record<string, string> }).values.kind = 'oauth2_authorization_code'
     let body = form.render(ctxView).join('\n')
     expect(body).toContain('authorization endpoint *')
     expect(body).toContain('token endpoint *')
@@ -626,6 +625,8 @@ describe('providers actions', () => {
 
     const info = vi.mocked(app.push).mock.calls[0]![0] as { render: FormView['render'] }
     const body = info.render(ctxView).join('\n')
+    expect(body).toContain('Caracal mandate')
+    expect(body).toContain('internal services')
     expect(body).toContain('OAuth2 auth code')
     expect(body).toContain('consent screen')
     expect(body).toContain('OAuth2 client creds')

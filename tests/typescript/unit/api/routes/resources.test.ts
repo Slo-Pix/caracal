@@ -89,7 +89,7 @@ describe('POST /v1/zones/:zoneId/resources', () => {
     expect(db.query).toHaveBeenCalledTimes(2)
   })
 
-  it('rejects provider references without Gateway routing', async () => {
+  it('rejects resources without Gateway routing', async () => {
     const { app, db } = buildRouteApp(resourcesRoutes)
     db.query
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
@@ -107,7 +107,7 @@ describe('POST /v1/zones/:zoneId/resources', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_requires_gateway_upstream' })
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'upstream_url_required' })
     expect(db.connect).not.toHaveBeenCalled()
   })
 
@@ -185,6 +185,7 @@ describe('POST /v1/zones/:zoneId/resources', () => {
     app.decorate('cfg', { maxResourcesPerZone: 1 })
     db.query
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
       .mockResolvedValueOnce({ rows: [{ resource_count: '1' }] })
 
     await app.ready()
@@ -193,6 +194,8 @@ describe('POST /v1/zones/:zoneId/resources', () => {
       url: '/v1/zones/z1/resources',
       payload: {
         identifier: 'resource://api',
+        upstream_url: 'https://api.example.com',
+        gateway_application_id: 'app-1',
         scopes: ['read'],
       },
     })
