@@ -22,12 +22,9 @@ function buildApp() {
 
 const mockZone = {
   id: 'z-lifecycle-1',
-  org_id: 'org1',
   name: 'Integration Zone',
   slug: 'integration-zone',
   dcr_enabled: false,
-  pkce_required: true,
-  login_flow: 'default',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 }
@@ -43,7 +40,7 @@ describe('Zone lifecycle: create → read', () => {
     const createRes = await app.inject({
       method: 'POST',
       url: '/v1/zones',
-      payload: { org_id: 'org1', name: 'Integration Zone' },
+      payload: { name: 'Integration Zone' },
     })
     expect(createRes.statusCode).toBe(201)
     const created = JSON.parse(createRes.body)
@@ -69,7 +66,7 @@ describe('Zone lifecycle: create → list includes zone', () => {
     await app.inject({
       method: 'POST',
       url: '/v1/zones',
-      payload: { org_id: 'org1', name: 'Integration Zone' },
+      payload: { name: 'Integration Zone' },
     })
 
     const listRes = await app.inject({ method: 'GET', url: '/v1/zones' })

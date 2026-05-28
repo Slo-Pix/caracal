@@ -131,6 +131,23 @@ function setRows(view: ListView<unknown>, rows: unknown[]): void {
 }
 
 describe('zones actions', () => {
+  it('renders only implemented zone settings', async () => {
+    const { ctx } = newCtx()
+    const list = zonesView(ctx as unknown as Parameters<typeof zonesView>[0]) as ListView<unknown>
+    setRows(list, [{ id: 'z1', slug: 'sl', name: 'n', dcr_enabled: false }])
+    const app = fakeApp()
+    const table = list.render({ app, size: { rows: 20, cols: 100 }, status: '' }).join('\n')
+    expect(table).toContain('dynamic clients')
+    expect(table).not.toContain('login_flow')
+    expect(table).not.toContain('pkce')
+
+    const form = await pressKey(list, 'e', app) as FormView
+    const body = form.render({ app, size: { rows: 20, cols: 100 }, status: '' }).join('\n')
+    expect(body).toContain('dynamic clients')
+    expect(body).not.toContain('require PKCE')
+    expect(body).not.toContain('login flow')
+  })
+
   it('n opens a FormView; submit calls zones.create', async () => {
     const { client, ctx } = newCtx()
     const list = zonesView(ctx as unknown as Parameters<typeof zonesView>[0]) as ListView<unknown>
@@ -146,7 +163,7 @@ describe('zones actions', () => {
   it('d on row opens ConfirmView; y calls zones.delete', async () => {
     const { client, ctx } = newCtx()
     const list = zonesView(ctx as unknown as Parameters<typeof zonesView>[0]) as ListView<unknown>
-    setRows(list, [{ id: 'z1', slug: 'sl', name: 'n', login_flow: 'p', dcr_enabled: false, pkce_required: true }])
+    setRows(list, [{ id: 'z1', slug: 'sl', name: 'n', dcr_enabled: false }])
     const app = fakeApp()
     const pushed = await pressKey(list, 'd', app) as ConfirmView
     expect(pushed).toBeInstanceOf(ConfirmView)

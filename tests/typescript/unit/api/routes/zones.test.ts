@@ -19,7 +19,7 @@ describe('GET /v1/zones/:id', () => {
 
   it('returns zone when found', async () => {
     const { app, db } = buildRouteApp(zonesRoutes)
-    const zone = { id: 'z1', org_id: 'org1', slug: 'test-zone', dcr_enabled: false }
+    const zone = { id: 'z1', slug: 'test-zone', dcr_enabled: false }
     db.query.mockResolvedValue({ rows: [zone] })
     await app.ready()
     const res = await app.inject({ method: 'GET', url: '/v1/zones/z1' })
@@ -36,23 +36,36 @@ describe('POST /v1/zones', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones',
-      payload: { org_id: 'org1', name: 'Test Zone', slug: 'INVALID SLUG' },
+      payload: { name: 'Test Zone', slug: 'INVALID SLUG' },
     })
     expect(res.statusCode).toBe(400)
   })
 
   it('creates zone and returns 201', async () => {
     const { app, db } = buildRouteApp(zonesRoutes)
-    const created = { id: 'z2', org_id: 'org1', name: 'My Zone', slug: 'my-zone', dcr_enabled: false }
+    const created = { id: 'z2', name: 'My Zone', slug: 'my-zone', dcr_enabled: false }
     db.query.mockResolvedValue({ rows: [created] })
     await app.ready()
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones',
-      payload: { org_id: 'org1', name: 'My Zone', slug: 'my-zone' },
+      payload: { name: 'My Zone', slug: 'my-zone' },
     })
     expect(res.statusCode).toBe(201)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'z2', slug: 'my-zone' })
+  })
+
+  it('rejects unsupported zone configuration fields', async () => {
+    const { app, db } = buildRouteApp(zonesRoutes)
+    db.query.mockResolvedValue({ rows: [] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones',
+      payload: { name: 'My Zone', login_flow: 'magic' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_zone' })
   })
 })
 

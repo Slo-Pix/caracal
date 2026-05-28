@@ -48,7 +48,7 @@ describe('Zone creation with adversarial names', () => {
       method: 'POST',
       url: '/v1/zones',
       headers: { authorization: 'Bearer admin-secret' },
-      payload: { org_id: 'org1', name },
+      payload: { name },
     })
     expect([200, 201, 400, 422, 500]).toContain(res.statusCode)
     await app.close()
@@ -63,7 +63,7 @@ describe('Zone creation with adversarial slugs', () => {
       method: 'POST',
       url: '/v1/zones',
       headers: { authorization: 'Bearer admin-secret' },
-      payload: { org_id: 'org1', name: 'Test Zone', slug },
+      payload: { name: 'Test Zone', slug },
     })
     expect([200, 201, 400, 422, 500]).toContain(res.statusCode)
     await app.close()
