@@ -64,7 +64,12 @@ describe('purgeCommand', () => {
     writeFileSync(join(runtimeHome, 'compose.yml'), 'services:\n  stsReplay:\n')
     writeFileSync(join(runtimeHome, 'caracal.env'), '# operator\n')
 
-    process.env = { ...ORIG_ENV, CARACAL_MODE: 'dev', CARACAL_REPO_ROOT: repoRoot }
+    process.env = {
+      ...ORIG_ENV,
+      CARACAL_MODE: 'dev',
+      CARACAL_REPO_ROOT: repoRoot,
+      CARACAL_DEV_SECRETS_DIR: join(repoRoot, '.caracal', 'dev-secrets'),
+    }
     engineMocks.runtimePaths.mockImplementation((home?: string) => {
       const root = home ?? runtimeHome
       return {
@@ -101,6 +106,7 @@ describe('purgeCommand', () => {
     expect(engineMocks.installRuntimeAssets).toHaveBeenCalledWith({
       home: runtimeHome,
       composeFile: join(runtimeHome, 'compose.yml'),
+      secretsDir: join(runtimeHome, 'secrets'),
       overrideEnvFile: join(runtimeHome, 'caracal.env'),
     }, 'stable')
     expect(engineMocks.installRuntimeAssets.mock.invocationCallOrder[0]).toBeLessThan(
