@@ -55,7 +55,7 @@ function userResources(resources: Resource[]): Resource[] {
   return resources.filter((resource) => resource.identifier !== audience)
 }
 
-function detail(title: string, load: () => Promise<unknown>, copyPage = false): DetailView {
+function detail(title: string, load: () => Promise<unknown>, copyPage = true): DetailView {
   return new DetailView({ title, load, mask: maskSecretField, copyPage })
 }
 

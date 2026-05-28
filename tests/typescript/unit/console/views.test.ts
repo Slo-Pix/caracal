@@ -328,7 +328,7 @@ describe('DetailView', () => {
     expect(joined).not.toContain('2026-05-28T04:48:55.460Z')
   })
 
-  it('copies raw page JSON without rendered transformations', async () => {
+  it('copies raw page JSON by default without rendered transformations', async () => {
     const app = fakeApp()
     const data = {
       id: 'z1',
@@ -336,7 +336,7 @@ describe('DetailView', () => {
       enabled: true,
       nested_value: { ids: ['a', 'b'] },
     }
-    const view = new DetailView({ title: 'zone', load: async () => data, copyPage: true })
+    const view = new DetailView({ title: 'zone', load: async () => data })
     const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
     try {
       await view.init(app)
@@ -353,6 +353,34 @@ describe('DetailView', () => {
     } finally {
       write.mockRestore()
     }
+  })
+
+  it('copies array-shaped review pages', async () => {
+    const app = fakeApp()
+    const data = [{ id: 'event-1' }, { id: 'event-2' }]
+    const view = new DetailView({ title: 'audit review', load: async () => data })
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await view.init(app)
+
+      expect(view.footerActions().map((action) => action.id)).toContain('copy-page')
+
+      await view.onKey('Y', { app, size: { rows: 10, cols: 100 }, status: '' })
+      const payload = String(write.mock.calls.at(-1)?.[0] ?? '')
+      const encoded = payload.match(/\u001b\]52;c;([^\u0007]+)\u0007/)?.[1]
+      expect(Buffer.from(encoded ?? '', 'base64').toString('utf8')).toBe(JSON.stringify(data, null, 2))
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('supports explicit copy-page opt-out', async () => {
+    const app = fakeApp()
+    const view = new DetailView({ title: 'plain', load: async () => ({ id: 'z1' }), copyPage: false })
+    await view.init(app)
+
+    expect(view.footerActions().map((action) => action.id)).not.toContain('copy-page')
+    expect(view.hints()).not.toContain('Y:copy-page')
   })
 
   it('hides reveal when the page has no hidden content', async () => {

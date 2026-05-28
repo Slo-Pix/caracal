@@ -287,7 +287,7 @@ describe('FormView validation', () => {
     await view.onKey('enter', { app, size: { rows: 10, cols: 80 }, status: '' })
 
     const status = (app as unknown as { _status: { text: string; kind: string }[] })._status
-    expect(status[0]!.text).toContain('this zone does not support DCR')
+    expect(status[0]!.text).toContain('This zone does not support DCR')
     expect(status[0]!.text).not.toContain('HTTP 403')
   })
 

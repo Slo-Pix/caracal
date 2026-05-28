@@ -42,7 +42,7 @@ export class DetailView implements View {
     this.loader = opts.load
     this.mask = opts.mask
     this.hide = opts.hide
-    this.copyPage = opts.copyPage === true
+    this.copyPage = opts.copyPage !== false
     this.info = opts.info ?? defaultDetailInfo(opts.title, this.copyPage)
   }
 
@@ -137,7 +137,7 @@ export class DetailView implements View {
   }
 
   private canCopyPage(): boolean {
-    return !this.loading && !this.error && this.copyPage && this.data !== undefined && this.data !== null && typeof this.data === 'object' && !Array.isArray(this.data)
+    return !this.loading && !this.error && this.copyPage && this.data !== undefined
   }
 
   private canReveal(): boolean {

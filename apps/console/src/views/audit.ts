@@ -178,7 +178,7 @@ export class AuditTailView implements View {
           { label: 'Decision', value: 'The authorization result: allow, deny, partial, or absent when evaluation did not reach a decision.' },
           { label: 'Request ID', value: 'Correlation value used to fetch the complete event group for one request.' },
         ],
-        notes: ['Timestamps are compact in the table; detail/explain pages preserve raw backend values in copy-page when enabled.'],
+        notes: ['Timestamps are compact in the table; detail/explain pages preserve raw backend values through copy-page.'],
       }))
       return
     }
