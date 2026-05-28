@@ -5,7 +5,7 @@
 
 import type { Application, PolicyVersion, Provider, ProviderKind, Resource, ResourceInput, Zone } from '@caracalai/admin'
 import type { JsonObject } from '@caracalai/core'
-import { DEFAULT_CONTROL_AUDIENCE, generateClientSecret } from '@caracalai/engine'
+import { DEFAULT_CONTROL_AUDIENCE } from '@caracalai/engine'
 import {
   DEFAULT_COORDINATOR_URL,
   DEFAULT_ZONE_URL,
@@ -710,13 +710,11 @@ async function ensureApplication(
       clientSecret: trimmed(values.existing_app_client_secret),
     }
   }
-  const clientSecret = generateClientSecret()
   const application = await ctx.client.applications.create(zoneId, {
     name: requiredText(values.agent_app_name, 'agent app is required'),
     registration_method: 'managed',
-    credential_type: 'token',
-    client_secret: clientSecret,
   })
+  const clientSecret = requireClientSecret(application.client_secret)
   return { application, created: true, clientSecret }
 }
 
@@ -847,7 +845,6 @@ function applicationPicker(ctx: Ctx, zoneId: () => string | undefined): Field['p
       load: () => ctx.client.applications.list(requireSetupZoneId(zoneId)),
       value: (row) => row.id,
       label: (row) => row.name,
-      description: (row) => row.credential_type,
       onPick: setValue,
     }))
   }
@@ -1234,6 +1231,11 @@ function requiredText(value: string | undefined, message: string): string {
   const text = trimmed(value)
   if (!text) throw new Error(message)
   return text
+}
+
+function requireClientSecret(value: string | undefined): string {
+  if (!value) throw new Error('application response did not include the one-time client secret')
+  return value
 }
 
 function quoteRego(value: string): string {

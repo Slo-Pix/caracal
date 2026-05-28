@@ -19,7 +19,6 @@ import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { zoneExists } from '../zone-guard.js'
 import { OPA_INPUT_SCHEMA_VERSION, validateAuthzPolicy, validatePolicySchemaVersion } from '../rego.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
-import { publicAppsReferencedByContents } from '../policy-invariants.js'
 import type { Queryable } from '../db.js'
 
 const MANIFEST_MAX_ENTRIES = 256
@@ -493,14 +492,6 @@ async function policySetContract(
     if (err) {
       return { policies: [], error: `policy version ${row.id} failed validation: ${err}` }
     }
-  }
-  const publicHits = await publicAppsReferencedByContents(
-    db,
-    zoneId,
-    rows.map((r) => String(r.content)),
-  )
-  if (publicHits.length > 0) {
-    return { policies: [], error: `policy references public application(s): ${publicHits.join(', ')}` }
   }
   return { policies: rows, error: null }
 }

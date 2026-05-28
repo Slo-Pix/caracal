@@ -31,7 +31,7 @@ import type { App, View } from '../screen.ts'
 import type { ConsoleStateStore } from '../state.ts'
 import { maskSecretField } from '../errors.ts'
 import { formatDateTimeOrValue } from '../format.ts'
-import { DEFAULT_CONTROL_AUDIENCE, generateClientSecret } from '@caracalai/engine'
+import { DEFAULT_CONTROL_AUDIENCE } from '@caracalai/engine'
 import { AuditTailView } from './audit.ts'
 import { DetailView } from './detail.ts'
 import { ConfirmView, FormView, type Field } from './form.ts'
@@ -62,6 +62,19 @@ function detail(title: string, load: () => Promise<unknown>, copyPage = false): 
 function entityDetail(title: string, load: () => Promise<unknown>): DetailView {
   return new DetailView({ title, load, mask: maskSecretField, copyPage: true, info: resourceDetailInfo(title) })
 }
+
+function applicationDetail(title: string, load: () => Promise<unknown>): DetailView {
+  return new DetailView({
+    title,
+    load,
+    mask: maskSecretField,
+    copyPage: true,
+    info: resourceDetailInfo(title),
+    hide: (_value, path) => path.length === 1 && APPLICATION_INTERNAL_DETAIL_FIELDS.has(path[0] ?? ''),
+  })
+}
+
+const APPLICATION_INTERNAL_DETAIL_FIELDS = new Set(['consent', 'credential_type', 'traits'])
 
 function open(app: App, view: View): void { app.push(view) }
 
@@ -191,8 +204,8 @@ function resourceHelp(kind: ResourceHelpKind): InfoPage & { notes: string[] } {
         when: 'Use managed applications for known durable software and DCR applications for dynamic or self-registering clients.',
         impact: 'The registration method decides which creation path is used. DCR is gated by the selected zone, rate-limited, capped, and may expire; managed applications are operator-provisioned and stable.',
         example: 'Son of Anton, Fiona, PiperNet AI',
-        valid: 'Console creates token-credential applications and shows the one-time client secret immediately after creation.',
-        after: 'Open the detail page to inspect the exact API object, IDs, registration method, credential type, traits, and DCR expiry.',
+        valid: 'Console creates applications with a one-time client secret immediately after creation.',
+        after: 'Open the detail page to inspect IDs, registration method, DCR expiry, and the exact API object through copy-page.',
         terms: [
           { label: 'Managed', value: 'Operator-provisioned identity for known long-lived agents, services, workers, gateways, CI jobs, and integrations.' },
           { label: 'DCR', value: 'Dynamic Client Registration for self-service, high-churn, or ephemeral clients when dynamic clients are enabled on the zone.' },
@@ -423,6 +436,11 @@ function int(v: string | undefined): number | undefined {
   return n
 }
 
+function requireClientSecret(value: string | undefined): string {
+  if (!value) throw new Error('application response did not include the one-time client secret')
+  return value
+}
+
 async function popAndReload(app: App, list: ListView<unknown>): Promise<void> {
   app.pop()
   await list.reload()
@@ -548,7 +566,6 @@ export function applicationPicker(ctx: Ctx): Field['pick'] {
     () => ctx.client.applications.list(ctx.zoneId),
     [
       { header: 'name', width: 24, value: (row) => row.name },
-      { header: 'credential', width: 12, value: (row) => row.credential_type },
     ],
     (row) => row.id,
     (row) => row.name,
@@ -780,7 +797,6 @@ export function applicationsView(ctx: Ctx): View {
     columns: [
       { header: 'name', width: 24, value: (r) => r.name },
       { header: 'method', width: 8, value: (r) => r.registration_method },
-      { header: 'cred', width: 12, value: (r) => r.credential_type },
     ],
     load: () => ctx.client.applications.list(ctx.zoneId),
     state: ctx.state,
@@ -789,7 +805,7 @@ export function applicationsView(ctx: Ctx): View {
     rowKey: (row) => row.id,
     rowId: (row) => row.id,
     rowName: (row) => row.name,
-    onEnter: (app, row) => open(app, entityDetail(`app / ${row.name}`, () => ctx.client.applications.get(ctx.zoneId, row.id))),
+    onEnter: (app, row) => open(app, applicationDetail(`app / ${row.name}`, () => ctx.client.applications.get(ctx.zoneId, row.id))),
     actions: [
       {
         key: 'n', label: 'new', build: () => new FormView({
@@ -840,13 +856,11 @@ export function applicationsView(ctx: Ctx): View {
           ],
           onSubmit: async (v, app) => {
             if (v.registration_method === 'dcr') {
-              const clientSecret = generateClientSecret()
               const application = await ctx.client.applications.dcr(ctx.zoneId, {
                 name: v.name!,
-                credential_type: 'token',
-                client_secret: clientSecret,
                 expires_in: int(v.expires_in),
               })
+              const clientSecret = requireClientSecret(application.client_secret)
               await popAndReload(app, list as unknown as ListView<unknown>)
               open(app, new DetailView({
                 title: `app / ${application.name}`,
@@ -855,7 +869,6 @@ export function applicationsView(ctx: Ctx): View {
                   zone_id: application.zone_id,
                   name: application.name,
                   registration_method: application.registration_method,
-                  credential_type: application.credential_type,
                   expires_at: (application as { expires_at?: string }).expires_at,
                   client_secret: clientSecret,
                   note: 'store client_secret now - it cannot be retrieved later',
@@ -864,29 +877,24 @@ export function applicationsView(ctx: Ctx): View {
               }))
               return
             }
-            const clientSecret = generateClientSecret()
             const application = await ctx.client.applications.create(ctx.zoneId, {
               name: v.name!,
               registration_method: 'managed',
-              credential_type: 'token',
-              client_secret: clientSecret,
             })
+            const clientSecret = requireClientSecret(application.client_secret)
             await popAndReload(app, list as unknown as ListView<unknown>)
-            if (clientSecret) {
-              open(app, new DetailView({
-                title: `app / ${application.name}`,
-                load: async () => ({
-                  id: application.id,
-                  zone_id: application.zone_id,
-                  name: application.name,
-                  registration_method: application.registration_method,
-                  credential_type: application.credential_type,
-                  client_secret: clientSecret,
-                  note: 'store client_secret now - it cannot be retrieved later',
-                }),
-                mask: maskSecretField,
-              }))
-            }
+            open(app, new DetailView({
+              title: `app / ${application.name}`,
+              load: async () => ({
+                id: application.id,
+                zone_id: application.zone_id,
+                name: application.name,
+                registration_method: application.registration_method,
+                client_secret: clientSecret,
+                note: 'store client_secret now - it cannot be retrieved later',
+              }),
+              mask: maskSecretField,
+            }))
           },
         }),
       },

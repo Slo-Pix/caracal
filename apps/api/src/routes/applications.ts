@@ -6,6 +6,7 @@
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
+import { randomBytes } from 'node:crypto'
 import { hashClientSecret } from '../hash-secret.js'
 import { buildPatchUpdate, patchColumn } from './patch.js'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
@@ -13,24 +14,34 @@ import { zoneExists } from '../zone-guard.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
 import { validateTraits } from '../traits.js'
 
+const APPLICATION_INTERNALS_HEADER = 'x-caracal-application-internals'
+
 const AppBody = z.object({
   name: z.string().min(1),
   registration_method: z.literal('managed'),
-  credential_type: z.literal('token').optional(),
-  client_secret: z.string().min(1).optional(),
   traits: z.array(z.string()).optional(),
 }).strict()
 
 const DCRBody = z.object({
   name: z.string().min(1),
-  credential_type: z.literal('token').optional(),
-  client_secret: z.string().min(1).optional(),
   traits: z.array(z.string()).optional(),
   expires_in: z.number().int().positive().optional(),
 }).strict()
 
-function validateSecret(hasSecret: boolean): string | undefined {
-  return hasSecret ? undefined : 'client_secret_required'
+const PatchBody = z.object({
+  name: z.string().min(1).optional(),
+  client_secret: z.string().min(1).optional(),
+  traits: z.array(z.string()).optional(),
+}).strict()
+
+function generateClientSecret(): string {
+  return `cs_${randomBytes(32).toString('base64url')}`
+}
+
+function applicationSelect(req: { headers: Record<string, unknown> }): string {
+  return req.headers[APPLICATION_INTERNALS_HEADER] === 'control'
+    ? 'id, zone_id, name, registration_method, traits, expires_at, created_at'
+    : 'id, zone_id, name, registration_method, expires_at, created_at'
 }
 
 export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -44,7 +55,7 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
       page,
     )
     const { rows } = await fastify.db.query(
-      `SELECT id, zone_id, name, registration_method, credential_type, traits, expires_at, created_at
+      `SELECT ${applicationSelect(req)}
        FROM applications WHERE ${keyset.conds.join(' AND ')}
        ORDER BY created_at DESC, id DESC LIMIT ${keyset.limitPlaceholder}`,
       keyset.values,
@@ -57,7 +68,7 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
     const { rows } = await fastify.db.query(
-      `SELECT id, zone_id, name, registration_method, credential_type, traits, expires_at, created_at
+      `SELECT ${applicationSelect(req)}
        FROM applications WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL`,
       [params.id, params.zoneId],
     )
@@ -76,43 +87,37 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
     const body = parsed.data
     const traitErr = validateTraits(body.traits, req.actor)
     if (traitErr) return reply.code(403).send(traitErr)
-    const credentialType = body.credential_type ?? 'token'
-    const secretError = validateSecret(body.client_secret !== undefined)
-    if (secretError) return reply.code(400).send({ error: secretError })
     const id = uuidv7()
-    const secretHash = body.client_secret ? await hashClientSecret(body.client_secret) : null
+    const clientSecret = generateClientSecret()
+    const secretHash = await hashClientSecret(clientSecret)
     const { rows } = await fastify.db.query(
       `INSERT INTO applications (id, zone_id, name, registration_method, credential_type, client_secret_hash, traits)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, zone_id, name, registration_method, credential_type, traits, expires_at, created_at`,
-      [id, params.zoneId, body.name, body.registration_method, credentialType, secretHash, body.traits ?? []],
+       RETURNING id, zone_id, name, registration_method, expires_at, created_at`,
+      [id, params.zoneId, body.name, body.registration_method, 'token', secretHash, body.traits ?? []],
     )
-    return reply.code(201).send(rows[0])
+    return reply.code(201).send({ ...rows[0], client_secret: clientSecret })
   })
 
   fastify.patch('/zones/:zoneId/applications/:id', async (req, reply) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
-    const parsed = AppBody.partial().safeParse(req.body)
+    const parsed = PatchBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_application' })
     const body = parsed.data
     const traitErr = validateTraits(body.traits, req.actor)
     if (traitErr) return reply.code(403).send(traitErr)
-    if (body.credential_type !== undefined || body.client_secret !== undefined) {
+    if (body.client_secret !== undefined) {
       const { rows: existing } = await fastify.db.query(
-        `SELECT credential_type, client_secret_hash FROM applications WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL`,
+        `SELECT client_secret_hash FROM applications WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL`,
         [params.id, params.zoneId],
       )
       if (!existing[0]) return reply.code(404).send({ error: 'application_not_found' })
-      const credentialType = body.credential_type ?? existing[0].credential_type
-      const hasSecret = body.client_secret !== undefined || existing[0].client_secret_hash !== null
-      const secretError = credentialType === 'token' ? validateSecret(hasSecret) : 'unsupported_credential_type'
-      if (secretError) return reply.code(400).send({ error: secretError })
+      if (!existing[0].client_secret_hash) return reply.code(400).send({ error: 'client_secret_not_configured' })
     }
     const patchedHash = body.client_secret === undefined ? undefined : await hashClientSecret(body.client_secret)
     const update = buildPatchUpdate([params.id, params.zoneId], [
       patchColumn('name', body.name),
-      patchColumn('credential_type', body.credential_type),
       patchColumn('client_secret_hash', patchedHash),
       patchColumn('traits', body.traits),
     ])
@@ -131,7 +136,7 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
     const { rowCount } = await fastify.db.query(
-      `UPDATE applications SET archived_at = now(), updated_at = now()
+      `UPDATE applications SET archived_at = now()
        WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL`,
       [params.id, params.zoneId],
     )
@@ -147,9 +152,6 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
     const body = parsed.data
     const traitErr = validateTraits(body.traits, req.actor)
     if (traitErr) return reply.code(403).send(traitErr)
-    const credentialType = body.credential_type ?? 'token'
-    const secretError = validateSecret(body.client_secret !== undefined)
-    if (secretError) return reply.code(400).send({ error: secretError })
 
     const rlKey = `rl:dcr:${params.zoneId}`
     await fastify.redis.set(rlKey, 0, 'EX', 1, 'NX')
@@ -188,15 +190,16 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
         await client.query('ROLLBACK')
         return reply.code(429).send({ error: 'dcr_limit_exceeded' })
       }
-      const dcrSecretHash = body.client_secret ? await hashClientSecret(body.client_secret) : null
+      const clientSecret = generateClientSecret()
+      const dcrSecretHash = await hashClientSecret(clientSecret)
       const { rows } = await client.query(
         `INSERT INTO applications (id, zone_id, name, registration_method, credential_type, client_secret_hash, traits, expires_at)
          VALUES ($1, $2, $3, 'dcr', $4, $5, $6, $7)
-         RETURNING id, zone_id, name, registration_method, credential_type, traits, expires_at, created_at`,
-        [id, params.zoneId, body.name, credentialType, dcrSecretHash, body.traits ?? [], expiresAt],
+         RETURNING id, zone_id, name, registration_method, expires_at, created_at`,
+        [id, params.zoneId, body.name, 'token', dcrSecretHash, body.traits ?? [], expiresAt],
       )
       await client.query('COMMIT')
-      return reply.code(201).send(rows[0])
+      return reply.code(201).send({ ...rows[0], client_secret: clientSecret })
     } catch (err) {
       await client.query('ROLLBACK')
       throw err

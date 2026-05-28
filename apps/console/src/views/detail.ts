@@ -15,6 +15,7 @@ export interface DetailOptions {
   title: string
   load: () => Promise<unknown>
   mask?: (value: unknown, path: string[]) => string | undefined
+  hide?: (value: unknown, path: string[]) => boolean
   copyPage?: boolean
   info?: InfoPage
 }
@@ -23,6 +24,7 @@ export class DetailView implements View {
   readonly title: string
   private readonly loader: () => Promise<unknown>
   private readonly mask?: (value: unknown, path: string[]) => string | undefined
+  private readonly hide?: (value: unknown, path: string[]) => boolean
   private readonly copyPage: boolean
   private readonly info: InfoPage
   private data: unknown
@@ -39,6 +41,7 @@ export class DetailView implements View {
     this.title = opts.title
     this.loader = opts.load
     this.mask = opts.mask
+    this.hide = opts.hide
     this.copyPage = opts.copyPage === true
     this.info = opts.info ?? defaultDetailInfo(opts.title, this.copyPage)
   }
@@ -94,7 +97,7 @@ export class DetailView implements View {
   }
 
   private rebuild(): void {
-    this.body = renderDetail(this.data, this.mask, this.revealed)
+    this.body = renderDetail(this.data, this.mask, this.hide, this.revealed)
   }
 
   render(ctx: ViewContext): string[] {
@@ -153,6 +156,7 @@ export class DetailView implements View {
 }
 
 type DetailMask = (value: unknown, path: string[]) => string | undefined
+type DetailHide = (value: unknown, path: string[]) => boolean
 
 const LABEL_WIDTH = 22
 const ACRONYMS = new Set(['api', 'dcr', 'id', 'json', 'jwt', 'mcp', 'oidc', 'oauth', 'pkce', 'url'])
@@ -163,8 +167,8 @@ const GOOD_VALUES = new Set([
 const WARN_VALUES = new Set(['disabled', 'expired', 'gated', 'partial', 'pending', 'revoked', 'suspended', 'unmounted', 'warning'])
 const BAD_VALUES = new Set(['blocked', 'deny', 'denied', 'down', 'error', 'failed', 'forbidden', 'invalid', 'terminated', 'unhealthy'])
 
-function renderDetail(value: unknown, mask: DetailMask | undefined, revealed: boolean): string[] {
-  const lines = renderNode('Details', value, [], mask, revealed, 0, true)
+function renderDetail(value: unknown, mask: DetailMask | undefined, hide: DetailHide | undefined, revealed: boolean): string[] {
+  const lines = renderNode('Details', value, [], mask, hide, revealed, 0, true)
   return lines.length > 0 ? lines : [ui.muted(' No data')]
 }
 
@@ -173,14 +177,15 @@ function renderNode(
   value: unknown,
   path: string[],
   mask: DetailMask | undefined,
+  hide: DetailHide | undefined,
   revealed: boolean,
   depth: number,
   root = false,
 ): string[] {
   const masked = maskedValue(value, path, mask, revealed)
   if (masked !== undefined || isScalar(value)) return renderField(root ? 'Value' : title, masked ?? value, path, depth)
-  if (Array.isArray(value)) return renderArray(root ? 'Items' : title, value, path, mask, revealed, depth)
-  return renderObject(root ? 'Overview' : title, value as Record<string, unknown>, path, mask, revealed, depth, root)
+  if (Array.isArray(value)) return renderArray(root ? 'Items' : title, value, path, mask, hide, revealed, depth)
+  return renderObject(root ? 'Overview' : title, value as Record<string, unknown>, path, mask, hide, revealed, depth, root)
 }
 
 function renderObject(
@@ -188,12 +193,13 @@ function renderObject(
   value: Record<string, unknown>,
   path: string[],
   mask: DetailMask | undefined,
+  hide: DetailHide | undefined,
   revealed: boolean,
   depth: number,
   root: boolean,
 ): string[] {
   const lines = section(title, depth)
-  const entries = Object.entries(value)
+  const entries = Object.entries(value).filter(([key, child]) => !hide?.(child, [...path, key]))
   if (entries.length === 0) {
     lines.push(indented(ui.muted('No fields'), depth + 1))
     return lines
@@ -214,7 +220,7 @@ function renderObject(
 
   const groupDepth = root ? depth : depth + 1
   for (const [key, child] of groups) {
-    lines.push(...renderNode(formatLabel(key), child, [...path, key], mask, revealed, groupDepth))
+    lines.push(...renderNode(formatLabel(key), child, [...path, key], mask, hide, revealed, groupDepth))
   }
   return lines
 }
@@ -224,6 +230,7 @@ function renderArray(
   value: unknown[],
   path: string[],
   mask: DetailMask | undefined,
+  hide: DetailHide | undefined,
   revealed: boolean,
   depth: number,
 ): string[] {
@@ -240,7 +247,7 @@ function renderArray(
     return lines
   }
   for (let i = 0; i < value.length; i++) {
-    lines.push(...renderNode(`#${i + 1}`, value[i], [...path, String(i)], mask, revealed, depth + 1))
+    if (!hide?.(value[i], [...path, String(i)])) lines.push(...renderNode(`#${i + 1}`, value[i], [...path, String(i)], mask, hide, revealed, depth + 1))
   }
   return lines
 }
