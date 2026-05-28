@@ -48,7 +48,7 @@ describe('POST /v1/zones/:zoneId/applications', () => {
     expect(db.query).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects public managed applications with a client secret', async () => {
+  it('rejects unsupported credential types', async () => {
     const { app, db } = buildApp()
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
 
@@ -65,7 +65,46 @@ describe('POST /v1/zones/:zoneId/applications', () => {
     })
 
     expect(res.statusCode).toBe(400)
-    expect(JSON.parse(res.body)).toMatchObject({ error: 'client_secret_not_allowed' })
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_application' })
+    expect(db.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects DCR registration through the managed application route', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications',
+      payload: {
+        name: 'Dynamic App',
+        registration_method: 'dcr',
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(db.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects unused application consent configuration', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications',
+      payload: {
+        name: 'Runner',
+        registration_method: 'managed',
+        credential_type: 'token',
+        client_secret: 'secret',
+        consent: true,
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
     expect(db.query).toHaveBeenCalledTimes(1)
   })
 })
@@ -99,7 +138,7 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones/z1/applications/dcr',
-      payload: { name: 'Dynamic App' },
+      payload: { name: 'Dynamic App', credential_type: 'token', client_secret: 'secret' },
     })
 
     expect(res.statusCode).toBe(403)
@@ -120,7 +159,7 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones/z1/applications/dcr',
-      payload: { name: 'Dynamic App' },
+      payload: { name: 'Dynamic App', credential_type: 'token', client_secret: 'secret' },
     })
 
     expect(res.statusCode).toBe(201)
@@ -135,7 +174,7 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones/z1/applications/dcr',
-      payload: { name: 'Dynamic App' },
+      payload: { name: 'Dynamic App', credential_type: 'token', client_secret: 'secret' },
     })
 
     expect(res.statusCode).toBe(429)
@@ -156,7 +195,7 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones/z1/applications/dcr',
-      payload: { name: 'Dynamic App' },
+      payload: { name: 'Dynamic App', credential_type: 'token', client_secret: 'secret' },
     })
 
     expect(res.statusCode).toBe(429)
