@@ -67,7 +67,6 @@ type OPAPrincipal struct {
 	Type           string   `json:"type"`
 	ID             string   `json:"id"`
 	ZoneID         string   `json:"zone_id"`
-	CredentialType string   `json:"credential_type,omitempty"`
 	AgentSessionID string   `json:"agent_session_id,omitempty"`
 	AgentKind      string   `json:"agent_kind,omitempty"`
 	Capabilities   []string `json:"capabilities,omitempty"`

@@ -98,7 +98,6 @@ type Application struct {
 	ZoneID             string
 	Name               string
 	RegistrationMethod string
-	CredentialType     *string
 	ClientSecretHash   *string
 	Traits             []string
 }
@@ -106,11 +105,11 @@ type Application struct {
 func (d *DB) GetApplicationByID(ctx context.Context, id, zoneID string) (*Application, error) {
 	var a Application
 	err := d.pool.QueryRow(ctx,
-		`SELECT id, zone_id, name, registration_method, credential_type, client_secret_hash, traits
+		`SELECT id, zone_id, name, registration_method, client_secret_hash, traits
 		 FROM applications
 		 WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL
 		   AND (expires_at IS NULL OR expires_at > now())`, id, zoneID,
-	).Scan(&a.ID, &a.ZoneID, &a.Name, &a.RegistrationMethod, &a.CredentialType, &a.ClientSecretHash, &a.Traits)
+	).Scan(&a.ID, &a.ZoneID, &a.Name, &a.RegistrationMethod, &a.ClientSecretHash, &a.Traits)
 	if err != nil {
 		return nil, err
 	}

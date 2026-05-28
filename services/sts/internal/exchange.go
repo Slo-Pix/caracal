@@ -318,7 +318,6 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 				Type:           "Application",
 				ID:             app.ID,
 				ZoneID:         zoneID,
-				CredentialType: derefStr(app.CredentialType),
 				AgentSessionID: req.AgentSessionID,
 				AgentKind:      agentSessionKind(agentSession),
 				Capabilities:   agentSessionCapabilities(agentSession),
@@ -634,8 +633,6 @@ func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) 
 		if !ok {
 			return nil, "", errSecretMismatch
 		}
-	} else if derefStr(app.CredentialType) == "public" {
-		return nil, "", fmt.Errorf("public clients are not supported: register a confidential application (client_secret) to issue tokens")
 	} else {
 		return nil, "", fmt.Errorf("client secret not configured")
 	}
