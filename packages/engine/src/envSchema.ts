@@ -24,7 +24,7 @@ export interface EnvSpec {
   // True when the variable resolves from a secret file via the *_FILE convention;
   // never written into env files or compose substitutions as a plaintext value.
   secret?: boolean
-  // Basename of the secret file under $CARACAL_HOME/secrets (or infra/secrets/files).
+  // Basename of the secret file under the managed operator secret directory.
   file?: string
   // True when the variable should appear in the end-user operator template
   // ($CARACAL_HOME/caracal.env). Non-exposed vars stay internal to the schema.

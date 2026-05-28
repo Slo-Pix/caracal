@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { connect } from 'node:net'
 import { X509Certificate } from 'node:crypto'
 import { join } from 'node:path'
-import { discoverRepoRoot, installedHome } from '@caracalai/core'
+import { discoverRepoRoot, managedSecretDirs } from '@caracalai/core'
 
 export interface PreflightCheck {
   check: string
@@ -43,15 +43,8 @@ function readSecret(path: string): string | undefined {
 
 function secretDirs(): string[] {
   const root = discoverRepoRoot()
-  const devDir = root ? join(root, 'infra', 'secrets', 'files') : undefined
-  const installedDir = join(installedHome(), 'secrets')
   const preferDev = process.env.CARACAL_MODE === 'dev' || (!process.env.CARACAL_HOME && root !== undefined)
-  const generatedDirs = preferDev ? [devDir, installedDir] : [installedDir, devDir]
-  const dirs = [
-    process.env.CARACAL_SECRETS_DIR,
-    ...generatedDirs,
-  ].filter((dir): dir is string => Boolean(dir))
-  return [...new Set(dirs)]
+  return managedSecretDirs({ preferDev })
 }
 
 function managedSecret(name: string): ResolvedValue | undefined {

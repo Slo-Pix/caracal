@@ -52,11 +52,6 @@ const INHERITED_ENV_KEYS = new Set([
   'XDG_CONFIG_HOME',
   'XDG_CACHE_HOME',
   'XDG_DATA_HOME',
-  'DOCKER_HOST',
-  'DOCKER_CONTEXT',
-  'DOCKER_TLS_VERIFY',
-  'DOCKER_CERT_PATH',
-  'COMPOSE_PROJECT_NAME',
 ])
 
 export type RunLineSink = (line: string, stream: 'stdout' | 'stderr') => void

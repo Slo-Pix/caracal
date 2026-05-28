@@ -5,7 +5,7 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { bootstrapSecrets, devBootstrapPaths } from './secrets.js'
+import { bootstrapSecrets, prepareDevSecrets } from './secrets.js'
 import { installRuntimeAssets, runtimePaths } from './runtime.js'
 import type { StackPaths } from './stack.js'
 import type { CaracalMode } from '@caracalai/core'
@@ -43,15 +43,17 @@ function devPaths(opts: ResolveStackPathsOptions): StackPaths {
   const composeFile = process.env.CARACAL_COMPOSE_FILE ?? join(repoRoot, 'infra', 'docker', 'docker-compose.yml')
   const defaultsEnvFile = join(repoRoot, 'infra', 'docker', 'dev.env')
   const overrideEnvFile = join(repoRoot, 'infra', 'docker', 'local.env')
-  const report = bootstrapSecrets(devBootstrapPaths(repoRoot))
+  const secrets = prepareDevSecrets(repoRoot)
+  const report = bootstrapSecrets(secrets)
   if (report.filesCreated.length > 0) {
-    opts.onInfo?.(`generated ${report.filesCreated.length} secret file(s) under infra/secrets/files`)
+    opts.onInfo?.(`generated ${report.filesCreated.length} operator secret file(s) under ${secrets.secretsDir}`)
   }
   return {
     composeFile,
     envFiles: existsSync(overrideEnvFile) ? [defaultsEnvFile, overrideEnvFile] : [defaultsEnvFile],
     cwd: repoRoot,
     mode: 'dev',
+    secretsDir: secrets.secretsDir,
   }
 }
 
@@ -66,5 +68,6 @@ function installedPaths(opts: ResolveStackPathsOptions, mode: Exclude<StackMode,
     envFiles: [overrideEnvFile],
     cwd: paths.home,
     mode,
+    secretsDir: paths.secretsDir,
   }
 }

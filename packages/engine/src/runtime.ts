@@ -14,6 +14,7 @@ import type { StackMode } from './stackPaths.js'
 export interface RuntimePaths {
   home: string
   composeFile: string
+  secretsDir: string
   // Operator override file. Generated as a fully commented template on first
   // install and never overwritten if it already exists.
   overrideEnvFile: string
@@ -31,6 +32,7 @@ export function runtimePaths(home: string = defaultRuntimeHome()): RuntimePaths 
   return {
     home,
     composeFile: join(home, 'compose.yml'),
+    secretsDir: process.env.CARACAL_SECRETS_DIR ?? join(home, 'secrets'),
     overrideEnvFile: join(home, 'caracal.env'),
   }
 }
@@ -61,7 +63,7 @@ export function installRuntimeAssets(
     try { chmodSync(paths.overrideEnvFile, 0o600) } catch { /* perms may be unsupported */ }
   }
 
-  const report = bootstrapSecrets(runtimeBootstrapPaths(paths.home))
+  const report = bootstrapSecrets({ ...runtimeBootstrapPaths(paths.home), secretsDir: paths.secretsDir })
   if (report.filesCreated.length > 0) created = true
 
   return { created, filesCreated: report.filesCreated }
