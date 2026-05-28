@@ -168,11 +168,17 @@ export class AuditTailView implements View {
     if (key === '?') {
       openInfo(ctx.app, infoPage({
         title: 'Audit event',
-        meaning: 'Audit rows show authorization and Gateway decisions as they happen.',
-        when: 'Use this view to confirm whether a request was allowed, denied, partial, or missing.',
+        meaning: 'Audit rows show authorization and Gateway decisions with their request IDs, status, and timestamps.',
+        when: 'Use this view during debugging, incident response, policy rollout checks, or when tracing one request through Caracal.',
+        impact: 'Audit is read-only evidence; changing filters or opening explanations does not alter authorization state.',
         example: 'deny token_exchange req_123',
-        valid: 'Move to an event, cycle the decision filter, or press enter on a request ID.',
-        after: 'Opening an event loads the full explanation for the selected request.',
+        valid: 'Move to an event, cycle the decision filter, reload, pause streaming, or press enter on a row with a request ID.',
+        after: 'Opening an event loads the backend explanation for that request so you can inspect policies, grants, and evaluation status.',
+        terms: [
+          { label: 'Decision', value: 'The authorization result: allow, deny, partial, or absent when evaluation did not reach a decision.' },
+          { label: 'Request ID', value: 'Correlation value used to fetch the complete event group for one request.' },
+        ],
+        notes: ['Timestamps are compact in the table; detail/explain pages preserve raw backend values in copy-page when enabled.'],
       }))
       return
     }

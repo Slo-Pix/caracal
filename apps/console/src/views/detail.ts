@@ -9,7 +9,7 @@ import { explainError } from '../errors.ts'
 import { formatDateTime } from '../format.ts'
 import type { Key } from '../keys.ts'
 import type { App, View, ViewContext } from '../screen.ts'
-import { actionInfo, openInfo, type InfoPage } from './info.ts'
+import { infoPage, openInfo, type InfoPage } from './info.ts'
 
 export interface DetailOptions {
   title: string
@@ -40,7 +40,7 @@ export class DetailView implements View {
     this.loader = opts.load
     this.mask = opts.mask
     this.copyPage = opts.copyPage === true
-    this.info = opts.info ?? actionInfo(opts.title, 'This view shows the latest structured record data from the API.')
+    this.info = opts.info ?? defaultDetailInfo(opts.title, this.copyPage)
   }
 
   hints(): string[] {
@@ -289,6 +289,24 @@ function hasMaskedContent(value: unknown, mask: DetailMask, path: string[] = [])
   if (!value || typeof value !== 'object' || value instanceof Date) return false
   if (Array.isArray(value)) return value.some((item, index) => hasMaskedContent(item, mask, [...path, String(index)]))
   return Object.entries(value as Record<string, unknown>).some(([key, child]) => hasMaskedContent(child, mask, [...path, key]))
+}
+
+function defaultDetailInfo(title: string, copyPage: boolean): InfoPage {
+  return infoPage({
+    title,
+    meaning: 'This page renders structured API data as readable terminal fields.',
+    when: 'Use it to inspect one result object, understand nested values, or confirm what the backend returned.',
+    impact: copyPage
+      ? 'copy-page copies the raw loaded JSON object; the screen may format booleans, timestamps, and labels only for readability.'
+      : 'This page is read-only and does not change backend state.',
+    example: title,
+    valid: 'Data is valid when the API request succeeds; reload fetches the latest response.',
+    after: 'Use reload to refresh, reveal only when masked fields exist, or esc to return.',
+    terms: [
+      { label: 'Raw JSON', value: 'The backend-shaped object before Console labels, colors, timestamp formatting, or table layout.' },
+      { label: 'Masked', value: 'Secret-shaped fields hidden in the terminal until explicitly revealed.' },
+    ],
+  })
 }
 
 function section(title: string, depth: number): string[] {

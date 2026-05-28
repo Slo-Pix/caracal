@@ -36,7 +36,7 @@ import { DEFAULT_CONTROL_AUDIENCE, generateClientSecret } from '@caracalai/engin
 import { AuditTailView } from './audit.ts'
 import { DetailView } from './detail.ts'
 import { ConfirmView, FormView, type Field } from './form.ts'
-import { infoPage, openInfo } from './info.ts'
+import { infoPage, openInfo, type InfoPage } from './info.ts'
 import { ListView } from './list.ts'
 import { appendCsv, EntityPickerView, pickFromList } from './picker.ts'
 
@@ -61,7 +61,7 @@ function detail(title: string, load: () => Promise<unknown>, copyPage = false): 
 }
 
 function entityDetail(title: string, load: () => Promise<unknown>): DetailView {
-  return detail(title, load, true)
+  return new DetailView({ title, load, mask: maskSecretField, copyPage: true, info: resourceDetailInfo(title) })
 }
 
 function open(app: App, view: View): void { app.push(view) }
@@ -114,6 +114,8 @@ type GrantRow = Grant & { application_name: string; resource_name: string }
 type AgentRow = AgentSession & { application_name: string }
 type DelegationRow = DelegationEdge & { resource_name?: string | undefined }
 
+type ResourceHelpKind = 'zone' | 'application' | 'resource' | 'provider' | 'policy' | 'policy set' | 'grant' | 'session' | 'delegation' | 'agent'
+
 function readFileOrInline(filePath: string, inline: string): string {
   if (filePath && filePath.length > 0) return readFileSync(filePath, 'utf8')
   return inline
@@ -124,6 +126,201 @@ function readPolicyContent(values: Record<string, string>): string {
   return source === 'file'
     ? readFileOrInline(values.file ?? '', '')
     : values.content ?? ''
+}
+
+function resourceListInfo(kind: ResourceHelpKind): InfoPage {
+  const help = resourceHelp(kind)
+  return infoPage({
+    title: `${help.title} list`,
+    meaning: help.meaning,
+    when: help.when,
+    impact: help.impact,
+    example: help.example,
+    valid: 'Rows are loaded from the Control API for the current scope; use reload when another operator or automation may have changed state.',
+    after: 'Press enter to open the full resource detail page; mutation keys only appear when the selected row supports them.',
+    terms: help.terms,
+    notes: help.notes,
+  })
+}
+
+function resourceDetailInfo(title: string): InfoPage {
+  const kind = resourceKindFromTitle(title)
+  const help = resourceHelp(kind)
+  return infoPage({
+    title,
+    meaning: `This page shows the raw ${help.title.toLowerCase()} object returned by the API, rendered for terminal reading.`,
+    when: `Use it when you need to inspect one ${help.title.toLowerCase()}, confirm operational state, or copy the complete JSON record.`,
+    impact: help.impact,
+    example: help.example,
+    valid: 'Values come from the backend response. Displayed timestamps and booleans may be formatted for reading, but copy-page preserves the raw JSON object.',
+    after: 'Use copy-page for automation/debugging, reload to fetch the latest API state, or esc to return to the list.',
+    terms: help.terms,
+    notes: ['copy-page copies the complete loaded object, not the rendered labels or table values.', ...(help.notes ?? [])],
+  })
+}
+
+function resourceKindFromTitle(title: string): ResourceHelpKind {
+  const head = title.split('/')[0]?.trim().toLowerCase() ?? ''
+  if (head === 'app') return 'application'
+  if (head === 'policy set') return 'policy set'
+  if (head === 'delegation-node') return 'delegation'
+  if (head === 'zone' || head === 'resource' || head === 'provider' || head === 'policy' || head === 'grant' || head === 'delegation' || head === 'agent') return head
+  return 'resource'
+}
+
+function resourceHelp(kind: ResourceHelpKind): InfoPage & { notes: string[] } {
+  switch (kind) {
+    case 'zone':
+      return {
+        title: 'Zone',
+        meaning: 'A zone is the operational trust boundary for applications, resources, policies, grants, sessions, audit events, and agents.',
+        when: 'Use zones to separate environments, tenants, or security domains that should not share authority.',
+        impact: 'Selecting a zone scopes almost every management action; DCR on a zone controls whether apps can self-register through the DCR endpoint.',
+        example: 'prod-payments',
+        valid: 'A zone has a name, slug, dynamic-client setting, and system metadata.',
+        after: 'Open a zone to inspect its API object or select it as the active Console scope.',
+        terms: [
+          { label: 'Trust boundary', value: 'A separation line where authority, audit, and policy state are isolated.' },
+          { label: 'DCR', value: 'Dynamic Client Registration; allows API-driven application registration only when enabled.' },
+        ],
+        notes: ['Keep production and non-production authority in separate zones.', 'Name zones after the boundary, not one service.'],
+      }
+    case 'application':
+      return {
+        title: 'Application',
+        meaning: 'An application is a client identity that requests Caracal tokens for a workload, agent, gateway, or automation actor.',
+        when: 'Use applications when software needs a stable identity and credential type for token exchange.',
+        impact: 'Credential type and traits affect how the app authenticates and what operational role it can play.',
+        example: 'payments-worker',
+        valid: 'Managed apps are created by Console; DCR apps are created through the zone DCR endpoint.',
+        after: 'Open the detail page to inspect exact traits, credential type, DCR metadata, and IDs.',
+        terms: [
+          { label: 'Credential', value: 'The method an app uses to authenticate, such as token, password, public key, URL, or public client.' },
+          { label: 'Traits', value: 'Capability labels used by Caracal workflows, for example agent or control behavior.' },
+        ],
+        notes: ['One-time client secrets are shown only when created or rotated.', 'Use copy-page on details when debugging SDK or API calls.'],
+      }
+    case 'resource':
+      return {
+        title: 'Resource',
+        meaning: 'A resource is a protected API, service, audience, or Gateway route that applications request access to.',
+        when: 'Use resources to define what can be accessed and which Caracal scopes exist for that target.',
+        impact: 'Resource identifiers and scopes become the vocabulary used by grants, policies, tokens, and Gateway bindings.',
+        example: 'resource://payments-api',
+        valid: 'Gateway resources include upstream routing fields; direct resources define an audience and scopes only.',
+        after: 'Open details to inspect routing, scopes, provider binding, and raw API identifiers.',
+        terms: [
+          { label: 'Scope', value: 'A named permission on a resource, such as read, write, or admin.' },
+          { label: 'Gateway', value: 'The proxy path where Caracal can enforce policy and forward requests upstream.' },
+        ],
+        notes: ['Changing identifiers can break clients that request the old audience.', 'Gateway fields only matter for resources configured with an upstream route.'],
+      }
+    case 'provider':
+      return {
+        title: 'Provider',
+        meaning: 'A provider describes an upstream identity or credential source Caracal can use when calling protected services.',
+        when: 'Use providers when Gateway or credential workflows must exchange, attach, or derive upstream credentials.',
+        impact: 'Provider kind and config decide which endpoints, headers, audiences, and credential rules are used at runtime.',
+        example: 'github-oidc',
+        valid: 'Only configured provider kinds and their implemented fields are sent to the API.',
+        after: 'Open details to inspect the merged provider config and exact backend field names.',
+        terms: [
+          { label: 'OIDC', value: 'OpenID Connect; identity metadata and tokens built on OAuth 2.0.' },
+          { label: 'Issuer', value: 'The authority URL that signs or describes identity tokens.' },
+        ],
+        notes: ['Secrets are masked in the terminal when present.', 'Use allowed token hosts to constrain outbound token endpoint calls.'],
+      }
+    case 'policy':
+      return {
+        title: 'Policy',
+        meaning: 'A policy is authorization logic that evaluates a request and produces an allow, deny, or partial result.',
+        when: 'Use policies to encode access rules that are more precise than static grants.',
+        impact: 'Policy versions can affect live authorization once included in an active policy set.',
+        example: 'allow read during business hours',
+        valid: 'Policy content is validated before save; versions are immutable once created.',
+        after: 'Open details to inspect metadata; validate before adding or activating a new version.',
+        terms: [
+          { label: 'Version', value: 'An immutable copy of policy content that can be referenced by policy sets.' },
+          { label: 'Partial', value: 'A decision that needs additional runtime enforcement or Gateway context.' },
+        ],
+        notes: ['Use validate before creating a version from pasted or file content.', 'Policy details do not replace policy-set activation status.'],
+      }
+    case 'policy set':
+      return {
+        title: 'Policy set',
+        meaning: 'A policy set groups specific policy versions and controls which authorization logic is active.',
+        when: 'Use policy sets to promote tested policy versions into live evaluation.',
+        impact: 'Activating a policy-set version changes the policy bundle used for new authorization decisions.',
+        example: 'prod baseline v3',
+        valid: 'A policy set version references immutable policy version IDs.',
+        after: 'Use simulate before activation when you need decision confidence for a concrete input.',
+        terms: [
+          { label: 'Manifest', value: 'The list of policy version IDs included in one policy-set version.' },
+          { label: 'Shadow', value: 'An optional comparison version used to evaluate changes without replacing primary behavior.' },
+        ],
+        notes: ['Activations are operational changes; copy-page can capture the active version and manifest for change records.'],
+      }
+    case 'grant':
+      return {
+        title: 'Grant',
+        meaning: 'A grant binds an application, subject, resource, and scopes into explicit authority.',
+        when: 'Use grants for known subjects or workloads that need scoped access to one resource.',
+        impact: 'Grants establish requestable authority; policies can still narrow or deny individual requests.',
+        example: 'payments-worker -> user:alice -> resource://payments-api read',
+        valid: 'The resource and application must exist in the selected zone; scopes should come from the selected resource.',
+        after: 'Open details to inspect status, subject, scopes, and linked object IDs before revoking.',
+        terms: [
+          { label: 'Subject', value: 'The end user, workload, or actor receiving authority through the grant.' },
+          { label: 'Revoke', value: 'Stops future use of the grant while keeping an audit trail.' },
+        ],
+        notes: ['Use the scope picker after selecting a resource to avoid invalid scope strings.'],
+      }
+    case 'session':
+      return {
+        title: 'Session',
+        meaning: 'A session is a tracked authority context created by token exchange, delegation, or agent activity.',
+        when: 'Use sessions to inspect active, expired, or revoked authority for a subject.',
+        impact: 'Session status affects whether related authority can continue to be used.',
+        example: 'user:alice@example.com active until 28 May, 04:48 UTC',
+        valid: 'Filters narrow by status, subject, and result limit.',
+        after: 'Use audit and delegation views for deeper request history or authority graph inspection.',
+        terms: [
+          { label: 'TTL', value: 'Time to live; how long a token or authority record remains valid.' },
+          { label: 'Revoked', value: 'Explicitly invalidated before natural expiration.' },
+        ],
+        notes: ['Session timestamps are formatted for reading in tables; detail JSON preserves raw backend values where available.'],
+      }
+    case 'delegation':
+      return {
+        title: 'Delegation',
+        meaning: 'A delegation edge transfers bounded authority from one session to another.',
+        when: 'Use delegation views to trace, traverse, or revoke authority passed between agents or sessions.',
+        impact: 'Revoking a delegation can cut off downstream authority paths and affect active agents.',
+        example: 'session A -> session B for resource://payments-api',
+        valid: 'Edges are zone-scoped and can be inspected by active, inbound, outbound, or traversal views.',
+        after: 'Open details or traverse to understand the exact edge before revocation.',
+        terms: [
+          { label: 'Inbound', value: 'Delegations targeting the selected session.' },
+          { label: 'Outbound', value: 'Delegations issued by the selected session.' },
+        ],
+        notes: ['Traversal is diagnostic; revoke is a state-changing authority operation.'],
+      }
+    case 'agent':
+      return {
+        title: 'Agent run',
+        meaning: 'An agent run is an operational session for an agent application and its child activity.',
+        when: 'Use agent views to inspect status, parent/child trees, suspension, resume, and termination.',
+        impact: 'Suspend and terminate affect live agent execution; tree inspection is read-only.',
+        example: 'payments-agent running depth 1',
+        valid: 'Agent rows come from the coordinator for the selected zone.',
+        after: 'Open details for raw session state or tree for child-session relationships.',
+        terms: [
+          { label: 'Depth', value: 'How far the session is from the root agent session.' },
+          { label: 'Suspend', value: 'Pause an agent session subtree without deleting its records.' },
+        ],
+        notes: ['Use terminate for cleanup only when the session should stop permanently.'],
+      }
+  }
 }
 
 function parseJsonObject(input: string): JsonObject {
@@ -490,6 +687,7 @@ function grantScopePicker(ctx: Ctx): Field['pick'] {
 export function zonesView(ctx: Ctx): View {
   const list: ListView<Zone> = new ListView<Zone>({
     title: 'zones',
+    info: resourceListInfo('zone'),
     columns: [
       { header: 'name', width: 24, value: (r) => r.name },
       { header: 'slug', width: 18, value: (r) => r.slug },
@@ -562,6 +760,7 @@ export function zonesView(ctx: Ctx): View {
 export function applicationsView(ctx: Ctx): View {
   const list: ListView<Application> = new ListView<Application>({
     title: 'applications',
+    info: resourceListInfo('application'),
     columns: [
       { header: 'name', width: 24, value: (r) => r.name },
       { header: 'method', width: 8, value: (r) => r.registration_method },
@@ -696,6 +895,7 @@ export function applicationsView(ctx: Ctx): View {
 export function resourcesView(ctx: Ctx): View {
   const list: ListView<Resource> = new ListView<Resource>({
     title: 'resources',
+    info: resourceListInfo('resource'),
     columns: [
       { header: 'name', width: 24, value: named },
       { header: 'identifier', width: 30, value: (r) => r.identifier },
@@ -789,6 +989,7 @@ export function resourcesView(ctx: Ctx): View {
 export function providersView(ctx: Ctx): View {
   const list: ListView<Provider> = new ListView<Provider>({
     title: 'providers',
+    info: resourceListInfo('provider'),
     columns: [
       { header: 'name', width: 24, value: named },
       { header: 'identifier', width: 24, value: (r) => r.identifier },
@@ -888,6 +1089,7 @@ export function providersView(ctx: Ctx): View {
 export function policiesView(ctx: Ctx): View {
   const list: ListView<Policy> = new ListView<Policy>({
     title: 'policies',
+    info: resourceListInfo('policy'),
     columns: [
       { header: 'name', width: 28, value: (r) => r.name },
       { header: 'owner', width: 10, value: (r) => r.owner_type },
@@ -983,6 +1185,7 @@ export function policiesView(ctx: Ctx): View {
 export function policySetsView(ctx: Ctx): View {
   const list: ListView<PolicySetRow> = new ListView<PolicySetRow>({
     title: 'policy sets',
+    info: resourceListInfo('policy set'),
     columns: [
       { header: 'name', width: 24, value: (r) => r.name },
       { header: 'active version', width: 16, value: (r) => r.active_version_label },
@@ -1095,6 +1298,7 @@ export function policySetsView(ctx: Ctx): View {
 export function grantsView(ctx: Ctx): View {
   const list: ListView<GrantRow> = new ListView<GrantRow>({
     title: 'grants',
+    info: resourceListInfo('grant'),
     columns: [
       { header: 'app', width: 28, value: (r) => r.application_name },
       { header: 'subject', width: 36, value: (r) => r.user_id },
@@ -1153,6 +1357,7 @@ export function sessionsView(ctx: Ctx): View {
   const filters: SessionQuery = { ...ctx.state?.sessionFilters(ctx.zoneId) }
   const list: ListView<Session> = new ListView<Session>({
     title: 'sessions',
+    info: resourceListInfo('session'),
     columns: [
       { header: 'subject', width: 36, value: (r) => r.subject_id },
       { header: 'type', width: 10, value: (r) => r.session_type },
@@ -1279,6 +1484,7 @@ class DelegationMenuView implements View {
 function delegationActiveView(ctx: Ctx): ListView<DelegationRow> {
   return new ListView<DelegationRow>({
     title: 'delegations / active',
+    info: resourceListInfo('delegation'),
     columns: [
       { header: 'source', width: 36, value: (r) => r.source_session_id },
       { header: 'target', width: 36, value: (r) => r.target_session_id },
@@ -1299,6 +1505,7 @@ function delegationActiveView(ctx: Ctx): ListView<DelegationRow> {
 function delegationEdgesView(ctx: Ctx, kind: 'inbound' | 'outbound', sessionId: string): ListView<DelegationRow> {
   const list: ListView<DelegationRow> = new ListView<DelegationRow>({
     title: `delegations / ${kind}`,
+    info: resourceListInfo('delegation'),
     columns: [
       { header: 'source', width: 36, value: (r) => r.source_session_id },
       { header: 'target', width: 36, value: (r) => r.target_session_id },
@@ -1342,6 +1549,7 @@ function delegationEdgesView(ctx: Ctx, kind: 'inbound' | 'outbound', sessionId: 
 function delegationTraverseView(ctx: Ctx, id: string): ListView<TraverseNode> {
   return new ListView<TraverseNode>({
     title: `delegation traverse / ${id}`,
+    info: resourceListInfo('delegation'),
     columns: [
       { header: 'depth', width: 6, value: (r) => String(r.depth) },
       { header: 'source', width: 36, value: (r) => r.source_session_id },
@@ -1361,6 +1569,7 @@ function delegationTraverseView(ctx: Ctx, id: string): ListView<TraverseNode> {
 export function agentsView(ctx: Ctx): View {
   const list: ListView<AgentRow> = new ListView<AgentRow>({
     title: 'agents',
+    info: resourceListInfo('agent'),
     columns: [
       { header: 'application', width: 28, value: (r) => r.application_name },
       { header: 'parent', width: 36, value: (r) => r.parent_id ?? '-' },
