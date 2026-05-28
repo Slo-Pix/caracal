@@ -179,7 +179,7 @@ function bool(v: string | undefined): boolean | undefined {
 }
 
 const APPLICATION_REGISTRATION_METHODS = ['managed', 'dcr'] as const
-const PROVIDER_KINDS: ProviderKind[] = ['oauth2', 'apikey']
+const PROVIDER_KINDS: ProviderKind[] = ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
 const RESOURCE_MODES = ['direct', 'gateway'] as const
 const CONTENT_SOURCES = ['paste', 'file'] as const
 
@@ -297,7 +297,7 @@ function resourceHelp(kind: ResourceHelpKind): InfoPage & { notes: string[] } {
         title: 'Provider',
         meaning: 'A provider describes an upstream credential source Caracal can use when calling protected services.',
         when: 'Use providers when Gateway workflows must exchange or attach upstream credentials.',
-        impact: 'Provider kind and config decide which token endpoint or API-key header is used at runtime.',
+        impact: 'Provider kind and config decide which provider-native credential flow STS and Gateway use at runtime.',
         example: 'Hooli OAuth2',
         valid: 'Only configured provider kinds and their implemented fields are sent to the API.',
         after: 'Open details to inspect the provider type and credential routing fields.',
@@ -411,12 +411,24 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
 function providerConfigFromValues(values: Record<string, string>, requireConfig: boolean): JsonObject | undefined {
   const kind = providerKind(values.kind)
   const config: JsonObject = {}
+  mergeConfigText(config, 'authorization_endpoint', values.authorization_endpoint)
   mergeConfigText(config, 'token_endpoint', values.token_endpoint)
+  mergeConfigText(config, 'redirect_uri', values.redirect_uri)
+  mergeConfigText(config, 'client_id', values.client_id)
+  mergeConfigText(config, 'client_secret', values.client_secret)
+  mergeConfigText(config, 'api_key', values.api_key)
+  mergeConfigText(config, 'bearer_token', values.bearer_token)
+  mergeConfigText(config, 'client_auth_method', values.client_auth_method)
+  mergeConfigList(config, 'scopes', values.provider_scopes)
   mergeConfigList(config, 'allowed_token_hosts', values.allowed_token_hosts || inferredTokenHosts(values.token_endpoint))
   mergeConfigText(config, 'header_name', values.api_key_header)
   mergeConfigText(config, 'auth_header', values.auth_header)
   mergeConfigText(config, 'auth_scheme', values.auth_scheme)
   if (values.forward_caracal_identity === 'true') config.forward_caracal_identity = true
+  const allowed = providerConfigKeys(kind)
+  for (const key of Object.keys(config)) {
+    if (!allowed.has(key)) delete config[key]
+  }
   if (Object.keys(config).length === 0) {
     if (requireConfig) throw new Error(`${kind} provider config is required`)
     return undefined
@@ -426,7 +438,7 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
 }
 
 function providerKind(value: string | undefined): ProviderKind {
-  return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2'
+  return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2_authorization_code'
 }
 
 function mergeConfigText(config: JsonObject, key: string, value: string | undefined): void {
@@ -443,17 +455,26 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
   const allowed = providerConfigKeys(kind)
   const unknown = Object.keys(config).filter((key) => !allowed.has(key))
   if (unknown.length > 0) throw new Error(`${kind} provider config has unsupported keys: ${unknown.join(', ')}`)
-  if (kind === 'apikey') {
-    requireString(config, 'header_name', 'apikey provider config requires header_name')
+  if (kind === 'api_key') {
+    requireString(config, 'header_name', 'api_key provider config requires header_name')
     return
   }
+  if (kind === 'bearer_token') return
   requireString(config, 'token_endpoint', `${kind} provider config requires token_endpoint`)
+  requireString(config, 'client_id', `${kind} provider config requires client_id`)
   requireStringList(config, 'allowed_token_hosts', `${kind} provider config requires allowed_token_hosts`)
+  if (kind === 'oauth2_authorization_code') {
+    requireString(config, 'authorization_endpoint', 'oauth2_authorization_code provider config requires authorization_endpoint')
+    requireString(config, 'redirect_uri', 'oauth2_authorization_code provider config requires redirect_uri')
+  }
 }
 
 function providerConfigKeys(kind: ProviderKind): Set<string> {
-  if (kind === 'apikey') return new Set(['header_name', 'auth_scheme', 'forward_caracal_identity'])
-  return new Set(['token_endpoint', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
+  if (kind === 'api_key') return new Set(['header_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
+  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'provider_scopes', 'scopes', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
+  if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri')
+  return new Set(keys)
 }
 
 function configString(config: JsonObject, key: string): string {
@@ -1130,13 +1151,21 @@ export function providersView(ctx: Ctx): View {
           submitLabel: 'create provider',
           fields: [
             { key: 'name', label: 'provider name', kind: 'text', required: true, hint: 'human-readable name; identifier is generated when blank' },
-            { key: 'kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: 'oauth2' },
-            { key: 'token_endpoint', label: 'token endpoint', kind: 'text', dependsOn: { kind: 'oauth2' }, required: true, hint: 'HTTPS endpoint where provider tokens are refreshed' },
-            { key: 'api_key_header', label: 'API key header', kind: 'text', dependsOn: { kind: 'apikey' }, required: true, hint: 'header where the upstream service expects the API key' },
+            { key: 'kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: 'oauth2_authorization_code' },
+            { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', dependsOn: { kind: 'oauth2_authorization_code' }, required: true, hint: 'HTTPS endpoint where users approve delegated access' },
+            { key: 'token_endpoint', label: 'token endpoint', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true, hint: 'HTTPS endpoint where provider tokens are issued or refreshed' },
+            { key: 'redirect_uri', label: 'redirect URI', kind: 'text', dependsOn: { kind: 'oauth2_authorization_code' }, required: true, hint: 'callback URI registered with the provider' },
+            { key: 'client_id', label: 'client ID', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true },
+            { key: 'client_secret', label: 'client secret', kind: 'secret', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, hint: 'required unless client auth method is none' },
+            { key: 'api_key_header', label: 'API key header', kind: 'text', dependsOn: { kind: 'api_key' }, required: true, hint: 'header where the upstream service expects the API key' },
+            { key: 'api_key', label: 'API key', kind: 'secret', dependsOn: { kind: 'api_key' }, required: true },
+            { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, required: true },
             { key: 'identifier', label: 'identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank' },
-            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: 'oauth2' }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
-            { key: 'auth_header', label: 'auth header', kind: 'text', dependsOn: { kind: 'oauth2' }, advanced: true, hint: 'optional; leave blank for Authorization' },
-            { key: 'auth_scheme', label: 'auth scheme', kind: 'text', dependsOn: { kind: ['oauth2', 'apikey'] }, advanced: true, hint: 'optional; leave blank for the default upstream credential scheme' },
+            { key: 'provider_scopes', label: 'provider scopes', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional upstream OAuth scopes requested from the provider' },
+            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
+            { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+            { key: 'auth_header', label: 'auth header', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
+            { key: 'auth_scheme', label: 'auth scheme', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for the default upstream credential scheme' },
             { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', advanced: true },
           ],
           onSubmit: async (v, app) => {
@@ -1159,18 +1188,27 @@ export function providersView(ctx: Ctx): View {
               { key: 'name', label: 'name', kind: 'text', default: row.name },
               { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
               { key: 'kind', label: 'kind', kind: 'select', options: PROVIDER_KINDS, default: row.kind },
-              { key: 'token_endpoint', label: 'token endpoint', kind: 'text', default: configString(row.config_json, 'token_endpoint'), dependsOn: { kind: 'oauth2' }, required: true },
-              { key: 'api_key_header', label: 'API key header', kind: 'text', default: configString(row.config_json, 'header_name'), dependsOn: { kind: 'apikey' }, required: true },
-              { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: 'oauth2' }, advanced: true },
-              { key: 'auth_header', label: 'auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: 'oauth2' }, advanced: true },
-              { key: 'auth_scheme', label: 'auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2', 'apikey'] }, advanced: true },
+              { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', default: configString(row.config_json, 'authorization_endpoint'), dependsOn: { kind: 'oauth2_authorization_code' }, required: true },
+              { key: 'token_endpoint', label: 'token endpoint', kind: 'text', default: configString(row.config_json, 'token_endpoint'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true },
+              { key: 'redirect_uri', label: 'redirect URI', kind: 'text', default: configString(row.config_json, 'redirect_uri'), dependsOn: { kind: 'oauth2_authorization_code' }, required: true },
+              { key: 'client_id', label: 'client ID', kind: 'text', default: configString(row.config_json, 'client_id'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true },
+              { key: 'client_secret', label: 'client secret', kind: 'secret', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, hint: 'leave blank to keep the current secret' },
+              { key: 'api_key_header', label: 'API key header', kind: 'text', default: configString(row.config_json, 'header_name'), dependsOn: { kind: 'api_key' }, required: true },
+              { key: 'api_key', label: 'API key', kind: 'secret', dependsOn: { kind: 'api_key' }, hint: 'leave blank to keep the current API key' },
+              { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, hint: 'leave blank to keep the current bearer token' },
+              { key: 'provider_scopes', label: 'provider scopes', kind: 'list', default: configList(row.config_json, 'scopes'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+              { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+              { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: configString(row.config_json, 'client_auth_method') || 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+              { key: 'auth_header', label: 'auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true },
+              { key: 'auth_scheme', label: 'auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true },
               { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: configBool(row.config_json, 'forward_caracal_identity'), advanced: true },
             ],
             onSubmit: async (v, app) => {
+              const kind = providerKind(v.kind)
               await ctx.client.providers.patch(ctx.zoneId, row.id, {
                 name: v.name || undefined,
                 identifier: v.identifier || undefined,
-                kind: providerKind(v.kind),
+                kind: kind === row.kind ? undefined : kind,
                 config_json: providerConfigFromValues(v, true),
               } as Partial<ProviderInput>)
               await popAndReload(app, list as unknown as ListView<unknown>)

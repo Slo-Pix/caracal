@@ -24,7 +24,7 @@ import { EntityPickerView } from './picker.ts'
 import type { Ctx } from './factory.ts'
 
 const DEFAULT_GATEWAY_URL = 'http://localhost:8081'
-const PROVIDER_KINDS: ProviderKind[] = ['oauth2', 'apikey']
+const PROVIDER_KINDS: ProviderKind[] = ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
 
 interface SetupValues {
   zone_mode?: string
@@ -47,7 +47,15 @@ interface SetupValues {
   provider_name?: string
   provider_identifier?: string
   provider_kind?: string
+  provider_authorization_endpoint?: string
   provider_token_endpoint?: string
+  provider_redirect_uri?: string
+  provider_client_id?: string
+  provider_client_secret?: string
+  provider_api_key?: string
+  provider_bearer_token?: string
+  provider_client_auth_method?: string
+  provider_scopes?: string
   provider_api_key_header?: string
   provider_allowed_token_hosts?: string
   provider_auth_header?: string
@@ -130,7 +138,7 @@ class FirstSetupWizardView implements View {
     write_files: 'false',
     overwrite_files: 'false',
     profile_path: defaultRuntimeConfigPath(),
-    provider_kind: 'oauth2',
+    provider_kind: 'oauth2_authorization_code',
     provider_forward_caracal_identity: 'false',
   }
   private selectedZone: Zone | undefined
@@ -325,12 +333,20 @@ class FirstSetupWizardView implements View {
 
   private clearProviderCreateValues(): void {
     this.values.provider_identifier = ''
-    this.values.provider_kind = 'oauth2'
+    this.values.provider_kind = 'oauth2_authorization_code'
     this.clearProviderTypeValues()
   }
 
   private clearProviderTypeValues(): void {
     this.values.provider_token_endpoint = ''
+    this.values.provider_authorization_endpoint = ''
+    this.values.provider_redirect_uri = ''
+    this.values.provider_client_id = ''
+    this.values.provider_client_secret = ''
+    this.values.provider_api_key = ''
+    this.values.provider_bearer_token = ''
+    this.values.provider_client_auth_method = 'client_secret_basic'
+    this.values.provider_scopes = ''
     this.values.provider_api_key_header = ''
     this.values.provider_allowed_token_hosts = ''
     this.values.provider_auth_header = ''
@@ -426,13 +442,21 @@ class FirstSetupWizardView implements View {
         { key: 'provider_mode', label: 'provider action', kind: 'select', options: ['create', 'select', 'none'], default: this.values.provider_mode ?? 'create', info: guidedInfo('Provider action', 'Most external resources need a provider; direct resources can choose none.', 'create for Hooli OAuth2', 'create, select, or none', 'Console either creates a provider, links an existing provider, or leaves the resource direct.') },
         { key: 'selected_provider_id', label: 'existing provider', kind: 'text', required: true, default: this.values.selected_provider_id ?? '', dependsOn: { provider_mode: 'select' }, pick: providerPicker(this.ctx, () => this.currentZoneId()), resolve: providerResolver(this.ctx, () => this.currentZoneId()), info: guidedInfo('Existing provider', 'Pick the provider that supplies upstream credentials.', 'Hooli OAuth2', 'Use the picker instead of typing an ID.', 'The resource page can attach this provider to the Gateway route.') },
         { key: 'provider_name', label: 'provider name', kind: 'text', required: true, default: this.values.provider_name ?? '', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider name', 'Human-readable name for the upstream credential source.', 'Hooli PiperNet OAuth2', 'Short text, not an internal ID.', 'Console creates this provider before creating the resource.') },
-        { key: 'provider_kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: this.values.provider_kind ?? 'oauth2', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider type', 'Type controls which credential fields are required.', 'oauth2 for a token endpoint; apikey for header injection', 'oauth2 or apikey', 'The form hides irrelevant fields and validates only the selected provider type.') },
-        { key: 'provider_token_endpoint', label: 'token endpoint', kind: 'text', required: true, default: this.values.provider_token_endpoint ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2' }, info: guidedInfo('Token endpoint', 'Endpoint where Gateway refreshes upstream OAuth tokens.', 'https://login.hooli.example/oauth/token', 'Absolute HTTPS URL.', 'Console infers allowed token hosts from this URL unless Advanced overrides them.') },
-        { key: 'provider_api_key_header', label: 'API key header', kind: 'text', required: true, default: this.values.provider_api_key_header ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'apikey' }, info: guidedInfo('API key header', 'Header where the upstream API expects its key.', 'X-API-Key', 'HTTP header name.', 'Gateway uses this header when calling the upstream API.') },
+        { key: 'provider_kind', label: 'provider type', kind: 'select', options: PROVIDER_KINDS, default: this.values.provider_kind ?? 'oauth2_authorization_code', dependsOn: { provider_mode: 'create' }, info: guidedInfo('Provider type', 'Type controls which credential fields are required.', 'Hooli OAuth2 authorization code', 'Choose the real upstream auth mode.', 'The form hides irrelevant fields and validates only the selected provider type.') },
+        { key: 'provider_authorization_endpoint', label: 'authorization endpoint', kind: 'text', required: true, default: this.values.provider_authorization_endpoint ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_authorization_code' }, info: guidedInfo('Authorization endpoint', 'Endpoint where users approve delegated provider access.', 'https://login.hooli.example/oauth/authorize', 'Absolute HTTPS URL.', 'Authorization-code providers use this with a callback URI.') },
+        { key: 'provider_token_endpoint', label: 'token endpoint', kind: 'text', required: true, default: this.values.provider_token_endpoint ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, info: guidedInfo('Token endpoint', 'Endpoint where Gateway obtains or refreshes upstream OAuth tokens.', 'https://login.hooli.example/oauth/token', 'Absolute HTTPS URL.', 'Console infers allowed token hosts from this URL unless Advanced overrides them.') },
+        { key: 'provider_redirect_uri', label: 'redirect URI', kind: 'text', required: true, default: this.values.provider_redirect_uri ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_authorization_code' }, info: guidedInfo('Redirect URI', 'Callback URI registered with the provider.', 'http://localhost:3000/oauth/callback', 'Absolute callback URI.', 'The provider sends authorization results to this URI.') },
+        { key: 'provider_client_id', label: 'client ID', kind: 'text', required: true, default: this.values.provider_client_id ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, info: guidedInfo('Client ID', 'OAuth client identifier issued by the provider.', 'hooli-pipernet-client', 'Provider-issued client ID.', 'STS uses this when exchanging or refreshing provider tokens.') },
+        { key: 'provider_client_secret', label: 'client secret', kind: 'secret', default: this.values.provider_client_secret ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, info: guidedInfo('Client secret', 'OAuth client secret issued by the provider unless the client uses public/no-secret token endpoint auth.', 'Paste the provider secret', 'Secret text, or blank only when client auth method is none.', 'Console seals this value before storing it.') },
+        { key: 'provider_api_key_header', label: 'API key header', kind: 'text', required: true, default: this.values.provider_api_key_header ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'api_key' }, info: guidedInfo('API key header', 'Header where the upstream API expects its key.', 'X-API-Key', 'HTTP header name.', 'Gateway uses this header when calling the upstream API.') },
+        { key: 'provider_api_key', label: 'API key', kind: 'secret', required: true, default: this.values.provider_api_key ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'api_key' }, info: guidedInfo('API key', 'Provider-native API key for the upstream service.', 'Paste the Hooli API key', 'Secret text.', 'Console seals this value before storing it.') },
+        { key: 'provider_bearer_token', label: 'bearer token', kind: 'secret', required: true, default: this.values.provider_bearer_token ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'bearer_token' }, info: guidedInfo('Bearer token', 'Provider-native bearer token for the upstream service.', 'Paste the Hooli bearer token', 'Secret text.', 'Console seals this value before storing it.') },
         { key: 'provider_identifier', label: 'identifier', kind: 'text', default: this.values.provider_identifier ?? '', dependsOn: { provider_mode: 'create' }, advanced: true, info: guidedInfo('Provider identifier', 'Stable provider identifier used by APIs and audit output.', 'provider://hooli-pipernet', 'Leave blank to generate from provider name.', 'Console sends this identifier when creating the provider.') },
-        { key: 'provider_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: this.values.provider_allowed_token_hosts ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2' }, advanced: true, info: guidedInfo('Allowed token hosts', 'Host allow-list for token refresh endpoints.', 'login.hooli.example', 'Comma-separated host names.', 'Blank uses the host inferred from token endpoint.') },
-        { key: 'provider_auth_header', label: 'auth header', kind: 'text', default: this.values.provider_auth_header ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2' }, advanced: true, info: guidedInfo('Auth header', 'Header where Gateway forwards OAuth provider tokens.', 'Authorization', 'HTTP header name, or blank for the default.', 'Gateway uses this header when calling the upstream API.') },
-        { key: 'provider_auth_scheme', label: 'auth scheme', kind: 'text', default: this.values.provider_auth_scheme ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2', 'apikey'] }, advanced: true, info: guidedInfo('Auth scheme', 'Optional prefix for upstream credential values.', 'Bearer', 'Short scheme name, or blank for the default.', 'Gateway formats provider credentials using this scheme when needed.') },
+        { key: 'provider_scopes', label: 'provider scopes', kind: 'list', default: this.values.provider_scopes ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Provider scopes', 'Optional OAuth scopes requested from the provider.', 'pipernet.read,pipernet.write', 'Comma-separated provider scopes.', 'STS sends these scopes to the provider when the flow uses them.') },
+        { key: 'provider_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: this.values.provider_allowed_token_hosts ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Allowed token hosts', 'Host allow-list for token refresh endpoints.', 'login.hooli.example', 'Comma-separated host names.', 'Blank uses the host inferred from token endpoint.') },
+        { key: 'provider_client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: this.values.provider_client_auth_method ?? 'client_secret_basic', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Client auth method', 'How STS authenticates to the OAuth token endpoint.', 'client_secret_basic', 'OAuth client authentication method.', 'Use the method registered with the provider.') },
+        { key: 'provider_auth_header', label: 'auth header', kind: 'text', default: this.values.provider_auth_header ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, info: guidedInfo('Auth header', 'Header where Gateway forwards provider tokens.', 'Authorization', 'HTTP header name, or blank for the default.', 'Gateway uses this header when calling the upstream API.') },
+        { key: 'provider_auth_scheme', label: 'auth scheme', kind: 'text', default: this.values.provider_auth_scheme ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, info: guidedInfo('Auth scheme', 'Optional prefix for upstream credential values.', 'Bearer', 'Short scheme name, or blank for the default.', 'Gateway formats provider credentials using this scheme when needed.') },
         { key: 'provider_forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: this.values.provider_forward_caracal_identity ?? 'false', dependsOn: { provider_mode: 'create' }, advanced: true, info: guidedInfo('Forward Caracal identity', 'Forward selected Caracal identity context to the upstream provider.', 'Enable for a Hooli broker that trusts Caracal identity.', 'Boolean toggle.', 'Provider config records the forwarding preference.') },
       ],
       onSubmit: async (raw, formApp) => {
@@ -878,18 +902,30 @@ function providerIdentifierFor(values: SetupValues): string {
 }
 
 function providerKind(value: string | undefined): ProviderKind {
-  return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2'
+  return PROVIDER_KINDS.includes(value as ProviderKind) ? value as ProviderKind : 'oauth2_authorization_code'
 }
 
 function providerConfigFromValues(values: SetupValues): JsonObject {
   const kind = providerKind(values.provider_kind)
   const config: JsonObject = {}
+  mergeConfigText(config, 'authorization_endpoint', values.provider_authorization_endpoint)
   mergeConfigText(config, 'token_endpoint', values.provider_token_endpoint)
+  mergeConfigText(config, 'redirect_uri', values.provider_redirect_uri)
+  mergeConfigText(config, 'client_id', values.provider_client_id)
+  mergeConfigText(config, 'client_secret', values.provider_client_secret)
+  mergeConfigText(config, 'api_key', values.provider_api_key)
+  mergeConfigText(config, 'bearer_token', values.provider_bearer_token)
+  mergeConfigText(config, 'client_auth_method', values.provider_client_auth_method)
+  mergeConfigList(config, 'scopes', values.provider_scopes)
   mergeConfigList(config, 'allowed_token_hosts', values.provider_allowed_token_hosts || inferredTokenHosts(values.provider_token_endpoint))
   mergeConfigText(config, 'header_name', values.provider_api_key_header)
   mergeConfigText(config, 'auth_header', values.provider_auth_header)
   mergeConfigText(config, 'auth_scheme', values.provider_auth_scheme)
   if (values.provider_forward_caracal_identity === 'true') config.forward_caracal_identity = true
+  const allowed = providerConfigKeys(kind)
+  for (const key of Object.keys(config)) {
+    if (!allowed.has(key)) delete config[key]
+  }
   validateProviderConfig(kind, config)
   return config
 }
@@ -915,12 +951,31 @@ function inferredTokenHosts(endpoint: string | undefined): string {
 }
 
 function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
-  if (kind === 'apikey') {
-    requireString(config, 'header_name', 'apikey provider config requires header_name')
+  if (kind === 'api_key') {
+    requireString(config, 'header_name', 'api_key provider config requires header_name')
+    requireString(config, 'api_key', 'api_key provider config requires api_key')
+    return
+  }
+  if (kind === 'bearer_token') {
+    requireString(config, 'bearer_token', 'bearer_token provider config requires bearer_token')
     return
   }
   requireString(config, 'token_endpoint', `${kind} provider config requires token_endpoint`)
+  requireString(config, 'client_id', `${kind} provider config requires client_id`)
+  if (config.client_auth_method !== 'none') requireString(config, 'client_secret', `${kind} provider config requires client_secret`)
   requireStringList(config, 'allowed_token_hosts', `${kind} provider config requires allowed_token_hosts`)
+  if (kind === 'oauth2_authorization_code') {
+    requireString(config, 'authorization_endpoint', 'oauth2_authorization_code provider config requires authorization_endpoint')
+    requireString(config, 'redirect_uri', 'oauth2_authorization_code provider config requires redirect_uri')
+  }
+}
+
+function providerConfigKeys(kind: ProviderKind): Set<string> {
+  if (kind === 'api_key') return new Set(['header_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
+  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'scopes', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
+  if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri')
+  return new Set(keys)
 }
 
 function requireString(config: JsonObject, key: string, message: string): void {

@@ -84,7 +84,7 @@ export interface ResourceInput {
   credential_provider_id?: string | null
 }
 
-export type ProviderKind = 'oauth2' | 'apikey'
+export type ProviderKind = 'oauth2_authorization_code' | 'oauth2_client_credentials' | 'api_key' | 'bearer_token'
 
 export interface Provider {
   id: string
@@ -93,6 +93,7 @@ export interface Provider {
   identifier: string
   kind: ProviderKind
   config_json: JsonObject
+  secret_config_keys: string[]
   created_at: string
   updated_at: string
 }
