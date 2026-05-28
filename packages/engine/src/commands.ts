@@ -126,18 +126,12 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
       create: [
         { name: '--name', summary: 'Zone display name (required)' },
         { name: '--slug', summary: 'URL-safe slug' },
-        { name: '--org', summary: 'Organization ID' },
         { name: '--dcr', summary: 'Enable dynamic client registration' },
-        { name: '--no-pkce', summary: 'Disable PKCE (on by default)' },
-        { name: '--login-flow', summary: 'Login flow type' },
       ],
       patch: [
         { name: '--name', summary: 'Zone display name' },
         { name: '--slug', summary: 'URL-safe slug' },
-        { name: '--org', summary: 'Organization ID' },
         { name: '--dcr', summary: 'Enable/disable DCR (=true|false)' },
-        { name: '--pkce', summary: 'Require PKCE (=true|false)' },
-        { name: '--login-flow', summary: 'Login flow type' },
       ],
     },
   },

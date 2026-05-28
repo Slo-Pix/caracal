@@ -489,9 +489,7 @@ export function zonesView(ctx: Ctx): View {
     columns: [
       { header: 'name', width: 24, value: (r) => r.name },
       { header: 'slug', width: 18, value: (r) => r.slug },
-      { header: 'login_flow', width: 12, value: (r) => r.login_flow },
-      { header: 'dcr', width: 5, value: (r) => (r.dcr_enabled ? 'yes' : 'no') },
-      { header: 'pkce', width: 5, value: (r) => (r.pkce_required ? 'req' : 'opt') },
+      { header: 'dynamic clients', width: 15, value: (r) => (r.dcr_enabled ? 'enabled' : 'disabled') },
     ],
     load: () => ctx.client.zones.list(),
     state: ctx.state,
@@ -528,16 +526,12 @@ export function zonesView(ctx: Ctx): View {
               { key: 'name', label: 'name', kind: 'text', default: row.name },
               { key: 'slug', label: 'slug', kind: 'text', default: row.slug },
               { key: 'dcr_enabled', label: 'dynamic clients', kind: 'bool', default: String(row.dcr_enabled) },
-              { key: 'pkce_required', label: 'require PKCE', kind: 'bool', default: String(row.pkce_required) },
-              { key: 'login_flow', label: 'login flow', kind: 'text', default: row.login_flow },
             ],
             onSubmit: async (v, app) => {
               await ctx.client.zones.patch(row.id, {
                 name: v.name || undefined,
                 slug: v.slug || undefined,
                 dcr_enabled: bool(v.dcr_enabled),
-                pkce_required: bool(v.pkce_required),
-                login_flow: v.login_flow || undefined,
               })
               await popAndReload(app, list as unknown as ListView<unknown>)
             },

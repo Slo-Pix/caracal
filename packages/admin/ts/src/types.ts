@@ -7,23 +7,17 @@ import type { JsonObject, JsonValue } from '@caracalai/core'
 
 export interface Zone {
   id: string
-  org_id: string
   name: string
   slug: string
   dcr_enabled: boolean
-  pkce_required: boolean
-  login_flow: string
   created_at: string
   updated_at: string
 }
 
 export interface ZoneInput {
-  org_id?: string
   name: string
   slug?: string
   dcr_enabled?: boolean
-  pkce_required?: boolean
-  login_flow?: string
 }
 
 export type RegistrationMethod = 'managed' | 'dcr'

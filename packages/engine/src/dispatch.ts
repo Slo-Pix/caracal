@@ -152,19 +152,13 @@ const zoneHandler = bySubcommand({
   create: ({ flags, ctx }) => ctx.admin.zones.create({
     name: mustStr(flags, 'name'),
     slug: getStr(flags, 'slug'),
-    organization_id: getStr(flags, 'org'),
     dcr_enabled: getBool(flags, 'dcr'),
-    require_pkce: getBool(flags, 'pkce'),
-    login_flow: getStr(flags, 'login-flow'),
-  } as never),
+  }),
   patch: ({ flags, ctx }) => ctx.admin.zones.patch(mustStr(flags, 'id'), {
     name: getStr(flags, 'name'),
     slug: getStr(flags, 'slug'),
-    organization_id: getStr(flags, 'org'),
     dcr_enabled: getBool(flags, 'dcr'),
-    require_pkce: getBool(flags, 'pkce'),
-    login_flow: getStr(flags, 'login-flow'),
-  } as never),
+  }),
   delete: ({ flags, ctx }) => ctx.admin.zones.delete(mustStr(flags, 'id')),
 })
 
