@@ -31,7 +31,7 @@
 
 The default product path is intentionally small: register an **agent app**, run an **agent run**, request a short-lived **mandate**, call a **resource** through the **Gateway**, and inspect the resulting **audit** trail. The STS evaluates policy and issues Caracal access tokens, the Gateway enforces token validity and provider routing, the Coordinator tracks runtime and delegation state, and Audit records why access was allowed or denied and what happened upstream.
 
-Read the full documentation at [caracal.run](https://caracal.run). Start with [What Caracal Does](https://caracal.run/get-started/what-caracal-does/) or jump to [Runtime and Console](https://caracal.run/runtime-console/) for setup and management workflows.
+Read the full documentation at [docs.caracal.run](https://docs.caracal.run). Start with [What Caracal Does](https://docs.caracal.run/get-started/what-caracal-does/) or jump to [Runtime and Console](https://docs.caracal.run/runtime-console/) for setup and management workflows.
 
 -----
 
