@@ -4,7 +4,7 @@
 // Transport MCP authentication unit tests.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { authenticate, checkActiveAuthority, extractBearer } from '../../../../packages/transport/mcp/ts/src/authenticate.js'
+import { authenticate, checkActiveAuthority, createMandateVerifier, extractBearer } from '../../../../packages/transport/mcp/ts/src/authenticate.js'
 
 const revocations = {
   isRevoked: vi.fn(),
@@ -108,7 +108,7 @@ describe('transport-mcp authentication', () => {
       audience: 'resource://api',
       revocations,
     })
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: false,
       error: { code: 'missing_token', description: 'Missing bearer token' },
     })
@@ -185,7 +185,7 @@ describe('transport-mcp authentication', () => {
       issuer,
       audience,
       revocations,
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       ok: false,
       error: { code: 'session_revoked', description: 'Session revoked' },
     })
@@ -203,7 +203,7 @@ describe('transport-mcp authentication', () => {
       issuer,
       audience,
       revocations,
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       ok: false,
       error: { code: 'session_revoked', description: 'Session revoked' },
     })
@@ -223,7 +223,7 @@ describe('transport-mcp authentication', () => {
       issuedAt: 10,
       expiresAt: 20,
       scope: 'mcp:call',
-    }, revocations, 21_000)).resolves.toEqual({
+    }, revocations, 21_000)).resolves.toMatchObject({
       code: 'invalid_token',
       description: 'Token expired during execution',
     })
@@ -246,7 +246,7 @@ describe('transport-mcp authentication', () => {
       audience,
       revocations,
       ...deps,
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       ok: false,
       error: { code, description },
     })
@@ -257,9 +257,29 @@ describe('transport-mcp authentication', () => {
       issuer: 'https://issuer.example.com',
       audience: 'resource://api',
       revocations,
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       ok: false,
       error: { code: 'invalid_token', description: 'Token validation failed' },
+    })
+  })
+
+  it('reuses verifier defaults and supports route-level requirements', async () => {
+    const { token, issuer, audience } = await mintToken({ target: ['resource://api'] })
+    revocations.isRevoked.mockResolvedValue(false)
+    const verifier = createMandateVerifier({ issuer, audience, revocations })
+
+    await expect(verifier.authorization(`Bearer ${token}`, {
+      requiredScopes: ['mcp:call'],
+      requiredTargets: ['resource://api'],
+    })).resolves.toMatchObject({ ok: true, principal: { sid: 'sid-1' } })
+
+    await expect(verifier.require({ requiredScopes: ['admin:call'] }).authenticate(token)).resolves.toMatchObject({
+      ok: false,
+      error: {
+        code: 'insufficient_scope',
+        description: 'Missing scope: admin:call',
+        hint: 'Request a mandate that includes every required scope for this route.',
+      },
     })
   })
 })

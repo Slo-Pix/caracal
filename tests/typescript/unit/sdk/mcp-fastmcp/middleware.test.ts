@@ -8,6 +8,7 @@ import {
   FastMcpAuthError,
   verifyFastMcpToken,
 } from '../../../../../packages/connectors/fastmcp/ts/src/middleware.js'
+import type { MandateVerifier } from '../../../../../packages/transport/mcp/ts/src/authenticate.js'
 
 const revocations = {
   isRevoked: vi.fn(),
@@ -112,5 +113,37 @@ describe('verifyFastMcpToken', () => {
       code: 'chain_mismatch',
       message: 'Delegation chain missing application: app-parent',
     } satisfies Partial<FastMcpAuthError>)
+  })
+
+  it('accepts reusable verifier instances with route requirements', async () => {
+    const verifier: MandateVerifier = {
+      defaults: { issuer: 'https://sts.example.com', audience: 'resource://mcp', revocations },
+      authenticate: vi.fn().mockResolvedValue({
+        ok: true,
+        principal: {
+          sub: 'user-1',
+          zoneId: 'zone-1',
+          clientId: 'app-1',
+          sid: 'sid-1',
+          rootSid: 'root-1',
+          use: 'resource',
+          subType: 'user',
+          jti: 'jti-1',
+          issuedAt: 1,
+          expiresAt: 2,
+          scope: 'tool:call',
+        },
+      }),
+      authorization: vi.fn(),
+      require: vi.fn(),
+      warmup: vi.fn(),
+    }
+
+    await expect(verifyFastMcpToken('valid.jwt.token', verifier, { requiredScopes: ['tool:call'] })).resolves.toEqual({
+      sub: 'user-1',
+      zoneId: 'zone-1',
+      scope: 'tool:call',
+    })
+    expect(verifier.authenticate).toHaveBeenCalledWith('valid.jwt.token', { requiredScopes: ['tool:call'] })
   })
 })

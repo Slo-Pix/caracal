@@ -4,12 +4,13 @@
 // TypeScript identity JWKS cache unit tests for fetch and cache behavior.
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getKeySet } from '../../../../packages/identity/ts/src/jwks.js'
+import { clearJwksCache, getKeySet } from '../../../../packages/identity/ts/src/jwks.js'
 
 const TTL_MS = 5 * 60 * 1000
 
 describe('getKeySet', () => {
   afterEach(() => {
+    clearJwksCache()
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
@@ -22,7 +23,9 @@ describe('getKeySet', () => {
     const keySet = await getKeySet(issuer)
 
     expect(typeof keySet).toBe('function')
-    expect(fetchMock).toHaveBeenCalledWith('https://issuer-one.example/.well-known/jwks.json')
+    expect(fetchMock).toHaveBeenCalledWith('https://issuer-one.example/.well-known/jwks.json', {
+      signal: expect.any(AbortSignal),
+    })
   })
 
   it('reuses cached key sets for the same issuer', async () => {
@@ -83,4 +86,3 @@ describe('getKeySet', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })
-

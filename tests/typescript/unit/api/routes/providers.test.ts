@@ -64,6 +64,34 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     expect(values[8]).toEqual(['client_secret'])
   })
 
+  it('creates Caracal mandate providers without secret config', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'caracal-mandate', kind: 'caracal_mandate' }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        identifier: 'caracal-mandate',
+        kind: 'caracal_mandate',
+      },
+    })
+
+    const values = db.query.mock.calls[1][1] as unknown[]
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-1', kind: 'caracal_mandate' })
+    expect(values[4]).toBe('caracal_mandate')
+    expect(JSON.parse(values[5] as string)).toEqual({})
+    expect(values[6]).toBeNull()
+    expect(values[7]).toBeNull()
+    expect(values[8]).toEqual([])
+  })
+
   it('rejects unsupported provider config fields', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
