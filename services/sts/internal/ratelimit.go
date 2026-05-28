@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Per-zone-resource rate limiting using Redis atomic counters.
+// Fixed per-zone-resource rate limiting using Redis atomic counters.
 
 package internal
 
@@ -24,18 +24,12 @@ func (s *Server) checkRateLimit(ctx context.Context, zoneID, resourceID, actorID
 	if s.redis == nil {
 		return sharederr.New(sharederr.ProviderRateLimited, "rate limit unavailable")
 	}
-	window := rateLimitWindow
-	maxRequests := rateLimitMax
-	if limit, err := s.db.GetResourceRateLimit(ctx, zoneID, resourceID); err == nil {
-		window = limit.Window
-		maxRequests = limit.Max
-	}
 	key := fmt.Sprintf("rl:%s:%s:%s", zoneID, resourceID, actorID)
-	count, err := s.redis.IncrWithExpiry(ctx, key, window)
+	count, err := s.redis.IncrWithExpiry(ctx, key, rateLimitWindow)
 	if err != nil {
 		return sharederr.New(sharederr.ProviderRateLimited, "rate limit unavailable")
 	}
-	if count > maxRequests {
+	if count > rateLimitMax {
 		return sharederr.New(sharederr.ProviderRateLimited, "rate limit exceeded")
 	}
 	return nil

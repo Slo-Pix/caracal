@@ -52,7 +52,6 @@ type DBQuerier interface {
 	UpdateGrantTokens(ctx context.Context, id string, expectedVersion int, accessCt, refreshCt []byte, expiresAt time.Time) error
 	GetProvider(ctx context.Context, id string) (*ProviderConfig, error)
 	GetDelegationEdge(ctx context.Context, id string) (*DelegationEdge, error)
-	GetResourceRateLimit(ctx context.Context, zoneID, resourceID string) (*ResourceRateLimit, error)
 	GetSession(ctx context.Context, sid string) (*Session, error)
 	GetAgentSession(ctx context.Context, id string) (*AgentSession, error)
 	GetDelegationPath(ctx context.Context, zoneID, sourceID, targetID string, maxHops int) ([]string, error)
@@ -130,31 +129,12 @@ func (d *DB) GetResourceByIdentifier(ctx context.Context, zoneID, identifier str
 	var r Resource
 	err := d.pool.QueryRow(ctx,
 		`SELECT id, zone_id, identifier, upstream_url, scopes, credential_provider_id FROM resources
-		 WHERE zone_id = $1 AND identifier = $2`, zoneID, identifier,
+		 WHERE zone_id = $1 AND identifier = $2 AND archived_at IS NULL`, zoneID, identifier,
 	).Scan(&r.ID, &r.ZoneID, &r.Identifier, &r.UpstreamURL, &r.Scopes, &r.CredentialProviderID)
 	if err != nil {
 		return nil, err
 	}
 	return &r, nil
-}
-
-// ResourceRateLimit holds the fixed-window limit for a resource.
-type ResourceRateLimit struct {
-	Window time.Duration
-	Max    int64
-}
-
-func (d *DB) GetResourceRateLimit(ctx context.Context, zoneID, resourceID string) (*ResourceRateLimit, error) {
-	var windowSeconds int
-	var maxRequests int64
-	err := d.pool.QueryRow(ctx,
-		`SELECT window_seconds, max_requests FROM resource_rate_limits
-		 WHERE zone_id = $1 AND resource_id = $2`, zoneID, resourceID,
-	).Scan(&windowSeconds, &maxRequests)
-	if err != nil {
-		return nil, err
-	}
-	return &ResourceRateLimit{Window: time.Duration(windowSeconds) * time.Second, Max: maxRequests}, nil
 }
 
 // PolicySetBinding holds the active version for a zone's policy set.

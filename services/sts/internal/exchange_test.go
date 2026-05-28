@@ -260,9 +260,6 @@ func (s *stubDB) GetDelegationEdge(_ context.Context, id string) (*DelegationEdg
 	}
 	return s.edge, s.edgeErr
 }
-func (s *stubDB) GetResourceRateLimit(_ context.Context, _, _ string) (*ResourceRateLimit, error) {
-	return nil, errors.New("stub")
-}
 func (s *stubDB) GetSession(_ context.Context, _ string) (*Session, error) {
 	return s.session, s.sessionErr
 }
