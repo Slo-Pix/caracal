@@ -33,6 +33,7 @@ applyTo: "{apps/console/**,tests/typescript/unit/console/**}"
 ## Writing Rules
 
 - Prefer human-readable names in explanatory UI copy.
+- Use numeric or typed examples for numeric, duration, boolean, URL, identifier, path, JSON, and enum fields; do not substitute names from the approved universe when the field is not a name-like value.
 - Prefer slugged identifiers only where the backend/API value is specifically being illustrated.
 - Match the entity type: use an AI name for an Application/agent, a product name for a Resource, a company name for a Zone or organization-like boundary, and a person name for a user/session subject.
 - Use reserved example domains only when a URL is required, with the approved brand in the host, such as `https://api.pipernet.example` or `https://login.hooli.example/oauth/token`.

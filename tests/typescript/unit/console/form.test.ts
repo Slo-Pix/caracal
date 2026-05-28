@@ -204,6 +204,25 @@ describe('FormView input UX', () => {
     expect(help).not.toContain('supplies the value used by the current Console workflow')
   })
 
+  it('uses numeric examples for lifetime and limit fields', async () => {
+    const view = new FormView({
+      title: 'numeric fields',
+      fields: [{ key: 'expires_in', label: 'client lifetime seconds', kind: 'text' }],
+      onSubmit: async () => {},
+    })
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 12, cols: 100 }, status: '' }
+
+    await view.onKey('?', ctx)
+
+    const info = vi.mocked(app.push).mock.calls.at(-1)![0] as { render: FormView['render'] }
+    const help = info.render(ctx).join('\n')
+    expect(help).toContain('Example')
+    expect(help).toContain('3600')
+    expect(help).toContain('numeric operational limit')
+    expect(help).not.toContain('Son of Anton')
+  })
+
   it('marks fields that control conditional fields and explains affected fields', async () => {
     const view = new FormView({
       title: 'conditional',

@@ -817,7 +817,26 @@ export function applicationsView(ctx: Ctx): View {
                 notes: ['Permanent known agents normally use managed.', 'Ephemeral or self-registering agents normally use DCR, with zone-level limits and cleanup.'],
               }),
             },
-            { key: 'expires_in', label: 'client lifetime seconds', kind: 'text', dependsOn: { registration_method: 'dcr' }, validate: (v) => v && !/^[1-9]\d*$/.test(v.trim()) ? 'client lifetime must be a positive integer' : undefined },
+            {
+              key: 'expires_in',
+              label: 'client lifetime seconds',
+              kind: 'text',
+              dependsOn: { registration_method: 'dcr' },
+              validate: (v) => v && !/^[1-9]\d*$/.test(v.trim()) ? 'client lifetime must be a positive integer' : undefined,
+              info: infoPage({
+                title: 'Client lifetime seconds',
+                meaning: 'Optional DCR client lifetime expressed as seconds from creation time.',
+                when: 'Use this for ephemeral or high-churn DCR clients that should stop authenticating after a bounded lifetime. Leave it blank only when the dynamically registered client should remain active until manually deleted.',
+                impact: 'The DCR API stores an expires_at timestamp. Expired applications are hidden from active references, denied by STS token authentication, and later archived by DCR cleanup.',
+                example: '3600',
+                valid: 'Optional for this path. Leave blank for no DCR expiry, or enter a positive integer number of seconds.',
+                after: 'After submit, Console sends expires_in to the DCR endpoint and shows the generated client secret once.',
+                terms: [
+                  { label: 'DCR', value: 'Dynamic Client Registration for self-service or ephemeral application identities.' },
+                  { label: 'expires_at', value: 'Backend timestamp derived from the submitted lifetime in seconds.' },
+                ],
+              }),
+            },
           ],
           onSubmit: async (v, app) => {
             if (v.registration_method === 'dcr') {

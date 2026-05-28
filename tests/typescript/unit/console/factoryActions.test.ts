@@ -231,6 +231,26 @@ describe('applications actions', () => {
     expect(help).toContain('Dynamic Client Registration')
   })
 
+  it('client lifetime help explains DCR expiry instead of showing a name example', async () => {
+    const { ctx } = newCtx()
+    const list = applicationsView(ctx as unknown as Parameters<typeof applicationsView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'n', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values.registration_method = 'dcr'
+    ;(form as unknown as { focus: number }).focus = 2
+
+    await form.onKey('?', { app, size: { rows: 25, cols: 100 }, status: '' })
+
+    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
+    const info = pushed[pushed.length - 1] as { render: FormView['render'] }
+    const help = info.render({ app, size: { rows: 25, cols: 100 }, status: '' }).join('\n')
+    expect(help).toContain('Optional DCR client lifetime')
+    expect(help).toContain('Example')
+    expect(help).toContain('3600')
+    expect(help).toContain('expires_at')
+    expect(help).not.toContain('Son of Anton')
+  })
+
   it('creates managed applications with a generated confidential client secret', async () => {
     const { client, ctx } = newCtx()
     client.applications.create.mockResolvedValueOnce({

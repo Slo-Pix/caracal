@@ -46,7 +46,7 @@ export function fieldInfo(label: string, kind: string, hint?: string, opts: Fiel
     when: whenFor(kind, title, opts),
     impact: impactFor(kind, title),
     example: exampleFor(kind, title, opts.options),
-    valid: `${required} ${validFor(kind, opts.options)}`,
+    valid: `${required} ${validFor(kind, title, opts.options)}`,
     after: opts.advanced
       ? 'After saving advanced options, Console keeps this value on the parent form and sends it only when you submit.'
       : 'After submit, Console sends this value to the Control API and shows the result or validation error.',
@@ -173,6 +173,7 @@ function sentence(value: string): string {
 
 function meaningFor(kind: string, title: string): string {
   const label = title.toLowerCase()
+  if (isNumericLabel(label)) return `${title} is a numeric value that controls a count, limit, lifetime, or time window.`
   if (label.includes('name')) return `${title} is the operator-facing label shown in lists, pickers, details, and setup output.`
   if (label.includes('identifier')) return `${title} is a stable API-facing value used by clients, policy input, tokens, and audit records.`
   if (label.includes('scope')) return `${title} defines named permissions that requests, grants, and policies evaluate.`
@@ -197,6 +198,7 @@ function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
   if (opts.advanced) return 'Use this only when the inferred default or standard picker does not match an enterprise or non-standard setup.'
   if (opts.picker) return `Pick an existing ${entityName(label)} when reusing configured state; type only when the flow accepts a new value.`
+  if (isNumericLabel(label)) return 'Use this when you need to bound a lifetime, result count, retry budget, or other numeric operational limit.'
   if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, grants, audit views, and setup output.'
   if (label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable identifier that differs from the generated default.'
   if (label.includes('scope')) return 'Use the scopes that the application will request and that grants or policies should be able to authorize.'
@@ -214,7 +216,7 @@ function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (kind === 'file') return 'Use this when the source is maintained as a local file instead of pasted into Console.'
   if (kind === 'multiline') return 'Use this when policy, JSON, or other structured content is easier to paste or author directly.'
   if (kind === 'list') return 'Use this when the API field expects multiple values rather than one string.'
-  return 'Fill this when the API request needs this value to create, update, filter, or inspect the selected object.'
+  return `Set ${title} only when the current workflow requires an explicit value; keep the default or leave it blank when the field is optional.`
 }
 
 function entityName(label: string): string {
@@ -231,6 +233,7 @@ function entityName(label: string): string {
 
 function impactFor(kind: string, title: string): string {
   const label = title.toLowerCase()
+  if (isNumericLabel(label)) return 'Changing this value changes how long something remains valid, how much data is returned, or which numeric limit the API applies.'
   if (label.includes('scope')) return 'Scopes bound here constrain what tokens, grants, or policies may authorize later.'
   if (label.includes('identifier')) return 'Identifiers are stable API-facing names; changing them can affect clients and automation.'
   if (label.includes('secret') || kind === 'secret') return 'Secrets are copied into requests exactly as pasted and are hidden in the terminal by default.'
@@ -297,6 +300,7 @@ function exampleFor(kind: string, label: string, options?: readonly string[]): s
   if (kind === 'secret') return '••••'
   if (kind === 'file') return '/home/richard/pied-piper/policies/pipernet.rego'
   if (kind === 'select') return options?.find((option) => option.length > 0) ?? 'Choose one of the listed options.'
+  if (isNumericLabel(label.toLowerCase())) return numericExampleFor(label.toLowerCase())
   if (label.toLowerCase().includes('token endpoint')) return 'https://login.hooli.example/oauth/token'
   if (label.toLowerCase().includes('url')) return 'https://api.pipernet.example'
   if (label.toLowerCase().includes('identifier')) return 'resource://pipernet'
@@ -304,7 +308,8 @@ function exampleFor(kind: string, label: string, options?: readonly string[]): s
   return 'Son of Anton'
 }
 
-function validFor(kind: string, options?: readonly string[]): string {
+function validFor(kind: string, title: string, options?: readonly string[]): string {
+  if (isNumericLabel(title.toLowerCase())) return 'Positive integer only; no units, commas, decimals, or text.'
   if (kind === 'bool') return 'Toggle on or off.'
   if (kind === 'list') return 'Comma-separated values; empty items are ignored.'
   if (kind === 'secret') return 'Paste the exact secret value; it is masked by default.'
@@ -312,4 +317,16 @@ function validFor(kind: string, options?: readonly string[]): string {
   if (kind === 'select') return `One of: ${(options ?? []).map((option) => option || '<empty>').join(', ')}.`
   if (kind === 'multiline') return 'Plain text content; pasted newlines are preserved.'
   return 'Non-empty text when the field is marked required.'
+}
+
+function isNumericLabel(label: string): boolean {
+  return /\b(seconds?|minutes?|hours?|days?|ttl|lifetime|limit|count|budget|depth|hops?|retries|attempts?)\b/.test(label)
+}
+
+function numericExampleFor(label: string): string {
+  if (label.includes('day')) return '7'
+  if (label.includes('ttl') || label.includes('lifetime') || label.includes('second')) return '3600'
+  if (label.includes('limit') || label.includes('count')) return '50'
+  if (label.includes('depth') || label.includes('hop')) return '3'
+  return '10'
 }
