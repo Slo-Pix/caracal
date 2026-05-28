@@ -38,7 +38,7 @@ function buildApp() {
 }
 
 interface SpawnStage {
-  refs?: { application_exists: boolean; session_exists: boolean }
+  refs?: { application_exists: boolean; session_exists: boolean; registration_method?: 'managed' | 'dcr' }
   count?: { app_n: string; zone_n: string }
   parent?: { depth: number; child_count: number; max_children: number; application_id?: string } | null
   insert?: { rows: unknown[] }
@@ -152,6 +152,37 @@ describe('POST /v1/zones/:zoneId/agents: spawn', () => {
     })
     expect(res.statusCode).toBe(429)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'agent_depth_limit_exceeded' })
+  })
+
+  it('requires DCR applications to spawn ephemeral agent sessions', async () => {
+    const { app, db } = buildApp()
+    db.connect.mockResolvedValueOnce(spawnClient({
+      refs: { application_exists: true, session_exists: true, registration_method: 'dcr' },
+    }))
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', subject_session_id: 'sid-1', kind: 'service' },
+    })
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'dcr_requires_ephemeral_agent' })
+  })
+
+  it('binds each DCR application to only one active agent session', async () => {
+    const { app, db } = buildApp()
+    db.connect.mockResolvedValueOnce(spawnClient({
+      refs: { application_exists: true, session_exists: true, registration_method: 'dcr' },
+      count: { app_n: '1', zone_n: '1' },
+    }))
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', subject_session_id: 'sid-1', kind: 'ephemeral' },
+    })
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'dcr_application_already_bound' })
   })
 
   it('serializes the spawn cap with a per-zone advisory lock and enqueues lifecycle outbox', async () => {

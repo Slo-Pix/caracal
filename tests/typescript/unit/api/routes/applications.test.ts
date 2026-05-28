@@ -27,6 +27,9 @@ function buildApp() {
   }
   app.decorate('db', db as unknown as DB)
   app.decorate('redis', redis as unknown as RedisClient)
+  app.addHook('preHandler', async (req) => {
+    ;(req as unknown as { actor: unknown }).actor = { id: 'actor-1', name: 'operator', scope: 'zone', zoneId: 'z1' }
+  })
   app.register(applicationsRoutes, { prefix: '/v1' })
   return { app, db, clientQuery, redis }
 }
@@ -134,7 +137,7 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
       .mockResolvedValueOnce({ rows: [{ dcr_enabled: true }] })
       .mockResolvedValueOnce({ rows: [{ n: '0' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'app-1', zone_id: 'z1', registration_method: 'dcr' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'app-1', zone_id: 'z1', registration_method: 'dcr', expires_at: '2026-05-28T09:00:00.000Z' }] })
       .mockResolvedValueOnce({ rows: [] }) // COMMIT
 
     await app.ready()
@@ -145,7 +148,40 @@ describe('POST /v1/zones/:zoneId/applications/dcr', () => {
     })
 
     expect(res.statusCode).toBe(201)
-    expect(JSON.parse(res.body)).toMatchObject({ id: 'app-1', registration_method: 'dcr', client_secret: expect.stringMatching(/^cs_[A-Za-z0-9_-]+$/) })
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'app-1', registration_method: 'dcr', expires_at: '2026-05-28T09:00:00.000Z', client_secret: expect.stringMatching(/^cs_[A-Za-z0-9_-]+$/) })
+    const insertCall = clientQuery.mock.calls.find((call) => String(call[0]).includes('INSERT INTO applications'))
+    expect(insertCall?.[1]?.[6]).toBeInstanceOf(Date)
+  })
+
+  it('rejects DCR lifetimes above the one-hour maximum', async () => {
+    const { app, db, redis } = buildApp()
+    redis.incr.mockResolvedValueOnce(1)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications/dcr',
+      payload: { name: 'Dynamic App', expires_in: 3601 },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_application' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
+  it('rejects internal traits on DCR registration', async () => {
+    const { app, db } = buildApp()
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications/dcr',
+      payload: { name: 'Dynamic App', traits: ['control:invoke'] },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_application' })
+    expect(db.connect).not.toHaveBeenCalled()
   })
 
   it('returns 429 when the DCR rate limit is exceeded', async () => {

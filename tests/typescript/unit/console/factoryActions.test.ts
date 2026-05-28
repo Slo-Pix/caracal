@@ -229,6 +229,7 @@ describe('applications actions', () => {
     ;(pushed as unknown as { values: Record<string, string> }).values.registration_method = 'dcr'
     body = pushed.render({ app, size: { rows: 20, cols: 100 }, status: '' }).join('\n')
     expect(body).toContain('client lifetime seconds')
+    expect(body).toContain('3600')
     expect(body).not.toContain('require consent')
     expect(body).not.toContain('traits')
   })
@@ -263,7 +264,8 @@ describe('applications actions', () => {
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
     const info = pushed[pushed.length - 1] as { render: FormView['render'] }
     const help = info.render({ app, size: { rows: 25, cols: 100 }, status: '' }).join('\n')
-    expect(help).toContain('Optional DCR client lifetime')
+    expect(help).toContain('DCR client lifetime')
+    expect(help).toContain('one hour')
     expect(help).toContain('Example')
     expect(help).toContain('3600')
     expect(help).toContain('expires_at')
