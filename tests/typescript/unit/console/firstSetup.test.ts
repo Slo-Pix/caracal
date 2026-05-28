@@ -59,8 +59,6 @@ function makeClient() {
     name: 'provider-name',
     identifier: 'provider://provider-name',
     kind: 'oauth2',
-    owner_type: 'customer',
-    client_id: null,
     config_json: {
       token_endpoint: 'https://issuer.example.com/oauth/token',
       allowed_token_hosts: ['issuer.example.com'],

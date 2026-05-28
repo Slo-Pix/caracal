@@ -562,21 +562,22 @@ describe('resources actions', () => {
 })
 
 describe('providers actions', () => {
-  it('n opens FormView with config_json multiline', async () => {
-    const { ctx } = newCtx()
-    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
-    const pushed = await pressKey(list, 'n', fakeApp()) as FormView
-    const fields = (pushed as unknown as { fields: { key: string; kind: string }[] }).fields
-    expect(fields.find((f) => f.key === 'config_file')?.kind).toBe('file')
-    expect(fields.find((f) => f.key === 'config_json')?.kind).toBe('multiline')
-  })
-
-  it('n includes client_id for provider creation', async () => {
+  it('n opens a minimal provider creation form without raw JSON or unused fields', async () => {
     const { ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
     const pushed = await pressKey(list, 'n', fakeApp()) as FormView
     const keys = (pushed as unknown as { fields: { key: string }[] }).fields.map((f) => f.key)
-    expect(keys).toContain('client_id')
+    expect(keys).toEqual([
+      'name',
+      'kind',
+      'token_endpoint',
+      'api_key_header',
+      'identifier',
+      'allowed_token_hosts',
+      'auth_header',
+      'auth_scheme',
+      'forward_caracal_identity',
+    ])
   })
 
   it('adapts provider fields to the selected provider kind', async () => {
@@ -586,30 +587,22 @@ describe('providers actions', () => {
     const ctxView = { app: fakeApp(), size: { rows: 30, cols: 100 }, status: '' }
 
     let body = form.render(ctxView).join('\n')
-    expect(body).toContain('issuer')
-    expect(body).toContain('authorization endpoint')
     expect(body).toContain('token endpoint *')
     expect(body).not.toContain('API key header')
-    expect(body).not.toContain('audience *')
+    expect(body).not.toContain('issuer')
+    expect(body).not.toContain('authorization endpoint')
+    expect(body).not.toContain('audience')
 
     ;(form as unknown as { values: Record<string, string> }).values.kind = 'apikey'
     body = form.render(ctxView).join('\n')
     expect(body).toContain('API key header *')
+    expect(body).not.toContain('token endpoint *')
     expect(body).not.toContain('issuer')
     expect(body).not.toContain('authorization endpoint')
-    expect(body).not.toContain('token endpoint *')
-    expect(body).not.toContain('audience *')
-
-    ;(form as unknown as { values: Record<string, string> }).values.kind = 'workload'
-    body = form.render(ctxView).join('\n')
-    expect(body).toContain('issuer *')
-    expect(body).toContain('audience *')
-    expect(body).toContain('token endpoint *')
-    expect(body).not.toContain('API key header')
-    expect(body).not.toContain('authorization endpoint')
+    expect(body).not.toContain('audience')
   })
 
-  it('creates oauth providers with upstream OAuth scopes separated from Caracal scopes', async () => {
+  it('creates oauth providers from real structured fields only', async () => {
     const { client, ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
     const app = fakeApp()
@@ -618,20 +611,12 @@ describe('providers actions', () => {
       identifier: 'provider-id',
       name: 'GitHub OAuth',
       kind: 'oauth2',
-      client_id: 'client-id',
-      issuer: '',
-      authorization_endpoint: '',
       token_endpoint: 'https://provider.example/token',
       allowed_token_hosts: 'provider.example',
-      upstream_oauth_scopes: 'provider.scope',
       api_key_header: '',
+      auth_header: '',
       auth_scheme: '',
-      workload_audience: '',
-      workload_token_endpoint: '',
-      workload_allowed_token_hosts: '',
       forward_caracal_identity: 'false',
-      config_file: '',
-      config_json: '',
     }
     ;(pushed as unknown as { focus: number }).focus = 99
 
@@ -640,11 +625,9 @@ describe('providers actions', () => {
     expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
       identifier: 'provider-id',
       kind: 'oauth2',
-      client_id: 'client-id',
       config_json: {
         token_endpoint: 'https://provider.example/token',
         allowed_token_hosts: ['provider.example'],
-        upstream_oauth_scopes: ['provider.scope'],
       },
     }))
   })
@@ -658,20 +641,12 @@ describe('providers actions', () => {
       identifier: 'provider-id',
       name: 'API key provider',
       kind: 'apikey',
-      client_id: 'stale-client',
-      issuer: 'https://issuer.example.com',
-      authorization_endpoint: 'https://issuer.example.com/auth',
       token_endpoint: 'https://provider.example/token',
       allowed_token_hosts: 'provider.example',
-      upstream_oauth_scopes: 'provider.scope',
       api_key_header: 'X-Api-Key',
+      auth_header: 'X-Provider-Token',
       auth_scheme: '',
-      workload_audience: 'stale-audience',
-      workload_token_endpoint: 'https://workload.example/token',
-      workload_allowed_token_hosts: 'workload.example',
       forward_caracal_identity: 'false',
-      config_file: '',
-      config_json: '',
     }
     ;(pushed as unknown as { focus: number }).focus = 99
 
@@ -684,38 +659,6 @@ describe('providers actions', () => {
         header_name: 'X-Api-Key',
       },
     }))
-  })
-
-  it('rejects provider config that mixes upstream scopes with Caracal scopes', async () => {
-    const { client, ctx } = newCtx()
-    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
-    const app = fakeApp()
-    const pushed = await pressKey(list, 'n', app) as FormView
-    ;(pushed as unknown as { values: Record<string, string> }).values = {
-      identifier: 'provider-id',
-      name: 'GitHub OAuth',
-      kind: 'oauth2',
-      client_id: '',
-      issuer: '',
-      authorization_endpoint: '',
-      token_endpoint: 'https://provider.example/token',
-      allowed_token_hosts: 'provider.example',
-      upstream_oauth_scopes: '',
-      api_key_header: '',
-      auth_scheme: '',
-      workload_audience: '',
-      workload_token_endpoint: '',
-      workload_allowed_token_hosts: '',
-      forward_caracal_identity: 'false',
-      config_file: '',
-      config_json: '{"scopes":["provider.scope"]}',
-    }
-    ;(pushed as unknown as { focus: number }).focus = 99
-
-    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
-
-    expect(client.providers.create).not.toHaveBeenCalled()
-    expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('upstream_oauth_scopes'), 'error')
   })
 })
 
