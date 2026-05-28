@@ -62,6 +62,8 @@ An agent app is the workload identity. It authenticates to Caracal with an app s
 
 A resource is the protected target. It includes scopes and, when Gateway routing is needed, an upstream URL and Gateway application binding. Stable scope names such as `calendar:read` or `payments:submit` are easier to govern than prose-like scopes.
 
+Gateway resources can also bind to a provider when the upstream API requires provider-native authentication. Direct resources continue to use Caracal mandates; provider credentials are only brokered inside the trusted Gateway/STS boundary.
+
 ### Policy
 
 Policy decides whether a request for a resource and scope set is allowed. If no active policy set exists, access is denied. New users should start with the Console-generated starter policy and tighten it after the first successful run.
@@ -76,9 +78,9 @@ The Gateway is the default execution boundary. It verifies Caracal mandates, che
 | --- | --- | --- |
 | Agent app secret | Runtime profile, deployment secret store, or workload secret manager. | Authenticates the app to Caracal. |
 | Mandate | Agent runtime. | Proves Caracal allowed a scoped action. |
-| Provider credential | Gateway or a contract-complete adapter. | Authenticates to the upstream provider. |
+| Provider credential | STS/Gateway boundary or a contract-complete adapter. | Authenticates to the upstream provider. |
 
-Provider-native credentials should not be copied into agent code. The Gateway-mediated path keeps them behind the enforcement boundary.
+Provider-native credentials should not be copied into agent code. API keys, bearer tokens, OAuth client secrets, and delegated provider tokens stay sealed at rest and are only opened by trusted services when Gateway executes the upstream request.
 
 ## Delegation rule
 

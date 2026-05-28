@@ -30,7 +30,7 @@ Console `guided setup` walks the first version of that flow and can write a runt
 | --- | --- |
 | `zone` | Zone records and active zone selection. |
 | `application` | Confidential agent applications and one-time client secrets. |
-| `provider` | Provider credential sources for OAuth2 refresh and API-key upstreams. |
+| `provider` | Provider credential sources for OAuth2 authorization code, OAuth2 client credentials, API-key, and bearer-token upstreams. |
 | `resource` | Protected resource identifiers, scopes, upstream URLs, and provider links. |
 | `policy` | Policy content and versions. |
 | `policy set` | Policy-set composition, simulation, activation, and shadow evaluation. |
@@ -40,7 +40,7 @@ Console `guided setup` walks the first version of that flow and can write a runt
 
 ## Secrets and credentials
 
-Application client secrets are shown once when created. Store them in a secret manager, mounted secret file, or Console-generated local profile before leaving the result screen. The Console masks secret-shaped fields and error output.
+Application client secrets are shown once when created. Provider secrets are accepted only in provider create or rotation-style edit flows and are stored sealed by the Control API. Store application secrets in a secret manager, mounted secret file, or Console-generated local profile before leaving the result screen. The Console masks secret-shaped fields and error output.
 
 ## Automation handoff
 

@@ -3,14 +3,14 @@ title: Define Resources and Providers
 description: Register protected upstream resources and optional provider credentials from the Console.
 ---
 
-Resources tell Caracal what can be protected. Providers describe optional upstream credential systems that a resource may use.
+Resources tell Caracal what can be protected. Providers describe optional upstream credential systems that a Gateway-routed resource may use.
 
 ## When to create each object
 
 | Object | Create it when |
 | --- | --- |
 | Resource | You need a stable protected target with scopes. |
-| Provider | The target needs brokered OAuth2 refresh or API-key upstream credentials. |
+| Provider | The target needs provider-native credentials, such as OAuth2 authorization code, OAuth2 client credentials, API key, or bearer-token upstream auth. |
 | Gateway application | You want the Gateway to front an HTTP upstream. |
 
 ## Console workflow
@@ -23,6 +23,17 @@ Resources tell Caracal what can be protected. Providers describe optional upstre
 6. Set the upstream URL and Gateway application when the Gateway should forward requests to the service.
 7. Select `provider` only for Gateway resources that need upstream credential brokering.
 8. Attach the provider to the resource if applicable.
+
+## Provider auth modes
+
+| Provider type | Required main fields | Runtime behavior |
+| --- | --- | --- |
+| OAuth2 authorization code | Authorization endpoint, token endpoint, redirect URI, client ID, client secret. | Uses user/resource provider grants and refreshes delegated provider tokens inside STS. |
+| OAuth2 client credentials | Token endpoint, client ID, client secret. | STS obtains a service-to-service provider token for Gateway upstream calls. |
+| API key | Header name and API key. | Gateway forwards the sealed provider key in the configured header. |
+| Bearer token | Bearer token. | Gateway forwards the sealed provider token through `Authorization` unless another header is configured. |
+
+Provider secrets are sealed at creation time and are not returned by list or detail APIs. Public provider metadata stays visible so operators can review endpoints, scope requests, and forwarding behavior without exposing credential values.
 
 ## Identifier and scope guidance
 
