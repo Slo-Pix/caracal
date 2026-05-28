@@ -115,6 +115,13 @@ function getBool(flags: FlagMap | undefined, key: string): boolean | undefined {
   return undefined
 }
 
+function getDcrShutdown(flags: FlagMap | undefined): 'keep_live' | 'revoke_live' | undefined {
+  const value = getStr(flags, 'dcr-shutdown')
+  if (value === undefined) return undefined
+  if (value === 'keep_live' || value === 'revoke_live') return value
+  invalid('flag "dcr-shutdown" must be keep_live or revoke_live')
+}
+
 function getList(flags: FlagMap | undefined, key: string): string[] | undefined {
   const v = flags?.[key]
   if (typeof v === 'string') return v.split(',').map(s => s.trim()).filter(Boolean)
@@ -158,6 +165,7 @@ const zoneHandler = bySubcommand({
     name: getStr(flags, 'name'),
     slug: getStr(flags, 'slug'),
     dcr_enabled: getBool(flags, 'dcr'),
+    dcr_shutdown: getDcrShutdown(flags),
   }),
   delete: ({ flags, ctx }) => ctx.admin.zones.delete(mustStr(flags, 'id')),
 })

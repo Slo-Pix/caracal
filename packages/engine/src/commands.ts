@@ -132,6 +132,7 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
         { name: '--name', summary: 'Zone display name' },
         { name: '--slug', summary: 'URL-safe slug' },
         { name: '--dcr', summary: 'Enable/disable DCR (=true|false)' },
+        { name: '--dcr-shutdown', summary: 'When disabling DCR with live apps: keep_live or revoke_live' },
       ],
     },
   },

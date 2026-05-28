@@ -35,7 +35,9 @@ import type {
   SessionQuery,
   TraverseNode,
   Zone,
+  ZoneDcrStatus,
   ZoneInput,
+  ZonePatchInput,
 } from './types.js'
 
 export interface AdminClientOptions {
@@ -186,8 +188,9 @@ export class AdminClient {
   zones = {
     list: () => this.request<Zone[]>('/v1/zones'),
     get: (id: string) => this.request<Zone>(`/v1/zones/${id}`),
+    dcrStatus: (id: string) => this.request<ZoneDcrStatus>(`/v1/zones/${id}/dcr-status`),
     create: (input: ZoneInput) => this.request<Zone>('/v1/zones', { method: 'POST', body: input }),
-    patch: (id: string, input: Partial<ZoneInput>) =>
+    patch: (id: string, input: ZonePatchInput) =>
       this.request<Zone>(`/v1/zones/${id}`, { method: 'PATCH', body: input }),
     delete: (id: string) => this.request<void>(`/v1/zones/${id}`, { method: 'DELETE', expectEmpty: true }),
   }

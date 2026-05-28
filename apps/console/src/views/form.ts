@@ -370,6 +370,8 @@ export class FormView implements View {
     app.invalidate()
     try {
       await this.submit(this.submitValues(), app)
+      this.submitting = false
+      app.invalidate()
     } catch (err) {
       app.setStatus(explainError(err), 'error')
       this.submitting = false
@@ -571,7 +573,7 @@ export class ConfirmView implements View {
       meaning: 'This prompt protects a change that can alter or remove a Console object.',
       when: 'Use yes only after checking the target name and revealing the ID if needed.',
       impact: 'Confirming sends the state-changing request; canceling leaves backend state unchanged.',
-        example: 'delete resource PiperNet',
+      example: 'delete resource PiperNet',
       valid: 'Press y to continue, n or esc to cancel.',
       after: 'Console sends the request and shows an API error if the operation is rejected.',
       notes: ['For destructive changes, open the detail page first and use copy-page if you need a raw JSON record.'],
@@ -609,6 +611,84 @@ export class ConfirmView implements View {
     if (key === 'n' || key === 'N' || key === 'esc') {
       this.cancel?.(ctx.app)
       ctx.app.pop()
+    }
+  }
+}
+
+export interface ChoiceConfirmOption {
+  key: string
+  label: string
+  description: string
+  value: string
+}
+
+export interface ChoiceConfirmOpts {
+  message: string
+  options: ChoiceConfirmOption[]
+  onChoose: (value: string, app: App) => Promise<void> | void
+  info?: InfoPage
+}
+
+export class ChoiceConfirmView implements View {
+  readonly title = 'confirm'
+  readonly isTextEntry = true
+  private readonly message: string
+  private readonly options: ChoiceConfirmOption[]
+  private readonly choose: ChoiceConfirmOpts['onChoose']
+  private readonly info: InfoPage
+  private busy = false
+
+  constructor(opts: ChoiceConfirmOpts) {
+    this.message = opts.message
+    this.options = opts.options
+    this.choose = opts.onChoose
+    this.info = opts.info ?? infoPage({
+      title: 'Confirm action',
+      meaning: 'This prompt requires choosing how Console should apply a state-changing operation.',
+      when: 'Use the option that matches the operational intent for existing runtime state.',
+      impact: 'Console sends the selected operation to the backend; cancel leaves backend state unchanged.',
+      example: 'revoke live DCR apps',
+      valid: 'Press the key beside an option, ? for help, or esc to cancel.',
+      after: 'Console submits the selected operation and shows an API error if the backend rejects it.',
+    })
+  }
+
+  hints(): string[] {
+    return [...this.options.map((option) => `${option.key}:${option.label}`), 'esc:cancel', '?:info']
+  }
+
+  dispose(): void { /* no resources to release */ }
+
+  render(ctx: ViewContext): string[] {
+    const lines = ['', ' ' + ui.warn('Confirm') + '  ' + this.message, '']
+    for (const option of this.options) {
+      lines.push(truncate(`  ${ui.key(option.key)}  ${option.label}  ${ui.muted(option.description)}`, ctx.size.cols))
+    }
+    if (this.busy) lines.push(' ' + ui.muted('working...'))
+    lines.push('')
+    return lines
+  }
+
+  async onKey(key: Key, ctx: ViewContext): Promise<void> {
+    if (this.busy) return
+    if (key === '?') {
+      openInfo(ctx.app, this.info)
+      return
+    }
+    if (key === 'esc') {
+      await this.choose('cancel', ctx.app)
+      return
+    }
+    const option = this.options.find((item) => item.key.toLowerCase() === key.toLowerCase())
+    if (!option) return
+    this.busy = true
+    ctx.app.invalidate()
+    try {
+      await this.choose(option.value, ctx.app)
+    } catch (err) {
+      ctx.app.setStatus(explainError(err), 'error')
+      this.busy = false
+      ctx.app.invalidate()
     }
   }
 }

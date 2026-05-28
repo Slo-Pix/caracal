@@ -20,6 +20,18 @@ export interface ZoneInput {
   dcr_enabled?: boolean
 }
 
+export type DcrShutdownMode = 'keep_live' | 'revoke_live'
+
+export interface ZonePatchInput extends Partial<ZoneInput> {
+  dcr_shutdown?: DcrShutdownMode
+}
+
+export interface ZoneDcrStatus {
+  id: string
+  dcr_enabled: boolean
+  live_dcr_applications: number
+}
+
 export type RegistrationMethod = 'managed' | 'dcr'
 
 export interface Application {
