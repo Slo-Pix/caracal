@@ -32,7 +32,6 @@ const BLOCKED_CREDENTIAL_ENV = new Set([
 
 const INHERITED_ENV_KEYS = new Set([
   'PATH',
-  'Path',
   'HOME',
   'USER',
   'LOGNAME',
@@ -52,7 +51,18 @@ const INHERITED_ENV_KEYS = new Set([
   'XDG_CONFIG_HOME',
   'XDG_CACHE_HOME',
   'XDG_DATA_HOME',
-])
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PROGRAMDATA',
+  'PROGRAMFILES',
+  'PROGRAMFILES(X86)',
+  'SYSTEMROOT',
+  'WINDIR',
+  'COMSPEC',
+].map((key) => key.toUpperCase()))
 
 export type RunLineSink = (line: string, stream: 'stdout' | 'stderr') => void
 
@@ -181,7 +191,8 @@ function validateArgv(argv: string[]): void {
 }
 
 function shouldInheritEnv(key: string): boolean {
-  return INHERITED_ENV_KEYS.has(key) || key.startsWith('LC_')
+  const upper = key.toUpperCase()
+  return INHERITED_ENV_KEYS.has(upper) || upper.startsWith('LC_')
 }
 
 function validateChildEnvKey(key: string): void {

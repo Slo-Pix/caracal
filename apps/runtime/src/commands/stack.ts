@@ -74,6 +74,8 @@ export function composeEnv(paths: StackPaths): Record<string, string | undefined
   const env: Record<string, string | undefined> = {
     CARACAL_MODE: paths.mode,
     CARACAL_SECRETS_DIR: paths.secretsDir,
+    DOCKER_BUILDKIT: '1',
+    COMPOSE_DOCKER_CLI_BUILD: '1',
   }
   if (paths.mode !== 'dev') {
     env.CARACAL_VERSION = CARACAL_VERSION
