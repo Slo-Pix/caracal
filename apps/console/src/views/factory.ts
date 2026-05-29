@@ -180,6 +180,7 @@ function bool(v: string | undefined): boolean | undefined {
 
 const APPLICATION_REGISTRATION_METHODS = ['managed', 'dcr'] as const
 const PROVIDER_KINDS: ProviderKind[] = ['caracal_mandate', 'oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
+const PROVIDER_CREDENTIAL_KINDS: ProviderKind[] = ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token']
 const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
   caracal_mandate: 'Caracal mandate',
   oauth2_authorization_code: 'OAuth2 auth code',
@@ -1177,7 +1178,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
             { key: 'auth_header', label: 'auth header', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
             { key: 'auth_scheme', label: 'auth scheme', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for the default upstream credential scheme' },
-            { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', advanced: true },
+            { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
           ],
           onSubmit: async (v, app) => {
             await ctx.client.providers.create(ctx.zoneId, {
@@ -1212,7 +1213,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: configString(row.config_json, 'client_auth_method') || 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
               { key: 'auth_header', label: 'auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true },
               { key: 'auth_scheme', label: 'auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true },
-              { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: configBool(row.config_json, 'forward_caracal_identity'), advanced: true },
+              { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: configBool(row.config_json, 'forward_caracal_identity'), dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
             ],
             onSubmit: async (v, app) => {
               const kind = providerKind(v.kind)

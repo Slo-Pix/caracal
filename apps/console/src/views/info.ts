@@ -203,6 +203,7 @@ function sentence(value: string): string {
 function meaningFor(kind: string, title: string): string {
   const label = title.toLowerCase()
   if (isNumericLabel(label)) return `${title} is a numeric value that controls a count, limit, lifetime, or time window.`
+  if (label.includes('forward') && label.includes('caracal identity')) return `${title} tells Gateway to send the Caracal resource mandate to the upstream service in addition to the provider credential.`
   if (label.includes('name')) return `${title} is the operator-facing label shown in lists, pickers, details, and setup output.`
   if (label.includes('provider') && label.includes('identifier')) return `${title} is the stable API-facing name for a configured upstream credential or mandate source.`
   if (label.includes('resource') && label.includes('identifier')) return `${title} is the stable audience value that grants, policies, tokens, and Gateway bindings use.`
@@ -229,6 +230,7 @@ function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
   if (opts.picker) return `Pick an existing ${entityName(label)} when reusing configured state; type only when the flow accepts a new value.`
   if (isNumericLabel(label)) return 'Use this when you need to bound a lifetime, result count, retry budget, or other numeric operational limit.'
+  if (label.includes('forward') && label.includes('caracal identity')) return 'Turn this on only for a trusted upstream that authenticates with provider-native credentials but also needs Caracal subject, scopes, target, zone, or audit context.'
   if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, grants, audit views, and setup output.'
   if (label.includes('provider') && label.includes('identifier')) return 'Leave blank to let Console generate one from the provider name; set it only when automation needs a specific stable name.'
   if (label.includes('resource') && label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable resource audience that differs from the generated default.'
@@ -268,6 +270,7 @@ function impactFor(kind: string, title: string): string {
   const label = title.toLowerCase()
   if (isNumericLabel(label)) return 'Changing this value changes how long something remains valid, how much data is returned, or which numeric limit the API applies.'
   if (label.includes('scope')) return 'Scopes bound here constrain what tokens, grants, or policies may authorize later.'
+  if (label.includes('forward') && label.includes('caracal identity')) return 'Gateway keeps the provider credential in the upstream auth header and sends the Caracal mandate separately as X-Caracal-Identity.'
   if (label.includes('provider') && label.includes('identifier')) return 'Resources, grants, setup output, and automation can reference the provider by this stable name.'
   if (label.includes('resource') && label.includes('identifier')) return 'Changing a resource audience can break clients and grants that request the old value.'
   if (label.includes('identifier')) return 'Identifiers are stable API-facing names; changing them can affect clients and automation.'
@@ -283,6 +286,7 @@ function termsFor(title: string): InfoPair[] | undefined {
   const label = title.toLowerCase()
   const terms: InfoPair[] = []
   if (label.includes('dcr') || label.includes('dynamic client')) terms.push({ label: 'DCR', value: 'Dynamic Client Registration; lets an app be registered through the API when the zone enables it.' })
+  if (label.includes('forward') && label.includes('caracal identity')) terms.push({ label: 'X-Caracal-Identity', value: 'Gateway header containing the Caracal mandate when an upstream also needs Caracal authorization context.' })
   if (label.includes('scope')) terms.push({ label: 'Scope', value: 'A named permission string requested in a token and evaluated by grants and policies.' })
   if (label.includes('resource')) terms.push({ label: 'Resource', value: 'The protected API, service, audience, or Gateway target being accessed.' })
   if (label.includes('provider')) terms.push({ label: 'Provider', value: 'An upstream credential source Caracal can use for protected calls.' })
@@ -337,6 +341,7 @@ function exampleFor(kind: string, label: string, options?: readonly string[]): s
   if (kind === 'select') return options?.find((option) => option.length > 0) ?? 'Choose one of the listed options.'
   if (isNumericLabel(label.toLowerCase())) return numericExampleFor(label.toLowerCase())
   const normalized = label.toLowerCase()
+  if (normalized.includes('forward') && normalized.includes('caracal identity')) return 'no'
   if (normalized.includes('token endpoint')) return 'https://login.hooli.example/oauth/token'
   if (normalized.includes('url')) return 'https://api.pipernet.example'
   if (normalized.includes('provider') && normalized.includes('identifier')) return 'provider://hooli-pipernet'

@@ -271,6 +271,26 @@ describe('FormView input UX', () => {
     expect(help).not.toContain('Son of Anton')
   })
 
+  it('explains forward Caracal identity as Gateway mandate forwarding', async () => {
+    const view = new FormView({
+      title: 'create provider',
+      fields: [{ key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', advanced: true }],
+      onSubmit: async () => {},
+    })
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 14, cols: 110 }, status: '' }
+
+    await view.onKey('right', ctx)
+    const advanced = vi.mocked(app.push).mock.calls.at(-1)![0] as FormView
+    await advanced.onKey('?', ctx)
+
+    const info = vi.mocked(app.push).mock.calls.at(-1)![0] as { render: FormView['render'] }
+    const help = info.render(ctx).join('\n')
+    expect(help).toContain('provider credential')
+    expect(help).toContain('X-Caracal-Identity')
+    expect(help).toContain('trusted upstream')
+  })
+
   it('marks fields that control conditional fields and explains affected fields', async () => {
     const view = new FormView({
       title: 'conditional',
