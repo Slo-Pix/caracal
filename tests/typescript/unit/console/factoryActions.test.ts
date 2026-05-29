@@ -671,6 +671,36 @@ describe('providers actions', () => {
     }))
   })
 
+  it('generates provider identifiers from provider names when identifier is blank', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const pushed = await pressKey(list, 'n', app) as FormView
+    ;(pushed as unknown as { values: Record<string, string> }).values = {
+      identifier: '',
+      name: 'Hooli OAuth2',
+      kind: 'caracal_mandate',
+      token_endpoint: '',
+      client_id: '',
+      client_secret: '',
+      allowed_token_hosts: '',
+      api_key_header: '',
+      api_key: '',
+      auth_header: '',
+      auth_scheme: '',
+      forward_caracal_identity: 'false',
+    }
+    ;(pushed as unknown as { focus: number }).focus = 99
+
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      identifier: 'provider://hooli-oauth2',
+      kind: 'caracal_mandate',
+      config_json: {},
+    }))
+  })
+
   it('drops stale hidden provider fields when the provider kind changes', async () => {
     const { client, ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>

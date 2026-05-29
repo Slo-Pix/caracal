@@ -92,6 +92,30 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     expect(values[8]).toEqual([])
   })
 
+  it('generates provider identifiers from provider names when omitted', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://hooli-oauth2', kind: 'caracal_mandate' }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        name: 'Hooli OAuth2',
+        kind: 'caracal_mandate',
+      },
+    })
+
+    const values = db.query.mock.calls[1][1] as unknown[]
+    expect(res.statusCode).toBe(201)
+    expect(values[2]).toBe('Hooli OAuth2')
+    expect(values[3]).toBe('provider://hooli-oauth2')
+  })
+
   it('rejects unsupported provider config fields', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })

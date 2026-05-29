@@ -18,13 +18,27 @@ const OAuthClientAuthMethod = z.enum(['client_secret_basic', 'client_secret_post
 type OAuthClientAuthMethod = z.infer<typeof OAuthClientAuthMethod>
 
 const ProviderCreateBody = z.object({
-  name: z.string().min(1).optional(),
-  identifier: z.string().min(1),
+  name: z.string().trim().min(1).optional(),
+  identifier: z.string().trim().min(1).optional(),
   kind: ProviderKind,
+  config_json: z.record(z.string(), z.unknown()).optional(),
+}).refine((body) => body.name !== undefined || body.identifier !== undefined, { message: 'name_or_identifier_required' })
+
+const ProviderPatchBody = z.object({
+  name: z.string().trim().min(1).optional(),
+  identifier: z.string().trim().min(1).optional(),
+  kind: ProviderKind.optional(),
   config_json: z.record(z.string(), z.unknown()).optional(),
 })
 
-const ProviderPatchBody = ProviderCreateBody.partial()
+function slugValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'provider'
+}
+
+function providerIdentifierFromName(name: string): string {
+  const text = name.trim()
+  return text.startsWith('provider://') ? text : `provider://${slugValue(text)}`
+}
 
 const PUBLIC_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
   caracal_mandate: new Set(),
@@ -214,6 +228,7 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     } catch (err) {
       return reply.code(400).send({ error: 'invalid_provider_config', message: err instanceof Error ? err.message : String(err) })
     }
+    const identifier = body.identifier ?? providerIdentifierFromName(body.name ?? `${body.kind} provider`)
     const sealed = sealSecretConfig(config.secretConfig)
     const { rows } = await fastify.db.query<ProviderRow>(
       `INSERT INTO providers (id, zone_id, name, identifier, provider_kind, config_json,
@@ -223,8 +238,8 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
       [
         id,
         params.zoneId,
-        body.name ?? body.identifier,
-        body.identifier,
+        body.name ?? identifier,
+        identifier,
         body.kind,
         JSON.stringify(config.publicConfig),
         sealed?.ciphertext ?? null,

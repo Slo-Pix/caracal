@@ -204,6 +204,8 @@ function meaningFor(kind: string, title: string): string {
   const label = title.toLowerCase()
   if (isNumericLabel(label)) return `${title} is a numeric value that controls a count, limit, lifetime, or time window.`
   if (label.includes('name')) return `${title} is the operator-facing label shown in lists, pickers, details, and setup output.`
+  if (label.includes('provider') && label.includes('identifier')) return `${title} is the stable API-facing name for a configured upstream credential or mandate source.`
+  if (label.includes('resource') && label.includes('identifier')) return `${title} is the stable audience value that grants, policies, tokens, and Gateway bindings use.`
   if (label.includes('identifier')) return `${title} is a stable API-facing value used by clients, policy input, tokens, and audit records.`
   if (label.includes('scope')) return `${title} defines named permissions that requests, grants, and policies evaluate.`
   if (label.includes('subject')) return `${title} identifies the user, workload, or actor receiving authority.`
@@ -225,11 +227,13 @@ function meaningFor(kind: string, title: string): string {
 
 function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
-  if (opts.advanced) return 'Use this only when the inferred default or standard picker does not match an enterprise or non-standard setup.'
   if (opts.picker) return `Pick an existing ${entityName(label)} when reusing configured state; type only when the flow accepts a new value.`
   if (isNumericLabel(label)) return 'Use this when you need to bound a lifetime, result count, retry budget, or other numeric operational limit.'
   if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, grants, audit views, and setup output.'
+  if (label.includes('provider') && label.includes('identifier')) return 'Leave blank to let Console generate one from the provider name; set it only when automation needs a specific stable name.'
+  if (label.includes('resource') && label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable resource audience that differs from the generated default.'
   if (label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable identifier that differs from the generated default.'
+  if (opts.advanced) return 'Use this only when the inferred default or standard picker does not match an enterprise or non-standard setup.'
   if (label.includes('scope')) return 'Use the scopes that the application will request and that grants or policies should be able to authorize.'
   if (label.includes('subject')) return 'Use the subject identity that should receive or be inspected for authority in this zone.'
   if (label.includes('secret') || kind === 'secret') return 'Paste this only while registering, rotating, or writing a credential that Console cannot retrieve later.'
@@ -264,6 +268,8 @@ function impactFor(kind: string, title: string): string {
   const label = title.toLowerCase()
   if (isNumericLabel(label)) return 'Changing this value changes how long something remains valid, how much data is returned, or which numeric limit the API applies.'
   if (label.includes('scope')) return 'Scopes bound here constrain what tokens, grants, or policies may authorize later.'
+  if (label.includes('provider') && label.includes('identifier')) return 'Resources, grants, setup output, and automation can reference the provider by this stable name.'
+  if (label.includes('resource') && label.includes('identifier')) return 'Changing a resource audience can break clients and grants that request the old value.'
   if (label.includes('identifier')) return 'Identifiers are stable API-facing names; changing them can affect clients and automation.'
   if (label.includes('secret') || kind === 'secret') return 'Secrets are copied into requests exactly as pasted and are hidden in the terminal by default.'
   if (label.includes('token endpoint')) return 'Token endpoints are contacted when Caracal exchanges or refreshes upstream credentials.'

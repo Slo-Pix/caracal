@@ -159,7 +159,7 @@ function providerIdentifierFromValues(values: Record<string, string>): string {
   const explicit = values.identifier?.trim()
   if (explicit) return explicit
   const base = values.name?.trim() || `${providerKind(values.kind)} provider`
-  return slugValue(base)
+  return `provider://${slugValue(base)}`
 }
 
 function inferredTokenHosts(endpoint: string | undefined): string {
@@ -1171,7 +1171,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'api_key_header', label: 'API key header', kind: 'text', dependsOn: { kind: 'api_key' }, required: true, hint: 'header where the upstream service expects the API key' },
             { key: 'api_key', label: 'API key', kind: 'secret', dependsOn: { kind: 'api_key' }, required: true },
             { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, required: true },
-            { key: 'identifier', label: 'identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank' },
+            { key: 'identifier', label: 'provider identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank' },
             { key: 'provider_scopes', label: 'provider scopes', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional upstream OAuth scopes requested from the provider' },
             { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
             { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
@@ -1197,7 +1197,7 @@ export function providersView(ctx: Ctx): View {
             title: `edit ${row.identifier}`,
             fields: [
               { key: 'name', label: 'name', kind: 'text', default: row.name },
-              { key: 'identifier', label: 'identifier', kind: 'text', default: row.identifier },
+              { key: 'identifier', label: 'provider identifier', kind: 'text', default: row.identifier },
               { key: 'kind', label: 'kind', kind: 'select', options: PROVIDER_KINDS, optionLabels: PROVIDER_KIND_LABELS, default: row.kind, info: providerTypeInfo() },
               { key: 'authorization_endpoint', label: 'authorization endpoint', kind: 'text', default: configString(row.config_json, 'authorization_endpoint'), dependsOn: { kind: 'oauth2_authorization_code' }, required: true },
               { key: 'token_endpoint', label: 'token endpoint', kind: 'text', default: configString(row.config_json, 'token_endpoint'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, required: true },
