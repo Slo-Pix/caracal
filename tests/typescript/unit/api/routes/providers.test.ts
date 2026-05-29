@@ -32,7 +32,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
       .mockResolvedValueOnce({
-        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'oauth-main', kind: 'oauth2_client_credentials' }],
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://oauth-main', kind: 'oauth2_client_credentials' }],
       })
 
     await app.ready()
@@ -40,7 +40,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       method: 'POST',
       url: '/v1/zones/z1/providers',
       payload: {
-        identifier: 'oauth-main',
+        identifier: 'provider://oauth-main',
         kind: 'oauth2_client_credentials',
         config_json: {
           token_endpoint: 'https://issuer.example/oauth/token',
@@ -69,7 +69,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
       .mockResolvedValueOnce({
-        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'caracal-mandate', kind: 'caracal_mandate' }],
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://caracal-mandate', kind: 'caracal_mandate' }],
       })
 
     await app.ready()
@@ -77,7 +77,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       method: 'POST',
       url: '/v1/zones/z1/providers',
       payload: {
-        identifier: 'caracal-mandate',
+        identifier: 'provider://caracal-mandate',
         kind: 'caracal_mandate',
       },
     })
@@ -126,11 +126,26 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/v1/zones/z1/providers',
-      payload: { identifier: 'oauth-main', kind: 'oauth2_client_credentials', config_json: { authorization_endpoint: 'https://issuer.example/auth' } },
+      payload: { identifier: 'provider://oauth-main', kind: 'oauth2_client_credentials', config_json: { authorization_endpoint: 'https://issuer.example/auth' } },
     })
 
     expect(res.statusCode).toBe(400)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_provider_config' })
+  })
+
+  it('rejects provider identifiers outside the provider namespace', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: { identifier: 'oauth-main', kind: 'caracal_mandate' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_provider_identifier' })
   })
 })
 
@@ -149,7 +164,7 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
   it('replaces provider config with validated provider settings', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query.mockResolvedValueOnce({
-      rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'apikey-main', kind: 'api_key' }],
+      rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://apikey-main', kind: 'api_key' }],
     })
 
     await app.ready()
@@ -172,7 +187,7 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
     db.query
       .mockResolvedValueOnce({ rows: [{ kind: 'oauth2_client_credentials' }] })
       .mockResolvedValueOnce({
-        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'oauth-main', kind: 'oauth2_client_credentials' }],
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://oauth-main', kind: 'oauth2_client_credentials' }],
       })
 
     await app.ready()
@@ -198,5 +213,20 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
       client_auth_method: 'client_secret_basic',
       allowed_token_hosts: ['issuer.example'],
     })
+  })
+
+  it('rejects provider identifier edits outside the provider namespace', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/providers/provider-1',
+      payload: { identifier: 'resource://pipernet' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_provider_identifier' })
+    expect(db.query).not.toHaveBeenCalled()
   })
 })

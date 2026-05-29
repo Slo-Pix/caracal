@@ -16,6 +16,8 @@ const ProviderKind = z.enum(['caracal_mandate', 'oauth2_authorization_code', 'oa
 type ProviderKind = z.infer<typeof ProviderKind>
 const OAuthClientAuthMethod = z.enum(['client_secret_basic', 'client_secret_post', 'none'])
 type OAuthClientAuthMethod = z.infer<typeof OAuthClientAuthMethod>
+const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
+const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 const OptionalText = z.preprocess(
   (value) => typeof value === 'string' && value.trim().length === 0 ? undefined : value,
   z.string().trim().min(1).optional(),
@@ -41,7 +43,13 @@ function slugValue(value: string): string {
 
 function providerIdentifierFromName(name: string): string {
   const text = name.trim()
-  return text.startsWith('provider://') ? text : `provider://${slugValue(text)}`
+  const base = text.startsWith(PROVIDER_IDENTIFIER_PREFIX) ? text.slice(PROVIDER_IDENTIFIER_PREFIX.length) : text
+  return `${PROVIDER_IDENTIFIER_PREFIX}${slugValue(base)}`
+}
+
+function providerIdentifierError(identifier: string | undefined): string | undefined {
+  if (identifier === undefined || PROVIDER_IDENTIFIER_PATTERN.test(identifier)) return undefined
+  return 'provider identifier must start with provider:// and use lowercase letters, numbers, or hyphens'
 }
 
 const PUBLIC_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
@@ -225,6 +233,8 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     const parsed = ProviderCreateBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_provider' })
     const body = parsed.data
+    const identifierError = providerIdentifierError(body.identifier)
+    if (identifierError) return reply.code(400).send({ error: 'invalid_provider_identifier', message: identifierError })
     const id = uuidv7()
     let config: ReturnType<typeof splitProviderConfig>
     try {
@@ -260,6 +270,8 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     const parsed = ProviderPatchBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_provider' })
     const body = parsed.data
+    const identifierError = providerIdentifierError(body.identifier)
+    if (identifierError) return reply.code(400).send({ error: 'invalid_provider_identifier', message: identifierError })
 
     if (body.kind !== undefined && body.config_json === undefined) {
       return reply.code(400).send({ error: 'provider_config_required' })

@@ -644,8 +644,8 @@ describe('providers actions', () => {
     const app = fakeApp()
     const pushed = await pressKey(list, 'n', app) as FormView
     ;(pushed as unknown as { values: Record<string, string> }).values = {
-      identifier: 'provider-id',
-      name: 'GitHub OAuth',
+      identifier: 'provider://hooli-oauth',
+      name: 'Hooli OAuth',
       kind: 'oauth2_client_credentials',
       token_endpoint: 'https://provider.example/token',
       client_id: 'provider-client',
@@ -662,7 +662,7 @@ describe('providers actions', () => {
     await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
 
     expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
-      identifier: 'provider-id',
+      identifier: 'provider://hooli-oauth',
       kind: 'oauth2_client_credentials',
       config_json: {
         token_endpoint: 'https://provider.example/token',
@@ -704,13 +704,38 @@ describe('providers actions', () => {
     }))
   })
 
+  it('blocks provider identifier edits outside the provider namespace', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    setRows(list, [{
+      id: 'provider-1',
+      zone_id: 'z1',
+      name: 'Hooli OIDC',
+      identifier: 'provider://hooli-oidc',
+      kind: 'caracal_mandate',
+      config_json: {},
+      secret_config_keys: [],
+      created_at: '',
+      updated_at: '',
+    }])
+    const pushed = await pressKey(list, 'e', app) as FormView
+    ;(pushed as unknown as { values: Record<string, string> }).values.identifier = 'resource://hooli-oidc'
+    ;(pushed as unknown as { focus: number }).focus = 99
+
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.providers.patch).not.toHaveBeenCalled()
+    expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('provider://'), 'error')
+  })
+
   it('drops stale hidden provider fields when the provider kind changes', async () => {
     const { client, ctx } = newCtx()
     const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
     const app = fakeApp()
     const pushed = await pressKey(list, 'n', app) as FormView
     ;(pushed as unknown as { values: Record<string, string> }).values = {
-      identifier: 'provider-id',
+      identifier: 'provider://hooli-api-key',
       name: 'API key provider',
       kind: 'api_key',
       token_endpoint: 'https://provider.example/token',
@@ -726,7 +751,7 @@ describe('providers actions', () => {
     await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
 
     expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
-      identifier: 'provider-id',
+      identifier: 'provider://hooli-api-key',
       kind: 'api_key',
       config_json: {
         header_name: 'X-Api-Key',
