@@ -154,6 +154,8 @@ const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
 const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
+const OAUTH_AUTHORIZATION_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
+const RESERVED_OAUTH_AUTHORIZATION_PARAMS = new Set(['client_id', 'code_challenge', 'code_challenge_method', 'redirect_uri', 'response_type', 'scope', 'state'])
 
 function resourceIdentifierFromName(name: string): string {
   const text = name.trim()
@@ -207,6 +209,17 @@ function requireOptionalAuthScheme(config: JsonObject, key: string, message: str
   if (value === undefined) return
   if (typeof value !== 'string' || !AUTH_SCHEME_PATTERN.test(value.trim())) throw new Error(message)
   config[key] = value.trim()
+}
+
+function requireOptionalStringRecord(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(message)
+  for (const [name, item] of Object.entries(value)) {
+    if (RESERVED_OAUTH_AUTHORIZATION_PARAMS.has(name) || !OAUTH_AUTHORIZATION_PARAM_PATTERN.test(name) || typeof item !== 'string' || item.trim().length === 0) {
+      throw new Error(message)
+    }
+  }
 }
 
 function inferredTokenHosts(endpoint: string | undefined): string {
@@ -476,6 +489,7 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
   mergeConfigText(config, 'bearer_token', values.bearer_token)
   mergeConfigText(config, 'client_auth_method', values.client_auth_method)
   mergeConfigList(config, 'scopes', values.provider_scopes)
+  mergeConfigMap(config, 'authorization_params', values.authorization_params)
   mergeConfigText(config, 'audience', values.token_audience)
   mergeConfigText(config, 'resource', values.token_resource)
   mergeConfigList(config, 'allowed_token_hosts', values.allowed_token_hosts || inferredTokenHosts(values.token_endpoint))
@@ -514,6 +528,21 @@ function mergeConfigList(config: JsonObject, key: string, value: string | undefi
   if (items.length > 0) config[key] = items
 }
 
+function mergeConfigMap(config: JsonObject, key: string, value: string | undefined): void {
+  const text = value?.trim()
+  if (!text) return
+  const params: JsonObject = {}
+  for (const item of splitList(text)) {
+    const index = item.indexOf('=')
+    if (index <= 0) throw new Error(`${key} entries must use key=value`)
+    const name = item.slice(0, index).trim()
+    const paramValue = item.slice(index + 1).trim()
+    if (!name || !paramValue) throw new Error(`${key} entries must use key=value`)
+    params[name] = paramValue
+  }
+  config[key] = params
+}
+
 function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
   const allowed = providerConfigKeys(kind)
   const unknown = Object.keys(config).filter((key) => !allowed.has(key))
@@ -542,6 +571,7 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
   if (kind === 'oauth2_authorization_code') {
     requireHttpsUrl(config, 'authorization_endpoint', 'oauth2_authorization_code provider config authorization_endpoint must be an HTTPS URL')
     requireAbsoluteUri(config, 'redirect_uri', 'oauth2_authorization_code provider config redirect_uri must be an absolute URI')
+    requireOptionalStringRecord(config, 'authorization_params', 'oauth2_authorization_code provider config authorization_params must use non-reserved key=value entries')
   }
 }
 
@@ -551,7 +581,7 @@ function providerConfigKeys(kind: ProviderKind): Set<string> {
   if (kind === 'bearer_token') return new Set(['bearer_token', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
   const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'provider_scopes', 'scopes', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
   if (kind === 'oauth2_client_credentials') keys.push('audience', 'resource')
-  if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri')
+  if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri', 'authorization_params')
   return new Set(keys)
 }
 
@@ -563,6 +593,15 @@ function configString(config: JsonObject, key: string): string {
 function configList(config: JsonObject, key: string): string {
   const value = config[key]
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').join(',') : ''
+}
+
+function configMap(config: JsonObject, key: string): string {
+  const value = config[key]
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
+  return Object.entries(value)
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+    .map(([name, item]) => `${name}=${item}`)
+    .join(',')
 }
 
 function configBool(config: JsonObject, key: string): string {
@@ -1247,6 +1286,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, required: true },
             { key: 'identifier', label: 'provider identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank', validate: validateProviderIdentifier },
             { key: 'provider_scopes', label: 'provider scopes', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional upstream OAuth scopes for provider-native grants' },
+            { key: 'authorization_params', label: 'authorization params', kind: 'list', dependsOn: { kind: 'oauth2_authorization_code' }, advanced: true, hint: 'optional key=value authorization parameters such as access_type=offline,prompt=consent' },
             { key: 'token_audience', label: 'token audience', kind: 'text', dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true, hint: 'optional audience parameter for token endpoints such as Auth0' },
             { key: 'token_resource', label: 'token resource', kind: 'text', dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true, hint: 'optional resource parameter for token endpoints that use RFC 8707 or Azure-style resource values' },
             { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
@@ -1284,6 +1324,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'api_key', label: 'API key', kind: 'secret', dependsOn: { kind: 'api_key' }, hint: 'leave blank to keep the current API key' },
               { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, hint: 'leave blank to keep the current bearer token' },
               { key: 'provider_scopes', label: 'provider scopes', kind: 'list', default: configList(row.config_json, 'scopes'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+              { key: 'authorization_params', label: 'authorization params', kind: 'list', default: configMap(row.config_json, 'authorization_params'), dependsOn: { kind: 'oauth2_authorization_code' }, advanced: true, hint: 'optional key=value authorization parameters such as access_type=offline,prompt=consent' },
               { key: 'token_audience', label: 'token audience', kind: 'text', default: configString(row.config_json, 'audience'), dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true },
               { key: 'token_resource', label: 'token resource', kind: 'text', default: configString(row.config_json, 'resource'), dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true },
               { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
@@ -1301,6 +1342,37 @@ export function providersView(ctx: Ctx): View {
                 config_json: providerConfigFromValues(v, true),
               } as Partial<ProviderInput>)
               await popAndReload(app, list as unknown as ListView<unknown>)
+            },
+          })
+        },
+      },
+      {
+        key: 'c', label: 'connect', priority: 'primary', visible: (row) => row?.kind === 'oauth2_authorization_code', build: (row) => {
+          if (!row) throw new Error('no row selected')
+          return new FormView({
+            title: `connect ${row.identifier}`,
+            submitLabel: 'create authorization URL',
+            fields: [
+              { key: 'user_id', label: 'user ID', kind: 'text', required: true, hint: 'subject that will use this delegated provider grant' },
+              { key: 'resource_id', label: 'resource', kind: 'text', required: true, pick: resourcePicker(ctx), resolve: resourceResolver(ctx), hint: 'Gateway resource bound to this OAuth provider' },
+              { key: 'scopes', label: 'Caracal scopes', kind: 'list', required: true, hint: 'resource scopes this provider grant should cover' },
+            ],
+            onSubmit: async (v, app) => {
+              const result = await ctx.client.grants.authorizeProviderOAuth(ctx.zoneId, {
+                user_id: v.user_id,
+                resource_id: v.resource_id,
+                provider_id: row.id,
+                scopes: splitList(v.scopes),
+              })
+              open(app, new DetailView({
+                title: `OAuth authorization / ${row.identifier}`,
+                load: async () => ({
+                  authorization_url: result.authorization_url,
+                  expires_at: result.expires_at,
+                  next_step: 'Open the authorization URL in a browser. The provider redirects back to the configured redirect URI and Caracal stores the provider grant.',
+                }),
+                copyPage: true,
+              }))
             },
           })
         },

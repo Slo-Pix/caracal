@@ -71,6 +71,12 @@ function isGlobalReadPath(method: string, url: string): boolean {
   return false
 }
 
+function isPublicOAuthCallback(method: string, url: string): boolean {
+  if (method !== 'GET' && method !== 'HEAD') return false
+  const path = url.split('?')[0]
+  return /^\/v1\/zones\/[^/]+\/provider-grants\/oauth\/callback$/.test(path)
+}
+
 export async function lookupAdminToken(db: DB, plaintext: string): Promise<Actor | null> {
   const digest = sha256(plaintext)
   const { rows } = await db.query<AdminTokenRow>(
@@ -181,6 +187,7 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
 
   fastify.addHook('preHandler', async (req, reply) => {
     if (!req.url.startsWith(prefix)) return
+    if (isPublicOAuthCallback(req.method, req.url)) return
 
     const bearer = extractBearer(req)
     if (!bearer) {

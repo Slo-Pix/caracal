@@ -24,11 +24,16 @@ function entityFromUrl(url: string): { type: string | null; id: string | null } 
   for (let i = segments.length - 2; i >= 0; i--) {
     const candidate = segments[i]
     const next = segments[i + 1]
-    if (candidate && next && /^(zones|applications|resources|providers|policies|policy-sets|policy-templates|grants|invitations|teams|step-up-challenges)$/.test(candidate)) {
+    if (candidate && next && /^(zones|applications|resources|providers|provider-grants|policies|policy-sets|policy-templates|grants|invitations|teams|step-up-challenges)$/.test(candidate)) {
       return { type: candidate, id: next }
     }
   }
   return { type: null, id: null }
+}
+
+function isProviderOAuthCallback(method: string, url: string): boolean {
+  if (method !== 'GET') return false
+  return /^\/v1\/zones\/[^/]+\/provider-grants\/oauth\/callback(?:\?|$)/.test(url)
 }
 
 export interface AuditPluginOptions {
@@ -43,7 +48,7 @@ export function registerAdminAuditHook(app: FastifyInstance, opts: AuditPluginOp
     if (!req.url.startsWith('/v1/')) return
 
     const success = reply.statusCode < 400
-    if (!MUTATING_METHODS.has(req.method) && success) return
+    if (!MUTATING_METHODS.has(req.method) && success && !isProviderOAuthCallback(req.method, req.url)) return
 
     const actor: Actor | null = req.actor ?? null
     const entity = entityFromUrl(req.url)
