@@ -19,7 +19,7 @@ SELECT DISTINCT
     'provider://none',
     'none',
     '{}'::jsonb,
-    '{}'
+    '{}'::text[]
 FROM resources
 WHERE credential_provider_id IS NULL
 ON CONFLICT (id) DO NOTHING;
