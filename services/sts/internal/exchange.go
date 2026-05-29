@@ -8,6 +8,7 @@ package internal
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +40,7 @@ const (
 	controlMaxTTLTrait     = "control:max-ttl:"
 	controlExpiresTrait    = "control:expires:"
 	defaultControlAudience = "caracal-control"
+	providerTokenCacheSkew = 30 * time.Second
 )
 
 type delegationProof struct {
@@ -632,6 +634,22 @@ func providerRequiresUserGrant(provider *ProviderConfig) bool {
 	return derefStr(provider.ProviderKind) == "oauth2_authorization_code"
 }
 
+type oauthClientCredentialsConfig struct {
+	TokenEndpoint     string   `json:"token_endpoint"`
+	ClientID          string   `json:"client_id"`
+	ClientAuthMethod  string   `json:"client_auth_method"`
+	AllowedTokenHosts []string `json:"allowed_token_hosts"`
+	Scopes            []string `json:"scopes"`
+	Audience          string   `json:"audience"`
+	Resource          string   `json:"resource"`
+}
+
+type providerServiceTokenCacheEntry struct {
+	fingerprint string
+	token       string
+	expiresAt   time.Time
+}
+
 func (s *Server) providerServiceToken(ctx context.Context, provider *ProviderConfig) (string, error) {
 	secretConfig, err := openProviderSecretConfig(s.keys.zek, provider)
 	if err != nil {
@@ -649,41 +667,112 @@ func (s *Server) providerServiceToken(ctx context.Context, provider *ProviderCon
 		}
 		return secretConfig.BearerToken, nil
 	case "oauth2_client_credentials":
-		var cfg struct {
-			TokenEndpoint     string   `json:"token_endpoint"`
-			ClientID          string   `json:"client_id"`
-			ClientAuthMethod  string   `json:"client_auth_method"`
-			AllowedTokenHosts []string `json:"allowed_token_hosts"`
-			Scopes            []string `json:"scopes"`
-		}
+		var cfg oauthClientCredentialsConfig
 		if err := json.Unmarshal(provider.ConfigJSON, &cfg); err != nil || cfg.TokenEndpoint == "" || cfg.ClientID == "" {
 			return "", fmt.Errorf("provider oauth2 config invalid")
 		}
-		tokenEndpoint, err := validateTokenEndpoint(cfg.TokenEndpoint, cfg.AllowedTokenHosts)
+		fingerprint := providerServiceTokenFingerprint(provider)
+		if token, ok := s.cachedProviderServiceToken(provider.ID, fingerprint, time.Now()); ok {
+			return token, nil
+		}
+		value, err, _ := s.refreshGroup.Do("provider-service-token:"+provider.ID+":"+fingerprint, func() (any, error) {
+			if token, ok := s.cachedProviderServiceToken(provider.ID, fingerprint, time.Now()); ok {
+				return token, nil
+			}
+			token, expiresAt, err := s.fetchProviderServiceToken(ctx, provider, cfg, secretConfig)
+			if err != nil {
+				return "", err
+			}
+			s.storeProviderServiceToken(provider.ID, fingerprint, token, expiresAt)
+			return token, nil
+		})
 		if err != nil {
 			return "", err
 		}
-		if s.providerCircuitOpen(ctx, provider.ID) {
-			return "", fmt.Errorf("provider token circuit open")
-		}
-		form := url.Values{"grant_type": {"client_credentials"}}
-		if len(cfg.Scopes) > 0 {
-			form.Set("scope", strings.Join(cfg.Scopes, " "))
-		}
-		body, err := s.refreshProviderToken(ctx, provider.ID, tokenEndpoint, form, cfg.ClientID, secretConfig.ClientSecret, cfg.ClientAuthMethod)
-		if err != nil {
-			return "", err
-		}
-		var tokenResp struct {
-			AccessToken string `json:"access_token"`
-		}
-		if err := json.Unmarshal(body, &tokenResp); err != nil || tokenResp.AccessToken == "" {
+		token, ok := value.(string)
+		if !ok || token == "" {
 			return "", fmt.Errorf("provider token response invalid")
 		}
-		return tokenResp.AccessToken, nil
+		return token, nil
 	default:
 		return "", fmt.Errorf("provider kind unsupported")
 	}
+}
+
+func (s *Server) fetchProviderServiceToken(ctx context.Context, provider *ProviderConfig, cfg oauthClientCredentialsConfig, secretConfig providerSecretConfig) (string, time.Time, error) {
+	tokenEndpoint, err := validateTokenEndpoint(cfg.TokenEndpoint, cfg.AllowedTokenHosts)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if s.providerCircuitOpen(ctx, provider.ID) {
+		return "", time.Time{}, fmt.Errorf("provider token circuit open")
+	}
+	form := oauthClientCredentialsForm(cfg)
+	body, err := s.refreshProviderToken(ctx, provider.ID, tokenEndpoint, form, cfg.ClientID, secretConfig.ClientSecret, cfg.ClientAuthMethod)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	var tokenResp struct {
+		AccessToken string `json:"access_token"`
+		ExpiresIn   int    `json:"expires_in"`
+	}
+	if err := json.Unmarshal(body, &tokenResp); err != nil || tokenResp.AccessToken == "" {
+		return "", time.Time{}, fmt.Errorf("provider token response invalid")
+	}
+	return tokenResp.AccessToken, time.Now().Add(providerServiceTokenTTL(tokenResp.ExpiresIn, s.cfg.MaxGrantTTLSeconds)), nil
+}
+
+func oauthClientCredentialsForm(cfg oauthClientCredentialsConfig) url.Values {
+	form := url.Values{"grant_type": {"client_credentials"}}
+	if len(cfg.Scopes) > 0 {
+		form.Set("scope", strings.Join(cfg.Scopes, " "))
+	}
+	if strings.TrimSpace(cfg.Audience) != "" {
+		form.Set("audience", strings.TrimSpace(cfg.Audience))
+	}
+	if strings.TrimSpace(cfg.Resource) != "" {
+		form.Set("resource", strings.TrimSpace(cfg.Resource))
+	}
+	return form
+}
+
+func providerServiceTokenTTL(providerSeconds, maxSeconds int) time.Duration {
+	if maxSeconds <= 0 {
+		maxSeconds = 3600
+	}
+	return capGrantTTL(providerSeconds, maxSeconds)
+}
+
+func providerServiceTokenFingerprint(provider *ProviderConfig) string {
+	h := sha256.New()
+	h.Write([]byte(derefStr(provider.ProviderKind)))
+	h.Write([]byte{0})
+	h.Write(provider.ConfigJSON)
+	h.Write([]byte{0})
+	h.Write(provider.SecretConfigCt)
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+func (s *Server) cachedProviderServiceToken(providerID, fingerprint string, now time.Time) (string, bool) {
+	s.providerTokenMu.RLock()
+	defer s.providerTokenMu.RUnlock()
+	entry, ok := s.providerTokenCache[providerID]
+	if !ok || entry.fingerprint != fingerprint || entry.token == "" || !entry.expiresAt.After(now.Add(providerTokenCacheSkew)) {
+		return "", false
+	}
+	return entry.token, true
+}
+
+func (s *Server) storeProviderServiceToken(providerID, fingerprint, token string, expiresAt time.Time) {
+	if token == "" || !expiresAt.After(time.Now().Add(providerTokenCacheSkew)) {
+		return
+	}
+	s.providerTokenMu.Lock()
+	defer s.providerTokenMu.Unlock()
+	if s.providerTokenCache == nil {
+		s.providerTokenCache = make(map[string]providerServiceTokenCacheEntry)
+	}
+	s.providerTokenCache[providerID] = providerServiceTokenCacheEntry{fingerprint: fingerprint, token: token, expiresAt: expiresAt}
 }
 
 type providerForwardingConfig struct {

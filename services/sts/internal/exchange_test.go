@@ -11,10 +11,14 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -647,6 +651,102 @@ func TestBuildUpstreamDirectiveRejectsMalformedProviderAuthScheme(t *testing.T) 
 	}
 	if _, err := srv.buildUpstreamDirective(context.Background(), "zone1", map[string]any{"sub": "user1"}, resource, true); err == nil {
 		t.Fatal("provider directive must reject malformed auth schemes")
+	}
+}
+
+func TestOAuthClientCredentialsFormIncludesProviderTokenParameters(t *testing.T) {
+	form := oauthClientCredentialsForm(oauthClientCredentialsConfig{
+		Scopes:   []string{"read", "write"},
+		Audience: " https://api.example.com ",
+		Resource: " https://resource.example.com ",
+	})
+	if form.Get("grant_type") != "client_credentials" {
+		t.Fatalf("unexpected grant_type: %s", form.Get("grant_type"))
+	}
+	if form.Get("scope") != "read write" {
+		t.Fatalf("unexpected scope: %s", form.Get("scope"))
+	}
+	if form.Get("audience") != "https://api.example.com" {
+		t.Fatalf("unexpected audience: %s", form.Get("audience"))
+	}
+	if form.Get("resource") != "https://resource.example.com" {
+		t.Fatalf("unexpected resource: %s", form.Get("resource"))
+	}
+}
+
+func TestBuildProviderTokenRequestImplementsClientAuthMethods(t *testing.T) {
+	endpoint, err := url.Parse("https://issuer.example.com/oauth/token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	basicReq, err := buildProviderTokenRequest(context.Background(), endpoint, url.Values{"grant_type": {"client_credentials"}}, "client-id", "client-secret", "client_secret_basic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("client-id:client-secret"))
+	if basicReq.Header.Get("Authorization") != wantAuth {
+		t.Fatalf("basic auth header mismatch: %s", basicReq.Header.Get("Authorization"))
+	}
+	body, err := io.ReadAll(basicReq.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "client_secret") {
+		t.Fatalf("client_secret_basic must not put client_secret in the form body: %s", string(body))
+	}
+
+	postReq, err := buildProviderTokenRequest(context.Background(), endpoint, url.Values{"grant_type": {"client_credentials"}}, "client-id", "client-secret", "client_secret_post")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if postReq.Header.Get("Authorization") != "" {
+		t.Fatalf("client_secret_post must not set Authorization: %s", postReq.Header.Get("Authorization"))
+	}
+	body, err = io.ReadAll(postReq.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values.Get("client_id") != "client-id" || values.Get("client_secret") != "client-secret" {
+		t.Fatalf("client_secret_post body mismatch: %s", string(body))
+	}
+
+	noneReq, err := buildProviderTokenRequest(context.Background(), endpoint, url.Values{"grant_type": {"client_credentials"}}, "client-id", "", "none")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noneReq.Header.Get("Authorization") != "" {
+		t.Fatalf("none auth must not set Authorization: %s", noneReq.Header.Get("Authorization"))
+	}
+	body, err = io.ReadAll(noneReq.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err = url.ParseQuery(string(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if values.Get("client_id") != "client-id" || values.Get("client_secret") != "" {
+		t.Fatalf("none auth body mismatch: %s", string(body))
+	}
+}
+
+func TestProviderServiceTokenCacheRequiresFreshMatchingFingerprint(t *testing.T) {
+	srv := &Server{}
+	now := time.Now()
+	srv.storeProviderServiceToken("provider1", "fp1", "token1", now.Add(5*time.Minute))
+	if token, ok := srv.cachedProviderServiceToken("provider1", "fp1", now); !ok || token != "token1" {
+		t.Fatalf("expected cached token, got %q ok=%v", token, ok)
+	}
+	if _, ok := srv.cachedProviderServiceToken("provider1", "fp2", now); ok {
+		t.Fatal("cache must miss when provider fingerprint changes")
+	}
+	srv.storeProviderServiceToken("provider2", "fp1", "token2", now.Add(providerTokenCacheSkew/2))
+	if _, ok := srv.cachedProviderServiceToken("provider2", "fp1", now); ok {
+		t.Fatal("cache must miss when token is inside refresh skew")
 	}
 }
 

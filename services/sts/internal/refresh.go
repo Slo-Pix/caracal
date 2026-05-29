@@ -500,12 +500,6 @@ func (s *Server) refreshProviderToken(ctx context.Context, providerID string, en
 	if method != "none" && clientSecret == "" {
 		return nil, errors.New("provider oauth client_secret missing")
 	}
-	if method == "client_secret_post" {
-		form.Set("client_id", clientID)
-		form.Set("client_secret", clientSecret)
-	} else if method == "none" {
-		form.Set("client_id", clientID)
-	}
 	client := safeHTTPClient(providerRefreshTimeout)
 	var lastErr error
 	for attempt := 0; attempt < providerRefreshAttempts; attempt++ {
@@ -516,13 +510,9 @@ func (s *Server) refreshProviderToken(ctx context.Context, providerID string, en
 			case <-time.After(jitteredBackoff(providerRetryBackoff, attempt-1)):
 			}
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), strings.NewReader(form.Encode()))
+		req, err := buildProviderTokenRequest(ctx, endpoint, form, clientID, clientSecret, method)
 		if err != nil {
 			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		if method == "client_secret_basic" {
-			req.SetBasicAuth(clientID, clientSecret)
 		}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -543,6 +533,29 @@ func (s *Server) refreshProviderToken(ctx context.Context, providerID string, en
 	}
 	s.recordProviderFailure(ctx, providerID)
 	return nil, lastErr
+}
+
+func buildProviderTokenRequest(ctx context.Context, endpoint *url.URL, form url.Values, clientID, clientSecret, method string) (*http.Request, error) {
+	requestForm := url.Values{}
+	for key, values := range form {
+		requestForm[key] = append([]string(nil), values...)
+	}
+	switch method {
+	case "client_secret_post":
+		requestForm.Set("client_id", clientID)
+		requestForm.Set("client_secret", clientSecret)
+	case "none":
+		requestForm.Set("client_id", clientID)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), strings.NewReader(requestForm.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if method == "client_secret_basic" {
+		req.SetBasicAuth(clientID, clientSecret)
+	}
+	return req, nil
 }
 
 func (s *Server) providerCircuitOpen(ctx context.Context, providerID string) bool {

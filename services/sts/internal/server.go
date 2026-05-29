@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
@@ -34,17 +35,19 @@ const (
 
 // Server holds all runtime state for the STS.
 type Server struct {
-	cfg            Config
-	db             DBQuerier
-	redis          *RedisClient
-	opa            *OPAEngine
-	keys           *KeyCache
-	auditBuffer    *AuditBuffer
-	metrics        *STSMetrics
-	refreshGroup   singleflight.Group
-	stepUpThrottle *stepUpThrottle
-	consumersReady chan struct{}
-	log            zerolog.Logger
+	cfg                Config
+	db                 DBQuerier
+	redis              *RedisClient
+	opa                *OPAEngine
+	keys               *KeyCache
+	auditBuffer        *AuditBuffer
+	metrics            *STSMetrics
+	refreshGroup       singleflight.Group
+	providerTokenMu    sync.RWMutex
+	providerTokenCache map[string]providerServiceTokenCacheEntry
+	stepUpThrottle     *stepUpThrottle
+	consumersReady     chan struct{}
+	log                zerolog.Logger
 }
 
 // New initialises all dependencies and returns a ready-to-run Server.
