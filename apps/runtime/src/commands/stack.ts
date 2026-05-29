@@ -59,6 +59,15 @@ function requireDockerCompose(): void {
   process.exit(1)
 }
 
+function requireBuildKit(): void {
+  if (spawnSync('docker', ['buildx', 'version'], { stdio: 'ignore' }).status === 0) return
+  printError(
+    'BuildKit is required to build the Caracal stack but `docker buildx` is not available. ' +
+      'Install the buildx plugin: https://docs.docker.com/build/architecture/#install-buildx',
+  )
+  process.exit(1)
+}
+
 function printBanner(paths: StackPaths): void {
   const tag =
     paths.mode === 'dev'
@@ -90,6 +99,7 @@ export function composeEnv(paths: StackPaths): Record<string, string | undefined
 export async function upCommand(argv: string[]): Promise<void> {
   const paths = resolvePaths()
   requireDockerCompose()
+  if (paths.mode === 'dev') requireBuildKit()
   printBanner(paths)
   const handle = stackUp({ paths, args: argv, env: composeEnv(paths) })
   const code = await handle.exitCode

@@ -103,6 +103,18 @@ describe('stack commands', () => {
     expect(engineMocks.stackUp).not.toHaveBeenCalled()
   })
 
+  it('fails up before spawning when BuildKit is unavailable in dev mode', async () => {
+    spawnSyncMock.mockImplementation((_cmd: string, args: string[]) => {
+      if (args[0] === 'buildx') return { status: 127 }
+      return { status: 0 }
+    })
+
+    await expect(upCommand([])).rejects.toThrow('exit:1')
+
+    expect(stderr).toContain('BuildKit is required to build the Caracal stack')
+    expect(engineMocks.stackUp).not.toHaveBeenCalled()
+  })
+
   it('runs up when Docker Compose is available', async () => {
     await expect(upCommand(['api'])).rejects.toThrow('exit:0')
 
