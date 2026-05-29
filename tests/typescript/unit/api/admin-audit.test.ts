@@ -57,4 +57,42 @@ describe('admin audit hook', () => {
     await app.close()
     expect(captured).toHaveLength(0)
   })
+
+  it('skips registration entirely when disabled', async () => {
+    const captured: { sql: string; params?: unknown[] }[] = []
+    const app = Fastify({ logger: false })
+    const db = {
+      query: vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
+        captured.push({ sql, params })
+        return Promise.resolve({ rows: [], rowCount: 1 })
+      }),
+    } as unknown as DB
+    registerAdminAuditHook(app, { db, enabled: false })
+    app.post('/v1/zones/:zoneId/policies/:id', async () => ({ ok: true }))
+    await app.inject({ method: 'POST', url: '/v1/zones/z1/policies/p1', payload: {} })
+    await app.close()
+    expect(captured).toHaveLength(0)
+  })
+
+  it('records the provider oauth callback even though it is a GET', async () => {
+    const captured: { sql: string; params?: unknown[] }[] = []
+    const app = buildApp(captured)
+    app.get('/v1/zones/:zoneId/provider-grants/oauth/callback', async () => ({ ok: true }))
+    await app.inject({ method: 'GET', url: '/v1/zones/z1/provider-grants/oauth/callback?code=abc' })
+    await app.close()
+    expect(captured).toHaveLength(1)
+    expect(captured[0].params![8]).toBe('z1')
+  })
+
+  it('swallows insert failures without breaking the response', async () => {
+    const app = Fastify({ logger: false })
+    const db = {
+      query: vi.fn().mockRejectedValue(new Error('db down')),
+    } as unknown as DB
+    registerAdminAuditHook(app, { db })
+    app.post('/v1/zones/:zoneId/policies/:id', async () => ({ ok: true }))
+    const res = await app.inject({ method: 'POST', url: '/v1/zones/z1/policies/p1', payload: {} })
+    await app.close()
+    expect(res.statusCode).toBe(200)
+  })
 })

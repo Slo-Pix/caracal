@@ -29,6 +29,12 @@ describe('explainError', () => {
     )
   })
 
+  it('explains a DCR disable that needs a shutdown choice', () => {
+    expect(explainError(new AdminApiError(409, 'dcr_shutdown_required', {}))).toBe(
+      'DCR disable needs a shutdown choice: keep live DCR apps or revoke them',
+    )
+  })
+
   it('formats AdminApiError 404', () => {
     expect(explainError(new AdminApiError(404, 'not_found', {}))).toMatch(/not found/)
   })

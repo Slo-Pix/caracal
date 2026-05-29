@@ -166,4 +166,11 @@ describe('api config trustProxy', () => {
 
     expect(() => loadConfig()).toThrow('Invalid boolean env var API_ENABLE_DOCS')
   })
+
+  test('rejects a gateway STS HMAC key shorter than 32 bytes', async () => {
+    process.env.GATEWAY_STS_HMAC_KEY = 'abcd'
+    const { loadConfig } = await import(CONFIG_PATH) as typeof import('../../../../apps/api/src/config')
+    expect(() => loadConfig()).toThrow('GATEWAY_STS_HMAC_KEY must be hex-encoded with at least 32 bytes')
+    delete process.env.GATEWAY_STS_HMAC_KEY
+  })
 })

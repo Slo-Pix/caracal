@@ -252,4 +252,118 @@ describe('AdminClient', () => {
     await expect(c.zones.create({ name: 'Demo' })).rejects.toMatchObject({ status: 503 })
     expect(f).toHaveBeenCalledTimes(1)
   })
+
+  it('honours a date-based retry-after header', async () => {
+    const when = new Date(Date.now() + 10).toUTCString()
+    const f = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false, status: 429, statusText: 'Too Many',
+        headers: new Headers({ 'retry-after': when }),
+        text: async () => '{}', json: async () => ({}),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200, statusText: 'OK', headers: new Headers(),
+        text: async () => '[]', json: async () => [],
+      }) as unknown as typeof fetch
+    const c = new AdminClient({ apiUrl: 'http://api', adminToken: 't', fetchImpl: f, retries: 1 })
+    await expect(c.zones.list()).resolves.toEqual([])
+    expect(f).toHaveBeenCalledTimes(2)
+  })
+
+  it('aborts when the caller signal fires', async () => {
+    const controller = new AbortController()
+    const f = vi.fn().mockImplementation(() => {
+      controller.abort()
+      return Promise.reject(new DOMException('aborted', 'AbortError'))
+    }) as unknown as typeof fetch
+    const c = new AdminClient({
+      apiUrl: 'http://api', adminToken: 't', fetchImpl: f, retries: 3, signal: controller.signal,
+    })
+    await expect(c.zones.list()).rejects.toBeInstanceOf(DOMException)
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws policy_template_not_found when a template id is missing', async () => {
+    const c = new AdminClient({
+      apiUrl: 'http://api', adminToken: 't', fetchImpl: fetchOk([{ id: 'known' }]),
+    })
+    await expect(c.policyTemplates.get('ghost')).rejects.toMatchObject({
+      status: 404, code: 'policy_template_not_found',
+    })
+  })
+
+  it('covers the API namespace surface with correct path and method', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = []
+    const f = vi.fn().mockImplementation((url: string, init: RequestInit) => {
+      calls.push({ url, method: init.method ?? 'GET', body: init.body as string | undefined })
+      return Promise.resolve({
+        ok: true, status: 200, statusText: 'OK', headers: new Headers(),
+        text: async () => '{}', json: async () => ({}),
+      })
+    }) as unknown as typeof fetch
+    const c = new AdminClient({
+      apiUrl: 'http://api', coordinatorUrl: 'http://coord',
+      adminToken: 'a', coordinatorToken: 'c', fetchImpl: f,
+    })
+
+    await c.zones.get('z1')
+    await c.zones.dcrStatus('z1')
+    await c.zones.delete('z1')
+    await c.applications.list('z1', { applicationInternals: true })
+    await c.applications.get('z1', 'a1')
+    await c.applications.create('z1', { name: 'A' } as never)
+    await c.applications.patch('z1', 'a1', { name: 'B' } as never)
+    await c.applications.delete('z1', 'a1')
+    await c.applications.dcr('z1', {} as never)
+    await c.resources.list('z1', { controlResource: true })
+    await c.resources.get('z1', 'r1')
+    await c.resources.create('z1', {} as never)
+    await c.resources.patch('z1', 'r1', {})
+    await c.resources.delete('z1', 'r1')
+    await c.providers.list('z1')
+    await c.providers.get('z1', 'p1')
+    await c.providers.create('z1', {} as never)
+    await c.providers.patch('z1', 'p1', {})
+    await c.providers.delete('z1', 'p1')
+    await c.policies.list('z1')
+    await c.policies.get('z1', 'pol1')
+    await c.policies.create('z1', {} as never)
+    await c.policies.validate('package x', '2026-05-20')
+    await c.policies.addVersion('z1', 'pol1', 'content')
+    await c.policies.delete('z1', 'pol1')
+    await c.policyTemplates.list()
+    await c.policySets.list('z1')
+    await c.policySets.get('z1', 'ps1')
+    await c.policySets.create('z1', 'Set', 'desc')
+    await c.policySets.addVersion('z1', 'ps1', [{ policy_version_id: 'v1' }])
+    await c.policySets.simulate('z1', 'ps1', 'v1', { foo: 1 })
+    await c.policySets.activate('z1', 'ps1', 'v1', 'shadow')
+    await c.policySets.delete('z1', 'ps1')
+    await c.grants.list('z1')
+    await c.grants.get('z1', 'g1')
+    await c.grants.create('z1', {} as never)
+    await c.grants.authorizeProviderOAuth('z1', {} as never)
+    await c.grants.revokeProviderGrant('z1', {} as never)
+    await c.grants.revoke('z1', 'g1')
+    await c.sessions.list('z1', { status: 'active' } as never)
+    await c.audit.list('z1', { limit: 5 } as never)
+
+    await c.agents.get('z1', 'ag1')
+    await c.agents.children('z1', 'ag1')
+    await c.agents.suspend('z1', 'ag1')
+    await c.agents.resume('z1', 'ag1')
+    await c.agents.terminate('z1', 'ag1')
+    await c.delegations.active('z1')
+    await c.delegations.inbound('z1', 's1')
+    await c.delegations.outbound('z1', 's1')
+    await c.delegations.traverse('z1', 'd1')
+    await c.delegations.impact('z1', 'd1')
+    await c.delegations.revoke('z1', 'd1')
+
+    expect(calls.some((x) => x.url === 'http://api/v1/zones/z1' && x.method === 'DELETE')).toBe(true)
+    expect(calls.some((x) => x.url === 'http://api/v1/policies/validate' && x.method === 'POST')).toBe(true)
+    expect(calls.some((x) => x.url === 'http://coord/zones/z1/agents/ag1/suspend' && x.method === 'PATCH')).toBe(true)
+    expect(calls.some((x) => x.url === 'http://coord/zones/z1/delegations/d1/revoke' && x.method === 'PATCH')).toBe(true)
+    expect(calls.some((x) => x.url === 'http://api/v1/zones/z1/sessions?status=active')).toBe(true)
+  })
 })
