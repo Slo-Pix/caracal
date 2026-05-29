@@ -31,10 +31,12 @@ Resources tell Caracal what can be protected. Providers describe the upstream cr
 | --- | --- | --- |
 | None | No credential fields. | Gateway strips caller auth and forwards no upstream credential; use only when Gateway is the enforcement point and the upstream expects no credential. |
 | Caracal mandate | No credential fields. | Gateway forwards the Caracal resource mandate in `Authorization: Bearer ...`; the resource verifies issuer, audience, scopes, target, expiry, and revocation. |
-| OAuth2 authorization code | Authorization endpoint, token endpoint, redirect URI, client ID, client secret. | Uses user/resource provider grants and refreshes delegated provider tokens inside STS. |
+| OAuth2 authorization code | Authorization endpoint, token endpoint, redirect URI, client ID, client secret. | Creates user/resource provider grants through a browser consent callback, then refreshes delegated provider tokens inside STS. |
 | OAuth2 client credentials | Token endpoint, client ID, client secret unless client auth method is `none`. | STS obtains and caches service-to-service provider tokens for Gateway upstream calls. |
 | API key | Header name and API key. | Gateway forwards the sealed provider key in the configured header, with an optional auth scheme prefix. |
 | Bearer token | Bearer token. | Gateway forwards the sealed provider token as `Authorization: Bearer ...` unless Advanced routing configures another header or scheme. |
+
+OAuth2 authorization-code providers are for delegated user consent. Register the exact Caracal callback URI as the provider redirect URI, then use the provider `connect` action to create an authorization URL for a user, resource, and Caracal scope set. Provider scopes are the upstream OAuth scopes requested during consent. Authorization params are Advanced key/value entries for provider-specific browser parameters, such as Google `access_type=offline` and `prompt=consent`; Caracal always owns reserved OAuth fields such as `client_id`, `redirect_uri`, `state`, and PKCE challenge values. Allowed token hosts constrain the code exchange and later refresh calls.
 
 OAuth2 client credentials keeps common machine-to-machine setup in the main form and moves provider-specific controls to Advanced. Use provider scopes when the token endpoint expects OAuth scopes, token audience when the provider requires an `audience` parameter, and token resource when the provider expects a resource indicator. Allowed token hosts constrain outbound token acquisition; Console infers the host from the token endpoint when the Advanced field is blank.
 

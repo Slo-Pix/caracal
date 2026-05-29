@@ -577,6 +577,7 @@ describe('providers actions', () => {
       'bearer_token',
       'identifier',
       'provider_scopes',
+      'authorization_params',
       'token_audience',
       'token_resource',
       'allowed_token_hosts',

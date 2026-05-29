@@ -60,6 +60,7 @@ async function buildPluginApp(
   })
   app.get('/v1/zones', async (req) => ({ ok: true, actor: req.actor }))
   app.get('/v1/zones/:zoneId/things', async (req) => ({ ok: true, params: req.params }))
+  app.get('/v1/zones/:zoneId/provider-grants/oauth/callback', async () => ({ ok: true }))
   return app
 }
 
@@ -85,6 +86,13 @@ describe('adminAuthPlugin', () => {
     const app = await buildPluginApp(makeDb({ token: 'secret' }))
     const res = await app.inject({ method: 'GET', url: '/v1/zones' })
     expect(res.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('allows OAuth provider callbacks without an admin bearer', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }))
+    const res = await app.inject({ method: 'GET', url: '/v1/zones/z1/provider-grants/oauth/callback?state=s&code=c' })
+    expect(res.statusCode).toBe(200)
     await app.close()
   })
 
