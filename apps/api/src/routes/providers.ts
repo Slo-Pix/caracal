@@ -16,17 +16,21 @@ const ProviderKind = z.enum(['caracal_mandate', 'oauth2_authorization_code', 'oa
 type ProviderKind = z.infer<typeof ProviderKind>
 const OAuthClientAuthMethod = z.enum(['client_secret_basic', 'client_secret_post', 'none'])
 type OAuthClientAuthMethod = z.infer<typeof OAuthClientAuthMethod>
+const OptionalText = z.preprocess(
+  (value) => typeof value === 'string' && value.trim().length === 0 ? undefined : value,
+  z.string().trim().min(1).optional(),
+)
 
 const ProviderCreateBody = z.object({
-  name: z.string().trim().min(1).optional(),
-  identifier: z.string().trim().min(1).optional(),
+  name: OptionalText,
+  identifier: OptionalText,
   kind: ProviderKind,
   config_json: z.record(z.string(), z.unknown()).optional(),
 }).refine((body) => body.name !== undefined || body.identifier !== undefined, { message: 'name_or_identifier_required' })
 
 const ProviderPatchBody = z.object({
-  name: z.string().trim().min(1).optional(),
-  identifier: z.string().trim().min(1).optional(),
+  name: OptionalText,
+  identifier: OptionalText,
   kind: ProviderKind.optional(),
   config_json: z.record(z.string(), z.unknown()).optional(),
 })

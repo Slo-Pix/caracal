@@ -100,7 +100,7 @@ export interface Provider {
 
 export interface ProviderInput {
   name?: string
-  identifier: string
+  identifier?: string
   kind: ProviderKind
   config_json: JsonObject
 }

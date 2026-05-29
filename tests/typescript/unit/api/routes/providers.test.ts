@@ -105,8 +105,10 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       method: 'POST',
       url: '/v1/zones/z1/providers',
       payload: {
+        identifier: '',
         name: 'Hooli OAuth2',
         kind: 'caracal_mandate',
+        config_json: {},
       },
     })
 
