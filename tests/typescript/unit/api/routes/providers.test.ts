@@ -402,6 +402,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
           client_secret: 'hooli-secret',
           allowed_token_hosts: ['login.hooli.example'],
           authorization_params: { access_type: 'offline', prompt: 'consent' },
+          token_params: { tenant: 'hooli' },
           auth_header: 'Authorization',
           auth_scheme: 'Bearer',
         },
@@ -418,6 +419,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       client_auth_method: 'client_secret_basic',
       allowed_token_hosts: ['login.hooli.example'],
       authorization_params: { access_type: 'offline', prompt: 'consent' },
+      token_params: { tenant: 'hooli' },
       auth_header: 'Authorization',
       auth_scheme: 'Bearer',
     })
@@ -463,6 +465,15 @@ describe('POST /v1/zones/:zoneId/providers', () => {
         client_secret: 'hooli-secret',
         allowed_token_hosts: ['login.hooli.example'],
         authorization_params: { client_id: 'override' },
+      },
+      {
+        authorization_endpoint: 'https://login.hooli.example/oauth/authorize',
+        token_endpoint: 'https://login.hooli.example/oauth/token',
+        redirect_uri: 'http://localhost:3000/oauth/callback',
+        client_id: 'hooli-client',
+        client_secret: 'hooli-secret',
+        allowed_token_hosts: ['login.hooli.example'],
+        token_params: { grant_type: 'override' },
       },
     ]) {
       const res = await app.inject({

@@ -226,6 +226,25 @@ export interface ProviderGrantOAuthAuthorize {
   expires_at: string
 }
 
+export interface ProviderGrantRevokeInput {
+  user_id: string
+  resource_id: string
+  provider_id: string
+}
+
+export interface ProviderGrant {
+  id: string
+  zone_id: string
+  user_id: string
+  resource_id: string
+  provider_id: string
+  scopes: string[]
+  status: string
+  expires_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Session {
   id: string
   zone_id: string

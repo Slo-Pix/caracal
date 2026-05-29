@@ -92,6 +92,8 @@ function makeClient() {
       list: vi.fn(async () => []),
       get: vi.fn(async () => ({})),
       create: vi.fn(async () => ({})),
+      authorizeProviderOAuth: vi.fn(async () => ({ authorization_url: 'https://login.hooli.example/oauth/authorize', state: 'state', expires_at: '' })),
+      revokeProviderGrant: vi.fn(async () => ({ id: 'provider-grant-1' })),
       revoke: vi.fn(async () => undefined),
     },
     sessions: { list: vi.fn(async () => []) },
@@ -578,6 +580,7 @@ describe('providers actions', () => {
       'identifier',
       'provider_scopes',
       'authorization_params',
+      'token_params',
       'token_audience',
       'token_resource',
       'allowed_token_hosts',
@@ -680,6 +683,7 @@ describe('providers actions', () => {
       client_id: 'provider-client',
       client_secret: 'provider-secret',
       provider_scopes: 'pipernet.read',
+      token_params: 'tenant=hooli',
       token_audience: 'https://api.hooli.example',
       token_resource: 'https://resource.hooli.example',
       allowed_token_hosts: 'provider.example',
@@ -702,6 +706,7 @@ describe('providers actions', () => {
         client_secret: 'provider-secret',
         client_auth_method: 'client_secret_basic',
         scopes: ['pipernet.read'],
+        token_params: { tenant: 'hooli' },
         audience: 'https://api.hooli.example',
         resource: 'https://resource.hooli.example',
         allowed_token_hosts: ['provider.example'],
@@ -760,6 +765,7 @@ describe('providers actions', () => {
       redirect_uri: 'http://localhost:3000/oauth/callback',
       client_id: 'hooli-client',
       client_secret: 'hooli-secret',
+      token_params: 'tenant=hooli',
       allowed_token_hosts: '',
       client_auth_method: 'client_secret_basic',
       auth_header: 'Authorization',
@@ -780,6 +786,7 @@ describe('providers actions', () => {
         client_id: 'hooli-client',
         client_secret: 'hooli-secret',
         client_auth_method: 'client_secret_basic',
+        token_params: { tenant: 'hooli' },
         allowed_token_hosts: ['login.hooli.example'],
         auth_header: 'Authorization',
         auth_scheme: 'Bearer',
@@ -957,6 +964,38 @@ describe('providers actions', () => {
 
     expect(client.providers.create).not.toHaveBeenCalled()
     expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('auth_scheme'), 'error')
+  })
+
+  it('disconnects delegated OAuth provider grants by user and resource', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    setRows(list, [{
+      id: 'provider-1',
+      zone_id: 'z1',
+      name: 'Hooli OIDC',
+      identifier: 'provider://hooli-oidc',
+      kind: 'oauth2_authorization_code',
+      config_json: {},
+      secret_config_keys: [],
+      created_at: '',
+      updated_at: '',
+    }])
+    const form = await pressKey(list, 'x', app) as FormView
+    ;(form as unknown as { values: Record<string, string> }).values = {
+      user_id: 'user:richard.hendricks@piedpiper.example',
+      resource_id: 'res-1',
+    }
+    ;(form as unknown as { focus: number }).focus = 99
+
+    await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.grants.revokeProviderGrant).toHaveBeenCalledWith('z1', {
+      user_id: 'user:richard.hendricks@piedpiper.example',
+      resource_id: 'res-1',
+      provider_id: 'provider-1',
+    })
+    expect(app.setStatus).toHaveBeenCalledWith('revoked provider grant provider-grant-1')
   })
 
   it('drops stale hidden provider fields when the provider kind changes', async () => {

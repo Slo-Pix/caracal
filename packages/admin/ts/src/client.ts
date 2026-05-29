@@ -28,8 +28,10 @@ import type {
   PolicyValidation,
   PolicyVersion,
   Provider,
+  ProviderGrant,
   ProviderGrantOAuthAuthorize,
   ProviderGrantOAuthAuthorizeInput,
+  ProviderGrantRevokeInput,
   ProviderInput,
   Resource,
   ResourceInput,
@@ -322,6 +324,8 @@ export class AdminClient {
       this.request<Grant>(`/v1/zones/${zoneId}/grants`, { method: 'POST', body: input }),
     authorizeProviderOAuth: (zoneId: string, input: ProviderGrantOAuthAuthorizeInput) =>
       this.request<ProviderGrantOAuthAuthorize>(`/v1/zones/${zoneId}/provider-grants/oauth/authorize`, { method: 'POST', body: input }),
+    revokeProviderGrant: (zoneId: string, input: ProviderGrantRevokeInput) =>
+      this.request<ProviderGrant>(`/v1/zones/${zoneId}/provider-grants/revoke`, { method: 'POST', body: input }),
     revoke: (zoneId: string, id: string) =>
       this.request<void>(`/v1/zones/${zoneId}/grants/${id}`, { method: 'DELETE', expectEmpty: true }),
   }
