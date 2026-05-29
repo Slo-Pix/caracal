@@ -152,6 +152,8 @@ function slugValue(value: string): string {
 
 const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
 const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
+const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 
 function resourceIdentifierFromName(name: string): string {
   const text = name.trim()
@@ -169,6 +171,42 @@ function validateProviderIdentifier(value: string): string | undefined {
   const text = value.trim()
   if (!text || PROVIDER_IDENTIFIER_PATTERN.test(text)) return undefined
   return 'provider identifier must stay in provider://lowercase-slug format'
+}
+
+function requireHttpsUrl(config: JsonObject, key: string, message: string): void {
+  requireString(config, key, message)
+  const value = config[key] as string
+  try {
+    const url = new URL(value)
+    if (url.protocol !== 'https:' || url.username || url.password || !url.hostname) throw new Error()
+  } catch {
+    throw new Error(message)
+  }
+}
+
+function requireAbsoluteUri(config: JsonObject, key: string, message: string): void {
+  requireString(config, key, message)
+  const value = config[key] as string
+  try {
+    const url = new URL(value)
+    if ((url.protocol === 'http:' || url.protocol === 'https:') && !url.hostname) throw new Error()
+  } catch {
+    throw new Error(message)
+  }
+}
+
+function requireOptionalHeaderName(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  if (typeof value !== 'string' || !HEADER_TOKEN_PATTERN.test(value.trim())) throw new Error(message)
+  config[key] = value.trim()
+}
+
+function requireOptionalAuthScheme(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  if (typeof value !== 'string' || !AUTH_SCHEME_PATTERN.test(value.trim())) throw new Error(message)
+  config[key] = value.trim()
 }
 
 function inferredTokenHosts(endpoint: string | undefined): string {
@@ -479,15 +517,23 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
   if (kind === 'caracal_mandate') return
   if (kind === 'api_key') {
     requireString(config, 'header_name', 'api_key provider config requires header_name')
+    requireOptionalHeaderName(config, 'header_name', 'api_key provider config header_name must be an HTTP header name')
+    requireOptionalAuthScheme(config, 'auth_scheme', 'api_key provider config auth_scheme must be an auth scheme token')
     return
   }
-  if (kind === 'bearer_token') return
-  requireString(config, 'token_endpoint', `${kind} provider config requires token_endpoint`)
+  if (kind === 'bearer_token') {
+    requireOptionalHeaderName(config, 'auth_header', 'bearer_token provider config auth_header must be an HTTP header name')
+    requireOptionalAuthScheme(config, 'auth_scheme', 'bearer_token provider config auth_scheme must be an auth scheme token')
+    return
+  }
+  requireHttpsUrl(config, 'token_endpoint', `${kind} provider config token_endpoint must be an HTTPS URL`)
   requireString(config, 'client_id', `${kind} provider config requires client_id`)
   requireStringList(config, 'allowed_token_hosts', `${kind} provider config requires allowed_token_hosts`)
+  requireOptionalHeaderName(config, 'auth_header', `${kind} provider config auth_header must be an HTTP header name`)
+  requireOptionalAuthScheme(config, 'auth_scheme', `${kind} provider config auth_scheme must be an auth scheme token`)
   if (kind === 'oauth2_authorization_code') {
-    requireString(config, 'authorization_endpoint', 'oauth2_authorization_code provider config requires authorization_endpoint')
-    requireString(config, 'redirect_uri', 'oauth2_authorization_code provider config requires redirect_uri')
+    requireHttpsUrl(config, 'authorization_endpoint', 'oauth2_authorization_code provider config authorization_endpoint must be an HTTPS URL')
+    requireAbsoluteUri(config, 'redirect_uri', 'oauth2_authorization_code provider config redirect_uri must be an absolute URI')
   }
 }
 
@@ -1184,11 +1230,11 @@ export function providersView(ctx: Ctx): View {
             { key: 'api_key', label: 'API key', kind: 'secret', dependsOn: { kind: 'api_key' }, required: true },
             { key: 'bearer_token', label: 'bearer token', kind: 'secret', dependsOn: { kind: 'bearer_token' }, required: true },
             { key: 'identifier', label: 'provider identifier', kind: 'text', advanced: true, hint: 'optional; generated from provider name when blank', validate: validateProviderIdentifier },
-            { key: 'provider_scopes', label: 'provider scopes', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional upstream OAuth scopes requested from the provider' },
+            { key: 'provider_scopes', label: 'provider scopes', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional upstream OAuth scopes for provider-native grants' },
             { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
             { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
-            { key: 'auth_header', label: 'auth header', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
-            { key: 'auth_scheme', label: 'auth scheme', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for the default upstream credential scheme' },
+            { key: 'auth_header', label: 'upstream auth header', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
+            { key: 'auth_scheme', label: 'upstream auth scheme', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, hint: 'optional; OAuth and bearer providers default to Bearer' },
             { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
           ],
           onSubmit: async (v, app) => {
@@ -1222,8 +1268,8 @@ export function providersView(ctx: Ctx): View {
               { key: 'provider_scopes', label: 'provider scopes', kind: 'list', default: configList(row.config_json, 'scopes'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
               { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
               { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: ['client_secret_basic', 'client_secret_post', 'none'], default: configString(row.config_json, 'client_auth_method') || 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
-              { key: 'auth_header', label: 'auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true },
-              { key: 'auth_scheme', label: 'auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true },
+              { key: 'auth_header', label: 'upstream auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
+              { key: 'auth_scheme', label: 'upstream auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, advanced: true, hint: 'optional; OAuth and bearer providers default to Bearer' },
               { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: configBool(row.config_json, 'forward_caracal_identity'), dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
             ],
             onSubmit: async (v, app) => {

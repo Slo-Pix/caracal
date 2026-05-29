@@ -18,6 +18,8 @@ const OAuthClientAuthMethod = z.enum(['client_secret_basic', 'client_secret_post
 type OAuthClientAuthMethod = z.infer<typeof OAuthClientAuthMethod>
 const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
 const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
+const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OptionalText = z.preprocess(
   (value) => typeof value === 'string' && value.trim().length === 0 ? undefined : value,
   z.string().trim().min(1).optional(),
@@ -99,8 +101,41 @@ function requireStringList(config: Record<string, unknown>, key: string, message
   }
 }
 
-function requireOptionalString(config: Record<string, unknown>, key: string, message: string): void {
-  if (config[key] !== undefined && typeof config[key] !== 'string') throw new Error(message)
+function requireHttpsUrl(config: Record<string, unknown>, key: string, message: string): void {
+  requireString(config, key, message)
+  const value = config[key] as string
+  let url: URL
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error(message)
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || !url.hostname) throw new Error(message)
+}
+
+function requireAbsoluteUri(config: Record<string, unknown>, key: string, message: string): void {
+  requireString(config, key, message)
+  const value = config[key] as string
+  try {
+    const url = new URL(value)
+    if (!url.protocol || !url.hostname && (url.protocol === 'http:' || url.protocol === 'https:')) throw new Error()
+  } catch {
+    throw new Error(message)
+  }
+}
+
+function requireOptionalHeaderName(config: Record<string, unknown>, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  if (typeof value !== 'string' || !HEADER_TOKEN_PATTERN.test(value.trim())) throw new Error(message)
+  config[key] = value.trim()
+}
+
+function requireOptionalAuthScheme(config: Record<string, unknown>, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  if (typeof value !== 'string' || !AUTH_SCHEME_PATTERN.test(value.trim())) throw new Error(message)
+  config[key] = value.trim()
 }
 
 function requireOptionalBoolean(config: Record<string, unknown>, key: string, message: string): void {
@@ -147,27 +182,28 @@ function splitProviderConfig(kind: ProviderKind, input: Record<string, unknown> 
   }
   if (kind === 'api_key') {
     requireString(publicConfig, 'header_name', 'api_key provider config requires header_name')
+    requireOptionalHeaderName(publicConfig, 'header_name', 'api_key provider config header_name must be an HTTP header name')
     if (requireSecrets && !secretConfig.api_key) throw new Error('api_key provider config requires api_key')
   } else if (kind === 'bearer_token') {
     if (requireSecrets && !secretConfig.bearer_token) throw new Error('bearer_token provider config requires bearer_token')
-    requireOptionalString(publicConfig, 'auth_header', 'bearer_token provider config auth_header must be a string')
+    requireOptionalHeaderName(publicConfig, 'auth_header', 'bearer_token provider config auth_header must be an HTTP header name')
   } else {
-    requireString(publicConfig, 'token_endpoint', `${kind} provider config requires token_endpoint`)
+    requireHttpsUrl(publicConfig, 'token_endpoint', `${kind} provider config token_endpoint must be an HTTPS URL`)
     requireString(publicConfig, 'client_id', `${kind} provider config requires client_id`)
     requireStringList(publicConfig, 'allowed_token_hosts', `${kind} provider config requires allowed_token_hosts`)
     requireOptionalStringList(publicConfig, 'scopes', `${kind} provider config scopes must be a list of strings`)
-    requireOptionalString(publicConfig, 'auth_header', `${kind} provider config auth_header must be a string`)
+    requireOptionalHeaderName(publicConfig, 'auth_header', `${kind} provider config auth_header must be an HTTP header name`)
     const clientAuthMethod = requireOptionalOAuthClientAuthMethod(publicConfig)
     publicConfig.client_auth_method = clientAuthMethod
     if (kind === 'oauth2_authorization_code') {
-      requireString(publicConfig, 'authorization_endpoint', 'oauth2_authorization_code provider config requires authorization_endpoint')
-      requireString(publicConfig, 'redirect_uri', 'oauth2_authorization_code provider config requires redirect_uri')
+      requireHttpsUrl(publicConfig, 'authorization_endpoint', 'oauth2_authorization_code provider config authorization_endpoint must be an HTTPS URL')
+      requireAbsoluteUri(publicConfig, 'redirect_uri', 'oauth2_authorization_code provider config redirect_uri must be an absolute URI')
     }
     if (requireSecrets && clientAuthMethod !== 'none' && !secretConfig.client_secret) {
       throw new Error(`${kind} provider config requires client_secret`)
     }
   }
-  requireOptionalString(publicConfig, 'auth_scheme', `${kind} provider config auth_scheme must be a string`)
+  requireOptionalAuthScheme(publicConfig, 'auth_scheme', `${kind} provider config auth_scheme must be an auth scheme token`)
   requireOptionalBoolean(publicConfig, 'forward_caracal_identity', `${kind} provider config forward_caracal_identity must be a boolean`)
   return { publicConfig, secretConfig, secretKeys: Object.keys(secretConfig).sort() }
 }
