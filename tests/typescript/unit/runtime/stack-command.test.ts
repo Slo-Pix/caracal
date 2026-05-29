@@ -121,4 +121,30 @@ describe('stack commands', () => {
     expect(stdout).not.toContain('runtime onboarding complete')
     expect(stdout).not.toContain('runtime config not found')
   })
+
+  it('forwards BuildKit env to compose when starting the stack', async () => {
+    await expect(upCommand(['api'])).rejects.toThrow('exit:0')
+
+    expect(engineMocks.stackUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          DOCKER_BUILDKIT: '1',
+          COMPOSE_DOCKER_CLI_BUILD: '1',
+        }),
+      }),
+    )
+  })
+
+  it('forwards BuildKit env to compose when stopping the stack', async () => {
+    await expect(downCommand([])).rejects.toThrow('exit:0')
+
+    expect(engineMocks.stackDown).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          DOCKER_BUILDKIT: '1',
+          COMPOSE_DOCKER_CLI_BUILD: '1',
+        }),
+      }),
+    )
+  })
 })
