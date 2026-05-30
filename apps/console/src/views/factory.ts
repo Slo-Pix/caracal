@@ -146,10 +146,6 @@ function splitList(s: string): string[] {
   return s.split(',').map((x) => x.trim()).filter((x) => x.length > 0)
 }
 
-function slugValue(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item'
-}
-
 const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
 const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 const API_KEY_AUTH_LOCATIONS = ['header', 'query']
@@ -158,18 +154,6 @@ const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OAUTH_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
 const RESERVED_OAUTH_AUTHORIZATION_PARAMS = new Set(['client_id', 'code_challenge', 'code_challenge_method', 'redirect_uri', 'response_type', 'scope', 'state'])
 const RESERVED_OAUTH_TOKEN_PARAMS = new Set(['client_id', 'client_secret', 'code', 'code_verifier', 'grant_type', 'redirect_uri', 'refresh_token', 'scope'])
-
-function resourceIdentifierFromName(name: string): string {
-  const text = name.trim()
-  return text.startsWith('resource://') ? text : `resource://${slugValue(text)}`
-}
-
-function providerIdentifierFromValues(values: Record<string, string>): string {
-  const explicit = values.identifier?.trim()
-  if (explicit) return explicit
-  const base = values.name?.trim() || `${providerKind(values.kind)} provider`
-  return `${PROVIDER_IDENTIFIER_PREFIX}${slugValue(base)}`
-}
 
 function validateProviderIdentifier(value: string): string | undefined {
   const text = value.trim()
@@ -1226,7 +1210,7 @@ export function resourcesView(ctx: Ctx): View {
           ],
           onSubmit: async (v, app) => {
             await ctx.client.resources.create(ctx.zoneId, {
-              identifier: v.identifier || resourceIdentifierFromName(v.name!),
+              ...(v.identifier ? { identifier: v.identifier } : {}),
               scopes: splitList(v.scopes ?? ''),
               name: v.name,
               upstream_url: v.upstream_url,
@@ -1330,7 +1314,7 @@ export function providersView(ctx: Ctx): View {
           ],
           onSubmit: async (v, app) => {
             await ctx.client.providers.create(ctx.zoneId, {
-              identifier: providerIdentifierFromValues(v),
+              ...(v.identifier ? { identifier: v.identifier } : {}),
               name: v.name || undefined,
               kind: providerKind(v.kind),
               config_json: providerConfigFromValues(v, true),

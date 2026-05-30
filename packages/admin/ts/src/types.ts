@@ -77,7 +77,7 @@ export interface Resource {
 
 export interface ResourceInput {
   name?: string
-  identifier: string
+  identifier?: string
   upstream_url?: string | null
   gateway_application_id?: string | null
   scopes: string[]

@@ -480,7 +480,7 @@ class FirstSetupWizardView implements View {
         { key: 'provider_api_key_query_param', label: 'API key query parameter', kind: 'text', required: true, default: this.values.provider_api_key_query_param ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'api_key', provider_api_key_auth_location: 'query' }, info: guidedInfo('API key query parameter', 'Query parameter where the upstream API expects its key.', 'key', 'Parameter name such as key, appid, api_key, or token.', 'Gateway replaces caller-supplied values for this parameter before forwarding upstream.') },
         { key: 'provider_api_key', label: 'API key', kind: 'secret', required: true, default: this.values.provider_api_key ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'api_key' }, info: guidedInfo('API key', 'Provider-native API key for the upstream service.', 'Paste the Hooli API key', 'Secret text.', 'Console seals this value before storing it.') },
         { key: 'provider_bearer_token', label: 'bearer token', kind: 'secret', required: true, default: this.values.provider_bearer_token ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'bearer_token' }, info: guidedInfo('Bearer token', 'Pre-issued provider-native token for the upstream service.', 'Paste the Hooli bearer token', 'Secret text.', 'Console seals this value and Gateway sends it as Authorization: Bearer unless Advanced routing changes the header or scheme.') },
-        { key: 'provider_identifier', label: 'provider identifier', kind: 'text', default: this.values.provider_identifier ?? '', dependsOn: { provider_mode: 'create' }, advanced: true, validate: validateProviderIdentifier, info: guidedInfo('Provider identifier', 'Stable provider identifier used by APIs and audit output.', 'provider://hooli-pipernet', 'Leave blank to generate from provider name.', 'Console sends this identifier when creating the provider.') },
+        { key: 'provider_identifier', label: 'provider identifier', kind: 'text', default: this.values.provider_identifier ?? '', dependsOn: { provider_mode: 'create' }, advanced: true, validate: validateProviderIdentifier, info: guidedInfo('Provider identifier', 'Stable provider identifier used by APIs and audit output.', 'provider://hooli-pipernet', 'Leave blank to let the API generate a collision-safe identifier from provider name.', 'Console sends this identifier only when Advanced provides one.') },
         { key: 'provider_scopes', label: 'provider scopes', kind: 'list', default: this.values.provider_scopes ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Provider scopes', 'Optional OAuth scopes for provider-native grants.', 'pipernet.read,pipernet.write', 'Comma-separated provider scopes.', 'Client-credentials providers send these scopes to the token endpoint; auth-code providers record the consent scope set expected for delegated grants.') },
         { key: 'provider_authorization_params', label: 'authorization params', kind: 'list', default: this.values.provider_authorization_params ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_authorization_code' }, advanced: true, info: guidedInfo('Authorization params', 'Optional provider-specific parameters sent on the browser authorization request.', 'access_type=offline,prompt=consent', 'Comma-separated key=value pairs; reserved OAuth parameters are managed by Caracal.', 'Use this for providers such as Google that require extra consent parameters for refresh tokens.') },
         { key: 'provider_token_params', label: 'token params', kind: 'list', default: this.values.provider_token_params ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Token params', 'Optional provider-specific parameters sent to the token endpoint.', 'tenant=hooli', 'Comma-separated key=value pairs; token credentials and grants are managed by Caracal.', 'Use this only when the provider documents extra token endpoint parameters.') },
@@ -524,7 +524,7 @@ class FirstSetupWizardView implements View {
         { key: 'resource_name', label: 'resource name', kind: 'text', required: true, default: this.values.resource_name ?? '', dependsOn: { resource_mode: 'create' }, info: guidedInfo('Resource name', 'Human-readable target name for the API, service, MCP server, or SDK capability.', 'PiperNet', 'Short text, not an internal ID.', 'Console creates a resource identifier from this name unless Advanced overrides it.') },
         { key: 'resource_scopes', label: 'Caracal scopes', kind: 'list', required: (current) => current.resource_mode === 'create', default: this.values.resource_scopes ?? '', info: guidedInfo('Caracal scopes', 'Permissions that Caracal policy evaluates for this resource.', 'pipernet.read,pipernet.write', 'Comma-separated Caracal scope names.', 'Console writes these scopes to the resource and generated allow-list policy.') },
         { key: 'upstream_url', label: 'upstream URL', kind: 'text', required: (current) => current.resource_mode === 'create', default: this.values.upstream_url ?? '', dependsOn: { resource_mode: 'create' }, info: guidedInfo('Upstream URL', 'Gateway target for the protected internal or external service.', 'https://api.pipernet.example', 'Absolute HTTP or HTTPS URL.', 'Console enables Gateway routing and Gateway forwards either a Caracal mandate or the selected provider credential.') },
-        { key: 'resource_identifier', label: 'resource identifier', kind: 'text', default: this.values.resource_identifier ?? '', dependsOn: { resource_mode: 'create' }, advanced: true, info: guidedInfo('Resource identifier', 'Stable identifier used in tokens, policy input, SDK config, and audit.', 'resource://pipernet', 'Leave blank to generate from resource name.', 'Console stores this as the policy resource target.') },
+        { key: 'resource_identifier', label: 'resource identifier', kind: 'text', default: this.values.resource_identifier ?? '', dependsOn: { resource_mode: 'create' }, advanced: true, info: guidedInfo('Resource identifier', 'Stable identifier used in tokens, policy input, SDK config, and audit.', 'resource://pipernet', 'Leave blank to let the API generate a collision-safe identifier from resource name.', 'Console uses the returned identifier as the policy resource target.') },
         { key: 'request_path', label: 'first request path', kind: 'text', default: this.values.request_path ?? '', dependsOn: 'upstream_url', advanced: true, info: guidedInfo('First request path', 'Optional path used only to show an exact first Gateway curl command.', '/v1/not-hotdog', 'Path starting with /, or blank.', 'The result page includes a ready-to-copy request example.') },
       ],
       onSubmit: async (raw, formApp) => {
@@ -696,8 +696,11 @@ async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<S
   const policy = bool(values.activate_policy)
     ? await createFirstPolicy(ctx, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, scopes)
     : undefined
-  const profile = target
-    ? buildProfile(target, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, upstreamUrl)
+  const finalTarget = shouldGenerateProfile
+    ? profileTarget(values, applicationResult.application.name, resourceResult.resource.identifier)
+    : undefined
+  const profile = finalTarget
+    ? buildProfile(finalTarget, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, upstreamUrl)
     : undefined
   const requestPath = normalizeRequestPath(values.request_path)
   const fileWrite = profile
@@ -774,7 +777,7 @@ async function setupResourceIdentifier(ctx: Ctx, zoneId: string | undefined, val
     if (!zoneId) throw new Error('zone is required before selecting an existing resource')
     return (await ctx.client.resources.get(zoneId, selectedResourceId)).identifier
   }
-  return resourceIdentifierFor(values)
+  return trimmed(values.resource_identifier) ?? `resource://${safeName(requiredText(values.resource_name, 'resource is required'))}`
 }
 
 async function ensureProvider(
@@ -787,7 +790,7 @@ async function ensureProvider(
   if (selectedProviderId) return selectedProviderId
   if (!trimmed(values.provider_name)) throw new Error('provider is required')
   const provider = await ctx.client.providers.create(zoneId, {
-    identifier: providerIdentifierFor(values),
+    ...(trimmed(values.provider_identifier) ? { identifier: trimmed(values.provider_identifier) } : {}),
     name: trimmed(values.provider_name),
     kind: providerKind(values.provider_kind),
     config_json: providerConfigFromValues(values),
@@ -808,7 +811,7 @@ async function ensureResource(
   if (!selectedResourceId) {
     return {
       resource: await ctx.client.resources.create(zoneId, {
-        identifier: resourceIdentifierFor(values),
+        ...(trimmed(values.resource_identifier) ? { identifier: trimmed(values.resource_identifier) } : {}),
         name: trimmed(values.resource_name),
         scopes,
         upstream_url: upstreamUrl,
@@ -834,10 +837,6 @@ async function ensureResource(
     created: false,
     updated,
   }
-}
-
-function resourceIdentifierFor(values: SetupValues): string {
-  return trimmed(values.resource_identifier) ?? `resource://${safeName(requiredText(values.resource_name, 'resource is required'))}`
 }
 
 function guidedInfo(title: string, meaning: string, example: string, valid: string, after: string) {
@@ -922,10 +921,6 @@ function resourcePicker(ctx: Ctx, zoneId: () => string | undefined): Field['pick
 
 function resourceResolver(ctx: Ctx, zoneId: () => string | undefined): Field['resolve'] {
   return async (id) => resourceLabel(await ctx.client.resources.get(requireSetupZoneId(zoneId), id))
-}
-
-function providerIdentifierFor(values: SetupValues): string {
-  return trimmed(values.provider_identifier) ?? `provider://${safeName(requiredText(values.provider_name, 'provider is required'))}`
 }
 
 function validateProviderIdentifier(value: string): string | undefined {

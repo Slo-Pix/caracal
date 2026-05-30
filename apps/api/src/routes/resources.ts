@@ -17,19 +17,23 @@ const HttpURL = z.string().url().refine((value) => {
   return protocol === 'http:' || protocol === 'https:'
 }, 'upstream_url must use http or https')
 
-const ResourceBody = z.object({
+const ResourceBodyBase = z.object({
   name: z.string().min(1).optional(),
-  identifier: z.string().min(1),
+  identifier: z.string().min(1).optional(),
   upstream_url: HttpURL.nullable().optional(),
   scopes: z.array(z.string()).min(1),
   credential_provider_id: z.string().nullable().optional(),
   gateway_application_id: z.string().min(1).nullable().optional(),
 })
+const ResourceBody = ResourceBodyBase.refine((body) => body.name !== undefined || body.identifier !== undefined, { message: 'name_or_identifier_required' })
+const ResourcePatchBody = ResourceBodyBase.partial()
 
 const DEFAULT_CONTROL_AUDIENCE = 'caracal-control'
 const CONTROL_RESOURCE_HEADER = 'x-caracal-control-resource'
 const NONE_PROVIDER_ID_PREFIX = 'provider-none-'
 const NONE_PROVIDER_IDENTIFIER = 'provider://none'
+const RESOURCE_IDENTIFIER_PREFIX = 'resource://'
+const RESOURCE_IDENTIFIER_UNIQUE_CONSTRAINT = 'resources_zone_id_identifier_key'
 
 interface ResourceQueryClient {
   query<T = unknown>(text: string, values?: unknown[]): Promise<{ rows: T[] }>
@@ -51,6 +55,43 @@ async function applicationExists(fastify: FastifyInstance, zoneId: string, appli
     [applicationId, zoneId],
   )
   return rows.length > 0
+}
+
+function slugValue(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'resource'
+}
+
+function resourceIdentifierFromName(name: string): string {
+  const text = name.trim()
+  return text.startsWith(RESOURCE_IDENTIFIER_PREFIX) ? text : `${RESOURCE_IDENTIFIER_PREFIX}${slugValue(text)}`
+}
+
+async function resourceIdentifierExists(client: ResourceQueryClient, zoneId: string, identifier: string): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM resources WHERE zone_id = $1 AND identifier = $2`,
+    [zoneId, identifier],
+  )
+  return rows.length > 0
+}
+
+async function nextResourceIdentifier(client: ResourceQueryClient, zoneId: string, name: string): Promise<string> {
+  const base = resourceIdentifierFromName(name)
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const identifier = suffix === 1 ? base : `${base}-${suffix}`
+    if (!(await resourceIdentifierExists(client, zoneId, identifier))) return identifier
+  }
+  return `${base}-${uuidv7().replace(/-/g, '')}`
+}
+
+function isResourceIdentifierConflict(err: unknown): boolean {
+  return Boolean(
+    err
+    && typeof err === 'object'
+    && 'code' in err
+    && (err as { code?: unknown }).code === '23505'
+    && 'constraint' in err
+    && (err as { constraint?: unknown }).constraint === RESOURCE_IDENTIFIER_UNIQUE_CONSTRAINT,
+  )
 }
 
 async function ensureNoneProvider(client: ResourceQueryClient, zoneId: string): Promise<string> {
@@ -200,18 +241,19 @@ export const resourcesRoutes: FastifyPluginAsync = async (fastify) => {
     const parsed = ResourceBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_resource' })
     const body = parsed.data
-    if (isControlResource(body.identifier) && !isControlResourceOperation(req)) {
+    const identifier = body.identifier ?? await nextResourceIdentifier(fastify.db, params.zoneId, body.name ?? 'resource')
+    if (isControlResource(identifier) && !isControlResourceOperation(req)) {
       return reply.code(409).send({ error: 'protected_resource', detail: 'control API resource is managed only through the Control console path' })
     }
     const credentialProviderID = body.credential_provider_id ?? (
-      isControlResource(body.identifier) && isControlResourceOperation(req)
+      isControlResource(identifier) && isControlResourceOperation(req)
         ? await ensureNoneProvider(fastify.db, params.zoneId)
         : null
     )
     if (credentialProviderID && !(await providerExists(fastify, params.zoneId, credentialProviderID))) {
       return reply.code(404).send({ error: 'provider_not_found' })
     }
-    const gatewayError = validateGatewayBinding(body.identifier, body.upstream_url, body.gateway_application_id, credentialProviderID)
+    const gatewayError = validateGatewayBinding(identifier, body.upstream_url, body.gateway_application_id, credentialProviderID)
     if (gatewayError) return reply.code(400).send({ error: gatewayError })
     if (body.gateway_application_id && !(await applicationExists(fastify, params.zoneId, body.gateway_application_id))) {
       return reply.code(404).send({ error: 'gateway_application_not_found' })
@@ -221,13 +263,18 @@ export const resourcesRoutes: FastifyPluginAsync = async (fastify) => {
     }
     const id = uuidv7()
     if (!body.gateway_application_id) {
-      const { rows } = await fastify.db.query(
-        `INSERT INTO resources (id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id, created_at, updated_at`,
-        [id, params.zoneId, body.name ?? body.identifier, body.identifier, body.upstream_url ?? null, body.scopes, credentialProviderID],
-      )
-      return reply.code(201).send({ ...rows[0], gateway_application_id: null })
+      try {
+        const { rows } = await fastify.db.query(
+          `INSERT INTO resources (id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id, created_at, updated_at`,
+          [id, params.zoneId, body.name ?? identifier, identifier, body.upstream_url ?? null, body.scopes, credentialProviderID],
+        )
+        return reply.code(201).send({ ...rows[0], gateway_application_id: null })
+      } catch (err) {
+        if (isResourceIdentifierConflict(err)) return reply.code(409).send({ error: 'resource_identifier_conflict' })
+        throw err
+      }
     }
     const client = await fastify.db.connect()
     try {
@@ -236,13 +283,14 @@ export const resourcesRoutes: FastifyPluginAsync = async (fastify) => {
         `INSERT INTO resources (id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, zone_id, name, identifier, upstream_url, scopes, credential_provider_id, created_at, updated_at`,
-        [id, params.zoneId, body.name ?? body.identifier, body.identifier, body.upstream_url, body.scopes, credentialProviderID],
+        [id, params.zoneId, body.name ?? identifier, identifier, body.upstream_url, body.scopes, credentialProviderID],
       )
-      await syncGatewayBinding(client, params.zoneId, body.identifier, body.gateway_application_id)
+      await syncGatewayBinding(client, params.zoneId, identifier, body.gateway_application_id)
       await client.query('COMMIT')
       return reply.code(201).send({ ...rows[0], gateway_application_id: body.gateway_application_id })
     } catch (err) {
       await client.query('ROLLBACK')
+      if (isResourceIdentifierConflict(err)) return reply.code(409).send({ error: 'resource_identifier_conflict' })
       throw err
     } finally {
       client.release()
@@ -252,7 +300,7 @@ export const resourcesRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.patch('/zones/:zoneId/resources/:id', async (req, reply) => {
     const params = parseParams(ZoneIdParams, req, reply)
     if (!params) return
-    const parsed = ResourceBody.partial().safeParse(req.body)
+    const parsed = ResourcePatchBody.safeParse(req.body)
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_resource' })
     const body = parsed.data
     if (body.credential_provider_id) {
@@ -342,6 +390,7 @@ export const resourcesRoutes: FastifyPluginAsync = async (fastify) => {
       return { ...(row as Record<string, unknown>), gateway_application_id: isControlResource(nextIdentifier) ? null : nextGatewayApplicationID }
     } catch (err) {
       await client.query('ROLLBACK')
+      if (isResourceIdentifierConflict(err)) return reply.code(409).send({ error: 'resource_identifier_conflict' })
       throw err
     } finally {
       client.release()

@@ -42,6 +42,8 @@ interface ZoneRow {
   updated_at: string
 }
 
+const ZONE_SLUG_UNIQUE_CONSTRAINT = 'zones_slug_key'
+
 interface LiveDcrApplication {
   id: string
 }
@@ -67,7 +69,35 @@ function isDcrShutdownInfrastructureError(err: unknown): boolean {
 }
 
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'zone'
+}
+
+async function zoneSlugExists(client: Queryable, slug: string): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM zones WHERE slug = $1`,
+    [slug],
+  )
+  return rows.length > 0
+}
+
+async function nextZoneSlug(client: Queryable, name: string): Promise<string> {
+  const base = slugify(name)
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const slug = suffix === 1 ? base : `${base}-${suffix}`
+    if (!(await zoneSlugExists(client, slug))) return slug
+  }
+  return `${base}-${uuidv7().replace(/-/g, '')}`
+}
+
+function isZoneSlugConflict(err: unknown): boolean {
+  return Boolean(
+    err
+    && typeof err === 'object'
+    && 'code' in err
+    && (err as { code?: unknown }).code === '23505'
+    && 'constraint' in err
+    && (err as { constraint?: unknown }).constraint === ZONE_SLUG_UNIQUE_CONSTRAINT,
+  )
 }
 
 function liveDcrPredicate(): string {
@@ -260,18 +290,23 @@ export const zonesRoutes: FastifyPluginAsync = async (fastify) => {
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_zone' })
     const body = parsed.data
     const id = uuidv7()
-    const { rows } = await fastify.db.query(
-      `INSERT INTO zones (id, name, slug, dek_ciphertext, dcr_enabled)
-       VALUES ($1, $2, $3, gen_random_bytes(32), $4)
-       RETURNING id, name, slug, dcr_enabled, created_at, updated_at`,
-      [
-        id,
-        body.name,
-        body.slug ?? slugify(body.name),
-        body.dcr_enabled ?? false,
-      ],
-    )
-    return reply.code(201).send(rows[0])
+    try {
+      const { rows } = await fastify.db.query(
+        `INSERT INTO zones (id, name, slug, dek_ciphertext, dcr_enabled)
+         VALUES ($1, $2, $3, gen_random_bytes(32), $4)
+         RETURNING id, name, slug, dcr_enabled, created_at, updated_at`,
+        [
+          id,
+          body.name,
+          body.slug ?? await nextZoneSlug(fastify.db, body.name),
+          body.dcr_enabled ?? false,
+        ],
+      )
+      return reply.code(201).send(rows[0])
+    } catch (err) {
+      if (isZoneSlugConflict(err)) return reply.code(409).send({ error: 'zone_slug_conflict' })
+      throw err
+    }
   })
 
   fastify.get('/zones/:id', async (req, reply) => {
