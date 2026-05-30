@@ -586,7 +586,7 @@ func TestBuildUpstreamDirectiveSupportsBearerTokenProviderShape(t *testing.T) {
 		},
 		{
 			name:       "custom header and scheme",
-			configJSON: `{"auth_header":"X-Provider-Authorization","auth_scheme":"Token"}`,
+			configJSON: `{"auth_header":"X-Provider-Authorization","auth_scheme":"Token","allowed_token_hosts":["API.Hooli.Example"]}`,
 			wantHeader: "X-Provider-Authorization",
 			wantScheme: "Token",
 		},
@@ -621,6 +621,9 @@ func TestBuildUpstreamDirectiveSupportsBearerTokenProviderShape(t *testing.T) {
 			}
 			if directive.AuthMode != UpstreamAuthProviderOAuth || directive.AuthHeader != tc.wantHeader || directive.AuthScheme != tc.wantScheme || directive.ProviderToken != "provider-bearer-token" {
 				t.Fatalf("unexpected bearer token directive: %#v", directive)
+			}
+			if tc.name == "custom header and scheme" && (len(directive.AllowedTokenHosts) != 1 || directive.AllowedTokenHosts[0] != "api.hooli.example") {
+				t.Fatalf("unexpected bearer token hosts: %#v", directive.AllowedTokenHosts)
 			}
 		})
 	}

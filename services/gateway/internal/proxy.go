@@ -287,6 +287,27 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Str("auth_mode", res.Upstream.AuthMode).
 		Dur("sts_latency_ms", res.Latency).
 		Logger()
+	if !providerCredentialHostAllowed(upstreamURL, res.Upstream.AllowedTokenHosts) {
+		writeErr(w, requestID, http.StatusBadGateway, sharederr.Internal, "provider credential not allowed for upstream host")
+		p.metrics.UpstreamErrors.Add(1)
+		logger.Warn().Msg("provider credential host rejected")
+		p.emitActionAudit(gatewayAuditInput{
+			RequestID:          requestID,
+			ZoneID:             bind.ZoneID,
+			ApplicationID:      bind.ApplicationID,
+			Resource:           resource,
+			SubjectFingerprint: tokenFingerprint(bearer),
+			Method:             r.Method,
+			UpstreamHost:       upstreamURL.Host,
+			AuthMode:           res.Upstream.AuthMode,
+			ProviderID:         res.Upstream.ProviderID,
+			GrantID:            res.Upstream.GrantID,
+			GatewayStatus:      http.StatusBadGateway,
+			EvaluationStatus:   "upstream_rejected",
+			ErrorKind:          "provider_host_not_allowed",
+		})
+		return
+	}
 
 	body := http.MaxBytesReader(w, r.Body, p.maxBytes)
 	defer body.Close()
@@ -508,6 +529,19 @@ func buildUpstreamRequest(r *http.Request, upstreamURL *url.URL, caracalToken st
 	}
 	req.Host = upstreamURL.Host
 	return req, nil
+}
+
+func providerCredentialHostAllowed(upstreamURL *url.URL, hosts []string) bool {
+	if len(hosts) == 0 {
+		return true
+	}
+	host := strings.ToLower(upstreamURL.Hostname())
+	for _, allowedHost := range hosts {
+		if strings.EqualFold(strings.TrimSpace(allowedHost), host) {
+			return true
+		}
+	}
+	return false
 }
 
 // classifyUpstreamError maps Go HTTP transport errors to safe gateway responses.

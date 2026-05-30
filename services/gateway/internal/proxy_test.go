@@ -480,9 +480,9 @@ func TestProxyNoneAuthModeForwardsNoCredential(t *testing.T) {
 
 	tok := makeJWT(t, time.Hour)
 	resp := doProxiedRequest(t, p, "GET", "/none", nil, http.Header{
-		"Authorization":       {"Bearer " + tok},
-		"X-Caracal-Resource":  {"r1"},
-		"X-Caracal-Identity":  {"caller-identity"},
+		"Authorization":      {"Bearer " + tok},
+		"X-Caracal-Resource": {"r1"},
+		"X-Caracal-Identity": {"caller-identity"},
 	})
 	if resp.StatusCode != http.StatusNoContent {
 		body, _ := io.ReadAll(resp.Body)
@@ -775,6 +775,46 @@ func TestProxyProviderBearerTokenSupportsHeadersSchemesAndIdentity(t *testing.T)
 				t.Fatalf("%s leaked upstream: %q", tc.wantMissing, seen.Header.Get(tc.wantMissing))
 			}
 		})
+	}
+}
+
+func TestProxyProviderBearerTokenRejectsNonAllowlistedUpstreamHost(t *testing.T) {
+	var calls int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+
+	sts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		resource := r.Form.Get("resource")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(stsResponseFixture{
+			AccessToken: "caracal-identity-token",
+			ExpiresIn:   300,
+			Upstreams: map[string]corests.UpstreamDirective{resource: {
+				URL:               upstream.URL,
+				AuthMode:          "provider_oauth",
+				AuthScheme:        "Bearer",
+				AllowedTokenHosts: []string{"api.hooli.example"},
+				ProviderToken:     "provider-token",
+			}},
+		})
+	}))
+	defer sts.Close()
+	p := newProxyForTest(t, sts, true)
+
+	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
+		"Authorization":      {"Bearer " + makeJWT(t, time.Hour)},
+		"X-Caracal-Resource": {"r1"},
+	})
+	if resp.StatusCode != http.StatusBadGateway {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 502, got %d: %s", resp.StatusCode, body)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatal("provider token was sent to a non-allowlisted upstream")
 	}
 }
 

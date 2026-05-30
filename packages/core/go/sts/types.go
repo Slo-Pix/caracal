@@ -10,17 +10,18 @@ package sts
 // Gateway exchanges; for caracal_jwt mode it is empty and the gateway forwards
 // the Caracal JWT from TokenResponse.AccessToken instead.
 type UpstreamDirective struct {
-	URL                    string `json:"url"`
-	AuthMode               string `json:"auth_mode"`
-	AuthLocation           string `json:"auth_location,omitempty"`
-	AuthHeader             string `json:"auth_header,omitempty"`
-	QueryParamName         string `json:"query_param_name,omitempty"`
-	AuthScheme             string `json:"auth_scheme,omitempty"`
-	ProviderToken          string `json:"provider_token,omitempty"`
-	ProviderID             string `json:"provider_id,omitempty"`
-	GrantID                string `json:"grant_id,omitempty"`
-	ForwardCaracalIdentity bool   `json:"forward_caracal_identity,omitempty"`
-	ExpiresAt              int64  `json:"expires_at,omitempty"`
+	URL                    string   `json:"url"`
+	AuthMode               string   `json:"auth_mode"`
+	AuthLocation           string   `json:"auth_location,omitempty"`
+	AuthHeader             string   `json:"auth_header,omitempty"`
+	QueryParamName         string   `json:"query_param_name,omitempty"`
+	AuthScheme             string   `json:"auth_scheme,omitempty"`
+	AllowedTokenHosts      []string `json:"allowed_token_hosts,omitempty"`
+	ProviderToken          string   `json:"provider_token,omitempty"`
+	ProviderID             string   `json:"provider_id,omitempty"`
+	GrantID                string   `json:"grant_id,omitempty"`
+	ForwardCaracalIdentity bool     `json:"forward_caracal_identity,omitempty"`
+	ExpiresAt              int64    `json:"expires_at,omitempty"`
 }
 
 // TokenResponse is the JSON response body for a successful exchange.

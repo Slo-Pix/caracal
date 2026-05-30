@@ -620,6 +620,11 @@ func applyProviderDirective(provider *ProviderConfig, directive *UpstreamDirecti
 		directive.AuthMode = UpstreamAuthProviderOAuth
 		directive.AuthHeader = "Authorization"
 		directive.AuthScheme = "Bearer"
+		hosts, err := normalizedProviderHosts(cfg.AllowedTokenHosts)
+		if err != nil {
+			return fmt.Errorf("provider allowed token hosts invalid")
+		}
+		directive.AllowedTokenHosts = hosts
 		if header := strings.TrimSpace(cfg.AuthHeader); header != "" {
 			if !validProviderHeaderName(header) {
 				return fmt.Errorf("provider auth header invalid")
@@ -807,12 +812,13 @@ func (s *Server) storeProviderServiceToken(providerID, fingerprint, token string
 }
 
 type providerForwardingConfig struct {
-	AuthLocation           string `json:"auth_location"`
-	AuthHeader             string `json:"auth_header"`
-	HeaderName             string `json:"header_name"`
-	QueryParamName         string `json:"query_param_name"`
-	AuthScheme             string `json:"auth_scheme"`
-	ForwardCaracalIdentity bool   `json:"forward_caracal_identity"`
+	AuthLocation           string   `json:"auth_location"`
+	AuthHeader             string   `json:"auth_header"`
+	HeaderName             string   `json:"header_name"`
+	QueryParamName         string   `json:"query_param_name"`
+	AuthScheme             string   `json:"auth_scheme"`
+	AllowedTokenHosts      []string `json:"allowed_token_hosts"`
+	ForwardCaracalIdentity bool     `json:"forward_caracal_identity"`
 }
 
 func providerDirectiveConfig(raw json.RawMessage) (providerForwardingConfig, error) {
@@ -872,6 +878,43 @@ func validProviderQueryParamName(name string) bool {
 		}
 	}
 	return true
+}
+
+func normalizedProviderHosts(hosts []string) ([]string, error) {
+	if len(hosts) == 0 {
+		return nil, nil
+	}
+	normalized := make([]string, 0, len(hosts))
+	for _, item := range hosts {
+		host := strings.ToLower(strings.TrimSpace(item))
+		if !validProviderHost(host) {
+			return nil, fmt.Errorf("provider host invalid")
+		}
+		normalized = append(normalized, host)
+	}
+	return normalized, nil
+}
+
+func validProviderHost(host string) bool {
+	if host == "" || len(host) > 253 || strings.Contains(host, "..") {
+		return false
+	}
+	if !isHostAlnum(host[0]) || !isHostAlnum(host[len(host)-1]) {
+		return false
+	}
+	for _, r := range host {
+		if r > 127 {
+			return false
+		}
+		if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '.' && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+func isHostAlnum(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
 }
 
 func (s *Server) authenticateApp(ctx context.Context, req TokenExchangeRequest) (*Application, string, error) {
