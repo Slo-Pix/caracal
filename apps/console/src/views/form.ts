@@ -438,6 +438,7 @@ export class FormView implements View {
   private fieldInfo(field: Field | undefined): InfoPage | undefined {
     if (!field) return this.info
     const info = field.info ?? fieldInfo(field.label, field.kind, field.hint, {
+      key: field.key,
       required: this.isRequired(field),
       picker: Boolean(field.pick),
       options: field.options,

@@ -26,6 +26,7 @@ export interface InfoPair {
 }
 
 export interface FieldInfoOpts {
+  key?: string
   required?: boolean
   picker?: boolean
   advanced?: boolean
@@ -42,11 +43,11 @@ export function fieldInfo(label: string, kind: string, hint?: string, opts: Fiel
   const required = opts.required ? 'Required for this path.' : 'Optional for this path.'
   return {
     title,
-    meaning: hint ? sentence(hint) : meaningFor(kind, title),
+    meaning: hint ? sentence(hint) : meaningFor(kind, title, opts),
     when: whenFor(kind, title, opts),
-    impact: impactFor(kind, title),
-    example: exampleFor(kind, title, opts.options),
-    valid: `${required} ${validFor(kind, title, opts.options)}`,
+    impact: impactFor(kind, title, opts),
+    example: exampleFor(kind, title, opts.options, opts),
+    valid: `${required} ${validFor(kind, title, opts.options, opts)}`,
     after: afterFor(kind, title, opts),
     context: opts.dependency ? [{ label: 'Visibility', value: opts.dependency }] : undefined,
     terms: termsFor(title),
@@ -199,9 +200,44 @@ function sentence(value: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`
 }
 
-function meaningFor(kind: string, title: string): string {
+function meaningFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
+  const key = opts.key ?? ''
   if (isNumericLabel(label)) return `${title} is a numeric value that controls a count, limit, lifetime, or time window.`
+  if (key === 'api_key_header' || label.includes('api key header')) return `${title} is the exact HTTP request header where Gateway sends the upstream API key.`
+  if (key === 'auth_header' || label.includes('upstream auth header')) return `${title} is the HTTP request header where Gateway sends the provider credential to the upstream.`
+  if (key === 'auth_scheme' || label.includes('upstream auth scheme')) return `${title} is the credential prefix Gateway writes before the provider token or key value.`
+  if (key === 'api_key') return `${title} is the static upstream API key sealed by Caracal and injected by Gateway.`
+  if (key === 'bearer_token') return `${title} is the static upstream bearer token sealed by Caracal and injected by Gateway.`
+  if (key === 'client_id' || label.includes('client id')) return `${title} is the OAuth client identifier issued by the upstream provider.`
+  if (key === 'client_secret' || label.includes('client secret')) return `${title} is the OAuth client secret issued by the upstream provider and sealed by Caracal.`
+  if (key === 'client_auth_method' || label.includes('client auth method')) return `${title} tells STS how the OAuth client authenticates to the token endpoint.`
+  if (key === 'authorization_params' || label.includes('authorization params')) return `${title} are extra OAuth authorization request parameters sent when Console starts browser consent.`
+  if (key === 'token_params' || label.includes('token params')) return `${title} are extra OAuth token endpoint parameters sent during exchange or refresh.`
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return `${title} limits which token endpoint hosts STS may contact for this OAuth provider.`
+  if (key === 'token_audience' || label.includes('token audience')) return `${title} is the OAuth audience parameter requested for client-credentials tokens.`
+  if (key === 'token_resource' || label.includes('token resource')) return `${title} is the OAuth resource parameter requested for providers that require resource indicators.`
+  if (key === 'credential_provider_id') return `${title} is the provider whose credential Gateway should use for this resource.`
+  if (key === 'gateway_application_id') return `${title} is the application allowed to represent Gateway calls for this resource.`
+  if (key === 'selected_agent_app_id') return `${title} identifies the existing application to reuse in guided setup.`
+  if (key === 'selected_provider_id') return `${title} identifies the existing provider to reuse in guided setup.`
+  if (key === 'selected_resource_id') return `${title} identifies the existing resource to reuse in guided setup.`
+  if (key === 'selected_zone_id' || key === 'zone_id') return `${title} identifies the Caracal zone for this operation.`
+  if (key === 'existing_app_client_secret') return `${title} is the existing application secret used by generated client examples.`
+  if (key === 'request_path') return `${title} is the first Gateway route path shown in generated runtime examples.`
+  if (key === 'profile_path') return `${title} is the local shell profile path where setup can write exported environment values.`
+  if (key === 'secret_file_path') return `${title} is the local path where setup can write generated secret values.`
+  if (key === 'credential_env') return `${title} names the environment variable that will hold the minted Caracal token.`
+  if (key === 'dcr_enabled') return `${title} controls whether the zone allows dynamic client registration.`
+  if (key === 'policy_versions') return `${title} selects policy versions to include in a policy set.`
+  if (key === 'version_id' || key === 'shadow_version_id') return `${title} identifies a policy-set version used for activation or simulation.`
+  if (key === 'request_id') return `${title} filters or explains one audited request.`
+  if (key === 'event_type') return `${title} filters audit events by their recorded event name.`
+  if (key === 'decision') return `${title} filters authorization results by allow, deny, or partial outcome.`
+  if (key === 'status') return `${title} filters records by lifecycle state.`
+  if (key === 'source') return `${title} chooses whether Console reads content from pasted input or a local file.`
+  if (key === 'content') return `${title} is the policy source text saved as a policy version.`
+  if (key === 'input') return `${title} is the JSON request input used for a policy simulation.`
   if (label.includes('forward') && label.includes('caracal identity')) return `${title} tells Gateway to send the Caracal resource mandate to the upstream service in addition to the provider credential.`
   if (label.includes('name')) return `${title} is the operator-facing label shown in lists, pickers, details, and setup output.`
   if (label.includes('provider') && label.includes('identifier')) return `${title} is the stable API-facing name for a configured upstream credential or mandate source.`
@@ -227,8 +263,28 @@ function meaningFor(kind: string, title: string): string {
 
 function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
+  const key = opts.key ?? ''
   if (opts.picker) return `Pick an existing ${entityName(label)} when reusing configured state; type only when the flow accepts a new value.`
   if (isNumericLabel(label)) return 'Use this when you need to bound a lifetime, result count, retry budget, or other numeric operational limit.'
+  if (key === 'api_key_header' || label.includes('api key header')) return 'Use the header named in the provider documentation for API-key authentication.'
+  if (key === 'auth_header' || label.includes('upstream auth header')) return 'Set this only when the upstream expects credentials outside the standard Authorization header.'
+  if (key === 'auth_scheme' || label.includes('upstream auth scheme')) return 'Set this only when the upstream expects a non-default credential prefix such as Token, ApiKey, or Key.'
+  if (key === 'client_auth_method' || label.includes('client auth method')) return 'Use the method required by the OAuth provider token endpoint; basic is the common default for confidential clients.'
+  if (key === 'authorization_params' || label.includes('authorization params')) return 'Use this for provider-specific consent options such as offline access, prompt behavior, tenant, or organization.'
+  if (key === 'token_params' || label.includes('token params')) return 'Use this only for provider-specific token endpoint parameters that Caracal does not manage itself.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'Use this to pin OAuth token exchange and refresh to expected provider hosts.'
+  if (key === 'token_audience' || label.includes('token audience')) return 'Use this when the OAuth provider requires an audience value for client-credentials tokens.'
+  if (key === 'token_resource' || label.includes('token resource')) return 'Use this when the OAuth provider requires an RFC 8707 resource indicator or equivalent token resource.'
+  if (key === 'credential_provider_id') return 'Use this to bind a Gateway resource to exactly one provider credential source.'
+  if (key === 'gateway_application_id') return 'Use this when Gateway calls should be associated with a specific Caracal application.'
+  if (key === 'selected_agent_app_id' || key === 'selected_provider_id' || key === 'selected_resource_id' || key === 'selected_zone_id') return 'Use this when setup should reuse an existing object instead of creating another one.'
+  if (key === 'zone_id') return 'Use this when a diagnostic or workflow should run against one zone instead of all visible zones.'
+  if (key === 'existing_app_client_secret') return 'Use this when reusing an existing application whose one-time secret is already stored outside Console.'
+  if (key === 'request_path') return 'Use this to make generated examples call a realistic first upstream route.'
+  if (key === 'profile_path' || key === 'secret_file_path') return 'Use this when generated local files should be written somewhere other than the default path.'
+  if (key === 'credential_env') return 'Use this when generated commands should expose the token under a predictable environment variable.'
+  if (key === 'request_id') return 'Use this when investigating one Gateway, STS, policy, or audit request.'
+  if (key === 'source' || key === 'input_source') return 'Choose file when the content already lives on disk; choose paste when entering it directly in Console.'
   if (label.includes('forward') && label.includes('caracal identity')) return 'Turn this on only for a trusted upstream that authenticates with provider-native credentials but also needs Caracal subject, scopes, target, zone, or audit context.'
   if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, grants, audit views, and setup output.'
   if (label.includes('provider') && label.includes('identifier')) return 'Leave blank to let Console generate one from the provider name; set it only when automation needs a specific stable name.'
@@ -267,9 +323,27 @@ function entityName(label: string): string {
   return 'object'
 }
 
-function impactFor(kind: string, title: string): string {
+function impactFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
+  const key = opts.key ?? ''
   if (isNumericLabel(label)) return 'Changing this value changes how long something remains valid, how much data is returned, or which numeric limit the API applies.'
+  if (key === 'api_key_header' || label.includes('api key header')) return 'Gateway writes the sealed API key into this header and strips caller-supplied values for protected credential headers.'
+  if (key === 'auth_header' || label.includes('upstream auth header')) return 'Gateway writes OAuth or bearer credentials into this header after removing caller-supplied credential headers.'
+  if (key === 'auth_scheme' || label.includes('upstream auth scheme')) return 'Gateway formats the upstream auth value as "<scheme> <credential>" when a scheme is configured.'
+  if (key === 'api_key' || key === 'bearer_token' || key === 'client_secret') return 'The value is sealed for storage and is never shown back in Console after submit.'
+  if (key === 'client_id' || label.includes('client id')) return 'STS sends this identifier to the OAuth token endpoint during authorization-code, refresh, or client-credentials flows.'
+  if (key === 'client_auth_method' || label.includes('client auth method')) return 'A wrong method can make provider token exchange or refresh fail even when the endpoint and secret are correct.'
+  if (key === 'authorization_params' || label.includes('authorization params')) return 'These parameters are appended to the OAuth authorization URL after Caracal-managed safety parameters.'
+  if (key === 'token_params' || label.includes('token params')) return 'These parameters are included in token exchange or refresh after Caracal-managed OAuth parameters.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'STS rejects token endpoints whose resolved host is outside this allowlist.'
+  if (key === 'credential_provider_id') return 'STS/Gateway use the bound provider to build the upstream credential directive for this resource.'
+  if (key === 'gateway_application_id') return 'Tokens and audit records can tie Gateway-originated upstream access to this application.'
+  if (key === 'selected_agent_app_id' || key === 'selected_provider_id' || key === 'selected_resource_id' || key === 'selected_zone_id') return 'Setup links the generated output to the selected existing object instead of creating a replacement.'
+  if (key === 'zone_id') return 'Console scopes the operation to this zone when the field is filled.'
+  if (key === 'existing_app_client_secret') return 'Generated files and commands can authenticate the existing application without rotating it.'
+  if (key === 'request_path') return 'The generated quickstart command uses this path for the first Gateway request.'
+  if (key === 'profile_path' || key === 'secret_file_path') return 'Setup writes generated local output to this path when file writing is enabled.'
+  if (key === 'credential_env') return 'Generated runtime commands read the minted token from this environment variable.'
   if (label.includes('scope')) return 'Scopes bound here constrain what tokens, grants, or policies may authorize later.'
   if (label.includes('forward') && label.includes('caracal identity')) return 'Gateway keeps the provider credential in the upstream auth header and sends the Caracal mandate separately as X-Caracal-Identity.'
   if (label.includes('provider') && label.includes('identifier')) return 'Resources, grants, setup output, and automation can reference the provider by this stable name.'
@@ -289,12 +363,19 @@ function impactFor(kind: string, title: string): string {
 
 function afterFor(kind: string, title: string, opts: FieldInfoOpts): string {
   const label = title.toLowerCase()
+  const key = opts.key ?? ''
   if (label.includes('authorization endpoint')) return 'After submit, Console saves this in provider config so OAuth authorization-code flows can redirect users to the provider consent page.'
   if (label.includes('token endpoint')) return 'After submit, Console saves this in provider config so STS can exchange or refresh provider tokens.'
   if (label.includes('redirect uri')) return 'After submit, Console saves this in provider config and the OAuth provider must have the same callback URI registered.'
+  if (key === 'api_key' || key === 'bearer_token' || key === 'client_secret') return 'After submit, Console sends the secret once for sealed storage; future detail views show only metadata.'
+  if (key === 'api_key_header' || key === 'auth_header' || key === 'auth_scheme' || label.includes('api key header') || label.includes('upstream auth header') || label.includes('upstream auth scheme')) return 'After submit, Gateway uses this formatting when injecting provider credentials into upstream requests.'
+  if (key === 'authorization_params' || label.includes('authorization params')) return 'After submit, Console includes these parameters when creating the OAuth authorization URL.'
+  if (key === 'token_params' || label.includes('token params')) return 'After submit, STS includes these parameters in OAuth token exchange or refresh requests.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'After submit, STS enforces this host allowlist before contacting token endpoints.'
+  if (key === 'credential_provider_id') return 'After submit, the resource cannot issue upstream Gateway credentials unless this provider binding is valid.'
   return opts.advanced
     ? 'After saving advanced options, Console keeps this value on the parent form and sends it only when you submit.'
-    : 'After submit, Console sends this value to the Control API and shows the result or validation error.'
+    : 'After submit, Console sends this value to the Admin API and shows the result or validation error.'
 }
 
 function termsFor(title: string): InfoPair[] | undefined {
@@ -348,17 +429,65 @@ function actionNotes(normalized: string): string[] | undefined {
   return undefined
 }
 
-function exampleFor(kind: string, label: string, options?: readonly string[]): string {
+function exampleFor(kind: string, label: string, options?: readonly string[], opts: FieldInfoOpts = {}): string {
   const normalized = label.toLowerCase()
+  const key = opts.key ?? ''
+  if (normalized.includes('forward') && normalized.includes('caracal identity')) return 'no'
   if (kind === 'bool') return 'yes'
+  if (key === 'api_key_header' || normalized.includes('api key header')) return 'X-API-Key'
+  if (key === 'auth_header' || normalized.includes('upstream auth header')) return 'Authorization'
+  if (key === 'auth_scheme' || normalized.includes('upstream auth scheme')) return 'Bearer'
+  if (key === 'api_key') return '••••'
+  if (key === 'bearer_token') return '••••'
+  if (key === 'client_id' || normalized.includes('client id')) return 'hooli-pipernet-client'
+  if (key === 'client_secret' || normalized.includes('client secret')) return '••••'
+  if (key === 'client_auth_method' || normalized.includes('client auth method')) return 'client_secret_basic'
+  if (key === 'allowed_token_hosts' || normalized.includes('allowed token hosts')) return 'login.hooli.example'
+  if (key === 'token_audience' || normalized.includes('token audience')) return 'https://api.hooli.example'
+  if (key === 'token_resource' || normalized.includes('token resource')) return 'https://api.hooli.example/pipernet'
+  if (key === 'credential_provider_id') return 'provider://hooli-pipernet'
+  if (key === 'gateway_application_id') return 'app://pipernet-agent'
+  if (key === 'selected_agent_app_id') return 'app://pipernet-agent'
+  if (key === 'selected_provider_id') return 'provider://hooli-pipernet'
+  if (key === 'selected_resource_id') return 'resource://pipernet'
+  if (key === 'selected_zone_id' || key === 'zone_id') return 'zone://pied-piper-prod'
+  if (key === 'existing_app_client_secret') return '••••'
+  if (key === 'request_path') return '/v1/files'
+  if (key === 'profile_path') return '/home/richard/.caracal/pipernet-profile.sh'
+  if (key === 'secret_file_path') return '/home/richard/.caracal/pipernet.env'
+  if (key === 'credential_env') return 'CARACAL_TOKEN'
+  if (key === 'description') return 'PiperNet production access policy.'
+  if (key === 'request_id') return 'req_01jz8piper9hooli7n4'
+  if (key === 'event_type') return 'gateway.request.completed'
+  if (key === 'since') return '28 May 2026, 04:48:55 UTC'
+  if (key === 'until') return '29 May 2026, 04:48:55 UTC'
+  if (key === 'status') return options?.find((option) => option.length > 0) ?? 'active'
+  if (key === 'decision') return options?.find((option) => option.length > 0) ?? 'allow'
+  if (key === 'resource_id' || normalized === 'resource') return 'resource://pipernet'
+  if (key === 'application_id' || normalized === 'application') return 'app://pipernet-agent'
+  if (key === 'user_id' || normalized === 'user id' || normalized === 'subject id' || normalized === 'subject') return 'user:richard.hendricks@piedpiper.example'
+  if (key === 'session_id' || normalized === 'session') return 'ses_01jz8piper9hooli7n4'
+  if (key === 'edge_id' || normalized === 'delegation') return 'del_01jz8piper9hooli7n4'
+  if (key === 'policy_versions') return 'polv_01jz8piper9hooli7n4'
+  if (key === 'version_id' || key === 'shadow_version_id' || normalized === 'version' || normalized === 'shadow version') return 'psv_01jz8piper9hooli7n4'
+  if (key === 'content') return 'package pipernet.authz'
+  if (key === 'input') return '{"method":"GET","path":"/v1/files"}'
+  if (key === 'input_file') return '/home/richard/pied-piper/simulations/request.json'
+  if (key === 'file') return normalized.includes('policy') ? '/home/richard/pied-piper/policies/pipernet.rego' : '/home/richard/pied-piper/credential.json'
+  if (key === 'source' || key === 'input_source') return options?.find((option) => option.length > 0) ?? 'paste'
+  if (key === 'slug') return 'pipernet'
+  if (key === 'id') return 'control-key-pipernet-prod'
+  if (key === 'token') return '••••'
   if (kind === 'list' && normalized.includes('authorization params')) return 'access_type=offline,prompt=consent'
   if (kind === 'list' && normalized.includes('token params')) return 'tenant=hooli'
+  if (kind === 'list' && normalized.includes('allowed token hosts')) return 'login.hooli.example'
+  if (kind === 'list' && normalized.includes('permission')) return 'keys:read,tokens:mint'
+  if (kind === 'list' && normalized.includes('policy versions')) return 'polv_01jz8piper9hooli7n4'
   if (kind === 'list') return 'read,write'
   if (kind === 'secret') return '••••'
   if (kind === 'file') return '/home/richard/pied-piper/policies/pipernet.rego'
   if (kind === 'select') return options?.find((option) => option.length > 0) ?? 'Choose one of the listed options.'
   if (isNumericLabel(normalized)) return numericExampleFor(normalized)
-  if (normalized.includes('forward') && normalized.includes('caracal identity')) return 'no'
   if (normalized.includes('authorization endpoint')) return 'https://login.hooli.example/oauth/authorize'
   if (normalized.includes('token endpoint')) return 'https://login.hooli.example/oauth/token'
   if (normalized.includes('redirect uri')) return 'http://localhost:3000/v1/zones/z1/provider-grants/oauth/callback'
@@ -374,15 +503,30 @@ function exampleFor(kind: string, label: string, options?: readonly string[]): s
   return 'Son of Anton'
 }
 
-function validFor(kind: string, title: string, options?: readonly string[]): string {
-  if (isNumericLabel(title.toLowerCase())) return 'Positive integer only; no units, commas, decimals, or text.'
+function validFor(kind: string, title: string, options?: readonly string[], opts: FieldInfoOpts = {}): string {
+  const label = title.toLowerCase()
+  const key = opts.key ?? ''
+  if (isNumericLabel(label)) return 'Positive integer only; no units, commas, decimals, or text.'
   if (kind === 'bool') return 'Toggle on or off.'
+  if (key === 'api_key_header' || key === 'auth_header' || label.includes('api key header') || label.includes('upstream auth header')) return 'HTTP header name only, without a colon or value.'
+  if (key === 'auth_scheme' || label.includes('upstream auth scheme')) return 'Credential scheme only, without the secret value; leave blank only when the upstream expects the raw credential.'
+  if (key === 'api_key' || key === 'bearer_token' || key === 'client_secret' || key === 'token') return 'Paste the exact secret value; it is masked by default and not echoed after submit.'
+  if (key === 'client_id' || label.includes('client id')) return 'Provider-issued client identifier exactly as shown in the upstream OAuth application.'
+  if (key === 'client_auth_method' || label.includes('client auth method')) return `One of: ${(options ?? []).join(', ')}.`
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'Comma-separated DNS hostnames only; omit paths, schemes, query strings, and credentials.'
+  if (key === 'authorization_params' || key === 'token_params' || label.includes('authorization params') || label.includes('token params')) return 'Comma-separated key=value pairs; do not include Caracal-managed OAuth parameters.'
+  if (key === 'resource_id' || key === 'credential_provider_id' || key === 'gateway_application_id' || key === 'application_id' || key === 'session_id' || key === 'edge_id' || key === 'version_id' || key === 'shadow_version_id' || key === 'selected_agent_app_id' || key === 'selected_provider_id' || key === 'selected_resource_id' || key === 'selected_zone_id' || key === 'zone_id') return 'Choose an existing object from the picker or enter its stable ID exactly.'
+  if (key === 'existing_app_client_secret') return 'Paste the existing application secret exactly as stored; Console cannot recover it from the API.'
+  if (key === 'request_path') return 'Path beginning with /, without scheme, host, or credentials.'
+  if (key === 'profile_path' || key === 'secret_file_path') return 'Absolute local file path.'
+  if (key === 'credential_env') return 'Environment variable name using letters, numbers, and underscores.'
+  if (key === 'request_id') return 'Exact request ID from audit, logs, Gateway, STS, or policy evaluation output.'
+  if (key === 'since' || key === 'until') return 'Readable date/time, ISO timestamp, or supported relative time accepted by the API.'
   if (kind === 'list') return 'Comma-separated values; empty items are ignored.'
   if (kind === 'secret') return 'Paste the exact secret value; it is masked by default.'
   if (kind === 'file') return 'Pick a readable file or enter an absolute path.'
   if (kind === 'select') return `One of: ${(options ?? []).map((option) => option || '<empty>').join(', ')}.`
   if (kind === 'multiline') return 'Plain text content; pasted newlines are preserved.'
-  const label = title.toLowerCase()
   if (label.includes('authorization endpoint')) return 'Absolute HTTPS URL for the provider authorization endpoint.'
   if (label.includes('token endpoint')) return 'Absolute HTTPS URL for the provider token endpoint.'
   if (label.includes('redirect uri')) return 'Absolute callback URI registered with the OAuth provider.'
