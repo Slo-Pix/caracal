@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Shared dispatcher kernel: builds usage text and routes argv through the runtime shell registry.
+// Shared dispatcher kernel: builds usage text and routes argv through the runtime CLI registry.
 
 import { COMMAND_NAME_PATTERN, type CommandGroup } from '@caracalai/engine/commands'
 import {
@@ -15,7 +15,6 @@ import type { CommandRegistry } from './registry.ts'
 import type { RuntimeConfig } from './config.ts'
 
 const GROUP_TITLES: Record<CommandGroup, string> = {
-  shell: 'Shell',
   stack: 'Stack',
   runtime: 'Runtime',
   admin: 'Admin',

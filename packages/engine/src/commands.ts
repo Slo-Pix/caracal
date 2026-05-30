@@ -4,7 +4,6 @@
 // Canonical command catalog shared by Caracal runtime, console management, and Control automation surfaces.
 
 export type CommandGroup =
-  | 'shell'
   | 'stack'
   | 'runtime'
   | 'admin'
@@ -74,7 +73,7 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     subcommands: ['stack', 'volumes', 'logs', 'config', 'runtime', 'secrets', 'cache', 'all'],
   },
   { name: 'run', group: 'runtime', summary: 'Run a command with injected resource tokens', requiresConfig: true },
-  { name: 'console', group: 'shell', summary: 'Launch the Caracal Console' },
+  { name: 'console', group: 'runtime', summary: 'Launch the Caracal Console' },
 ]);
 
 export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
@@ -334,7 +333,7 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     },
   },
 
-  { name: 'completion', group: 'shell', summary: 'Generate shell completions', subcommands: ['bash', 'zsh', 'fish', 'powershell'], hidden: true },
+  { name: 'completion', group: 'runtime', summary: 'Generate shell completions', subcommands: ['bash', 'zsh', 'fish', 'powershell'], hidden: true },
 ]);
 
 export function findCommand(

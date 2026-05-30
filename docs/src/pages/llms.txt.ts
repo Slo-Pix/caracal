@@ -64,7 +64,7 @@ export async function GET() {
     '',
     'Caracal is an open-source system built by Garudex Labs. It issues short-lived signed mandates that bind agents and workloads to policy before protected-resource access. The core primitives are: principal, mandate, policy, zone, resource, grant, delegation edge, constraint, agent session, step-up challenge, and audit ledger.',
     '',
-    'The runtime includes API (port 3000), STS (port 8080), Gateway (port 8081), Audit (port 9090), Coordinator (port 4000), and optional Control (port 8087). Runtime lifecycle uses the top-level caracal shell; product management uses Console, Admin SDK, or Control API.',
+    'The runtime includes API (port 3000), STS (port 8080), Gateway (port 8081), Audit (port 9090), Coordinator (port 4000), and optional Control (port 8087). Runtime lifecycle uses the top-level caracal runtime CLI; product management uses Console, Admin SDK, or Control API.',
     '',
   ]
 

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// `caracal`: thin top-level shell that owns stack lifecycle commands and optional interface launchers.
+// `caracal`: thin top-level runtime CLI that owns stack lifecycle commands and optional interface launchers.
 //
 // Surface invariant: SHELL_COMMANDS in @caracalai/core/commands is the single source of truth for runtime commands and optional interface launchers. buildRegistry enforces a 1:1 mapping with the executors below after unavailable interfaces are filtered out.
 
