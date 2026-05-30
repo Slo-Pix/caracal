@@ -153,6 +153,7 @@ const OAUTH_CLIENT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post', 
 const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OAUTH_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
+const HOST_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/
 const RESERVED_OAUTH_AUTHORIZATION_PARAMS = new Set(['client_id', 'code_challenge', 'code_challenge_method', 'redirect_uri', 'response_type', 'scope', 'state'])
 const RESERVED_OAUTH_TOKEN_PARAMS = new Set(['client_assertion', 'client_assertion_type', 'client_id', 'client_secret', 'code', 'code_verifier', 'grant_type', 'redirect_uri', 'refresh_token', 'scope'])
 
@@ -499,7 +500,9 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
   mergeConfigMap(config, 'token_params', values.token_params)
   mergeConfigText(config, 'audience', values.token_audience)
   mergeConfigText(config, 'resource', values.token_resource)
-  mergeConfigList(config, 'allowed_token_hosts', values.allowed_token_hosts || inferredTokenHosts(values.token_endpoint))
+  const oauthKind = kind === 'oauth2_authorization_code' || kind === 'oauth2_client_credentials'
+  const tokenHosts = values.allowed_token_hosts || (oauthKind ? inferredTokenHosts(values.token_endpoint) : '')
+  mergeConfigList(config, 'allowed_token_hosts', tokenHosts)
   mergeConfigText(config, 'auth_location', values.api_key_auth_location)
   mergeConfigText(config, 'header_name', values.api_key_header)
   mergeConfigText(config, 'query_param_name', values.api_key_query_param)
@@ -571,6 +574,7 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
     return
   }
   if (kind === 'bearer_token') {
+    requireOptionalHostList(config, 'allowed_token_hosts', 'bearer_token provider config allowed_token_hosts must be DNS hostnames')
     requireOptionalHeaderName(config, 'auth_header', 'bearer_token provider config auth_header must be an HTTP header name')
     requireOptionalAuthScheme(config, 'auth_scheme', 'bearer_token provider config auth_scheme must be an auth scheme token')
     return
@@ -609,7 +613,7 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
 function providerConfigKeys(kind: ProviderKind): Set<string> {
   if (kind === 'none' || kind === 'caracal_mandate') return new Set()
   if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
-  if (kind === 'bearer_token') return new Set(['bearer_token', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
   const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'provider_scopes', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
   if (kind === 'oauth2_client_credentials') keys.push('audience', 'resource', 'key_id', 'private_key')
   if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri', 'authorization_params')
@@ -648,6 +652,17 @@ function requireStringList(config: JsonObject, key: string, message: string): vo
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string' || item.trim().length === 0)) {
     throw new Error(message)
   }
+}
+
+function requireOptionalHostList(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  requireStringList(config, key, message)
+  config[key] = (value as string[]).map((item) => {
+    const host = item.trim().toLowerCase()
+    if (!HOST_PATTERN.test(host) || host.includes('..')) throw new Error(message)
+    return host
+  })
 }
 
 function requireOptionalText(config: JsonObject, key: string, message: string): void {
@@ -1323,7 +1338,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'token_params', label: 'token params', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional key=value token endpoint parameters not managed by Caracal' },
             { key: 'token_audience', label: 'token audience', kind: 'text', dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true, hint: 'optional audience parameter for token endpoints such as Auth0' },
             { key: 'token_resource', label: 'token resource', kind: 'text', dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true, hint: 'optional resource parameter for token endpoints that use RFC 8707 or Azure-style resource values' },
-            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional; inferred from token endpoint when blank' },
+            { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; OAuth infers from token endpoint when blank, bearer tokens use this as an upstream send allow-list' },
             { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: OAUTH_CLIENT_AUTH_METHODS, default: 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
             { key: 'key_id', label: 'key ID', kind: 'text', dependsOn: { kind: 'oauth2_client_credentials', client_auth_method: 'private_key_jwt' }, advanced: true, hint: 'optional kid header for private_key_jwt client assertions' },
             { key: 'private_key', label: 'private key', kind: 'secret-multiline', dependsOn: { kind: 'oauth2_client_credentials', client_auth_method: 'private_key_jwt' }, advanced: true, hint: 'PEM private key used to sign private_key_jwt client assertions' },
@@ -1366,7 +1381,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'token_params', label: 'token params', kind: 'list', default: configMap(row.config_json, 'token_params'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, hint: 'optional key=value token endpoint parameters not managed by Caracal' },
               { key: 'token_audience', label: 'token audience', kind: 'text', default: configString(row.config_json, 'audience'), dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true },
               { key: 'token_resource', label: 'token resource', kind: 'text', default: configString(row.config_json, 'resource'), dependsOn: { kind: 'oauth2_client_credentials' }, advanced: true },
-              { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
+              { key: 'allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: configList(row.config_json, 'allowed_token_hosts'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true },
               { key: 'client_auth_method', label: 'client auth method', kind: 'select', options: OAUTH_CLIENT_AUTH_METHODS, default: configString(row.config_json, 'client_auth_method') || 'client_secret_basic', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true },
               { key: 'key_id', label: 'key ID', kind: 'text', default: configString(row.config_json, 'key_id'), dependsOn: { kind: 'oauth2_client_credentials', client_auth_method: 'private_key_jwt' }, advanced: true, hint: 'optional kid header for private_key_jwt client assertions' },
               { key: 'private_key', label: 'private key', kind: 'secret-multiline', dependsOn: { kind: 'oauth2_client_credentials', client_auth_method: 'private_key_jwt' }, advanced: true, hint: row.secret_config_keys.includes('private_key') ? 'leave blank to keep the current private key' : 'PEM private key used to sign private_key_jwt client assertions' },

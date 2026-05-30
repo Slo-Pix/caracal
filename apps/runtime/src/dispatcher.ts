@@ -3,7 +3,7 @@
 //
 // Shared dispatcher kernel: builds usage text and routes argv through the runtime CLI registry.
 
-import { COMMAND_NAME_PATTERN, type CommandDescriptor, type CommandGroup } from '@caracalai/engine/commands'
+import { COMMAND_NAME_PATTERN, type CommandGroup } from '@caracalai/engine/commands'
 import {
   RuntimeConfigMissingError,
   RuntimeConfigValidationError,
@@ -86,27 +86,6 @@ function isHelpToken(arg: string | undefined): boolean {
   return arg === 'help' || arg === '--help' || arg === '-h'
 }
 
-export function printCommandUsage(opts: DispatchOptions, descriptor: CommandDescriptor, out: NodeJS.WriteStream = process.stdout): void {
-  const H = (s: string) => style.header(s)
-  const suffix = descriptor.subcommands?.length ? ' <subcommand>' : ''
-  const lines: string[] = [
-    `${style.title('Usage:')} ${opts.binary} ${descriptor.name}${suffix} [options]`,
-    '',
-    descriptor.summary,
-    '',
-  ]
-  if (descriptor.subcommands?.length) {
-    lines.push(H('Subcommands'), `  ${descriptor.subcommands.join(', ')}`, '')
-  }
-  for (const [sub, flags] of Object.entries(descriptor.flags ?? {})) {
-    if (!flags || flags.length === 0) continue
-    lines.push(H(sub === '' ? 'Options' : `Options for ${sub}`))
-    for (const f of flags) lines.push(`  ${f.name.padEnd(16)} ${f.summary}`)
-    lines.push('')
-  }
-  out.write(lines.join('\n'))
-}
-
 export async function dispatch(opts: DispatchOptions, rawArgs: readonly string[]): Promise<void> {
   const argv = rawArgs[0] === '--' ? rawArgs.slice(1) : rawArgs
   const command = argv[0]
@@ -136,12 +115,12 @@ export async function dispatch(opts: DispatchOptions, rawArgs: readonly string[]
   }
 
   const binding = opts.registry.byName.get(command)!
-  if (isHelpToken(rest[0])) {
-    printCommandUsage(opts, binding.descriptor, process.stdout)
-    process.exit(0)
-  }
+  // A leading help token, or a missing required operand, must reach the command's own
+  // help/usage path without first demanding runtime config the user has no chance to supply.
+  const operands = rest[0] === '--' ? rest.slice(1) : rest
+  const skipConfig = isHelpToken(rest[0]) || ((binding.descriptor.requiresArgs ?? false) && operands.length === 0)
   let cfg: RuntimeConfig | undefined
-  if (opts.loadConfig) {
+  if (opts.loadConfig && !skipConfig) {
     try {
       cfg = loadConfig(binding.descriptor.requiresConfig ?? false)
     } catch (err) {

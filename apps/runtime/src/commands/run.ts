@@ -10,6 +10,31 @@ import { buildRunEnv, runExec } from '@caracalai/engine'
 import type { RuntimeConfig } from '../config.ts'
 import { printError } from '../style.ts'
 
+const RUN_HELP = `Usage: caracal run [--] <command> [args...]
+
+Run <command> with short-lived resource tokens injected as environment variables.
+Caracal exchanges your workload identity for per-resource tokens (60-minute TTL) and
+launches the command with a scrubbed environment, so only PATH-like variables and the
+issued tokens reach the child process.
+
+Use -- to separate Caracal from the command when the command takes its own flags.
+
+Examples:
+  caracal run -- node agent.js
+  caracal run python tool.py --serve
+  caracal run -- printenv RESOURCE_TOKEN
+
+Configuration:
+  Requires runtime config (zone, application, client secret). Set it up in the Caracal
+  Console, then provide it through CARACAL_STS_URL, CARACAL_ZONE_ID,
+  CARACAL_APPLICATION_ID, CARACAL_APP_CLIENT_SECRET_FILE, and CARACAL_RUN_CREDENTIALS_FILE,
+  or point CARACAL_CONFIG at a runtime profile.
+`
+
+function isHelpToken(arg: string | undefined): boolean {
+  return arg === 'help' || arg === '--help' || arg === '-h'
+}
+
 function assertNoWorkspaceOperatorSecrets(): void {
   if (process.env.CARACAL_RUN_ALLOW_WORKSPACE_SECRETS === 'true') return
   const root = discoverRepoRoot()
@@ -21,10 +46,18 @@ function assertNoWorkspaceOperatorSecrets(): void {
   )
 }
 
-export async function runCommand(argv: string[], cfg: RuntimeConfig): Promise<void> {
+export async function runCommand(argv: string[], cfg?: RuntimeConfig): Promise<void> {
+  if (isHelpToken(argv[0])) {
+    process.stdout.write(RUN_HELP)
+    process.exit(0)
+  }
   const commandArgs = argv[0] === '--' ? argv.slice(1) : argv
   if (commandArgs.length === 0) {
-    printError('Usage: caracal run <cmd...>')
+    process.stderr.write(RUN_HELP)
+    process.exit(1)
+  }
+  if (!cfg) {
+    printError('runtime config is required to run a command')
     process.exit(1)
   }
 

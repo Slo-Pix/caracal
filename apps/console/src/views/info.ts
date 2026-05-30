@@ -216,7 +216,7 @@ function meaningFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'client_auth_method' || label.includes('client auth method')) return `${title} tells STS how the OAuth client authenticates to the token endpoint.`
   if (key === 'authorization_params' || label.includes('authorization params')) return `${title} are extra OAuth authorization request parameters sent when Console starts browser consent.`
   if (key === 'token_params' || label.includes('token params')) return `${title} are extra OAuth token endpoint parameters sent during exchange or refresh.`
-  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return `${title} limits which token endpoint hosts STS may contact for this OAuth provider.`
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return `${title} limits which token endpoint hosts STS may contact for OAuth providers or which upstream hosts Gateway may receive static bearer tokens.`
   if (key === 'token_audience' || label.includes('token audience')) return `${title} is the OAuth audience parameter requested for client-credentials tokens.`
   if (key === 'token_resource' || label.includes('token resource')) return `${title} is the OAuth resource parameter requested for providers that require resource indicators.`
   if (key === 'credential_provider_id') return `${title} is the provider whose credential Gateway should use for this resource.`
@@ -276,7 +276,7 @@ function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'client_auth_method' || label.includes('client auth method')) return 'Use the method required by the OAuth provider token endpoint; basic is the common default for confidential clients.'
   if (key === 'authorization_params' || label.includes('authorization params')) return 'Use this for provider-specific consent options such as offline access, prompt behavior, tenant, or organization.'
   if (key === 'token_params' || label.includes('token params')) return 'Use this only for provider-specific token endpoint parameters that Caracal does not manage itself.'
-  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'Use this to pin OAuth token exchange and refresh to expected provider hosts.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'Use this to pin OAuth token exchange hosts or static bearer-token forwarding hosts.'
   if (key === 'token_audience' || label.includes('token audience')) return 'Use this when the OAuth provider requires an audience value for client-credentials tokens.'
   if (key === 'token_resource' || label.includes('token resource')) return 'Use this when the OAuth provider requires an RFC 8707 resource indicator or equivalent token resource.'
   if (key === 'credential_provider_id') return 'Use this to bind a Gateway resource to exactly one provider credential source.'
@@ -341,7 +341,7 @@ function impactFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'client_auth_method' || label.includes('client auth method')) return 'A wrong method can make provider token exchange or refresh fail even when the endpoint and secret are correct.'
   if (key === 'authorization_params' || label.includes('authorization params')) return 'These parameters are appended to the OAuth authorization URL after Caracal-managed safety parameters.'
   if (key === 'token_params' || label.includes('token params')) return 'These parameters are included in token exchange or refresh after Caracal-managed OAuth parameters.'
-  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'STS rejects token endpoints whose resolved host is outside this allowlist.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'STS rejects OAuth token endpoints outside this allowlist, and Gateway rejects static bearer-token forwarding to non-listed upstream hosts.'
   if (key === 'credential_provider_id') return 'STS/Gateway use the bound provider to build the upstream credential directive for this resource.'
   if (key === 'gateway_application_id') return 'Tokens and audit records can tie Gateway-originated upstream access to this application.'
   if (key === 'selected_agent_app_id' || key === 'selected_provider_id' || key === 'selected_resource_id' || key === 'selected_zone_id') return 'Setup links the generated output to the selected existing object instead of creating a replacement.'
@@ -377,7 +377,7 @@ function afterFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'api_key_auth_location' || key === 'provider_api_key_auth_location' || key === 'api_key_query_param' || key === 'provider_api_key_query_param' || key === 'api_key_header' || key === 'auth_header' || key === 'auth_scheme' || label.includes('api key header') || label.includes('upstream auth header') || label.includes('upstream auth scheme')) return 'After submit, Gateway uses this formatting when injecting provider credentials into upstream requests.'
   if (key === 'authorization_params' || label.includes('authorization params')) return 'After submit, Console includes these parameters when creating the OAuth authorization URL.'
   if (key === 'token_params' || label.includes('token params')) return 'After submit, STS includes these parameters in OAuth token exchange or refresh requests.'
-  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'After submit, STS enforces this host allowlist before contacting token endpoints.'
+  if (key === 'allowed_token_hosts' || label.includes('allowed token hosts')) return 'After submit, STS enforces this allowlist for OAuth token endpoints and Gateway enforces it for static bearer-token upstream forwarding.'
   if (key === 'credential_provider_id') return 'After submit, the resource cannot issue upstream Gateway credentials unless this provider binding is valid.'
   return opts.advanced
     ? 'After saving advanced options, Console keeps this value on the parent form and sends it only when you submit.'

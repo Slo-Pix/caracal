@@ -32,6 +32,7 @@ const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
 const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OAUTH_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
+const HOST_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/
 const RESERVED_OAUTH_AUTHORIZATION_PARAMS = new Set(['client_id', 'code_challenge', 'code_challenge_method', 'redirect_uri', 'response_type', 'scope', 'state'])
 const RESERVED_OAUTH_TOKEN_PARAMS = new Set(['client_assertion', 'client_assertion_type', 'client_id', 'client_secret', 'code', 'code_verifier', 'grant_type', 'redirect_uri', 'refresh_token', 'scope'])
 const PROVIDER_KIND_LABELS: Record<ProviderKind, string> = {
@@ -491,7 +492,7 @@ class FirstSetupWizardView implements View {
         { key: 'provider_token_params', label: 'token params', kind: 'list', default: this.values.provider_token_params ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Token params', 'Optional provider-specific parameters sent to the token endpoint.', 'tenant=hooli', 'Comma-separated key=value pairs; token credentials and grants are managed by Caracal.', 'Use this only when the provider documents extra token endpoint parameters.') },
         { key: 'provider_token_audience', label: 'token audience', kind: 'text', default: this.values.provider_token_audience ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_client_credentials' }, advanced: true, info: guidedInfo('Token audience', 'Optional OAuth audience parameter sent during client-credentials token acquisition.', 'https://api.hooli.example', 'Provider-documented audience value.', 'Use this only when the provider token endpoint requires an audience parameter.') },
         { key: 'provider_token_resource', label: 'token resource', kind: 'text', default: this.values.provider_token_resource ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_client_credentials' }, advanced: true, info: guidedInfo('Token resource', 'Optional OAuth resource parameter sent during client-credentials token acquisition.', 'https://graph.example/.default', 'Provider-documented resource value.', 'Use this only when the provider token endpoint requires a resource parameter.') },
-        { key: 'provider_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: this.values.provider_allowed_token_hosts ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Allowed token hosts', 'Host allow-list for token refresh endpoints.', 'login.hooli.example', 'Comma-separated host names.', 'Blank uses the host inferred from token endpoint.') },
+        { key: 'provider_allowed_token_hosts', label: 'allowed token hosts', kind: 'list', default: this.values.provider_allowed_token_hosts ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, info: guidedInfo('Allowed token hosts', 'Host allow-list for token refresh endpoints or static bearer-token forwarding.', 'login.hooli.example', 'Comma-separated host names.', 'Blank uses the host inferred from token endpoint for OAuth or upstream URL for bearer tokens.') },
         { key: 'provider_client_auth_method', label: 'client auth method', kind: 'select', options: OAUTH_CLIENT_AUTH_METHODS, default: this.values.provider_client_auth_method ?? 'client_secret_basic', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials'] }, advanced: true, info: guidedInfo('Client auth method', 'How STS authenticates to the OAuth token endpoint.', 'client_secret_basic', 'OAuth client authentication method.', 'Use the method registered with the provider.') },
         { key: 'provider_key_id', label: 'key ID', kind: 'text', default: this.values.provider_key_id ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_client_credentials', provider_client_auth_method: 'private_key_jwt' }, advanced: true, info: guidedInfo('Key ID', 'Optional key identifier sent as the JWT kid header.', 'provider-key-2026-01', 'Provider-registered key identifier.', 'STS includes this only for private_key_jwt token endpoint authentication.') },
         { key: 'provider_private_key', label: 'private key', kind: 'secret-multiline', default: this.values.provider_private_key ?? '', dependsOn: { provider_mode: 'create', provider_kind: 'oauth2_client_credentials', provider_client_auth_method: 'private_key_jwt' }, advanced: true, info: guidedInfo('Private key', 'PEM private key used to sign OAuth client assertions.', '-----BEGIN PRIVATE KEY-----', 'PEM PKCS#8, RSA, or EC private key.', 'STS seals this key and uses it only for private_key_jwt token endpoint authentication.') },
@@ -958,7 +959,7 @@ function providerConfigFromValues(values: SetupValues): JsonObject {
   mergeConfigMap(config, 'token_params', values.provider_token_params)
   mergeConfigText(config, 'audience', values.provider_token_audience)
   mergeConfigText(config, 'resource', values.provider_token_resource)
-  mergeConfigList(config, 'allowed_token_hosts', values.provider_allowed_token_hosts || inferredTokenHosts(values.provider_token_endpoint))
+  mergeConfigList(config, 'allowed_token_hosts', values.provider_allowed_token_hosts || inferredTokenHosts(kind === 'bearer_token' ? values.upstream_url : values.provider_token_endpoint))
   mergeConfigText(config, 'auth_location', values.provider_api_key_auth_location)
   mergeConfigText(config, 'header_name', values.provider_api_key_header)
   mergeConfigText(config, 'query_param_name', values.provider_api_key_query_param)
@@ -1026,6 +1027,7 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
   }
   if (kind === 'bearer_token') {
     requireString(config, 'bearer_token', 'bearer_token provider config requires bearer_token')
+    requireOptionalHostList(config, 'allowed_token_hosts', 'bearer_token provider config allowed_token_hosts must be DNS hostnames')
     requireOptionalHeaderName(config, 'auth_header', 'bearer_token provider config auth_header must be an HTTP header name')
     requireOptionalAuthScheme(config, 'auth_scheme', 'bearer_token provider config auth_scheme must be an auth scheme token')
     return
@@ -1133,7 +1135,7 @@ function requireOptionalStringRecord(config: JsonObject, key: string, reserved: 
 function providerConfigKeys(kind: ProviderKind): Set<string> {
   if (kind === 'none' || kind === 'caracal_mandate') return new Set()
   if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
-  if (kind === 'bearer_token') return new Set(['bearer_token', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
   const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
   if (kind === 'oauth2_client_credentials') keys.push('audience', 'resource', 'key_id', 'private_key')
   if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri', 'authorization_params')
@@ -1149,6 +1151,17 @@ function requireStringList(config: JsonObject, key: string, message: string): vo
   if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== 'string' || item.trim().length === 0)) {
     throw new Error(message)
   }
+}
+
+function requireOptionalHostList(config: JsonObject, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  requireStringList(config, key, message)
+  config[key] = (value as string[]).map((item) => {
+    const host = item.trim().toLowerCase()
+    if (!HOST_PATTERN.test(host) || host.includes('..')) throw new Error(message)
+    return host
+  })
 }
 
 function requireOptionalText(config: JsonObject, key: string, message: string): void {
