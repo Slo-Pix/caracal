@@ -197,7 +197,7 @@ jobs:
 
       - run: mkdir -p "$FINDINGS_DIR"
 
-      - run: bash scripts/postRelease/validateShellBinaries.sh
+      - run: bash scripts/postRelease/validateRuntimeBinaries.sh
 
       - run: bash scripts/postRelease/validateConsoleBinaries.sh
 

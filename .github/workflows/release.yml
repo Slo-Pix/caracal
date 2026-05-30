@@ -251,7 +251,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-dist
           source_date_epoch="$(git log -1 --format=%ct)"
-          targets='shell:linux:amd64:x64 shell:linux:arm64:arm64 shell:darwin:amd64:x64 shell:darwin:arm64:arm64 shell:windows:amd64:x64 console:linux:amd64:x64 console:linux:arm64:arm64 console:darwin:amd64:x64 console:darwin:arm64:arm64 console:windows:amd64:x64'
+          targets='runtime:linux:amd64:x64 runtime:linux:arm64:arm64 runtime:darwin:amd64:x64 runtime:darwin:arm64:arm64 runtime:windows:amd64:x64 console:linux:amd64:x64 console:linux:arm64:arm64 console:darwin:amd64:x64 console:darwin:arm64:arm64 console:windows:amd64:x64'
           for entry in $targets; do
             IFS=: read -r kind os arch bunArch <<EOF
           ${entry}
@@ -259,7 +259,7 @@ jobs:
             ext=''
             [ "$os" = windows ] && ext='.exe'
             case "$kind" in
-              shell) srcDir=apps/runtime/dist; srcBase=caracal; binName=caracal ;;
+              runtime) srcDir=apps/runtime/dist; srcBase=caracal; binName=caracal ;;
               console) srcDir=apps/console/dist; srcBase=caracal-console; binName=caracal-console ;;
             esac
             src="${srcDir}/${srcBase}-${os}-${bunArch}${ext}"
@@ -287,7 +287,7 @@ jobs:
         run: |
           set -euo pipefail
           source_date_epoch="$(git log -1 --format=%ct)"
-          for entry in shell:apps/runtime/dist:caracal console:apps/console/dist:caracal-console; do
+          for entry in runtime:apps/runtime/dist:caracal console:apps/console/dist:caracal-console; do
             IFS=: read -r kind srcDir binName <<EOF
           ${entry}
           EOF
@@ -308,7 +308,7 @@ jobs:
         run: |
           set -euo pipefail
           work="$(mktemp -d)"
-          tar -xzf "release-dist/caracal-shell-linux-amd64-${RELEASE_TAG}.tar.gz" -C "$work"
+          tar -xzf "release-dist/caracal-runtime-linux-amd64-${RELEASE_TAG}.tar.gz" -C "$work"
           "${work}/caracal" --help
           tar -xzf "release-dist/caracal-console-linux-amd64-${RELEASE_TAG}.tar.gz" -C "$work"
           "${work}/caracal-console" --help
@@ -320,7 +320,7 @@ jobs:
 
       - name: Generate checksums
         working-directory: release-dist
-        run: sha256sum caracal-shell-*.tar.gz caracal-shell-*.zip caracal-console-*.tar.gz caracal-console-*.zip manifest.json install-console.sh install-console.ps1 > SHA256SUMS
+        run: sha256sum caracal-runtime-*.tar.gz caracal-runtime-*.zip caracal-console-*.tar.gz caracal-console-*.zip manifest.json install-console.sh install-console.ps1 > SHA256SUMS
 
       - name: Verify assets
         env:
@@ -338,7 +338,7 @@ jobs:
         if: needs.context.outputs.publish == 'true'
         with:
           subject-path: |
-            release-dist/caracal-shell-*
+            release-dist/caracal-runtime-*
             release-dist/caracal-console-*
 
   serviceImages:
@@ -594,7 +594,7 @@ jobs:
           prerelease: ${{ needs.context.outputs.channel == 'rc' }}
           fail_on_unmatched_files: true
           files: |
-            dist/caracal-shell-*
+            dist/caracal-runtime-*
             dist/caracal-console-*
             dist/manifest.json
             dist/SHA256SUMS

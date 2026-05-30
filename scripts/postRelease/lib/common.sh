@@ -61,7 +61,7 @@ NPM_VERS=()
 CONTAINER_NAMES=()
 CONTAINER_VERS=()
 RUNTIME_IMAGE_VER=""
-SHELL_VER=""
+RUNTIME_VER=""
 CONSOLE_VER=""
 
 eval "$("$CARACAL_PYTHON" - "$MANIFEST" "$CARACAL_RELEASE" "$REPO_ROOT/release.config.json" <<'PY'
@@ -79,7 +79,7 @@ packages = m.get("packages", {})
 published = packages.get("published", {}) if isinstance(packages, dict) else {}
 pypi = published.get("pypi", m.get("pypi", {}))
 npm = published.get("npm", m.get("npm", {}))
-print(f'SHELL_VER={shlex.quote(m["binaries"]["shell"])}')
+print(f'RUNTIME_VER={shlex.quote(m["binaries"]["runtime"])}')
 print(f'CONSOLE_VER={shlex.quote(m["binaries"]["console"])}')
 if m.get("runtimeImage"):
     print(f'RUNTIME_IMAGE_VER={shlex.quote(m["runtimeImage"])}')
