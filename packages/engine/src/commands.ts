@@ -23,6 +23,7 @@ export interface CommandDescriptor {
   readonly summary: string;
   readonly subcommands?: readonly string[];
   readonly requiresConfig?: boolean;
+  readonly requiresArgs?: boolean;
   readonly requiresZone?: boolean;
   readonly hidden?: boolean;
   readonly localOnly?: boolean;
@@ -72,7 +73,7 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     summary: 'Clean stack artifacts and local state',
     subcommands: ['stack', 'volumes', 'logs', 'config', 'runtime', 'secrets', 'cache', 'all'],
   },
-  { name: 'run', group: 'runtime', summary: 'Run a command with injected resource tokens', requiresConfig: true },
+  { name: 'run', group: 'runtime', summary: 'Run a command with injected resource tokens', requiresConfig: true, requiresArgs: true },
   { name: 'console', group: 'runtime', summary: 'Launch the Caracal Console' },
 ]);
 

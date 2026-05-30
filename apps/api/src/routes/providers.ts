@@ -24,6 +24,7 @@ const PROVIDER_IDENTIFIER_UNIQUE_INDEX = 'providers_zone_identifier_active_uidx'
 const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OAUTH_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
+const HOST_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/
 const RESERVED_OAUTH_AUTHORIZATION_PARAMS = new Set([
   'client_id',
   'code_challenge',
@@ -143,7 +144,7 @@ const PUBLIC_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
     'forward_caracal_identity',
   ]),
   api_key: new Set(['auth_location', 'header_name', 'query_param_name', 'auth_scheme', 'forward_caracal_identity']),
-  bearer_token: new Set(['auth_header', 'auth_scheme', 'forward_caracal_identity']),
+  bearer_token: new Set(['allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity']),
 }
 
 const SECRET_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
@@ -209,6 +210,17 @@ function requireOptionalBoolean(config: Record<string, unknown>, key: string, me
 
 function requireOptionalStringList(config: Record<string, unknown>, key: string, message: string): void {
   if (config[key] !== undefined) requireStringList(config, key, message)
+}
+
+function requireOptionalHostList(config: Record<string, unknown>, key: string, message: string): void {
+  const value = config[key]
+  if (value === undefined) return
+  requireStringList(config, key, message)
+  config[key] = (value as string[]).map((item) => {
+    const host = item.trim().toLowerCase()
+    if (!HOST_PATTERN.test(host) || host.includes('..')) throw new Error(message)
+    return host
+  })
 }
 
 function requireOptionalText(config: Record<string, unknown>, key: string, message: string): void {
@@ -299,6 +311,7 @@ function splitProviderConfig(kind: ProviderKind, input: Record<string, unknown> 
     if (requireSecrets && !secretConfig.api_key) throw new Error('api_key provider config requires api_key')
   } else if (kind === 'bearer_token') {
     if (requireSecrets && !secretConfig.bearer_token) throw new Error('bearer_token provider config requires bearer_token')
+    requireOptionalHostList(publicConfig, 'allowed_token_hosts', 'bearer_token provider config allowed_token_hosts must be DNS hostnames')
     requireOptionalHeaderName(publicConfig, 'auth_header', 'bearer_token provider config auth_header must be an HTTP header name')
   } else {
     requireHttpsUrl(publicConfig, 'token_endpoint', `${kind} provider config token_endpoint must be an HTTPS URL`)

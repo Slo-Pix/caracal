@@ -26,8 +26,8 @@ const executors: Record<string, Executor> = {
   purge: (argv) => purgeCommand([...argv]),
   run: (argv, cfg) => {
     const cmdArgs = argv[0] === '--' ? argv.slice(1) : argv
-    if (cmdArgs.length > 0) checkMcpGovernance(cmdArgs, cfg!)
-    return runCommand([...argv], cfg!)
+    if (cmdArgs.length > 0 && cfg) checkMcpGovernance(cmdArgs, cfg)
+    return runCommand([...argv], cfg)
   },
   console: (argv) => { consoleDispatch([...argv]) },
 }
