@@ -574,7 +574,9 @@ describe('providers actions', () => {
       'redirect_uri',
       'client_id',
       'client_secret',
+      'api_key_auth_location',
       'api_key_header',
+      'api_key_query_param',
       'api_key',
       'bearer_token',
       'identifier',
@@ -607,13 +609,21 @@ describe('providers actions', () => {
     expect(body).not.toContain('audience')
 
     ;(form as unknown as { values: Record<string, string> }).values.kind = 'api_key'
+    ;(form as unknown as { values: Record<string, string> }).values.api_key_auth_location = 'header'
     body = form.render(ctxView).join('\n')
+    expect(body).toContain('API key location')
     expect(body).toContain('API key header *')
     expect(body).toContain('API key *')
+    expect(body).not.toContain('API key query parameter')
     expect(body).not.toContain('token endpoint *')
     expect(body).not.toContain('issuer')
     expect(body).not.toContain('authorization endpoint')
     expect(body).not.toContain('audience')
+
+    ;(form as unknown as { values: Record<string, string> }).values.api_key_auth_location = 'query'
+    body = form.render(ctxView).join('\n')
+    expect(body).toContain('API key query parameter *')
+    expect(body).not.toContain('API key header *')
   })
 
   it('explains when each provider type should be used', async () => {
@@ -803,6 +813,7 @@ describe('providers actions', () => {
       identifier: 'provider://hooli-api-key',
       name: 'Hooli API Key',
       kind: 'api_key',
+      api_key_auth_location: 'header',
       api_key_header: 'Authorization',
       api_key: 'provider-key',
       auth_scheme: 'Bearer',
@@ -817,10 +828,41 @@ describe('providers actions', () => {
       identifier: 'provider://hooli-api-key',
       kind: 'api_key',
       config_json: {
+        auth_location: 'header',
         header_name: 'Authorization',
         api_key: 'provider-key',
         auth_scheme: 'Bearer',
         forward_caracal_identity: true,
+      },
+    }))
+  })
+
+  it('creates API key providers with query parameter placement', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const pushed = await pressKey(list, 'n', app) as FormView
+    ;(pushed as unknown as { values: Record<string, string> }).values = {
+      identifier: 'provider://hooli-weather',
+      name: 'Hooli Weather',
+      kind: 'api_key',
+      api_key_auth_location: 'query',
+      api_key_query_param: 'key',
+      api_key: 'provider-key',
+      auth_scheme: 'Bearer',
+      forward_caracal_identity: 'false',
+    }
+    ;(pushed as unknown as { focus: number }).focus = 99
+
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      identifier: 'provider://hooli-weather',
+      kind: 'api_key',
+      config_json: {
+        auth_location: 'query',
+        query_param_name: 'key',
+        api_key: 'provider-key',
       },
     }))
   })
@@ -839,6 +881,7 @@ describe('providers actions', () => {
       auth_scheme: 'Token',
       forward_caracal_identity: 'true',
       api_key_header: 'X-Api-Key',
+      api_key_query_param: 'key',
     }
     ;(pushed as unknown as { focus: number }).focus = 99
 
@@ -870,6 +913,7 @@ describe('providers actions', () => {
       client_secret: '',
       allowed_token_hosts: '',
       api_key_header: '',
+      api_key_query_param: '',
       api_key: '',
       auth_header: '',
       auth_scheme: '',
@@ -900,6 +944,7 @@ describe('providers actions', () => {
       client_secret: 'secret',
       allowed_token_hosts: 'issuer.example',
       api_key_header: 'X-API-Key',
+      api_key_query_param: 'key',
       api_key: 'api-key',
       bearer_token: 'provider-token',
       auth_header: 'X-Provider-Authorization',
@@ -1009,6 +1054,7 @@ describe('providers actions', () => {
       kind: 'api_key',
       token_endpoint: 'https://provider.example/token',
       allowed_token_hosts: 'provider.example',
+      api_key_auth_location: 'header',
       api_key_header: 'X-Api-Key',
       api_key: 'provider-key',
       auth_header: 'X-Provider-Token',
@@ -1023,6 +1069,7 @@ describe('providers actions', () => {
       identifier: 'provider://hooli-api-key',
       kind: 'api_key',
       config_json: {
+        auth_location: 'header',
         header_name: 'X-Api-Key',
         api_key: 'provider-key',
       },

@@ -234,6 +234,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     expect(res.statusCode).toBe(201)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-1', kind: 'api_key' })
     expect(JSON.parse(values[5] as string)).toEqual({
+      auth_location: 'header',
       header_name: 'Authorization',
       auth_scheme: 'Bearer',
       forward_caracal_identity: true,
@@ -241,7 +242,40 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     expect(values[8]).toEqual(['api_key'])
   })
 
-  it('rejects API key providers with unsupported or malformed header configuration', async () => {
+  it('stores API key provider query parameter placement and sealed secrets', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://hooli-weather', kind: 'api_key' }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        identifier: 'provider://hooli-weather',
+        kind: 'api_key',
+        config_json: {
+          auth_location: 'query',
+          query_param_name: 'api_key',
+          api_key: 'hooli-api-key',
+        },
+      },
+    })
+
+    const values = db.query.mock.calls[1][1] as unknown[]
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-1', kind: 'api_key' })
+    expect(JSON.parse(values[5] as string)).toEqual({
+      auth_location: 'query',
+      query_param_name: 'api_key',
+    })
+    expect(values[8]).toEqual(['api_key'])
+  })
+
+  it('rejects API key providers with unsupported or malformed forwarding configuration', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query.mockResolvedValue({ rows: [{ '?column?': 1 }] })
 
@@ -259,6 +293,25 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       {
         header_name: 'Authorization',
         auth_scheme: 'Bearer Token',
+        api_key: 'hooli-api-key',
+      },
+      {
+        auth_location: 'query',
+        api_key: 'hooli-api-key',
+      },
+      {
+        auth_location: 'query',
+        query_param_name: 'api key',
+        api_key: 'hooli-api-key',
+      },
+      {
+        auth_location: 'query',
+        query_param_name: 'api_key',
+        auth_scheme: 'Bearer',
+        api_key: 'hooli-api-key',
+      },
+      {
+        auth_location: 'cookie',
         api_key: 'hooli-api-key',
       },
     ]
@@ -585,7 +638,7 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
     expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-1', kind: 'api_key' })
     expect(values.slice(0, 2)).toEqual(['provider-1', 'z1'])
     expect(values).toContain('api_key')
-    expect(JSON.parse(values[3] as string)).toEqual({ header_name: 'X-Api-Key' })
+    expect(JSON.parse(values[3] as string)).toEqual({ auth_location: 'header', header_name: 'X-Api-Key' })
   })
 
   it('validates config-only patches against the existing provider kind', async () => {

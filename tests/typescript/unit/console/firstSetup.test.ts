@@ -300,6 +300,43 @@ describe('first setup workflow', () => {
     }))
   })
 
+  it('creates guided API key providers with query parameter placement', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    })
+    await view.init?.(app)
+
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      provider_name: 'Hooli Weather',
+      provider_kind: 'api_key',
+      provider_api_key_auth_location: 'query',
+      provider_api_key_query_param: 'key',
+      provider_api_key: 'provider-key',
+    })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.hooli.example',
+    })
+    await openAndSubmit(view, app, { policy_mode: 'skip' })
+    await view.onKey('enter', ctx(app))
+
+    expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      identifier: 'provider://hooli-weather',
+      name: 'Hooli Weather',
+      kind: 'api_key',
+      config_json: {
+        auth_location: 'query',
+        query_param_name: 'key',
+        api_key: 'provider-key',
+      },
+    }))
+  })
+
   it('selects existing objects without asking for their IDs in the main flow', async () => {
     const client = makeClient()
     const app = fakeApp()
