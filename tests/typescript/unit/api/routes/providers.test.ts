@@ -342,6 +342,7 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query
       .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({
         rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://hooli-oauth2', kind: 'caracal_mandate' }],
       })
@@ -358,10 +359,62 @@ describe('POST /v1/zones/:zoneId/providers', () => {
       },
     })
 
-    const values = db.query.mock.calls[1][1] as unknown[]
+    const values = db.query.mock.calls[2][1] as unknown[]
     expect(res.statusCode).toBe(201)
     expect(values[2]).toBe('Hooli OAuth2')
     expect(values[3]).toBe('provider://hooli-oauth2')
+  })
+
+  it('suffixes generated provider identifiers when the provider name already exists in the zone', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-2', zone_id: 'z1', identifier: 'provider://hooli-oauth2-2', kind: 'caracal_mandate' }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        name: 'Hooli OAuth2',
+        kind: 'caracal_mandate',
+        config_json: {},
+      },
+    })
+
+    const values = db.query.mock.calls[3][1] as unknown[]
+    expect(res.statusCode).toBe(201)
+    expect(values[3]).toBe('provider://hooli-oauth2-2')
+  })
+
+  it('rejects duplicate explicit provider identifiers in the zone', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    const conflict = Object.assign(new Error('duplicate key'), {
+      code: '23505',
+      constraint: 'providers_zone_identifier_active_uidx',
+    })
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockRejectedValueOnce(conflict)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        identifier: 'provider://hooli-oauth2',
+        name: 'Hooli OAuth2',
+        kind: 'caracal_mandate',
+        config_json: {},
+      },
+    })
+
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_identifier_conflict' })
   })
 
   it('rejects unsupported provider config fields', async () => {
@@ -581,6 +634,25 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
     expect(res.statusCode).toBe(400)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_provider_identifier' })
     expect(db.query).not.toHaveBeenCalled()
+  })
+
+  it('rejects provider identifier patches that conflict in the zone', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    const conflict = Object.assign(new Error('duplicate key'), {
+      code: '23505',
+      constraint: 'providers_zone_identifier_active_uidx',
+    })
+    db.query.mockRejectedValueOnce(conflict)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/providers/provider-1',
+      payload: { identifier: 'provider://hooli-oauth2' },
+    })
+
+    expect(res.statusCode).toBe(409)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_identifier_conflict' })
   })
 })
 

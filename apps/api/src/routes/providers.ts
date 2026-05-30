@@ -18,6 +18,7 @@ const OAuthClientAuthMethod = z.enum(['client_secret_basic', 'client_secret_post
 type OAuthClientAuthMethod = z.infer<typeof OAuthClientAuthMethod>
 const PROVIDER_IDENTIFIER_PREFIX = 'provider://'
 const PROVIDER_IDENTIFIER_PATTERN = /^provider:\/\/[a-z0-9]+(?:-[a-z0-9]+)*$/
+const PROVIDER_IDENTIFIER_UNIQUE_INDEX = 'providers_zone_identifier_active_uidx'
 const HEADER_TOKEN_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 const AUTH_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9-]*$/
 const OAUTH_PARAM_PATTERN = /^[A-Za-z0-9._~-]+$/
@@ -67,6 +68,38 @@ function providerIdentifierFromName(name: string): string {
   const text = name.trim()
   const base = text.startsWith(PROVIDER_IDENTIFIER_PREFIX) ? text.slice(PROVIDER_IDENTIFIER_PREFIX.length) : text
   return `${PROVIDER_IDENTIFIER_PREFIX}${slugValue(base)}`
+}
+
+interface ProviderQueryClient {
+  query<T = unknown>(text: string, values?: unknown[]): Promise<{ rows: T[] }>
+}
+
+async function providerIdentifierExists(client: ProviderQueryClient, zoneId: string, identifier: string): Promise<boolean> {
+  const { rows } = await client.query(
+    `SELECT 1 FROM providers WHERE zone_id = $1 AND identifier = $2 AND archived_at IS NULL`,
+    [zoneId, identifier],
+  )
+  return rows.length > 0
+}
+
+async function nextProviderIdentifier(client: ProviderQueryClient, zoneId: string, name: string): Promise<string> {
+  const base = providerIdentifierFromName(name)
+  for (let suffix = 1; suffix < 1000; suffix++) {
+    const identifier = suffix === 1 ? base : `${base}-${suffix}`
+    if (!(await providerIdentifierExists(client, zoneId, identifier))) return identifier
+  }
+  return `${base}-${uuidv7().replace(/-/g, '')}`
+}
+
+function isProviderIdentifierConflict(err: unknown): boolean {
+  return Boolean(
+    err
+    && typeof err === 'object'
+    && 'code' in err
+    && (err as { code?: unknown }).code === '23505'
+    && 'constraint' in err
+    && (err as { constraint?: unknown }).constraint === PROVIDER_IDENTIFIER_UNIQUE_INDEX,
+  )
 }
 
 function providerIdentifierError(identifier: string | undefined): string | undefined {
@@ -329,33 +362,48 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
     const body = parsed.data
     const identifierError = providerIdentifierError(body.identifier)
     if (identifierError) return reply.code(400).send({ error: 'invalid_provider_identifier', message: identifierError })
-    const id = uuidv7()
     let config: ReturnType<typeof splitProviderConfig>
     try {
       config = splitProviderConfig(body.kind, body.config_json, true)
     } catch (err) {
       return reply.code(400).send({ error: 'invalid_provider_config', message: err instanceof Error ? err.message : String(err) })
     }
-    const identifier = body.identifier ?? providerIdentifierFromName(body.name ?? `${body.kind} provider`)
     const sealed = sealSecretConfig(config.secretConfig)
-    const { rows } = await fastify.db.query<ProviderRow>(
-      `INSERT INTO providers (id, zone_id, name, identifier, provider_kind, config_json,
-                              secret_config_ct, secret_config_nonce, secret_config_keys)
-       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
-       RETURNING ${RETURNING}`,
-      [
-        id,
-        params.zoneId,
-        body.name ?? identifier,
-        identifier,
-        body.kind,
-        JSON.stringify(config.publicConfig),
-        sealed?.ciphertext ?? null,
-        sealed?.nonce ?? null,
-        config.secretKeys,
-      ],
-    )
-    return reply.code(201).send(rows[0])
+    const explicitIdentifier = body.identifier !== undefined
+    let identifier = body.identifier
+    if (identifier === undefined) {
+      identifier = await nextProviderIdentifier(fastify.db, params.zoneId, body.name ?? `${body.kind} provider`)
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const id = uuidv7()
+      try {
+        const { rows } = await fastify.db.query<ProviderRow>(
+          `INSERT INTO providers (id, zone_id, name, identifier, provider_kind, config_json,
+                                  secret_config_ct, secret_config_nonce, secret_config_keys)
+           VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+           RETURNING ${RETURNING}`,
+          [
+            id,
+            params.zoneId,
+            body.name ?? identifier,
+            identifier,
+            body.kind,
+            JSON.stringify(config.publicConfig),
+            sealed?.ciphertext ?? null,
+            sealed?.nonce ?? null,
+            config.secretKeys,
+          ],
+        )
+        return reply.code(201).send(rows[0])
+      } catch (err) {
+        if (!isProviderIdentifierConflict(err)) throw err
+        if (explicitIdentifier) {
+          return reply.code(409).send({ error: 'provider_identifier_conflict' })
+        }
+        identifier = await nextProviderIdentifier(fastify.db, params.zoneId, body.name ?? `${body.kind} provider`)
+      }
+    }
+    return reply.code(409).send({ error: 'provider_identifier_conflict' })
   })
 
   fastify.patch('/zones/:zoneId/providers/:id', async (req, reply) => {
@@ -404,12 +452,19 @@ export const providersRoutes: FastifyPluginAsync = async (fastify) => {
       patchColumn('secret_config_keys', config && (sealed || clearSecrets) ? config.secretKeys : undefined),
     ])
     if (!update) return reply.code(400).send({ error: 'no_fields' })
-    const { rows } = await fastify.db.query<ProviderRow>(
-      `UPDATE providers SET ${update.sets.join(', ')}, updated_at = now()
-       WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL
-       RETURNING ${RETURNING}`,
-      update.values,
-    )
+    let rows: ProviderRow[]
+    try {
+      const result = await fastify.db.query<ProviderRow>(
+        `UPDATE providers SET ${update.sets.join(', ')}, updated_at = now()
+         WHERE id = $1 AND zone_id = $2 AND archived_at IS NULL
+         RETURNING ${RETURNING}`,
+        update.values,
+      )
+      rows = result.rows
+    } catch (err) {
+      if (isProviderIdentifierConflict(err)) return reply.code(409).send({ error: 'provider_identifier_conflict' })
+      throw err
+    }
     if (!rows[0]) return reply.code(404).send({ error: 'provider_not_found' })
     return rows[0]
   })
