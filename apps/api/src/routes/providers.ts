@@ -128,6 +128,7 @@ const PUBLIC_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
     'auth_header',
     'auth_scheme',
     'forward_caracal_identity',
+    'allow_runtime_injection',
   ]),
   oauth2_client_credentials: new Set([
     'token_endpoint',
@@ -142,9 +143,10 @@ const PUBLIC_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
     'auth_header',
     'auth_scheme',
     'forward_caracal_identity',
+    'allow_runtime_injection',
   ]),
-  api_key: new Set(['auth_location', 'header_name', 'query_param_name', 'auth_scheme', 'forward_caracal_identity']),
-  bearer_token: new Set(['allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity']),
+  api_key: new Set(['auth_location', 'header_name', 'query_param_name', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection']),
+  bearer_token: new Set(['allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection']),
 }
 
 const SECRET_PROVIDER_CONFIG_KEYS: Record<ProviderKind, ReadonlySet<string>> = {
@@ -352,6 +354,7 @@ function splitProviderConfig(kind: ProviderKind, input: Record<string, unknown> 
   }
   requireOptionalAuthScheme(publicConfig, 'auth_scheme', `${kind} provider config auth_scheme must be an auth scheme token`)
   requireOptionalBoolean(publicConfig, 'forward_caracal_identity', `${kind} provider config forward_caracal_identity must be a boolean`)
+  requireOptionalBoolean(publicConfig, 'allow_runtime_injection', `${kind} provider config allow_runtime_injection must be a boolean`)
   return { publicConfig, secretConfig, secretKeys: Object.keys(secretConfig).sort() }
 }
 

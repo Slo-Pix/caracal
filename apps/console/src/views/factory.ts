@@ -509,6 +509,7 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
   mergeConfigText(config, 'auth_header', values.auth_header)
   mergeConfigText(config, 'auth_scheme', values.auth_scheme)
   if (values.forward_caracal_identity === 'true') config.forward_caracal_identity = true
+  if (values.allow_runtime_injection === 'true') config.allow_runtime_injection = true
   const allowed = providerConfigKeys(kind)
   for (const key of Object.keys(config)) {
     if (!allowed.has(key)) delete config[key]
@@ -612,9 +613,9 @@ function validateProviderConfig(kind: ProviderKind, config: JsonObject): void {
 
 function providerConfigKeys(kind: ProviderKind): Set<string> {
   if (kind === 'none' || kind === 'caracal_mandate') return new Set()
-  if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
-  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
-  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'provider_scopes', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
+  if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection'])
+  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'provider_scopes', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection']
   if (kind === 'oauth2_client_credentials') keys.push('audience', 'resource', 'key_id', 'private_key')
   if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri', 'authorization_params')
   return new Set(keys)
@@ -1345,6 +1346,7 @@ export function providersView(ctx: Ctx): View {
             { key: 'auth_header', label: 'upstream auth header', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
             { key: 'auth_scheme', label: 'upstream auth scheme', kind: 'text', dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, visible: (current) => current.kind !== 'api_key' || current.api_key_auth_location === 'header', advanced: true, hint: 'optional prefix such as Bearer, Token, or ApiKey; API-key query auth does not use a scheme' },
             { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: 'false', dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
+            { key: 'allow_runtime_injection', label: 'allow runtime injection', kind: 'bool', default: 'false', dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'allow caracal run to inject this provider credential into a child process environment' },
           ],
           onSubmit: async (v, app) => {
             await ctx.client.providers.create(ctx.zoneId, {
@@ -1388,6 +1390,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'auth_header', label: 'upstream auth header', kind: 'text', default: configString(row.config_json, 'auth_header'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, hint: 'optional; leave blank for Authorization' },
               { key: 'auth_scheme', label: 'upstream auth scheme', kind: 'text', default: configString(row.config_json, 'auth_scheme'), dependsOn: { kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, visible: (current) => current.kind !== 'api_key' || current.api_key_auth_location === 'header', advanced: true, hint: 'optional prefix such as Bearer, Token, or ApiKey; API-key query auth does not use a scheme' },
               { key: 'forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: configBool(row.config_json, 'forward_caracal_identity'), dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'also send X-Caracal-Identity to trusted upstreams' },
+              { key: 'allow_runtime_injection', label: 'allow runtime injection', kind: 'bool', default: configBool(row.config_json, 'allow_runtime_injection'), dependsOn: { kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, hint: 'allow caracal run to inject this provider credential into a child process environment' },
             ],
             onSubmit: async (v, app) => {
               const kind = providerKind(v.kind)

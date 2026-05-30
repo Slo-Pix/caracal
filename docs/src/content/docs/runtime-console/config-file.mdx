@@ -30,6 +30,7 @@ The runtime does not read `./caracal.toml` from the current working directory.
 | `CARACAL_RUN_CREDENTIALS_FILE` | JSON credential manifest file. |
 | `CARACAL_RUN_CREDENTIALS` | Inline JSON credential manifest. |
 | `CARACAL_RUN_CONTINUE_ON_FAILURE` | `true` or `false` for required credential failure behavior. |
+| `CARACAL_RUN_TTL_SECONDS` | Credential exchange TTL, capped at 900 seconds. |
 | `CARACAL_MCP_GOVERNANCE_MODE` | `block` or `log`. |
 
 Set only one of `CARACAL_RUN_CREDENTIALS_FILE` and `CARACAL_RUN_CREDENTIALS`.
@@ -43,15 +44,18 @@ coordinator_url = "https://coordinator.example.com"
 zone_id = "zone_prod"
 application_id = "app_agent"
 app_client_secret_file = "/run/secrets/caracal-app-secret"
+ttl_seconds = 900
 
 [[credentials]]
-env = "TICKETS_TOKEN"
-resource = "https://api.example.com/tickets"
-upstream_prefix = "https://api.example.com"
+env = "OPENAI_API_KEY"
+resource = "resource://openai"
+credential_type = "provider_token"
+upstream_prefix = "https://api.openai.com/v1"
 
 [[optional_credentials]]
-env = "CALENDAR_TOKEN"
-resource = "https://api.example.com/calendar"
+env = "CARACAL_MANDATE"
+resource = "resource://mandate-aware-api"
+credential_type = "caracal_mandate"
 on_failure = "warn"
 
 [mcp_governance]
@@ -69,12 +73,13 @@ mode = "block"
 | `application_id` | Confidential application used by the workload. |
 | `app_client_secret_file` | Preferred secret-file path. |
 | `app_client_secret` | Inline local-development secret. |
+| `ttl_seconds` | Credential exchange TTL; defaults to and is capped at 900 seconds. |
 | `continue_on_failure` | Required credential failure behavior; defaults to `false`. |
 | `credentials[]` | Required resource tokens. |
 | `optional_credentials[]` | Optional resource tokens with `on_failure = "warn"` or `"error"`. |
 | `mcp_governance.mode` | `block` or `log` for likely MCP subprocesses. |
 
-Credential entries use `env`, `resource`, and optional `upstream_prefix`. Runtime injection requires `env`; SDKs can also use entries as resource audiences and Gateway routing hints.
+Credential entries use `env`, `resource`, optional `upstream_prefix`, and optional `credential_type`. `provider_token` is the `caracal run` golden path and requires a provider with `allow_runtime_injection = true`; `caracal_mandate` is for workloads that consume Caracal mandates directly. SDKs can also use entries as resource audiences and Gateway routing hints.
 
 ## Security rules
 
@@ -94,5 +99,6 @@ Console `guided setup` can generate a complete profile and one-time secret file 
 | --- | --- |
 | `CARACAL_CONFIG` is set but ignored | The file must exist; when it is set, no other profile path is considered. |
 | Runtime rejects a profile | Remove unknown fields and check permissions, URL safety, and credential env names. |
+| Provider key is not injected | Confirm the credential uses `credential_type = "provider_token"` and the provider config allows runtime injection. |
 | SDK Gateway routing does not happen | Confirm `gateway_url` and `upstream_prefix` are present. |
 | Optional credential stops the process | Set `on_failure = "warn"` for optional credentials that may be absent. |

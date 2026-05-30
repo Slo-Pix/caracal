@@ -35,12 +35,13 @@ flowchart TD
 | `application_id` | Confidential application ID. |
 | `app_client_secret_file` | Preferred secret-file path. |
 | `app_client_secret` | Inline local-development secret. |
+| `ttl_seconds` | `caracal run` exchange TTL, capped at 900 seconds. |
 | `continue_on_failure` | Required credential failure behavior. |
 | `credentials[]` | Required resource credentials. |
 | `optional_credentials[]` | Optional resource credentials with `on_failure`. |
 | `mcp_governance.mode` | `block` or `log` for likely MCP subprocesses. |
 
-Credential entries use `env`, `resource`, and optional `upstream_prefix`.
+Credential entries use `env`, `resource`, optional `upstream_prefix`, and optional `credential_type`. Use `provider_token` for direct `caracal run` provider-key injection and `caracal_mandate` for mandate-aware workloads.
 
 ## Core service env keys
 

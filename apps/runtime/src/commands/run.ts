@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// `caracal run <cmd...>`: injects ambient 60-min tokens into child process env.
+// `caracal run <cmd...>`: injects just-in-time credentials into child process env.
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -12,23 +12,24 @@ import { printError } from '../style.ts'
 
 const RUN_HELP = `Usage: caracal run [--] <command> [args...]
 
-Run <command> with short-lived resource tokens injected as environment variables.
-Caracal exchanges your workload identity for per-resource tokens (60-minute TTL) and
-launches the command with a scrubbed environment, so only PATH-like variables and the
-issued tokens reach the child process.
+Run <command> with just-in-time credentials injected as environment variables.
+Caracal exchanges your workload identity for scoped provider credentials or Caracal
+mandates with a maximum 15-minute TTL, then launches the command with a scrubbed
+environment so only PATH-like variables and injected credentials reach the child.
 
 Use -- to separate Caracal from the command when the command takes its own flags.
 
 Examples:
-  caracal run -- node agent.js
+  caracal run -- node agent.js --model=gpt-4o-mini
   caracal run python tool.py --serve
-  caracal run -- printenv RESOURCE_TOKEN
+  caracal run -- printenv OPENAI_API_KEY
 
 Configuration:
   Requires runtime config (zone, application, client secret). Set it up in the Caracal
   Console, then provide it through CARACAL_STS_URL, CARACAL_ZONE_ID,
   CARACAL_APPLICATION_ID, CARACAL_APP_CLIENT_SECRET_FILE, and CARACAL_RUN_CREDENTIALS_FILE,
-  or point CARACAL_CONFIG at a runtime profile.
+  or point CARACAL_CONFIG at a runtime profile. Use credential_type=provider_token for
+  provider-native key injection and credential_type=caracal_mandate for mandate-aware code.
 `
 
 function isHelpToken(arg: string | undefined): boolean {

@@ -91,6 +91,7 @@ interface SetupValues {
   provider_auth_header?: string
   provider_auth_scheme?: string
   provider_forward_caracal_identity?: string
+  provider_allow_runtime_injection?: string
   policy_mode?: string
   activate_policy?: string
   generate_profile?: string
@@ -171,6 +172,7 @@ class FirstSetupWizardView implements View {
     provider_kind: 'caracal_mandate',
     provider_api_key_auth_location: 'header',
     provider_forward_caracal_identity: 'false',
+    provider_allow_runtime_injection: 'false',
   }
   private selectedZone: Zone | undefined
   private selectedApplication: Application | undefined
@@ -499,6 +501,7 @@ class FirstSetupWizardView implements View {
         { key: 'provider_auth_header', label: 'upstream auth header', kind: 'text', default: this.values.provider_auth_header ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'bearer_token'] }, advanced: true, info: guidedInfo('Upstream auth header', 'Header where Gateway forwards provider tokens.', 'Authorization', 'HTTP header name, or blank for the default.', 'Gateway uses this header when calling the upstream API.') },
         { key: 'provider_auth_scheme', label: 'upstream auth scheme', kind: 'text', default: this.values.provider_auth_scheme ?? '', dependsOn: { provider_mode: 'create', provider_kind: ['oauth2_authorization_code', 'oauth2_client_credentials', 'api_key', 'bearer_token'] }, visible: (current) => current.provider_kind !== 'api_key' || current.provider_api_key_auth_location === 'header', advanced: true, info: guidedInfo('Upstream auth scheme', 'Optional prefix for upstream credential values.', 'Bearer', 'Short scheme name such as Bearer, Token, or ApiKey; API-key query auth does not use a scheme.', 'Gateway formats provider credentials using this scheme when the upstream API expects one.') },
         { key: 'provider_forward_caracal_identity', label: 'forward Caracal identity', kind: 'bool', default: this.values.provider_forward_caracal_identity ?? 'false', dependsOn: { provider_mode: 'create', provider_kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, info: guidedInfo('Forward Caracal identity', 'Forward selected Caracal identity context to the upstream provider.', 'Enable for a Hooli broker that trusts Caracal identity.', 'Boolean toggle.', 'Gateway sends X-Caracal-Identity only for provider-native credential routes that opt in.') },
+        { key: 'provider_allow_runtime_injection', label: 'allow runtime injection', kind: 'bool', default: this.values.provider_allow_runtime_injection ?? 'false', dependsOn: { provider_mode: 'create', provider_kind: PROVIDER_CREDENTIAL_KINDS }, advanced: true, info: guidedInfo('Allow runtime injection', 'Allow caracal run to inject this provider credential directly into a child process environment.', 'Enable for PiperNet AI runs that need a provider API key at process start.', 'Boolean toggle.', 'STS returns provider-native credentials to caracal run only when policy allows the resource and the provider opts in.') },
       ],
       onSubmit: async (raw, formApp) => {
         Object.assign(this.values, raw)
@@ -698,8 +701,8 @@ async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<S
   const zoneResult = await ensureZone(ctx, values, app)
   const applicationResult = await ensureApplication(ctx, zoneResult.zone.id, values)
   const upstreamUrl = trimmed(values.upstream_url)
-  const providerId = await ensureProvider(ctx, zoneResult.zone.id, values, upstreamUrl)
-  const resourceResult = await ensureResource(ctx, zoneResult.zone.id, applicationResult.application.id, values, scopes, upstreamUrl, providerId)
+  const providerResult = await ensureProvider(ctx, zoneResult.zone.id, values, upstreamUrl)
+  const resourceResult = await ensureResource(ctx, zoneResult.zone.id, applicationResult.application.id, values, scopes, upstreamUrl, providerResult.provider.id)
 
   const policy = bool(values.activate_policy)
     ? await createFirstPolicy(ctx, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, scopes)
@@ -708,7 +711,7 @@ async function runFirstSetup(ctx: Ctx, values: SetupValues, app: App): Promise<S
     ? profileTarget(values, applicationResult.application.name, resourceResult.resource.identifier)
     : undefined
   const profile = finalTarget
-    ? buildProfile(finalTarget, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, upstreamUrl)
+    ? buildProfile(finalTarget, zoneResult.zone.id, applicationResult.application.id, resourceResult.resource.identifier, upstreamUrl, profileCredentialType(providerResult.provider))
     : undefined
   const requestPath = normalizeRequestPath(values.request_path)
   const fileWrite = profile
@@ -793,9 +796,9 @@ async function ensureProvider(
   zoneId: string,
   values: SetupValues,
   upstreamUrl: string | undefined,
-): Promise<string> {
+): Promise<{ provider: Provider; created: boolean }> {
   const selectedProviderId = trimmed(values.selected_provider_id)
-  if (selectedProviderId) return selectedProviderId
+  if (selectedProviderId) return { provider: await ctx.client.providers.get(zoneId, selectedProviderId), created: false }
   if (!trimmed(values.provider_name)) throw new Error('provider is required')
   const provider = await ctx.client.providers.create(zoneId, {
     ...(trimmed(values.provider_identifier) ? { identifier: trimmed(values.provider_identifier) } : {}),
@@ -803,7 +806,7 @@ async function ensureProvider(
     kind: providerKind(values.provider_kind),
     config_json: providerConfigFromValues(values),
   })
-  return provider.id
+  return { provider, created: true }
 }
 
 async function ensureResource(
@@ -966,6 +969,7 @@ function providerConfigFromValues(values: SetupValues): JsonObject {
   mergeConfigText(config, 'auth_header', values.provider_auth_header)
   mergeConfigText(config, 'auth_scheme', values.provider_auth_scheme)
   if (values.provider_forward_caracal_identity === 'true') config.forward_caracal_identity = true
+  if (values.provider_allow_runtime_injection === 'true') config.allow_runtime_injection = true
   const allowed = providerConfigKeys(kind)
   for (const key of Object.keys(config)) {
     if (!allowed.has(key)) delete config[key]
@@ -1134,9 +1138,9 @@ function requireOptionalStringRecord(config: JsonObject, key: string, reserved: 
 
 function providerConfigKeys(kind: ProviderKind): Set<string> {
   if (kind === 'none' || kind === 'caracal_mandate') return new Set()
-  if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity'])
-  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity'])
-  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity']
+  if (kind === 'api_key') return new Set(['auth_location', 'header_name', 'query_param_name', 'api_key', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection'])
+  if (kind === 'bearer_token') return new Set(['bearer_token', 'allowed_token_hosts', 'auth_header', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection'])
+  const keys = ['token_endpoint', 'client_id', 'client_secret', 'client_auth_method', 'scopes', 'allowed_token_hosts', 'token_params', 'auth_header', 'auth_scheme', 'forward_caracal_identity', 'allow_runtime_injection']
   if (kind === 'oauth2_client_credentials') keys.push('audience', 'resource', 'key_id', 'private_key')
   if (kind === 'oauth2_authorization_code') keys.push('authorization_endpoint', 'redirect_uri', 'authorization_params')
   return new Set(keys)
@@ -1243,6 +1247,7 @@ function buildProfile(
   applicationId: string,
   resourceIdentifier: string,
   upstreamUrl: string | undefined,
+  credentialType: 'provider_token' | 'caracal_mandate',
 ): SetupResult['profile'] {
   const stsUrl = process.env.CARACAL_STS_URL ?? process.env.CARACAL_ZONE_URL ?? DEFAULT_ZONE_URL
   const coordinatorUrl = process.env.CARACAL_COORDINATOR_URL ?? DEFAULT_COORDINATOR_URL
@@ -1256,13 +1261,22 @@ function buildProfile(
     `application_id = ${quoteToml(applicationId)}`,
     `app_client_secret_file = ${quoteToml(target.secretPath)}`,
     'continue_on_failure = false',
+    'ttl_seconds = 900',
     '',
     '[[credentials]]',
     `env = ${quoteToml(target.credentialEnv)}`,
     `resource = ${quoteToml(resourceIdentifier)}`,
+    `credential_type = ${quoteToml(credentialType)}`,
   ]
   if (upstreamUrl) lines.push(`upstream_prefix = ${quoteToml(upstreamUrl)}`)
   return { ...target, gatewayUrl, content: lines.join('\n') + '\n' }
+}
+
+function profileCredentialType(provider: Provider): 'provider_token' | 'caracal_mandate' {
+  if (PROVIDER_CREDENTIAL_KINDS.includes(provider.kind) && provider.config_json?.allow_runtime_injection === true) {
+    return 'provider_token'
+  }
+  return 'caracal_mandate'
 }
 
 function setupSummary(result: SetupResult): Record<string, unknown> {
