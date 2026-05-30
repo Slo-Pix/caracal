@@ -302,6 +302,47 @@ describe('first setup workflow', () => {
     }))
   })
 
+  it('creates guided OAuth2 private-key JWT providers', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    })
+    await view.init?.(app)
+
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      provider_name: 'provider-name',
+      provider_kind: 'oauth2_client_credentials',
+      provider_token_endpoint: 'https://issuer.example.com/oauth/token',
+      provider_client_id: 'hooli-client',
+      provider_client_auth_method: 'private_key_jwt',
+      provider_private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+      provider_key_id: 'key-1',
+    })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.example.com',
+    })
+    await openAndSubmit(view, app, { policy_mode: 'skip' })
+    await view.onKey('enter', ctx(app))
+
+    expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      name: 'provider-name',
+      kind: 'oauth2_client_credentials',
+      config_json: expect.objectContaining({
+        token_endpoint: 'https://issuer.example.com/oauth/token',
+        client_id: 'hooli-client',
+        client_auth_method: 'private_key_jwt',
+        private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+        key_id: 'key-1',
+        allowed_token_hosts: ['issuer.example.com'],
+      }),
+    }))
+  })
+
   it('creates guided API key providers with query parameter placement', async () => {
     const client = makeClient()
     const app = fakeApp()

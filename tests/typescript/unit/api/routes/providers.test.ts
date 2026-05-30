@@ -70,6 +70,44 @@ describe('POST /v1/zones/:zoneId/providers', () => {
     expect(values[8]).toEqual(['client_secret'])
   })
 
+  it('stores private-key JWT client credentials with sealed private keys', async () => {
+    const { app, db } = buildRouteApp(providersRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://oauth-main', kind: 'oauth2_client_credentials' }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/providers',
+      payload: {
+        identifier: 'provider://oauth-main',
+        kind: 'oauth2_client_credentials',
+        config_json: {
+          token_endpoint: 'https://issuer.example/oauth/token',
+          client_id: 'hooli-client',
+          client_auth_method: 'private_key_jwt',
+          key_id: 'key-1',
+          private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+          allowed_token_hosts: ['issuer.example'],
+        },
+      },
+    })
+
+    const values = db.query.mock.calls[1][1] as unknown[]
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(values[5] as string)).toEqual({
+      token_endpoint: 'https://issuer.example/oauth/token',
+      client_id: 'hooli-client',
+      client_auth_method: 'private_key_jwt',
+      key_id: 'key-1',
+      allowed_token_hosts: ['issuer.example'],
+    })
+    expect(values[8]).toEqual(['private_key'])
+  })
+
   it('rejects OAuth2 client-credentials providers with invalid endpoint or token parameter config', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query.mockResolvedValue({ rows: [{ '?column?': 1 }] })
@@ -95,6 +133,27 @@ describe('POST /v1/zones/:zoneId/providers', () => {
         client_secret: 'hooli-secret',
         allowed_token_hosts: ['issuer.example'],
         auth_header: 'Authorization Header',
+      },
+      {
+        token_endpoint: 'https://issuer.example/oauth/token',
+        client_id: 'hooli-client',
+        client_auth_method: 'private_key_jwt',
+        allowed_token_hosts: ['issuer.example'],
+      },
+      {
+        token_endpoint: 'https://issuer.example/oauth/token',
+        client_id: 'hooli-client',
+        client_secret: 'hooli-secret',
+        private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+        client_auth_method: 'private_key_jwt',
+        allowed_token_hosts: ['issuer.example'],
+      },
+      {
+        token_endpoint: 'https://issuer.example/oauth/token',
+        client_id: 'hooli-client',
+        client_secret: 'hooli-secret',
+        key_id: 'key-1',
+        allowed_token_hosts: ['issuer.example'],
       },
     ]) {
       const res = await app.inject({
@@ -644,7 +703,7 @@ describe('PATCH /v1/zones/:zoneId/providers/:id', () => {
   it('validates config-only patches against the existing provider kind', async () => {
     const { app, db } = buildRouteApp(providersRoutes)
     db.query
-      .mockResolvedValueOnce({ rows: [{ kind: 'oauth2_client_credentials' }] })
+      .mockResolvedValueOnce({ rows: [{ kind: 'oauth2_client_credentials', secret_config_keys: ['client_secret'] }] })
       .mockResolvedValueOnce({
         rows: [{ id: 'provider-1', zone_id: 'z1', identifier: 'provider://oauth-main', kind: 'oauth2_client_credentials' }],
       })

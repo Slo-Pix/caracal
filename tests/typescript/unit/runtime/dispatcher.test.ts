@@ -93,8 +93,7 @@ describe('dispatch', () => {
     expect(out).toContain('Usage: caracal console')
   })
 
-  it('keeps runtime help limited to visible commands and global options', async () => {
-    exitSpy()
+  it('keeps runtime help limited to visible commands and global options', async () => {    exitSpy()
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
     const executors = Object.fromEntries(MANAGEMENT_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
     const registry = buildRegistry(MANAGEMENT_COMMANDS, executors)
@@ -110,5 +109,26 @@ describe('dispatch', () => {
     expect(out).not.toMatch(/\bcompletion\b/)
     expect(out).not.toContain('NO_COLOR')
     expect(out).not.toContain('--json')
+  })
+
+  it('prints command help for a help request without loading config or running the executor', async () => {
+    const exit = exitSpy()
+    const run = vi.fn() as Executor
+    const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
+    for (const token of ['help', '--help', '-h']) {
+      stdout.mockClear()
+      await expect(dispatch({ ...makeOpts(run), loadConfig: true }, ['run', token])).rejects.toThrow('exit:0')
+      const out = stdout.mock.calls.map((c) => String(c[0])).join('')
+      expect(out).toContain('Usage: caracal run [options]')
+      expect(out).toContain('Run a command with injected resource tokens')
+    }
+    expect(exit).toHaveBeenCalledWith(0)
+    expect(run).not.toHaveBeenCalled()
+  })
+
+  it('only treats a help token as command help when it leads the arguments', async () => {
+    const run = vi.fn() as Executor
+    await dispatch(makeOpts(run), ['run', 'mytool', '--help'])
+    expect(run).toHaveBeenCalledWith(['mytool', '--help'], undefined)
   })
 })

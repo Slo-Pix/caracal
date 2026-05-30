@@ -587,6 +587,8 @@ describe('providers actions', () => {
       'token_resource',
       'allowed_token_hosts',
       'client_auth_method',
+      'key_id',
+      'private_key',
       'auth_header',
       'auth_scheme',
       'forward_caracal_identity',
@@ -720,6 +722,42 @@ describe('providers actions', () => {
         token_params: { tenant: 'hooli' },
         audience: 'https://api.hooli.example',
         resource: 'https://resource.hooli.example',
+        allowed_token_hosts: ['provider.example'],
+      },
+    }))
+  })
+
+  it('creates OAuth2 client-credentials providers with private-key JWT authentication', async () => {
+    const { client, ctx } = newCtx()
+    const list = providersView(ctx as unknown as Parameters<typeof providersView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const pushed = await pressKey(list, 'n', app) as FormView
+    ;(pushed as unknown as { values: Record<string, string> }).values = {
+      identifier: 'provider://hooli-private-jwt',
+      name: 'Hooli Private JWT',
+      kind: 'oauth2_client_credentials',
+      token_endpoint: 'https://provider.example/token',
+      client_id: 'provider-client',
+      client_secret: '',
+      private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+      key_id: 'key-1',
+      allowed_token_hosts: 'provider.example',
+      client_auth_method: 'private_key_jwt',
+      forward_caracal_identity: 'false',
+    }
+    ;(pushed as unknown as { focus: number }).focus = 99
+
+    await pushed.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
+
+    expect(client.providers.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      identifier: 'provider://hooli-private-jwt',
+      kind: 'oauth2_client_credentials',
+      config_json: {
+        token_endpoint: 'https://provider.example/token',
+        client_id: 'provider-client',
+        private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
+        client_auth_method: 'private_key_jwt',
+        key_id: 'key-1',
         allowed_token_hosts: ['provider.example'],
       },
     }))
