@@ -64,7 +64,7 @@ Retry token exchange only after the challenge is satisfied. The STS validates th
 | --- | --- |
 | No `challenge_id` | Confirm the policy emits a `step_up_required` diagnostic. |
 | Challenge cannot be satisfied | Confirm it has not expired, was not consumed, and is not self-approved. |
-| Retry still denied | Inspect `explain`; policy may require a different resource, scope, or challenge type. |
+| Retry still denied | Inspect `request trace`; policy may require a different resource, scope, or challenge type. |
 | Too many attempts | Wait for the STS step-up throttle window or investigate repeated proof failures. |
 
 Related pages: [Step-Up Challenge](/concepts/step-up/) and [Author a Rego Policy](/guides/author-policy/).

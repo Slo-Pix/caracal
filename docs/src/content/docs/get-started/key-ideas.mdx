@@ -11,14 +11,14 @@ Caracal has one core promise: an agent receives only the authority it needs, onl
 ```mermaid
 flowchart LR
   App[Agent app]
-  Run[Agent run]
+  Session[Agent session]
   STS[STS policy decision]
   Token[Mandate]
   Gateway[Gateway]
   Resource[Resource]
   Audit[(Audit)]
 
-  App --> Run --> STS
+  App --> Session --> STS
   STS -->|allow| Token
   STS -->|allow or deny| Audit
   Token --> Gateway --> Resource
@@ -30,10 +30,10 @@ flowchart LR
 | Term | Meaning |
 | --- | --- |
 | Agent app | The registered workload identity that asks Caracal for authority. |
-| Agent run | One tracked execution of an agent app. |
+| Agent session | One tracked execution of an agent app. |
 | Mandate | The short-lived signed token Caracal issues after policy allows access. |
 | Resource | The protected tool, API, provider, service, or data target. |
-| Delegated permission | A narrowed authority path from one agent run to another. |
+| Delegated permission | A narrowed authority path from one agent session to another. |
 
 Everything else supports those terms. Use this vocabulary in onboarding and product workflows; use the precise reference names in APIs, policy, and architecture docs.
 
@@ -42,7 +42,7 @@ Everything else supports those terms. Use this vocabulary in onboarding and prod
 | Product term | Reference term | Where it appears |
 | --- | --- | --- |
 | Agent app | Application / principal | Console, policy input, SDK config. |
-| Agent run | Execution session / agent session | Coordinator, sessions, audit. |
+| Agent session | Execution session | Coordinator, authority sessions, audit. |
 | Mandate | Caracal access token | STS, Gateway, SDK transport. |
 | Resource | Resource identifier | Gateway routing, policy, grants. |
 | Delegated permission | Delegation edge | Multi-agent workflows and revocation. |
@@ -56,7 +56,7 @@ A zone is the tenant or environment boundary. It owns applications, resources, p
 
 ### Agent app
 
-An agent app is the workload identity. It authenticates to Caracal with an app secret, starts agent runs, requests scoped mandates, and appears in audit records. The app secret is not a provider credential.
+An agent app is the workload identity. It authenticates to Caracal with an app secret, starts agent sessions, requests scoped mandates, and appears in audit records. The app secret is not a provider credential.
 
 ### Resource
 

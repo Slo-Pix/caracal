@@ -46,7 +46,7 @@ Caracal's product model is intentionally small:
 | Product object | Role |
 | --- | --- |
 | Agent app | The workload identity requesting authority. |
-| Agent run | One tracked execution of that workload. |
+| Agent session | One tracked execution of that workload. |
 | Mandate | The short-lived scoped credential issued after policy allows access. |
 | Resource | The protected target being accessed. |
 | Delegated permission | A narrowed authority path from one run to another. |
@@ -81,7 +81,7 @@ The agent never receives the provider-native credential in this path.
 
 ## Delegation narrows authority
 
-Delegation lets one agent run give another run narrower permission. The invariant is:
+Delegation lets one agent session give another session narrower permission. The invariant is:
 
 ```text
 source = delegator

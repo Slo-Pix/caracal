@@ -12,7 +12,7 @@ Grants authorize an application and user to request resource scopes. Invitations
 3. Choose the zone, application, subject or user, resource, and scopes.
 4. Save the grant.
 5. Run a token exchange or Gateway request that asks for those scopes.
-6. Inspect `audit` or `explain` to confirm the grant was considered.
+6. Inspect `audit` or `request trace` to confirm the grant was considered.
 
 ## Create an invitation
 
@@ -40,7 +40,7 @@ The Admin API exposes invitation list, create, and cancel endpoints for automati
 | --- | --- |
 | Exchange is denied | Confirm the grant matches application, subject, resource, and scopes. |
 | Scope missing | Confirm the resource defines the scope and the grant includes it. |
-| Policy still denies | Use `explain`; grants are only one policy input. |
+| Policy still denies | Use `request trace`; grants are only one policy input. |
 | Access continues after revocation | Confirm revocation consumers are running on resource servers. |
 
 Related pages: [Resource and Grant](/concepts/resource-grant/), [Policy](/concepts/policy/), and [Sessions and Revocation](/concepts/sessions-revocation/).
