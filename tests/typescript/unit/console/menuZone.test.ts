@@ -90,7 +90,7 @@ describe('menu zone hotkey', () => {
     expect(rendered).toContain(' r  agent run')
     expect(rendered).toContain(' g  delegation')
     expect(rendered).toContain(' d  diagnostics')
-    expect(rendered).toContain(' c  credential')
+    expect(rendered).not.toContain(' c  credential')
   })
 
   it('opens operationally useful contextual menu help', async () => {

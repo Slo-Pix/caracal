@@ -3,9 +3,6 @@
 //
 // audit-explain form submits the request_id and pushes a populated DetailView.
 
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import { MenuView } from '../../../../apps/console/src/views/menu.ts'
@@ -95,7 +92,7 @@ describe('audit explain entry', () => {
     const menu = new MenuView(client, 'z1')
     const body = menu.render({ app: fakeApp(), size: { rows: 25, cols: 80 }, status: '' }).join('\n')
     expect(body).toContain('diagnostics')
-    expect(body).toContain('credential')
+    expect(body).not.toContain(' c  credential')
     expect(body).toContain('control')
   })
 
@@ -180,141 +177,14 @@ describe('audit explain entry', () => {
     expect(detail).toBeInstanceOf(DetailView)
   })
 
-  it('opens credential read with a resource picker', async () => {
-    const client = {
-      audit: { byRequest: vi.fn() },
-      resources: { list: vi.fn(async () => []) },
-    } as unknown as AdminClient
-    const menu = new MenuView(client, 'z1')
-    const app = fakeApp()
-
-    await menu.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-    const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-    await credential.onKey('r', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const form = pushed[pushed.length - 1] as FormView
-
-    expect(typeof (form as unknown as { fields: { pick?: unknown }[] }).fields[0]?.pick).toBe('function')
-  })
-
-  it('points Control API token requests to the Control menu', async () => {
+  it('does not expose resource credential tools from the Console menu', async () => {
     const client = { audit: { byRequest: vi.fn() } } as unknown as AdminClient
     const menu = new MenuView(client, 'z1')
     const app = fakeApp()
 
     await menu.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
     const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-    const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-    await credential.onKey('r', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const form = pushed[pushed.length - 1] as FormView
-    ;(form as unknown as { values: Record<string, string> }).values = { resource: 'caracal-control', application_id: 'app1' }
-    const fields = (form as unknown as { fields: unknown[] }).fields
-    ;(form as unknown as { focus: number }).focus = fields.length
-    await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
-
-    expect(app.setStatus).toHaveBeenCalledWith(
-      'Control API tokens are issued from control → issue invocation token',
-      'error',
-    )
-  })
-
-  it('reads credentials from selected application fields without loading runtime config', async () => {
-    const cwd = process.cwd()
-    const dir = mkdtempSync(join(tmpdir(), 'caracal-console-credential-'))
-    const configDir = join(dir, '.config', 'caracal')
-    mkdirSync(configDir, { recursive: true })
-    const secretPath = join(configDir, 'runtime-secret')
-    const configPath = join(configDir, 'caracal.toml')
-    writeFileSync(secretPath, 'runtime-secret\n')
-    writeFileSync(configPath, [
-      'zone_url = "https://runtime-sts.example.com"',
-      'zone_id = "runtime-zone"',
-      'application_id = "runtime-app"',
-      `app_client_secret_file = "${secretPath}"`,
-      '[[credentials]]',
-      'env = "RESOURCE_TOKEN"',
-      'resource = "resource://runtime"',
-      '',
-    ].join('\n'))
-    if (process.platform !== 'win32') {
-      chmodSync(secretPath, 0o600)
-      chmodSync(configPath, 0o600)
-    }
-    vi.stubEnv('PWD', dir)
-    vi.stubEnv('INIT_CWD', dir)
-    vi.stubEnv('XDG_CONFIG_HOME', join(dir, '.config'))
-    vi.stubEnv('CARACAL_ZONE_URL', 'https://sts.example.com')
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      access_token: 'token-value',
-      token_type: 'Bearer',
-      expires_in: 900,
-    }), { status: 200, headers: { 'content-type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
-    const client = {
-      audit: { byRequest: vi.fn() },
-      resources: { list: vi.fn(async () => []) },
-      applications: { list: vi.fn(async () => []) },
-    } as unknown as AdminClient
-    const menu = new MenuView(client, 'z1')
-    const app = fakeApp()
-
-    try {
-      process.chdir(dir)
-      await menu.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
-      const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-      const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-      await credential.onKey('r', { app, size: { rows: 25, cols: 80 }, status: '' })
-      const form = pushed[pushed.length - 1] as FormView
-      const fields = (form as unknown as { fields: { key: string; pick?: unknown }[] }).fields
-      expect(fields.map((field) => field.key)).toEqual(['resource', 'application_id', 'app_client_secret'])
-      expect(typeof fields[1]?.pick).toBe('function')
-
-      ;(form as unknown as { values: Record<string, string> }).values = {
-        resource: 'resource://api',
-        application_id: 'app-1',
-        app_client_secret: 'secret',
-      }
-      ;(form as unknown as { focus: number }).focus = 3
-      await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
-
-      expect(fetchMock).toHaveBeenCalledWith('https://sts.example.com/oauth/2/token', expect.objectContaining({
-        method: 'POST',
-      }))
-      expect(fetchMock).not.toHaveBeenCalledWith('https://runtime-sts.example.com/oauth/2/token', expect.anything())
-      const detail = pushed[pushed.length - 1] as DetailView
-      expect(detail).toBeInstanceOf(DetailView)
-      await detail.init(app)
-      const body = detail.render({ app, size: { rows: 25, cols: 80 }, status: '' }).join('\n')
-      expect(body).toContain('resource://api')
-      expect(body).toContain('••••')
-    } finally {
-      process.chdir(cwd)
-      rmSync(dir, { recursive: true, force: true })
-    }
-  })
-
-  it('opens credential inspect and decodes local JWT claims', async () => {
-    const client = { audit: { byRequest: vi.fn() } } as unknown as AdminClient
-    const menu = new MenuView(client, 'z1')
-    const app = fakeApp()
-    const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url')
-    const token = `${encode({ alg: 'none', kid: 'k1' })}.${encode({ sub: 'user-1', exp: 4_102_444_800 })}.signature`
-
-    await menu.onKey('c', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const pushed = (app as unknown as { _pushed: unknown[] })._pushed
-    const credential = pushed[pushed.length - 1] as { onKey: MenuView['onKey'] }
-    await credential.onKey('i', { app, size: { rows: 25, cols: 80 }, status: '' })
-    const form = pushed[pushed.length - 1] as FormView
-    ;(form as unknown as { values: Record<string, string> }).values = { source: 'paste', token, file: '' }
-    ;(form as unknown as { focus: number }).focus = 3
-    await form.onKey('enter', { app, size: { rows: 25, cols: 80 }, status: '' })
-
-    const detail = pushed[pushed.length - 1] as DetailView
-    expect(detail).toBeInstanceOf(DetailView)
-    await detail.init(app)
-    const body = detail.render({ app, size: { rows: 25, cols: 80 }, status: '' }).join('\n')
-    expect(body).toContain('user-1')
-    expect(body).toContain('k1')
+    expect(pushed).toHaveLength(0)
   })
 
   it('issues control invocation tokens only through scoped control keys', async () => {
