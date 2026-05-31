@@ -15,8 +15,10 @@ import type {
   PolicySet,
   PolicySetVersion,
   Provider,
+  ProviderConfig,
   ProviderInput,
   ProviderKind,
+  ProviderPatchInput,
   Resource,
   ResourceInput,
   Session,
@@ -279,7 +281,7 @@ type PolicyVersionRow = PolicyVersion & { policy_name: string }
 type PolicySetVersionRow = PolicySetVersion & { policy_set_name: string }
 type PolicySetRow = PolicySet & { active_version_label: string }
 type ResourceRow = Resource & { provider_id: string; provider_name: string; provider_kind: string }
-type GrantRow = Grant & { application_name: string; resource_name: string; provider_id: string; provider_name: string; provider_kind: string }
+type GrantRow = Omit<Grant, 'provider_kind'> & { application_name: string; resource_name: string; provider_id: string; provider_name: string; provider_kind: string }
 type AgentRow = AgentSession & { application_name: string }
 type DelegationRow = DelegationEdge & { resource_name?: string | undefined }
 interface GrantFilters {
@@ -527,9 +529,9 @@ function parseJsonObject(input: string): JsonObject {
   return parsed as JsonObject
 }
 
-function providerConfigFromValues(values: Record<string, string>, requireConfig: true): JsonObject
-function providerConfigFromValues(values: Record<string, string>, requireConfig: false): JsonObject | undefined
-function providerConfigFromValues(values: Record<string, string>, requireConfig: boolean): JsonObject | undefined {
+function providerConfigFromValues(values: Record<string, string>, requireConfig: true): ProviderConfig
+function providerConfigFromValues(values: Record<string, string>, requireConfig: false): ProviderConfig | undefined
+function providerConfigFromValues(values: Record<string, string>, requireConfig: boolean): ProviderConfig | undefined {
   const kind = providerKind(values.kind)
   const config: JsonObject = {}
   mergeConfigText(config, 'authorization_endpoint', values.authorization_endpoint)
@@ -571,7 +573,7 @@ function providerConfigFromValues(values: Record<string, string>, requireConfig:
     return undefined
   }
   validateProviderConfig(kind, config)
-  return config
+  return config as ProviderConfig
 }
 
 function providerKind(value: string | undefined): ProviderKind {
@@ -672,18 +674,22 @@ function providerConfigKeys(kind: ProviderKind): Set<string> {
   return new Set(keys)
 }
 
-function configString(config: JsonObject, key: string): string {
-  const value = config[key]
+function configValue(config: ProviderConfig, key: string): unknown {
+  return (config as Record<string, unknown>)[key]
+}
+
+function configString(config: ProviderConfig, key: string): string {
+  const value = configValue(config, key)
   return typeof value === 'string' ? value : ''
 }
 
-function configList(config: JsonObject, key: string): string {
-  const value = config[key]
+function configList(config: ProviderConfig, key: string): string {
+  const value = configValue(config, key)
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').join(',') : ''
 }
 
-function configMap(config: JsonObject, key: string): string {
-  const value = config[key]
+function configMap(config: ProviderConfig, key: string): string {
+  const value = configValue(config, key)
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ''
   return Object.entries(value)
     .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
@@ -691,8 +697,8 @@ function configMap(config: JsonObject, key: string): string {
     .join(',')
 }
 
-function configBool(config: JsonObject, key: string): string {
-  return config[key] === true ? 'true' : 'false'
+function configBool(config: ProviderConfig, key: string): string {
+  return configValue(config, key) === true ? 'true' : 'false'
 }
 
 function requireString(config: JsonObject, key: string, message: string): void {
@@ -859,14 +865,17 @@ async function loadGrants(ctx: Ctx): Promise<GrantRow[]> {
   const applicationNames = labelMap(applications, (row) => row.id, (row) => row.name)
   const resourceNames = labelMap(resources, (row) => row.id, named)
   const resourcesById = new Map(resources.map((resource) => [resource.id, resource]))
-  return grants.map((grant) => ({
-    ...grant,
-    application_name: applicationNames.get(grant.application_id) ?? grant.application_id,
-    resource_name: resourceNames.get(grant.resource_id) ?? grant.resource_id,
-    provider_id: resourcesById.get(grant.resource_id)?.provider_id ?? '',
-    provider_name: resourcesById.get(grant.resource_id)?.provider_name ?? '-',
-    provider_kind: resourcesById.get(grant.resource_id)?.provider_kind ?? '-',
-  }))
+  return grants.map((grant) => {
+    const resource = resourcesById.get(grant.resource_id)
+    return {
+      ...grant,
+      application_name: grant.application_name ?? applicationNames.get(grant.application_id) ?? grant.application_id,
+      resource_name: grant.resource_name ?? resourceNames.get(grant.resource_id) ?? grant.resource_id,
+      provider_id: grant.provider_id ?? resource?.provider_id ?? '',
+      provider_name: grant.provider_name ?? resource?.provider_name ?? '-',
+      provider_kind: grant.provider_kind ? PROVIDER_KIND_LABELS[grant.provider_kind] : resource?.provider_kind ?? '-',
+    }
+  })
 }
 
 function filterGrants(rows: GrantRow[], filters: GrantFilters): GrantRow[] {
@@ -1619,7 +1628,7 @@ export function providersView(ctx: Ctx): View {
               name: v.name || undefined,
               kind: providerKind(v.kind),
               config_json: providerConfigFromValues(v, true),
-            })
+            } as ProviderInput)
             await popAndReload(app, list as unknown as ListView<unknown>)
           },
         }),
@@ -1666,7 +1675,7 @@ export function providersView(ctx: Ctx): View {
                 identifier: v.identifier || undefined,
                 kind: kind === row.kind ? undefined : kind,
                 config_json: providerConfigFromValues(v, true),
-              } as Partial<ProviderInput>)
+              } as ProviderPatchInput)
               await popAndReload(app, list as unknown as ListView<unknown>)
             },
           })
@@ -1684,7 +1693,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'scopes', label: 'Caracal resource scopes', kind: 'list', required: true, hint: 'resource scopes this provider grant should cover' },
             ],
             onSubmit: async (v, app) => {
-              const result = await ctx.client.grants.authorizeProviderOAuth(ctx.zoneId, {
+              const result = await ctx.client.providerGrants.authorizeOAuth(ctx.zoneId, {
                 user_id: v.user_id,
                 resource_id: v.resource_id,
                 provider_id: row.id,
@@ -1714,7 +1723,7 @@ export function providersView(ctx: Ctx): View {
               { key: 'resource_id', label: 'resource', kind: 'text', required: true, pick: resourcePicker(ctx), resolve: resourceResolver(ctx), hint: 'Gateway resource bound to this OAuth provider' },
             ],
             onSubmit: async (v, app) => {
-              const result = await ctx.client.grants.revokeProviderGrant(ctx.zoneId, {
+              const result = await ctx.client.providerGrants.revoke(ctx.zoneId, {
                 user_id: v.user_id,
                 resource_id: v.resource_id,
                 provider_id: row.id,

@@ -3,7 +3,24 @@
 //
 // Guided first setup workflow for production-shaped Caracal onboarding.
 
-import type { Application, PolicyVersion, Provider, ProviderKind, Resource, ResourceInput, Zone } from '@caracalai/admin'
+import { isProviderIdentifier } from '@caracalai/admin'
+import type {
+  APIKeyProviderConfig,
+  Application,
+  BearerTokenProviderConfig,
+  EmptyProviderConfig,
+  OAuth2AuthorizationCodeProviderConfig,
+  OAuth2ClientCredentialsProviderConfig,
+  PolicyVersion,
+  Provider,
+  ProviderConfig,
+  ProviderIdentifier,
+  ProviderInput,
+  ProviderKind,
+  Resource,
+  ResourceInput,
+  Zone,
+} from '@caracalai/admin'
 import type { JsonObject } from '@caracalai/core'
 import { DEFAULT_CONTROL_AUDIENCE } from '@caracalai/engine'
 import {
@@ -808,12 +825,7 @@ async function ensureProvider(
   const selectedProviderId = trimmed(values.selected_provider_id)
   if (selectedProviderId) return { provider: await ctx.client.providers.get(zoneId, selectedProviderId), created: false }
   if (!trimmed(values.provider_name)) throw new Error('provider is required')
-  const provider = await ctx.client.providers.create(zoneId, {
-    ...(trimmed(values.provider_identifier) ? { identifier: trimmed(values.provider_identifier) } : {}),
-    name: trimmed(values.provider_name),
-    kind: providerKind(values.provider_kind),
-    config_json: providerConfigFromValues(values),
-  })
+  const provider = await ctx.client.providers.create(zoneId, providerInputFromValues(values))
   return { provider, created: true }
 }
 
@@ -969,7 +981,38 @@ function submittedOAuthClientAuthMethod(values: SetupValues): string {
   return values.provider_client_credentials_auth_method || 'client_secret_basic'
 }
 
-function providerConfigFromValues(values: SetupValues): JsonObject {
+function providerInputFromValues(values: SetupValues): ProviderInput {
+  const identifier = providerIdentifierValue(values.provider_identifier)
+  const base = {
+    ...(identifier ? { identifier } : {}),
+    name: trimmed(values.provider_name),
+  }
+  const kind = providerKind(values.provider_kind)
+  const config = providerConfigFromValues(values)
+  switch (kind) {
+    case 'none':
+      return { ...base, kind, config_json: config as EmptyProviderConfig }
+    case 'caracal_mandate':
+      return { ...base, kind, config_json: config as EmptyProviderConfig }
+    case 'oauth2_authorization_code':
+      return { ...base, kind, config_json: config as OAuth2AuthorizationCodeProviderConfig }
+    case 'oauth2_client_credentials':
+      return { ...base, kind, config_json: config as OAuth2ClientCredentialsProviderConfig }
+    case 'api_key':
+      return { ...base, kind, config_json: config as APIKeyProviderConfig }
+    case 'bearer_token':
+      return { ...base, kind, config_json: config as BearerTokenProviderConfig }
+  }
+}
+
+function providerIdentifierValue(value: string | undefined): ProviderIdentifier | undefined {
+  const text = trimmed(value)
+  if (!text) return undefined
+  if (!isProviderIdentifier(text)) throw new Error('provider identifier must stay in provider://lowercase-slug format')
+  return text
+}
+
+function providerConfigFromValues(values: SetupValues): ProviderConfig {
   const kind = providerKind(values.provider_kind)
   const config: JsonObject = {}
   mergeConfigText(config, 'authorization_endpoint', values.provider_authorization_endpoint)
@@ -1004,7 +1047,7 @@ function providerConfigFromValues(values: SetupValues): JsonObject {
     if (!allowed.has(key)) delete config[key]
   }
   validateProviderConfig(kind, config)
-  return config
+  return config as ProviderConfig
 }
 
 function mergeConfigText(config: JsonObject, key: string, value: string | undefined): void {

@@ -34,6 +34,21 @@ const GrantBody = z.object({
   scopes: z.array(Scope).min(1).max(64),
 })
 
+const GrantListQuery = z.object({
+  application_id: z.string().min(1).optional(),
+  user_id: z.string().min(1).optional(),
+  subject_id: z.string().min(1).optional(),
+  resource_id: z.string().min(1).optional(),
+  provider_id: z.string().min(1).optional(),
+  status: z.string().min(1).optional(),
+  scopes: z.preprocess(
+    (value) => typeof value === 'string'
+      ? value.split(',').map((item) => item.trim()).filter(Boolean)
+      : value,
+    z.array(Scope).min(1).max(64).optional(),
+  ),
+})
+
 const ProviderGrantBody = z.object({
   user_id: z.string().min(1),
   resource_id: z.string().min(1),
@@ -276,14 +291,55 @@ export const grantsRoutes: FastifyPluginAsync = async (fastify) => {
     if (!params) return
     const page = parseListPagination(req, reply)
     if (!page) return
+    const parsed = GrantListQuery.safeParse(req.query ?? {})
+    if (!parsed.success) return reply.code(400).send({ error: 'invalid_query' })
+    const query = parsed.data
+    const userId = query.user_id ?? query.subject_id
+    const base = { conds: ['dg.zone_id = $1'], values: [params.zoneId] as unknown[] }
+    if (query.application_id) {
+      base.values.push(query.application_id)
+      base.conds.push(`dg.application_id = $${base.values.length}`)
+    }
+    if (userId) {
+      base.values.push(userId)
+      base.conds.push(`dg.user_id = $${base.values.length}`)
+    }
+    if (query.resource_id) {
+      base.values.push(query.resource_id)
+      base.conds.push(`dg.resource_id = $${base.values.length}`)
+    }
+    if (query.provider_id) {
+      base.values.push(query.provider_id)
+      base.conds.push(`r.credential_provider_id = $${base.values.length}`)
+    }
+    if (query.status) {
+      base.values.push(query.status)
+      base.conds.push(`dg.status = $${base.values.length}`)
+    }
+    if (query.scopes) {
+      base.values.push(query.scopes)
+      base.conds.push(`dg.scopes @> $${base.values.length}::text[]`)
+    }
     const keyset = appendKeysetCondition(
-      { conds: ['zone_id = $1'], values: [params.zoneId] },
+      base,
       page,
+      'dg.created_at',
+      'dg.id',
     )
     const { rows } = await fastify.db.query(
-      `SELECT id, zone_id, application_id, user_id, resource_id, scopes, status, created_at
-       FROM delegated_grants WHERE ${keyset.conds.join(' AND ')}
-       ORDER BY created_at DESC, id DESC LIMIT ${keyset.limitPlaceholder}`,
+      `SELECT dg.id, dg.zone_id, dg.application_id, dg.user_id, dg.resource_id,
+              r.credential_provider_id AS provider_id,
+              a.name AS application_name,
+              r.name AS resource_name,
+              p.name AS provider_name,
+              p.provider_kind AS provider_kind,
+              dg.scopes, dg.status, dg.created_at
+       FROM delegated_grants dg
+       LEFT JOIN applications a ON a.zone_id = dg.zone_id AND a.id = dg.application_id
+       LEFT JOIN resources r ON r.zone_id = dg.zone_id AND r.id = dg.resource_id
+       LEFT JOIN providers p ON p.zone_id = dg.zone_id AND p.id = r.credential_provider_id
+       WHERE ${keyset.conds.join(' AND ')}
+       ORDER BY dg.created_at DESC, dg.id DESC LIMIT ${keyset.limitPlaceholder}`,
       keyset.values,
     )
     setNextLink(req, reply, rows, page.limit)
