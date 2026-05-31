@@ -476,6 +476,24 @@ describe('GET /v1/zones/:zoneId/grants list and detail', () => {
     expect(JSON.parse(res.body)).toHaveLength(2)
   })
 
+  it('applies grant list filters and enriches provider context', async () => {
+    const { app, db } = buildRouteApp(grantsRoutes)
+    db.query.mockResolvedValueOnce({ rows: [{ id: 'grant-1', provider_id: 'provider-1' }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/grants?application_id=app-1&subject_id=user-1&resource_id=res-1&provider_id=provider-1&status=active&scopes=read,write',
+    })
+
+    expect(res.statusCode).toBe(200)
+    const [sql, values] = db.query.mock.calls[0]
+    expect(sql).toContain('LEFT JOIN applications')
+    expect(sql).toContain('r.credential_provider_id = $5')
+    expect(sql).toContain('dg.scopes @> $7::text[]')
+    expect(values).toEqual(['z1', 'app-1', 'user-1', 'res-1', 'provider-1', 'active', ['read', 'write'], 200])
+  })
+
   it('returns a single grant', async () => {
     const { app, db } = buildRouteApp(grantsRoutes)
     db.query.mockResolvedValueOnce({ rows: [{ id: 'grant-1', status: 'active' }] })

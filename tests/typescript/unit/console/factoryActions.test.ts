@@ -92,9 +92,12 @@ function makeClient() {
       list: vi.fn(async () => []),
       get: vi.fn(async () => ({})),
       create: vi.fn(async () => ({})),
-      authorizeProviderOAuth: vi.fn(async () => ({ authorization_url: 'https://login.hooli.example/oauth/authorize', state: 'state', expires_at: '' })),
-      revokeProviderGrant: vi.fn(async () => ({ id: 'provider-grant-1' })),
       revoke: vi.fn(async () => undefined),
+    },
+    providerGrants: {
+      create: vi.fn(async () => ({})),
+      authorizeOAuth: vi.fn(async () => ({ authorization_url: 'https://login.hooli.example/oauth/authorize', state: 'state', expires_at: '' })),
+      revoke: vi.fn(async () => ({ id: 'provider-grant-1' })),
     },
     sessions: { list: vi.fn(async () => []) },
     agents: {
@@ -1094,7 +1097,7 @@ describe('providers actions', () => {
 
     await form.onKey('enter', { app, size: { rows: 20, cols: 80 }, status: '' })
 
-    expect(client.grants.revokeProviderGrant).toHaveBeenCalledWith('z1', {
+    expect(client.providerGrants.revoke).toHaveBeenCalledWith('z1', {
       user_id: 'user:richard.hendricks@piedpiper.example',
       resource_id: 'res-1',
       provider_id: 'provider-1',
