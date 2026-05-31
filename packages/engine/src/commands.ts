@@ -79,19 +79,6 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
 
 export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   {
-    name: 'credential',
-    group: 'runtime',
-    summary: 'Read or inspect a resource credential',
-    subcommands: ['read', 'inspect'],
-    flags: {
-      inspect: [
-        { name: '--token', summary: 'JWT to inspect' },
-        { name: '--file', summary: 'Read JWT from file' },
-        { name: '--json', summary: 'Emit decoded header, claims, and summary' },
-      ],
-    },
-  },
-  {
     name: 'doctor',
     group: 'admin',
     summary: 'Run operator diagnostics for the local control plane',

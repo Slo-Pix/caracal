@@ -3,7 +3,7 @@
 //
 // Top-level menu listing every resource the Console can navigate.
 
-import type { AdminClient, Application, Zone } from '@caracalai/admin'
+import type { AdminClient, Zone } from '@caracalai/admin'
 import {
   applyControlLifecycleAction,
   authorizeControlManagementAccess,
@@ -15,7 +15,6 @@ import {
   controlPermissions,
   controlServiceStatus,
   DEFAULT_CONTROL_AUDIENCE,
-  credentialInspect,
   credentialRead,
   readControlState,
   resolveStackPaths,
@@ -26,10 +25,8 @@ import {
   type StackMode,
   type StackPaths,
 } from '@caracalai/engine'
-import { readFileSync } from 'node:fs'
 import {
   resolveStsUrl,
-  type RuntimeConfig,
 } from '@caracalai/engine/runtime-config'
 import { pad, ui } from '../ansi.ts'
 import { explainError, maskSecretField } from '../errors.ts'
@@ -52,7 +49,6 @@ import {
   policySetsView,
   providersView,
   resourcesView,
-  resourceIdentifierPicker,
   sessionsView,
   zonesView,
   type Ctx,
@@ -67,19 +63,6 @@ interface Entry {
   needsZone: boolean
   open: (ctx: Ctx, app: App) => View
   info?: InfoPage
-}
-
-function credentialConfig(ctx: Ctx, values: Record<string, string>): RuntimeConfig {
-  const applicationId = values.application_id
-  if (!applicationId) throw new Error('application is required')
-  const clientSecret = values.app_client_secret
-  if (!clientSecret) throw new Error('client secret is required')
-  return {
-    zone_url: resolveStsUrl(),
-    zone_id: ctx.zoneId,
-    application_id: applicationId,
-    app_client_secret: clientSecret,
-  }
 }
 
 function controlAudience(): string {
@@ -128,7 +111,6 @@ const BASE_ENTRIES: Entry[] = [
   { key: 'r', label: 'agent run',  group: 'agents', description: 'Manage agent runs', needsZone: true, open: agentsView },
   { key: 'g', label: 'delegation', group: 'agents', description: 'Manage delegated permissions', needsZone: true, open: delegationsView },
   { key: 'd', label: 'diagnostics', group: 'runtime', description: 'Run operator diagnostics', needsZone: false, open: doctorEntry },
-  { key: 'c', label: 'credential', group: 'runtime', description: 'Read or inspect a protected resource token', needsZone: false, open: credentialEntry },
 ]
 
 function menuEntries(): Entry[] {
@@ -179,18 +161,6 @@ function controlKeyPicker(client: AdminClient, zoneId: string): Field['pick'] {
   )
 }
 
-function confidentialApplicationPicker(ctx: Ctx): Field['pick'] {
-  return pickFromList<Application>(
-    'pick confidential application',
-    () => ctx.client.applications.list(ctx.zoneId),
-    [
-      { header: 'name', width: 24, value: (row) => row.name },
-    ],
-    (row) => row.id,
-    (row) => row.name,
-  )
-}
-
 function controlPermissionPicker(): Field['pick'] {
   return pickFromList(
     'pick control permission',
@@ -219,95 +189,6 @@ function expiresInDays(value: string | undefined): string | undefined {
   const days = Number.parseInt(value, 10)
   if (!Number.isFinite(days) || days < 1) throw new Error('expiry must be at least one day')
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
-}
-
-function credentialEntry(ctx: Ctx): View {
-  return new CredentialMenuView(ctx)
-}
-
-class CredentialMenuView implements View {
-  readonly title = 'credential'
-  private cursor = 0
-  private readonly ctx: Ctx
-  private readonly items = [
-    { key: 'r', label: 'read', build: () => this.readForm() },
-    { key: 'i', label: 'inspect', build: () => this.inspectForm() },
-  ]
-
-  constructor(ctx: Ctx) {
-    this.ctx = ctx
-  }
-
-  hints(): string[] { return ['↑/↓:select', 'enter:open', '?:info', 'esc:back'] }
-
-  render(): string[] {
-    const lines = ['', ' ' + ui.title('Credential'), '']
-    for (let i = 0; i < this.items.length; i++) {
-      const item = this.items[i]!
-      const mark = i === this.cursor ? ui.accent('>') : ' '
-      lines.push(` ${mark} ${ui.key(item.key)} ${item.label}`)
-    }
-    return lines
-  }
-
-  async onKey(key: Key, ctx: ViewContext): Promise<void> {
-    if (key === 'up' || key === 'k') { this.cursor = Math.max(0, this.cursor - 1); return }
-    if (key === 'down' || key === 'j') { this.cursor = Math.min(this.items.length - 1, this.cursor + 1); return }
-    if (key === 'left' || key === 'esc') { ctx.app.pop(); return }
-    if (key === '?') {
-      const item = this.items[this.cursor]
-      if (item) openInfo(ctx.app, actionInfo(`Credential ${item.label}`, 'The selected credential tool opens a focused form for reading or inspecting protected-resource tokens.'))
-      return
-    }
-    const direct = this.items.findIndex((item) => item.key === key)
-    if (direct >= 0) { ctx.app.push(this.items[direct]!.build()); return }
-    if (key === 'enter') ctx.app.push(this.items[this.cursor]!.build())
-  }
-
-  private readForm(): View {
-    const fields: Field[] = [
-      { key: 'resource', label: 'resource', kind: 'text', required: true, pick: resourceIdentifierPicker(this.ctx) },
-      { key: 'application_id', label: 'application', kind: 'text', required: true, pick: confidentialApplicationPicker(this.ctx) },
-      { key: 'app_client_secret', label: 'client secret', kind: 'secret', hint: 'paste the one-time secret from create or rotate' },
-    ]
-    return new FormView({
-      title: 'credential read',
-      fields,
-      onSubmit: async (v, app) => {
-        if (v.resource === controlAudience()) {
-          throw new Error('Control API tokens are issued from control → issue invocation token')
-        }
-        const token = await credentialRead({ cfg: credentialConfig(this.ctx, v), resource: v.resource! })
-        app.pop()
-        app.push(new DetailView({
-          title: `credential / ${v.resource}`,
-          load: async () => ({ resource: v.resource, access_token: token }),
-          mask: maskSecretField,
-        }))
-      },
-    })
-  }
-
-  private inspectForm(): View {
-    return new FormView({
-      title: 'credential inspect',
-      fields: [
-        { key: 'source', label: 'source', kind: 'select', options: ['paste', 'file'], default: 'paste' },
-        { key: 'token', label: 'token', kind: 'secret', required: true, dependsOn: { source: 'paste' } },
-        { key: 'file', label: 'file', kind: 'file', required: true, dependsOn: { source: 'file' } },
-      ],
-      onSubmit: async (v, app) => {
-        const token = v.source === 'file' ? readFileSync(v.file!, 'utf8') : v.token!
-        const result = credentialInspect(token)
-        app.pop()
-        app.push(new DetailView({
-          title: 'credential inspect',
-          load: async () => result,
-          mask: maskSecretField,
-        }))
-      },
-    })
-  }
 }
 
 function controlEntry(ctx: Ctx): View {
@@ -1021,15 +902,6 @@ function menuHelp(label: string): Pick<InfoPage, 'meaning' | 'when' | 'impact' |
         impact: 'Diagnostics are read-only and report failures or warnings for operator action.',
         example: 'strict readiness before a PiperNet launch smoke run',
         terms: [{ label: 'Preflight', value: 'A readiness check before running a workflow.' }],
-      }
-    case 'credential':
-      return {
-        meaning: 'Credential tools read or inspect protected-resource tokens for local operational debugging.',
-        when: 'Use this when validating a runtime profile, app secret, or protected resource access.',
-        impact: 'Read returns live token material and masks it in the terminal; inspect decodes supplied tokens locally.',
-        example: 'read token for resource://pipernet',
-        terms: [{ label: 'Access token', value: 'Bearer credential presented to a protected resource.' }],
-        notes: ['Treat copied tokens as secrets.'],
       }
     default:
       return {
