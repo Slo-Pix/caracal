@@ -41,18 +41,19 @@ export class AuditTailView implements View {
   }
 
   hints(): string[] {
-    return [
+    const hints = [
       `filter:${this.decision}`,
       this.filterLabel(),
       this.paused ? 'p:resume' : 'p:pause',
       'd:cycle-decision',
-      'enter:details',
-      'x:trace',
       'f:filters',
       'r:reload',
       '?:info',
       'esc:back',
     ]
+    return this.events.length === 0
+      ? hints
+      : [...hints.slice(0, 4), 'enter:details', 'x:trace', ...hints.slice(4)]
   }
 
   async init(app: App): Promise<void> {
@@ -202,9 +203,13 @@ export class AuditTailView implements View {
 
   private openSelected(app: App, trace: boolean): void {
     const ev = this.events[this.cursor]
+    if (!ev) {
+      app.setStatus('no audit events yet; waiting for activity')
+      return
+    }
     const requestId = ev?.request_id
     if (!requestId) {
-      app.setStatus('selected audit event has no request ID', 'error')
+      app.setStatus('audit event has no request ID', 'error')
       return
     }
     app.push(new DetailView({

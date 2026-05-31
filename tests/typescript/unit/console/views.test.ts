@@ -45,6 +45,23 @@ describe('AuditTailView', () => {
     expect(cursor).toBe(0)
   })
 
+  it('does not expose row actions or selected-row errors when no events exist', async () => {
+    const { AuditTailView } = await import('../../../../apps/console/src/views/audit.ts')
+    const fakeClient = { audit: { byRequest: vi.fn(), explain: vi.fn() } } as unknown as Parameters<typeof AuditTailView>[0]
+    const view = new AuditTailView(fakeClient as never, 'zone-1')
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 10, cols: 80 }, status: '' }
+
+    expect(view.hints()).not.toContain('enter:details')
+    expect(view.hints()).not.toContain('x:trace')
+
+    await view.onKey('enter', ctx)
+    expect(app.push).not.toHaveBeenCalled()
+    expect((app as unknown as { _status: { text: string; kind: string }[] })._status).toEqual([
+      { text: 'no audit events yet; waiting for activity', kind: 'info' },
+    ])
+  })
+
   it('sanitizes API-sourced fields so injected escapes cannot reach output', async () => {
     const { AuditTailView } = await import('../../../../apps/console/src/views/audit.ts')
     const fakeClient = { audit: { tail: vi.fn(), byRequest: vi.fn() } } as unknown as Parameters<typeof AuditTailView>[0]
