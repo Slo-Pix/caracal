@@ -61,12 +61,14 @@ describe('fieldInfo', () => {
   it('describes gateway binding and audit fields with operational examples', () => {
     const provider = fieldInfo('upstream credential provider', 'text', undefined, { key: 'credential_provider_id', picker: true })
     const gatewayApp = fieldInfo('gateway application', 'text', undefined, { key: 'gateway_application_id', picker: true })
+    const resourceIdentifier = fieldInfo('resource identifier', 'text', undefined, { key: 'identifier' })
     const requestId = fieldInfo('request ID', 'text', undefined, { key: 'request_id' })
 
     expect(provider.example).toBe('provider://hooli-pipernet')
-    expect(provider.after).toContain('provider binding is valid')
+    expect(provider.after).toContain('upstream credential provider binding')
     expect(gatewayApp.example).toBe('app://pipernet-agent')
     expect(gatewayApp.impact).toContain('Gateway-originated upstream access')
+    expect(resourceIdentifier.valid).toContain('resource://')
     expect(requestId.example).toBe('req_01jz8piper9hooli7n4')
     expect(requestId.valid).toContain('Exact request ID')
   })

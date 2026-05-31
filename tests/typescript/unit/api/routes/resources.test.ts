@@ -89,6 +89,32 @@ describe('POST /v1/zones/:zoneId/resources', () => {
     expect(db.query).toHaveBeenCalledTimes(2)
   })
 
+  it('rejects relative or provider-shaped resource identifiers', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+
+    await app.ready()
+    for (const identifier of ['pipernet', 'provider://pipernet']) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/v1/zones/z1/resources',
+        payload: {
+          identifier,
+          upstream_url: 'https://api.pipernet.example',
+          scopes: ['read'],
+          gateway_application_id: 'app-1',
+          credential_provider_id: 'provider-1',
+        },
+      })
+
+      expect(res.statusCode).toBe(400)
+      expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_resource_identifier' })
+    }
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
   it('rejects resources without Gateway routing', async () => {
     const { app, db } = buildRouteApp(resourcesRoutes)
     db.query
@@ -434,6 +460,37 @@ describe('PATCH /v1/zones/:zoneId/resources/:id', () => {
     expect(client.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE gateway_binding_revision'),
     )
+  })
+
+  it('rejects resource identifier patches that use the provider namespace', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{
+            identifier: 'resource://api',
+            upstream_url: 'https://api.example.com',
+            credential_provider_id: 'provider-1',
+            gateway_application_id: 'app-1',
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/resources/res-1',
+      payload: { identifier: 'provider://api' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_resource_identifier' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalled()
   })
 
   it('blocks generic edits to the Control API resource', async () => {

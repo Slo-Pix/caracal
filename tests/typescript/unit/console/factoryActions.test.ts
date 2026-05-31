@@ -520,16 +520,18 @@ describe('resources actions', () => {
     expect(body).not.toContain('caracal-control')
   })
 
-  it('n opens FormView with name+scopes required and identifier advanced', async () => {
+  it('n opens FormView with name+scopes required and resource identifier advanced', async () => {
     const { ctx } = newCtx()
     const list = resourcesView(ctx as unknown as Parameters<typeof resourcesView>[0]) as ListView<unknown>
     const pushed = await pressKey(list, 'n', fakeApp()) as FormView
-    const fields = (pushed as unknown as { fields: { key: string; required?: boolean; advanced?: boolean }[] }).fields
+    const fields = (pushed as unknown as { fields: { key: string; label?: string; required?: boolean; advanced?: boolean; validate?: unknown }[] }).fields
     const keys = fields
       .filter((f) => f.required).map((f) => f.key)
     expect(keys).toContain('name')
     expect(keys).toContain('scopes')
     expect(fields.find((f) => f.key === 'identifier')?.advanced).toBe(true)
+    expect(fields.find((f) => f.key === 'identifier')?.label).toBe('resource identifier')
+    expect(typeof fields.find((f) => f.key === 'identifier')?.validate).toBe('function')
     expect(fields.find((f) => f.key === 'gateway_application_id')?.required).toBe(true)
   })
 
