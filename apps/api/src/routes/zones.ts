@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { insertAdminAuditRecord } from '@caracalai/admin-audit'
 import { buildPatchUpdate, patchColumn } from './patch.js'
+import { withTransaction, TxAbort } from '../db.js'
 import { IdParams, parseParams } from './params.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
 import { enqueueOutbox } from '../outbox.js'
@@ -363,49 +364,43 @@ export const zonesRoutes: FastifyPluginAsync = async (fastify) => {
       patchColumn('dcr_enabled', body.dcr_enabled),
     ])
     if (!update) return reply.code(400).send({ error: 'no_fields' })
-    const client = await fastify.db.connect()
     try {
-      await client.query('BEGIN')
-      const { rows: zones } = await client.query<{ dcr_enabled: boolean }>(
-        `SELECT dcr_enabled FROM zones WHERE id = $1 AND archived_at IS NULL FOR UPDATE`,
-        [params.id],
-      )
-      if (!zones[0]) {
-        await client.query('ROLLBACK')
-        return reply.code(404).send({ error: 'zone_not_found' })
-      }
-
-      const apps = zones[0].dcr_enabled || body.dcr_shutdown
-        ? await liveDcrApplications(client, params.id, true)
-        : []
-      if (apps.length > 0 && !body.dcr_shutdown) {
-        await client.query('ROLLBACK')
-        return reply.code(409).send({ error: 'dcr_shutdown_required', live_dcr_applications: apps.length })
-      }
-
-      const { rows } = await client.query<ZoneRow>(
-        `UPDATE zones SET ${update.sets.join(', ')}, updated_at = now()
-         WHERE id = $1 AND archived_at IS NULL
-         RETURNING id, name, slug, dcr_enabled, created_at, updated_at`,
-        update.values,
-      )
-      const shutdown = body.dcr_shutdown === 'revoke_live'
-        ? await revokeDcrIdentities(client, params.id, apps.map((app) => app.id), req.id)
-        : { applications: 0, sessions: 0, agents: 0, delegations: 0 }
-      if (zones[0].dcr_enabled || body.dcr_shutdown) {
-        await auditDcrShutdown(
-          client,
-          req.actor ?? null,
-          req.id,
-          params.id,
-          apps.length === 0 ? 'no_live' : body.dcr_shutdown ?? 'keep_live',
-          { live: apps.length, ...shutdown },
+      return await withTransaction(fastify.db, async (client) => {
+        const { rows: zones } = await client.query<{ dcr_enabled: boolean }>(
+          `SELECT dcr_enabled FROM zones WHERE id = $1 AND archived_at IS NULL FOR UPDATE`,
+          [params.id],
         )
-      }
-      await client.query('COMMIT')
-      return rows[0]
+        if (!zones[0]) throw new TxAbort(reply.code(404).send({ error: 'zone_not_found' }))
+
+        const apps = zones[0].dcr_enabled || body.dcr_shutdown
+          ? await liveDcrApplications(client, params.id, true)
+          : []
+        if (apps.length > 0 && !body.dcr_shutdown) {
+          throw new TxAbort(reply.code(409).send({ error: 'dcr_shutdown_required', live_dcr_applications: apps.length }))
+        }
+
+        const { rows } = await client.query<ZoneRow>(
+          `UPDATE zones SET ${update.sets.join(', ')}, updated_at = now()
+           WHERE id = $1 AND archived_at IS NULL
+           RETURNING id, name, slug, dcr_enabled, created_at, updated_at`,
+          update.values,
+        )
+        const shutdown = body.dcr_shutdown === 'revoke_live'
+          ? await revokeDcrIdentities(client, params.id, apps.map((app) => app.id), req.id)
+          : { applications: 0, sessions: 0, agents: 0, delegations: 0 }
+        if (zones[0].dcr_enabled || body.dcr_shutdown) {
+          await auditDcrShutdown(
+            client,
+            req.actor ?? null,
+            req.id,
+            params.id,
+            apps.length === 0 ? 'no_live' : body.dcr_shutdown ?? 'keep_live',
+            { live: apps.length, ...shutdown },
+          )
+        }
+        return rows[0]
+      })
     } catch (err) {
-      await client.query('ROLLBACK')
       if (isDcrShutdownInfrastructureError(err)) {
         req.log.error({ err }, 'dcr_shutdown_infrastructure_error')
         return reply.code(503).send({
@@ -414,8 +409,6 @@ export const zonesRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
       throw err
-    } finally {
-      client.release()
     }
   })
 

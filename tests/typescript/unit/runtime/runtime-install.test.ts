@@ -109,7 +109,7 @@ describe('runtime installer', () => {
     expect(result.filesCreated.length).toBeGreaterThan(0)
     for (const name of ['postgresPassword', 'redisPassword', 'caracalAdminToken', 'zoneKek']) {
       const secretPath = join(home, 'secrets', name)
-      expect(statSync(secretPath).mode & 0o777).toBe(0o444)
+      expect(statSync(secretPath).mode & 0o777).toBe(0o400)
       const value = readFileSync(secretPath, 'utf8').trim()
       expect(value.length).toBeGreaterThan(0)
     }

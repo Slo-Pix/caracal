@@ -43,3 +43,57 @@ export function newDB(options: DBOptions): DB {
   })
   return pool
 }
+
+export type TxClient = pg.PoolClient
+
+// Thrown by a withTransaction callback to roll back and return a business
+// response (404/403/409/...) without treating it as a retriable failure.
+export class TxAbort<T = unknown> {
+  constructor(public readonly value: T) {}
+}
+
+// 40001 serialization_failure, 40P01 deadlock_detected. Postgres asks the
+// client to retry these from the top, matching the Go services' behavior.
+const RETRYABLE_TX_CODES = new Set(['40001', '40P01'])
+
+function isRetryableTxError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return false
+  return RETRYABLE_TX_CODES.has(String((err as { code?: unknown }).code ?? ''))
+}
+
+export interface TxOptions {
+  maxAttempts?: number
+  baseDelayMs?: number
+}
+
+export async function withTransaction<T>(
+  db: DB,
+  fn: (client: TxClient) => Promise<T>,
+  options: TxOptions = {},
+): Promise<T> {
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 3)
+  const baseDelayMs = Math.max(1, options.baseDelayMs ?? 10)
+  const client = await db.connect()
+  try {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await client.query('BEGIN')
+        const value = await fn(client)
+        await client.query('COMMIT')
+        return value
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {})
+        if (err instanceof TxAbort) return err.value as T
+        if (attempt < maxAttempts && isRetryableTxError(err)) {
+          const backoff = baseDelayMs * 2 ** (attempt - 1)
+          const delay = backoff + Math.floor(Math.random() * baseDelayMs)
+          await new Promise((resolve) => setTimeout(resolve, delay))
+          continue
+        }
+        throw err
+      }
+    }
+  } finally {
+    client.release()
+  }
+}

@@ -26,6 +26,26 @@ export interface JwksCache {
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000
 const DEFAULT_FETCH_TIMEOUT_MS = 5_000
 
+function assertSecureIssuer(issuer: string): void {
+  const parsed = new URL(issuer)
+  if (parsed.protocol === 'https:') return
+  if (parsed.protocol === 'http:') {
+    const insecureAllowed =
+      isLoopbackHost(parsed.hostname) ||
+      (process.env.NODE_ENV ?? 'development') === 'development' ||
+      process.env.CARACAL_ALLOW_INSECURE_CONFIG_URLS === 'true'
+    if (insecureAllowed) return
+    throw new Error('insecure issuer scheme: http requires a loopback host or development mode')
+  }
+  throw new Error(`unsupported issuer scheme: ${parsed.protocol}`)
+}
+
+function isLoopbackHost(host: string): boolean {
+  if (host === 'localhost') return true
+  if (host === '::1' || host === '[::1]') return true
+  return /^127(?:\.\d{1,3}){3}$/.test(host)
+}
+
 export function createJwksCache(opts: JwksCacheOptions = {}): JwksCache {
   const ttlMs = opts.ttlMs ?? DEFAULT_CACHE_TTL_MS
   const fetchTimeoutMs = opts.fetchTimeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS
@@ -52,6 +72,7 @@ export function createJwksCache(opts: JwksCacheOptions = {}): JwksCache {
   }
 
   async function fetchAndStore(issuer: string): Promise<JWTVerifyGetKey> {
+    assertSecureIssuer(issuer)
     const url = `${issuer.replace(/\/$/, '')}/.well-known/jwks.json`
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs)

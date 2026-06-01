@@ -34,7 +34,7 @@ describe('bootstrapSecrets', () => {
       const value = readFileSync(path, 'utf8').trim()
       expect(value.length).toBe(spec.bytes * 2)
       if (process.platform !== 'win32') {
-        expect(statSync(path).mode & 0o777).toBe(0o444)
+        expect(statSync(path).mode & 0o777).toBe(0o400)
       }
     }
   })

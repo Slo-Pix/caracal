@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { randomBytes } from 'node:crypto'
 import { hashClientSecret } from '../hash-secret.js'
+import { withTransaction, TxAbort } from '../db.js'
 import { buildPatchUpdate, patchColumn } from './patch.js'
 import { ZoneIdParams, ZoneParams, parseParams } from './params.js'
 import { zoneExists } from '../zone-guard.js'
@@ -161,21 +162,13 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const id = uuidv7()
     const expiresAt = new Date(Date.now() + body.expires_in * 1000)
-    const client = await fastify.db.connect()
-    try {
-      await client.query('BEGIN')
+    return withTransaction(fastify.db, async (client) => {
       const { rows: zones } = await client.query(
         `SELECT dcr_enabled FROM zones WHERE id = $1 AND archived_at IS NULL FOR UPDATE`,
         [params.zoneId],
       )
-      if (!zones[0]) {
-        await client.query('ROLLBACK')
-        return reply.code(404).send({ error: 'zone_not_found' })
-      }
-      if (!zones[0].dcr_enabled) {
-        await client.query('ROLLBACK')
-        return reply.code(403).send({ error: 'dcr_disabled' })
-      }
+      if (!zones[0]) throw new TxAbort(reply.code(404).send({ error: 'zone_not_found' }))
+      if (!zones[0].dcr_enabled) throw new TxAbort(reply.code(403).send({ error: 'dcr_disabled' }))
       const { rows: cnt } = await client.query(
         `SELECT COUNT(*) AS n FROM applications
          WHERE zone_id = $1 AND registration_method = 'dcr'
@@ -184,8 +177,7 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
         [params.zoneId],
       )
       if (parseInt(cnt[0].n, 10) >= 1000) {
-        await client.query('ROLLBACK')
-        return reply.code(429).send({ error: 'dcr_limit_exceeded' })
+        throw new TxAbort(reply.code(429).send({ error: 'dcr_limit_exceeded' }))
       }
       const clientSecret = generateClientSecret()
       const dcrSecretHash = await hashClientSecret(clientSecret)
@@ -195,13 +187,7 @@ export const applicationsRoutes: FastifyPluginAsync = async (fastify) => {
          RETURNING id, zone_id, name, registration_method, expires_at, created_at`,
         [id, params.zoneId, body.name, 'token', dcrSecretHash, [], expiresAt],
       )
-      await client.query('COMMIT')
       return reply.code(201).send({ ...rows[0], client_secret: clientSecret })
-    } catch (err) {
-      await client.query('ROLLBACK')
-      throw err
-    } finally {
-      client.release()
-    }
+    })
   })
 }
