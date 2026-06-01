@@ -120,6 +120,34 @@ class SpawnTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(events, ["end:agent-1"])
 
+    async def test_start_hook_failure_terminates_without_end_hook(self) -> None:
+        calls: list[str] = []
+        events: list[str] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            calls.append(req.method)
+            if req.method == "POST":
+                return httpx.Response(200, json={"agent_session_id": "agent-1"})
+            return httpx.Response(204)
+
+        async def on_start(ctx) -> None:
+            events.append(f"start:{ctx.agent_session_id}")
+            raise RuntimeError("start failed")
+
+        async def on_end(ctx) -> None:
+            events.append(f"end:{ctx.agent_session_id}")
+
+        coord = _coord(handler)
+        with self.assertRaises(RuntimeError):
+            async with spawn(
+                coordinator=coord, zone_id="z", application_id="app",
+                subject_token="tok", on_agent_start=on_start, on_agent_end=on_end,
+            ):
+                pass  # pragma: no cover
+
+        self.assertEqual(events, ["start:agent-1"])
+        self.assertIn("DELETE", calls)
+
     async def test_propagates_coordinator_error(self) -> None:
         async def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(500)
@@ -239,6 +267,68 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
                 pass
 
         self.assertEqual(calls.count("DELETE"), 1)
+
+    async def test_delegation_failure_terminates_spawned_child(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            calls.append((req.method, req.url.path))
+            if req.method == "POST" and req.url.path.endswith("/agents"):
+                return httpx.Response(200, json={"agent_session_id": "child-1"})
+            if req.method == "POST" and req.url.path.endswith("/delegations"):
+                return httpx.Response(403)
+            if req.method == "DELETE":
+                return httpx.Response(204)
+            return httpx.Response(404)
+
+        coord = _coord(handler)
+        async with spawn(
+            coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
+        ):
+            with self.assertRaises(httpx.HTTPStatusError):
+                async with delegate_to_spawn(
+                    coordinator=coord, zone_id="z", application_id="app-child",
+                    subject_token="tok", scopes=["tool:call"],
+                ):
+                    pass  # pragma: no cover
+
+        self.assertTrue(any(method == "DELETE" and path.endswith("/agents/child-1") for method, path in calls))
+
+    async def test_start_hook_failure_terminates_spawned_child_without_end_hook(self) -> None:
+        calls: list[str] = []
+        events: list[str] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            calls.append(req.method)
+            if req.method == "POST" and req.url.path.endswith("/agents"):
+                return httpx.Response(200, json={"agent_session_id": "child-1"})
+            if req.method == "POST" and req.url.path.endswith("/delegations"):
+                return httpx.Response(200, json={"delegation_edge_id": "edge-9"})
+            if req.method == "DELETE":
+                return httpx.Response(204)
+            return httpx.Response(404)
+
+        async def on_start(ctx) -> None:
+            events.append(f"start:{ctx.agent_session_id}")
+            raise RuntimeError("start failed")
+
+        async def on_end(ctx) -> None:
+            events.append(f"end:{ctx.agent_session_id}")
+
+        coord = _coord(handler)
+        async with spawn(
+            coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
+        ):
+            with self.assertRaises(RuntimeError):
+                async with delegate_to_spawn(
+                    coordinator=coord, zone_id="z", application_id="app-child",
+                    subject_token="tok", scopes=["tool:call"],
+                    on_agent_start=on_start, on_agent_end=on_end,
+                ):
+                    pass  # pragma: no cover
+
+        self.assertEqual(events, ["start:child-1"])
+        self.assertEqual(calls.count("DELETE"), 2)
 
 
 class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):

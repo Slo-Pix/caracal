@@ -97,6 +97,7 @@ class DelegationRequest:
     target_session_id: str
     receiver_application_id: str
     scopes: list[str]
+    parent_edge_id: str | None = None
     resource_id: str | None = None
     constraints: DelegationConstraints | None = None
     ttl_seconds: int | None = None
@@ -178,6 +179,8 @@ async def create_delegation(
     }
     if req.resource_id is not None:
         body["resource_id"] = req.resource_id
+    if req.parent_edge_id is not None:
+        body["parent_edge_id"] = req.parent_edge_id
     if req.constraints is not None:
         body["constraints"] = req.constraints.to_wire()
     if req.ttl_seconds:

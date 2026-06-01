@@ -79,15 +79,18 @@ async def spawn(
         hop=parent.hop if parent else 0,
     )
 
-    if on_agent_start is not None:
-        await on_agent_start(ctx)
-
-    token = _ctx_var.set(ctx)
+    token = None
+    started = False
     try:
+        if on_agent_start is not None:
+            await on_agent_start(ctx)
+        started = True
+        token = _ctx_var.set(ctx)
         yield ctx
     finally:
-        _ctx_var.reset(token)
-        if on_agent_end is not None:
+        if token is not None:
+            _ctx_var.reset(token)
+        if started and on_agent_end is not None:
             await on_agent_end(ctx)
         if kind != AgentKind.SERVICE:
             await terminate_agent(coordinator, bearer, zone_id, res.agent_session_id)
@@ -117,6 +120,7 @@ async def delegate(
             source_session_id=ctx.agent_session_id,
             target_session_id=to_agent_session_id,
             receiver_application_id=to_application_id,
+            parent_edge_id=ctx.delegation_edge_id,
             resource_id=resource_id,
             scopes=scopes,
             constraints=constraints,
@@ -185,43 +189,47 @@ async def delegate_to_spawn(
         ),
     )
 
-    delegation_res = await create_delegation(
-        coordinator,
-        parent.subject_token,
-        DelegationRequest(
-            zone_id=parent.zone_id,
-            issuer_application_id=parent.client_id,
-            source_session_id=parent.agent_session_id,
-            target_session_id=spawn_res.agent_session_id,
-            receiver_application_id=application_id,
-            resource_id=resource_id,
-            scopes=scopes,
-            constraints=constraints,
-            ttl_seconds=delegation_ttl_seconds,
-        ),
-    )
-
-    ctx = CaracalContext(
-        subject_token=subject_token,
-        zone_id=zone_id,
-        client_id=application_id,
-        agent_session_id=spawn_res.agent_session_id,
-        delegation_edge_id=delegation_res.delegation_edge_id,
-        parent_edge_id=parent.delegation_edge_id,
-        session_id=parent.session_id,
-        trace_id=trace_id or parent.trace_id,
-        hop=parent.hop + 1,
-    )
-
-    if on_agent_start is not None:
-        await on_agent_start(ctx)
-
-    token = _ctx_var.set(ctx)
+    token = None
+    started = False
     try:
+        delegation_res = await create_delegation(
+            coordinator,
+            parent.subject_token,
+            DelegationRequest(
+                zone_id=parent.zone_id,
+                issuer_application_id=parent.client_id,
+                source_session_id=parent.agent_session_id,
+                target_session_id=spawn_res.agent_session_id,
+                receiver_application_id=application_id,
+                parent_edge_id=parent.delegation_edge_id,
+                resource_id=resource_id,
+                scopes=scopes,
+                constraints=constraints,
+                ttl_seconds=delegation_ttl_seconds,
+            ),
+        )
+
+        ctx = CaracalContext(
+            subject_token=subject_token,
+            zone_id=zone_id,
+            client_id=application_id,
+            agent_session_id=spawn_res.agent_session_id,
+            delegation_edge_id=delegation_res.delegation_edge_id,
+            parent_edge_id=parent.delegation_edge_id,
+            session_id=parent.session_id,
+            trace_id=trace_id or parent.trace_id,
+            hop=parent.hop + 1,
+        )
+
+        if on_agent_start is not None:
+            await on_agent_start(ctx)
+        started = True
+        token = _ctx_var.set(ctx)
         yield ctx
     finally:
-        _ctx_var.reset(token)
-        if on_agent_end is not None:
+        if token is not None:
+            _ctx_var.reset(token)
+        if started and on_agent_end is not None:
             await on_agent_end(ctx)
         if kind != AgentKind.SERVICE:
             await terminate_agent(coordinator, subject_token, zone_id, spawn_res.agent_session_id)

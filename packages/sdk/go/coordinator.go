@@ -103,6 +103,7 @@ type DelegationRequest struct {
 	SourceSessionID       string
 	TargetSessionID       string
 	ReceiverApplicationID string
+	ParentEdgeID          string
 	ResourceID            string
 	Scopes                []string
 	Constraints           *DelegationConstraints
@@ -175,6 +176,9 @@ func CreateDelegation(ctx context.Context, client *CoordinatorClient, bearer str
 	}
 	if req.ResourceID != "" {
 		body["resource_id"] = req.ResourceID
+	}
+	if req.ParentEdgeID != "" {
+		body["parent_edge_id"] = req.ParentEdgeID
 	}
 	if req.Constraints != nil {
 		body["constraints"] = req.Constraints.toWire()
