@@ -146,7 +146,7 @@ caracal run -- node worker.js         # workload execution
 - Python 3.14+ (only when changing Python packages)
 - Bun (only when building distributable runtime/console binaries)
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.
 
 </details>
 
@@ -205,7 +205,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for clone, setup, testing, and pull reque
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
+See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
 
 -----
 

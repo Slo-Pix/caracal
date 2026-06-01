@@ -8,7 +8,7 @@
 - Security posture changes must remain traceable to the current OSS architecture and public process.
 
 ## Required
-- Must keep governance language consistent with the root `SECURITY.md`, `CODE_OF_CONDUCT.md`, and current trust boundaries.
+- Must keep governance language consistent with `.github/SECURITY.md`, `.github/CODE_OF_CONDUCT.md`, and current trust boundaries.
 - Must update governance documents when service boundaries, disclosure process, or supported surfaces change.
 - Must keep incident and threat-model guidance concrete enough for maintainers and agents to follow.
 

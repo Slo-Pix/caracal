@@ -203,4 +203,4 @@ Do not file public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-Apache-2.0. By contributing you agree your contribution is licensed under the same terms ([LICENSE](LICENSE)).
+Apache-2.0. By contributing you agree your contribution is licensed under the same terms ([LICENSE](../LICENSE)).
