@@ -18,6 +18,7 @@ packages:
   - 'packages/connectors/redis/ts'
 linkWorkspacePackages: true
 allowBuilds:
+  bun: true
   esbuild: true
   sharp: true
 overrides:
