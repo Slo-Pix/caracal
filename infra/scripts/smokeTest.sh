@@ -22,7 +22,7 @@ probe() {
 }
 
 probe "api-ready"   "http://${host}:3000/ready"
-probe "api-live"    "http://${host}:3000/live"
+probe "api-health"  "http://${host}:3000/health"
 probe "gateway"     "http://${host}:8081/ready"
 probe "sts"         "http://${host}:8080/ready"
 probe "audit"       "http://${host}:9090/ready"

@@ -2,7 +2,7 @@
 // Caracal, a product of Garudex Labs
 //
 // Static HTTP probe used by container HEALTHCHECK directives.
-// HEALTH_PATH selects between /ready (readiness, default) and /live (liveness);
+// HEALTH_PATH selects the probe path (/ready for readiness, the default; /health for liveness);
 // the binary returns non-zero on any non-2xx/3xx response or transport error.
 package main
 

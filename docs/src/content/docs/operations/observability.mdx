@@ -43,7 +43,7 @@ caracal status --ready
 bash infra/scripts/smokeTest.sh
 ```
 
-`smokeTest.sh` probes API `/ready` and `/live`, Gateway `/ready`, STS `/ready`, Audit `/ready`, and Coordinator `/ready`.
+`smokeTest.sh` probes API `/ready` and `/health`, Gateway `/ready`, STS `/ready`, Audit `/ready`, and Coordinator `/ready`.
 
 ## Kubernetes checks
 
@@ -66,4 +66,4 @@ Use Console `diagnostics` for API health, readiness, zone diagnostics, and local
 | Health passes but readiness fails | Dependency, stream, outbox, policy, revocation, or audit readiness. |
 | Metrics scrape returns unauthorized | Match scraper bearer token to `METRICS_BEARER`. |
 | Readiness flaps | CPU throttling, OOM, Postgres/Redis latency, probe timeouts, or dependency restarts. |
-| Smoke test fails only for API `/live` | Confirm the API exposes `/live` in the deployment shape being tested. |
+| Smoke test fails only for API `/health` | Confirm the API liveness endpoint responds in the deployment shape being tested. |

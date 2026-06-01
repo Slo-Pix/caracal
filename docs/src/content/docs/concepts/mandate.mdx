@@ -49,9 +49,9 @@ Resource servers should always verify a mandate at request time. Verification in
 | Failure | Meaning |
 | --- | --- |
 | `invalid_token` | Signature, issuer, audience, required claim, or expiry validation failed. |
-| `insufficient_scope` | The mandate does not contain a required scope. |
+| `scope_insufficient` | The mandate does not contain a required scope. |
 | `session_revoked` | One of the mandate revocation anchors has been revoked. |
-| `agent_required` | The resource requires an agent mandate. |
+| `agent_identity_required` | The resource requires an agent mandate. |
 | `delegation_required` | The resource requires delegated authority. |
 | `chain_mismatch` | The delegation chain does not include the required application. |
 | `hop_count_exceeded` | The delegation path exceeds the configured hop limit. |

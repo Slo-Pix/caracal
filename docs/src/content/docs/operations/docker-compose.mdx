@@ -51,7 +51,7 @@ caracal status --ready
 bash infra/scripts/smokeTest.sh
 ```
 
-`caracal up` builds local images in development mode. It writes operator secrets outside the repository under the managed dev secret directory, exports `CARACAL_SECRETS_DIR` to Compose, and keeps the host directory private so only the operator account can mount those files into services. `caracal status --ready` checks dependency readiness, and `smokeTest.sh` probes `/ready` or `/live` for API, Gateway, STS, Audit, and Coordinator.
+`caracal up` builds local images in development mode. It writes operator secrets outside the repository under the managed dev secret directory, exports `CARACAL_SECRETS_DIR` to Compose, and keeps the host directory private so only the operator account can mount those files into services. `caracal status --ready` checks dependency readiness, and `smokeTest.sh` probes `/ready` for API, Gateway, STS, Audit, and Coordinator, plus the API `/health` liveness endpoint.
 
 ## Self-hosted runtime flow
 

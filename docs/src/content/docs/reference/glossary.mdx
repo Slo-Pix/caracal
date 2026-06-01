@@ -24,9 +24,11 @@ Use these terms consistently across docs, API names, Console labels, and example
 | Principal | User, service, application, or agent identity participating in authority. |
 | Provider | Credential source or upstream integration for a protected resource. |
 | Resource | Protected API, tool, MCP server, provider target, or upstream identifier. |
+| Root session | Originating session at the root of a delegation chain; its ID is propagated as the authority root and checked as a revocation anchor. |
 | Runtime profile | `caracal.toml` or environment configuration used by `caracal run` and SDKs. |
 | STS | Security Token Service that performs token exchange and mandate issuance. |
 | Step-up challenge | Additional approval required before STS issues authority. |
+| Subject session | Original authenticated user or service context that initiates a chain of agent authority. |
 | Zone | Tenant and trust boundary for product state, policies, grants, sessions, and audit. |
 
 ## Naming rules
