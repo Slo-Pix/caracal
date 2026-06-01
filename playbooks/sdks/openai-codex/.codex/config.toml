@@ -1,0 +1,44 @@
+# Codex configuration guidance for the Caracal SDK integration playbook.
+
+[workflow]
+principle = "Understand first. Integrate second."
+implementation_requires_user_confirmation = true
+mock_integrations = "only if explicitly requested by the user"
+
+[documentation]
+priority = [
+  "https://docs.caracal.run",
+  "official Caracal SDK documentation",
+  "project dependency and runtime metadata",
+  "connected documentation MCPs",
+  "repository guidance"
+]
+rule = "Documentation and installed package versions override memory and assumptions."
+
+[mcp]
+purpose = "Use documentation MCP servers so Codex can retrieve current Caracal and SDK documentation before planning or implementation."
+use_when = [
+  "SDK API names or types are unclear",
+  "SDK version compatibility must be verified",
+  "framework integration patterns depend on documentation",
+  "provider or resource terminology must be checked"
+]
+recommended_servers = ["Context7", "Caracal documentation MCPs", "provider documentation MCPs", "internal documentation MCPs"]
+
+[mcp.context7]
+enabled_by_default = false
+server = "https://mcp.context7.com/mcp"
+note = "Enable when the Codex environment supports MCP and direct documentation lookup."
+
+[approval]
+network_access = "ask or follow workspace policy"
+file_changes = "only after product understanding, architecture review, integration plan, and user confirmation"
+secret_handling = "never output usable credentials"
+
+[safety]
+docs_first = true
+mask_secrets = true
+thin_integration = true
+reuse_existing_architecture = true
+no_placeholder_integrations = true
+response_style = "short, direct, architecture-aware, documentation-backed"
