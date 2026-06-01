@@ -342,6 +342,33 @@ describe("caracal.transport", () => {
     expect(calls[0].headers.get("Authorization")).toBe("Bearer tok");
   });
 
+  it("fetch composes gatewayRequest and transport in one call", async () => {
+    const calls: { url: string; method?: string; headers: Headers }[] = [];
+    const fakeFetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      calls.push({ url: String(input), method: init.method, headers: new Headers(init.headers) });
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+    const c = new Caracal({
+      ...dummyConfig,
+      coordinator: { baseUrl: "http://c", fetchImpl: fakeFetch },
+      gatewayUrl: "https://gateway.example.com/proxy",
+    });
+
+    await c.fetch(
+      "resource://calendar",
+      "events?limit=10",
+      { method: "POST", headers: { "content-type": "application/json" } },
+      { allowRoot: true },
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("https://gateway.example.com/proxy/events?limit=10");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].headers.get("X-Caracal-Resource")).toBe("resource://calendar");
+    expect(calls[0].headers.get("Authorization")).toBe("Bearer tok");
+    expect(calls[0].headers.get("content-type")).toBe("application/json");
+  });
+
   it("rejects invalid Gateway helper inputs", () => {
     const c = new Caracal({ ...dummyConfig, gatewayUrl: "https://gateway.example.com/proxy" });
     expect(() => new Caracal(dummyConfig).gatewayRequest("resource://calendar", "/events")).toThrow(/gatewayUrl/);

@@ -101,6 +101,25 @@ describe('app v1 rate limit', () => {
   })
 })
 
+describe('canonical error shape', () => {
+  it('emits error, error_description, and requestId on parse failures', async () => {
+    const cfg = makeCfg()
+    const app = await buildApp({ cfg, db: makeDb(), redis: makeRedis() })
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones',
+      headers: { 'content-type': 'application/json' },
+      payload: '{ not valid json',
+    })
+    const body = JSON.parse(res.body)
+    expect(res.statusCode).toBeGreaterThanOrEqual(400)
+    expect(body.error).toBe('internal_error')
+    expect(typeof body.error_description).toBe('string')
+    expect(body.requestId).toBe(res.headers['x-request-id'])
+    await app.close()
+  })
+})
+
 describe('security response headers', () => {
   it('sets nosniff/no-referrer/no-store on /v1 responses', async () => {
     const cfg = makeCfg()

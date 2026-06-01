@@ -48,7 +48,7 @@ sequenceDiagram
 | --- | --- |
 | Resource mandate | Capped at 15 minutes. |
 | Session mandate | Capped at 60 minutes. |
-| Runtime-injected credential | `caracal run` injects one-hour credentials after STS exchange. |
+| Runtime-injected credential | `caracal run` injects credentials capped at 15 minutes after STS exchange. |
 
 Gateway performs a per-request exchange and rejects inbound tokens that are too close to expiry before proxying.
 

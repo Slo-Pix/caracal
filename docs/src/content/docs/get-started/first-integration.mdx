@@ -60,10 +60,9 @@ await caracal.spawn(async () => {
   const ctx = caracal.current();
   console.log("Agent session:", ctx?.agentSessionId);
 
-  const request = caracal.gatewayRequest(resourceId, resourcePath);
-  const response = await caracal.transport()(request.url, {
+  const response = await caracal.fetch(resourceId, resourcePath, {
     method: "POST",
-    headers: { ...request.headers, "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
 
@@ -91,14 +90,14 @@ async def main():
     async with caracal.spawn(kind=AgentKind.EPHEMERAL) as ctx:
         print("Agent session:", ctx.agent_session_id)
 
-        request = caracal.gateway_request(resource_id, resource_path)
-        async with caracal.transport() as client:
-            response = await client.post(
-                request.url,
-                headers=request.headers,
-                json={},
-            )
-            print(response.text)
+        response = await caracal.fetch(
+            resource_id,
+            resource_path,
+            method="POST",
+            headers={"Content-Type": "application/json"},
+            json={},
+        )
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -138,19 +137,9 @@ func main() {
         cc, _ := c.Current(ctx)
         fmt.Println("Agent session:", cc.AgentSessionID)
 
-        target, err := c.GatewayRequest(resourceID, resourcePath)
-        if err != nil {
-            return err
-        }
-
-        req, err := http.NewRequestWithContext(ctx, http.MethodPost, target.URL, nil)
-        if err != nil {
-            return err
-        }
-        req.Header = target.Header.Clone()
-        req.Header.Set("Content-Type", "application/json")
-
-        resp, err := c.Transport(nil).Do(req)
+        header := http.Header{}
+        header.Set("Content-Type", "application/json")
+        resp, err := c.Fetch(ctx, http.MethodPost, resourceID, resourcePath, nil, header)
         if err != nil {
             return err
         }
@@ -172,6 +161,7 @@ func main() {
 | --- | --- |
 | `connect()` / `Connect()` | Loads the generated profile or environment configuration and prepares token exchange. |
 | `spawn()` / `Spawn()` | Creates an agent session, binds context for the work, and terminates the session when the block exits. |
+| `fetch()` / `Fetch()` | One call that sends a request to a resource through the Gateway with context and authority injected. |
 | `gatewayRequest()` / `GatewayRequest()` | Builds the Gateway URL and `X-Caracal-Resource` header for explicit resource routing. |
 | `transport()` / `Transport()` | Injects Caracal context, authorization, trace, and baggage headers on outbound calls. |
 
