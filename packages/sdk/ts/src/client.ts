@@ -218,6 +218,9 @@ export class Caracal {
       ?? serviceUrl(env, "CARACAL_STS_URL", DEFAULT_STS_URL);
     const coordinatorUrl = stringValue(value, "coordinator_url") ?? serviceUrl(env, "CARACAL_COORDINATOR_URL", DEFAULT_COORDINATOR_URL);
     const resources = resourcesFromProfile(value, path, env, zoneId, applicationId);
+    if (!resources.resources.length) {
+      throw new Error(`Caracal.fromConfig: ${path} requires at least one resource via credentials, CARACAL_RESOURCES, or CARACAL_RESOURCES_FILE`);
+    }
     return Caracal.fromClientSecret({
       coordinatorUrl,
       stsUrl,
@@ -619,45 +622,106 @@ function resourcesFromProfile(record: Record<string, unknown>, source: string, e
     ...credentialManifestFromEnv(env, zoneId, applicationId),
   ];
   const resources = resourcesFromCredentials(credentials);
-  if (!resources.resources.length) throw new Error(`${source}: at least one credentials or optional_credentials entry is required`);
-  return resources;
+  return resolveProfileResources(resources.resources, resources.bindings ?? [], env);
 }
 
 function resourcesFromEnv(env: NodeJS.ProcessEnv, zoneId: string, applicationId: string): ProfileResources {
   const credentials = credentialManifestFromEnv(env, zoneId, applicationId);
-  const envBindings = [
-    ...resourceBindingsFromFile(env.CARACAL_RESOURCES_FILE),
-    ...(parseResourceBindings(env.CARACAL_RESOURCES) ?? []),
-  ];
   const resources = resourcesFromCredentials(credentials);
+  return resolveProfileResources(resources.resources, resources.bindings ?? [], env);
+}
+
+function resolveProfileResources(resources: Array<string | ResourceBinding>, credentialBindings: ResourceBinding[], env: NodeJS.ProcessEnv): ProfileResources {
+  const envBindings = parseResourceBindings(env.CARACAL_RESOURCES) ?? [];
+  const bindings = sortBindingsLongestFirst(mergeResourceBindings(
+    credentialBindings,
+    resourceBindingsFromFile(env.CARACAL_RESOURCES_FILE),
+    envBindings,
+  ));
   const byResource = new Map<string, string | ResourceBinding>();
-  for (const item of resources.resources) byResource.set(typeof item === "string" ? item : item.resourceId, item);
-  for (const binding of envBindings) byResource.set(binding.resourceId, binding);
+  for (const item of resources) byResource.set(typeof item === "string" ? item : item.resourceId, item);
+  for (const binding of bindings) byResource.set(binding.resourceId, binding);
   const values = [...byResource.values()];
-  return { resources: values, bindings: values.filter((value): value is ResourceBinding => typeof value !== "string") };
+  return { resources: values, bindings };
 }
 
 function resourceBindingsFromFile(path: string | undefined): ResourceBinding[] {
   if (!path) return [];
   const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  const errors: string[] = [];
   if (Array.isArray(parsed)) {
-    return parsed.map((entry, index) => {
-      if (!isRecord(entry)) throw new Error(`CARACAL_RESOURCES_FILE[${index}] must be an object`);
-      const resourceId = stringValue(entry, "resource_id");
-      const upstreamPrefix = stringValue(entry, "upstream_prefix");
-      if (!resourceId || !upstreamPrefix) throw new Error(`CARACAL_RESOURCES_FILE[${index}] requires resource_id and upstream_prefix`);
-      return { resourceId, upstreamPrefix };
-    });
+    const out: ResourceBinding[] = [];
+    for (const [index, entry] of parsed.entries()) {
+      if (!isRecord(entry)) {
+        errors.push(`[${index}]: entry must be an object`);
+        continue;
+      }
+      const keys = Object.keys(entry);
+      if (keys.length !== 2 || !keys.includes("resource_id") || !keys.includes("upstream_prefix")) {
+        errors.push(`[${index}]: expected exactly resource_id and upstream_prefix`);
+        continue;
+      }
+      const resourceId = entry.resource_id;
+      const upstreamPrefix = entry.upstream_prefix;
+      if (typeof resourceId !== "string" || !resourceId) {
+        errors.push(`[${index}]: resource_id must be a non-empty string`);
+        continue;
+      }
+      if (typeof upstreamPrefix !== "string" || !upstreamPrefix) {
+        errors.push(`[${index}]: upstream_prefix must be a non-empty string`);
+        continue;
+      }
+      if (!isAbsoluteUrl(upstreamPrefix)) {
+        errors.push(`[${index}]: upstream_prefix must be an absolute URL`);
+        continue;
+      }
+      out.push({ resourceId, upstreamPrefix });
+    }
+    if (errors.length) throw new Error(`invalid CARACAL_RESOURCES_FILE:\n- ${errors.join("\n- ")}`);
+    return out;
   }
   if (isRecord(parsed)) {
-    return Object.entries(parsed).map(([resourceId, upstreamPrefix]) => {
-      if (typeof upstreamPrefix !== "string" || !upstreamPrefix) {
-        throw new Error(`CARACAL_RESOURCES_FILE.${resourceId} must be a non-empty string`);
+    const out: ResourceBinding[] = [];
+    for (const [resourceId, upstreamPrefix] of Object.entries(parsed)) {
+      if (!resourceId) {
+        errors.push("key must be a non-empty string");
+        continue;
       }
-      return { resourceId, upstreamPrefix };
-    });
+      if (typeof upstreamPrefix !== "string" || !upstreamPrefix) {
+        errors.push(`entry ${JSON.stringify(resourceId)} upstream_prefix must be a non-empty string`);
+        continue;
+      }
+      if (!isAbsoluteUrl(upstreamPrefix)) {
+        errors.push(`entry ${JSON.stringify(resourceId)} upstream_prefix must be an absolute URL`);
+        continue;
+      }
+      out.push({ resourceId, upstreamPrefix });
+    }
+    if (errors.length) throw new Error(`invalid CARACAL_RESOURCES_FILE:\n- ${errors.join("\n- ")}`);
+    return out;
   }
   throw new Error("CARACAL_RESOURCES_FILE must contain an object or array");
+}
+
+function mergeResourceBindings(...sources: ResourceBinding[][]): ResourceBinding[] {
+  const order: string[] = [];
+  const byResource = new Map<string, ResourceBinding>();
+  for (const source of sources) {
+    for (const binding of source) {
+      if (!byResource.has(binding.resourceId)) order.push(binding.resourceId);
+      byResource.set(binding.resourceId, binding);
+    }
+  }
+  return order.map((resourceId) => byResource.get(resourceId)!);
+}
+
+function isAbsoluteUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return Boolean(parsed.protocol && parsed.host);
+  } catch {
+    return false;
+  }
 }
 
 function credentialManifestFromEnv(env: NodeJS.ProcessEnv, zoneId: string, applicationId: string): CredentialEntry[] {
@@ -755,9 +819,7 @@ function parseResourceBindings(raw: string | undefined): ResourceBinding[] | und
       errors.push(`entry ${index + 1} must contain non-empty resourceId and upstreamPrefix`);
       continue;
     }
-    try {
-      new URL(upstreamPrefix);
-    } catch {
+    if (!isAbsoluteUrl(upstreamPrefix)) {
       errors.push(`entry ${index + 1} upstreamPrefix must be an absolute URL`);
       continue;
     }
@@ -773,7 +835,7 @@ function resourceIdsFromEnv(raw: string | undefined, resources: Array<string | R
   const explicit = raw?.split(",").map((value) => value.trim()).filter(Boolean);
   if (explicit?.length) return explicit;
   if (resources?.length) return resources;
-  throw new Error("Caracal.fromEnv: client-secret mode requires resources via CARACAL_APP_RESOURCES, CARACAL_RUN_CREDENTIALS, or CARACAL_RESOURCES");
+  throw new Error("Caracal.fromEnv: client-secret mode requires resources via CARACAL_APP_RESOURCES, CARACAL_RUN_CREDENTIALS, CARACAL_RESOURCES, or CARACAL_RESOURCES_FILE");
 }
 
 function createClientSecretTokenSource(

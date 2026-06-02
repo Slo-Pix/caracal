@@ -539,6 +539,88 @@ func TestFromEnvSortsResourcesLongestFirst(t *testing.T) {
 	}
 }
 
+func TestFromEnvResourceBindingsFileObjectAndEnvPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	bindingsPath := filepath.Join(dir, "resources.json")
+	if err := os.WriteFile(bindingsPath, []byte(`{
+		"calendar": "https://file.example.com/v1",
+		"billing": "https://billing.example.com"
+	}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CARACAL_COORDINATOR_URL", "http://coord")
+	t.Setenv("CARACAL_ZONE_ID", "z")
+	t.Setenv("CARACAL_APPLICATION_ID", "app")
+	t.Setenv("CARACAL_SUBJECT_TOKEN", "tok")
+	t.Setenv("CARACAL_RESOURCES_FILE", bindingsPath)
+	t.Setenv("CARACAL_RESOURCES", "calendar=https://env.example.com/v2")
+	c, err := sdk.FromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resourceBindingMap(c.Resources)
+	if got["calendar"] != "https://env.example.com/v2" {
+		t.Fatalf("expected env binding precedence, got %#v", got)
+	}
+	if got["billing"] != "https://billing.example.com" {
+		t.Fatalf("expected file binding, got %#v", got)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected deduplicated bindings, got %#v", c.Resources)
+	}
+}
+
+func TestFromConfigHonorsResourceBindingsFileAndEnv(t *testing.T) {
+	var gotResources []string
+	sts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		gotResources = r.Form["resource"]
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"fresh-root","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer sts.Close()
+	dir := t.TempDir()
+	secretPath := filepath.Join(dir, "secret")
+	if err := os.WriteFile(secretPath, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bindingsPath := filepath.Join(dir, "resources.json")
+	if err := os.WriteFile(bindingsPath, []byte(`[
+		{"resource_id":"calendar","upstream_prefix":"https://file.example.com/v1"},
+		{"resource_id":"billing","upstream_prefix":"https://billing.example.com"}
+	]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(dir, "caracal.toml")
+	profile := `coordinator_url = "http://coord"
+sts_url = "` + sts.URL + `"
+zone_id = "z"
+application_id = "app"
+app_client_secret_file = "` + secretPath + `"
+`
+	if err := os.WriteFile(profilePath, []byte(profile), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CARACAL_RESOURCES_FILE", bindingsPath)
+	t.Setenv("CARACAL_RESOURCES", "calendar=https://env.example.com/v2")
+	c, err := sdk.FromConfig(profilePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Headers(context.Background(), sdk.RootOptions{AllowRoot: true}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(compactSorted(gotResources), ",") != "billing,calendar" {
+		t.Fatalf("unexpected resources: %#v", gotResources)
+	}
+	got := resourceBindingMap(c.Resources)
+	if got["calendar"] != "https://env.example.com/v2" || got["billing"] != "https://billing.example.com" {
+		t.Fatalf("unexpected bindings: %#v", got)
+	}
+}
+
 func TestFromEnvRejectsMalformedResources(t *testing.T) {
 	t.Setenv("CARACAL_COORDINATOR_URL", "http://coord")
 	t.Setenv("CARACAL_ZONE_ID", "z")
@@ -548,4 +630,31 @@ func TestFromEnvRejectsMalformedResources(t *testing.T) {
 	if _, err := sdk.FromEnv(); err == nil {
 		t.Fatal("expected malformed resource error")
 	}
+}
+
+func TestFromEnvRejectsMalformedResourceBindingsFile(t *testing.T) {
+	dir := t.TempDir()
+	bindingsPath := filepath.Join(dir, "resources.json")
+	if err := os.WriteFile(bindingsPath, []byte(`[
+		{"resource_id":"calendar","upstream_prefix":"not-a-url"},
+		{"resource_id":"billing","upstream_prefix":"https://billing.example.com","extra":true}
+	]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CARACAL_COORDINATOR_URL", "http://coord")
+	t.Setenv("CARACAL_ZONE_ID", "z")
+	t.Setenv("CARACAL_APPLICATION_ID", "app")
+	t.Setenv("CARACAL_SUBJECT_TOKEN", "tok")
+	t.Setenv("CARACAL_RESOURCES_FILE", bindingsPath)
+	if _, err := sdk.FromEnv(); err == nil || !strings.Contains(err.Error(), "invalid CARACAL_RESOURCES_FILE") {
+		t.Fatalf("expected malformed resource file error, got %v", err)
+	}
+}
+
+func resourceBindingMap(bindings []sdk.ResourceBinding) map[string]string {
+	out := map[string]string{}
+	for _, binding := range bindings {
+		out[binding.ResourceID] = binding.UpstreamPrefix
+	}
+	return out
 }

@@ -110,7 +110,7 @@ func FromEnv() (*Caracal, error) {
 	if err != nil {
 		return nil, err
 	}
-	bindings, err := parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))
+	envBindings, err := parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))
 	if err != nil {
 		return nil, err
 	}
@@ -118,12 +118,11 @@ func FromEnv() (*Caracal, error) {
 	if err != nil {
 		return nil, err
 	}
-	bindings = append(fileBindings, bindings...)
 	credentialIDs, credentialBindings, err := credentialManifestFromEnv(zone, app)
 	if err != nil {
 		return nil, err
 	}
-	bindings = sortBindingsLongestFirst(append(credentialBindings, bindings...))
+	bindings := sortBindingsLongestFirst(mergeResourceBindings(credentialBindings, fileBindings, envBindings))
 	if clientSecret != "" {
 		return FromClientSecret(ClientSecretOptions{
 			CoordinatorURL:   coordinatorURL,
@@ -207,15 +206,23 @@ func FromConfig(path string) (*Caracal, error) {
 	if err != nil {
 		return nil, err
 	}
-	resourceIDs, bindings := resourceIDsFromProfile(cfg)
+	resourceIDs, profileBindings := resourceIDsFromProfile(cfg)
 	credentialIDs, credentialBindings, err := credentialManifestFromEnv(cfg["zone_id"], cfg["application_id"])
 	if err != nil {
 		return nil, err
 	}
-	resourceIDs = compactStrings(append(resourceIDs, credentialIDs...))
-	bindings = sortBindingsLongestFirst(append(credentialBindings, bindings...))
+	fileBindings, err := resourceBindingsFromFile(os.Getenv("CARACAL_RESOURCES_FILE"))
+	if err != nil {
+		return nil, err
+	}
+	envBindings, err := parseResourceBindings(os.Getenv("CARACAL_RESOURCES"))
+	if err != nil {
+		return nil, err
+	}
+	bindings := sortBindingsLongestFirst(mergeResourceBindings(profileBindings, credentialBindings, fileBindings, envBindings))
+	resourceIDs = compactStrings(append(append(resourceIDs, credentialIDs...), bindingResourceIDs(bindings)...))
 	if len(resourceIDs) == 0 {
-		return nil, fmt.Errorf("caracal: %s requires at least one credentials entry", path)
+		return nil, fmt.Errorf("caracal: %s requires at least one resource via credentials, CARACAL_RESOURCES, or CARACAL_RESOURCES_FILE", path)
 	}
 	gatewayURL := cfg["gateway_url"]
 	if gatewayURL == "" {
@@ -288,6 +295,34 @@ func sortBindingsLongestFirst(bindings []ResourceBinding) []ResourceBinding {
 	return out
 }
 
+func mergeResourceBindings(sources ...[]ResourceBinding) []ResourceBinding {
+	order := []string{}
+	seen := map[string]bool{}
+	byResource := map[string]ResourceBinding{}
+	for _, source := range sources {
+		for _, binding := range source {
+			if !seen[binding.ResourceID] {
+				seen[binding.ResourceID] = true
+				order = append(order, binding.ResourceID)
+			}
+			byResource[binding.ResourceID] = binding
+		}
+	}
+	out := make([]ResourceBinding, 0, len(order))
+	for _, resourceID := range order {
+		out = append(out, byResource[resourceID])
+	}
+	return out
+}
+
+func bindingResourceIDs(bindings []ResourceBinding) []string {
+	out := make([]string, 0, len(bindings))
+	for _, binding := range bindings {
+		out = append(out, binding.ResourceID)
+	}
+	return out
+}
+
 // validateSubjectToken performs a local sanity check on the bootstrap subject
 // token. When the token has a JWT shape, decodes the payload and rejects
 // tokens that are malformed or already expired. Opaque tokens are accepted.
@@ -347,8 +382,7 @@ func parseResourceBindings(raw string) ([]ResourceBinding, error) {
 			errors = append(errors, fmt.Sprintf("entry %d must contain non-empty resourceID and upstreamPrefix", index+1))
 			continue
 		}
-		parsed, err := url.Parse(prefix)
-		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		if !isAbsoluteURL(prefix) {
 			errors = append(errors, fmt.Sprintf("entry %d upstreamPrefix must be an absolute URL", index+1))
 			continue
 		}
@@ -371,37 +405,86 @@ func resourceBindingsFromFile(path string) ([]ResourceBinding, error) {
 	if err != nil {
 		return nil, err
 	}
-	var array []struct {
-		ResourceID     string `json:"resource_id"`
-		UpstreamPrefix string `json:"upstream_prefix"`
-	}
-	if err := json.Unmarshal(data, &array); err == nil {
-		out := make([]ResourceBinding, 0, len(array))
-		for _, entry := range array {
-			if entry.ResourceID == "" || entry.UpstreamPrefix == "" {
-				return nil, fmt.Errorf("caracal: CARACAL_RESOURCES_FILE requires resource_id and upstream_prefix")
-			}
-			out = append(out, ResourceBinding{ResourceID: entry.ResourceID, UpstreamPrefix: entry.UpstreamPrefix})
-		}
-		return out, nil
-	}
-	var object map[string]string
-	if err := json.Unmarshal(data, &object); err != nil {
+	var parsed any
+	if err := json.Unmarshal(data, &parsed); err != nil {
 		return nil, err
 	}
-	out := make([]ResourceBinding, 0, len(object))
-	for resourceID, upstreamPrefix := range object {
-		if resourceID == "" || upstreamPrefix == "" {
-			return nil, fmt.Errorf("caracal: CARACAL_RESOURCES_FILE requires non-empty resource ids and upstream prefixes")
+	switch value := parsed.(type) {
+	case []any:
+		out := make([]ResourceBinding, 0, len(value))
+		errors := []string{}
+		for index, entry := range value {
+			record, ok := entry.(map[string]any)
+			if !ok {
+				errors = append(errors, fmt.Sprintf("[%d]: entry must be an object", index))
+				continue
+			}
+			if len(record) != 2 || record["resource_id"] == nil || record["upstream_prefix"] == nil {
+				errors = append(errors, fmt.Sprintf("[%d]: expected exactly resource_id and upstream_prefix", index))
+				continue
+			}
+			resourceID, ok := record["resource_id"].(string)
+			if !ok || resourceID == "" {
+				errors = append(errors, fmt.Sprintf("[%d]: resource_id must be a non-empty string", index))
+				continue
+			}
+			upstreamPrefix, ok := record["upstream_prefix"].(string)
+			if !ok || upstreamPrefix == "" {
+				errors = append(errors, fmt.Sprintf("[%d]: upstream_prefix must be a non-empty string", index))
+				continue
+			}
+			if !isAbsoluteURL(upstreamPrefix) {
+				errors = append(errors, fmt.Sprintf("[%d]: upstream_prefix must be an absolute URL", index))
+				continue
+			}
+			out = append(out, ResourceBinding{ResourceID: resourceID, UpstreamPrefix: upstreamPrefix})
 		}
-		out = append(out, ResourceBinding{ResourceID: resourceID, UpstreamPrefix: upstreamPrefix})
+		if len(errors) > 0 {
+			return nil, fmt.Errorf("caracal: invalid CARACAL_RESOURCES_FILE: %s", strings.Join(errors, "; "))
+		}
+		return out, nil
+	case map[string]any:
+		out := make([]ResourceBinding, 0, len(value))
+		errors := []string{}
+		resourceIDs := make([]string, 0, len(value))
+		for resourceID := range value {
+			resourceIDs = append(resourceIDs, resourceID)
+		}
+		sort.Strings(resourceIDs)
+		for _, resourceID := range resourceIDs {
+			rawPrefix := value[resourceID]
+			if resourceID == "" {
+				errors = append(errors, "key must be a non-empty string")
+				continue
+			}
+			upstreamPrefix, ok := rawPrefix.(string)
+			if !ok || upstreamPrefix == "" {
+				errors = append(errors, fmt.Sprintf("entry %q upstream_prefix must be a non-empty string", resourceID))
+				continue
+			}
+			if !isAbsoluteURL(upstreamPrefix) {
+				errors = append(errors, fmt.Sprintf("entry %q upstream_prefix must be an absolute URL", resourceID))
+				continue
+			}
+			out = append(out, ResourceBinding{ResourceID: resourceID, UpstreamPrefix: upstreamPrefix})
+		}
+		if len(errors) > 0 {
+			return nil, fmt.Errorf("caracal: invalid CARACAL_RESOURCES_FILE: %s", strings.Join(errors, "; "))
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("caracal: CARACAL_RESOURCES_FILE must contain an object or array")
 	}
-	return out, nil
+}
+
+func isAbsoluteURL(value string) bool {
+	parsed, err := url.Parse(value)
+	return err == nil && parsed.Scheme != "" && parsed.Host != ""
 }
 
 func resourceIDsFromEnv(raw string, first []string, bindings []ResourceBinding) []string {
+	out := append([]string(nil), first...)
 	if raw != "" {
-		out := []string{}
 		for _, value := range strings.Split(raw, ",") {
 			value = strings.TrimSpace(value)
 			if value != "" {
@@ -409,10 +492,9 @@ func resourceIDsFromEnv(raw string, first []string, bindings []ResourceBinding) 
 			}
 		}
 		if len(out) > 0 {
-			return out
+			return compactStrings(out)
 		}
 	}
-	out := append([]string(nil), first...)
 	for _, binding := range bindings {
 		out = append(out, binding.ResourceID)
 	}
