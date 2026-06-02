@@ -8,7 +8,7 @@ import Fastify from 'fastify'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { invocationsRoutes } from '../../../../../../apps/coordinator/src/routes/invocations.js'
 
-function buildApp() {
+function buildApp(scopes = ['coordinator.admin'], clientId = 'app-1') {
   const app = Fastify({ logger: false })
   const db = {
     query: vi.fn(),
@@ -19,9 +19,9 @@ function buildApp() {
   app.addHook('preHandler', async (req) => {
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
       zoneId: (req.params as Record<string, string>)?.zoneId ?? 'z1',
-      scopes: ['coordinator.admin'],
+      scopes,
       subject: 'test',
-      clientId: 'app-1',
+      clientId,
       sessionId: 'sid-test',
     }
   })
@@ -30,6 +30,53 @@ function buildApp() {
 }
 
 describe('POST /v1/zones/:zoneId/invocations', () => {
+  it('returns 404 when the target service is missing', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/invocations',
+      payload: { service_id: 'svc-missing', idempotency_key: 'idem-1', method: 'run' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'agent_service_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
+  it('returns 403 when the caller cannot invoke from the source application', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/invocations',
+      payload: { service_id: 'svc-1', idempotency_key: 'idem-1', method: 'run' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'invoker_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('creates a pending invocation and enqueues an outbox event', async () => {
     const { app, db } = buildApp()
     const client = {
@@ -120,6 +167,55 @@ describe('POST /v1/zones/:zoneId/invocations', () => {
 })
 
 describe('PATCH /v1/zones/:zoneId/invocations/:id/cancel', () => {
+  it('returns 404 when the invocation to cancel is unknown', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/invocations/missing/cancel' })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'invocation_not_found' })
+  })
+
+  it('returns 403 when the caller cannot cancel the invocation', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/invocations/inv-1/cancel' })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'invoker_ownership_required' })
+  })
+
+  it('returns 409 when the invocation cannot be canceled', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/invocations/inv-1/cancel' })
+    expect(res.statusCode).toBe(409)
+    expect(res.json()).toEqual({ error: 'invocation_not_cancelable' })
+  })
+
   it('records cancellation and emits an invocation event', async () => {
     const { app, db } = buildApp()
     const client = {
@@ -229,6 +325,22 @@ describe('PATCH /v1/zones/:zoneId/invocations/:id/start', () => {
     expect(res.json()).toEqual({ error: 'invocation_not_startable' })
   })
 
+  it('returns 403 when the caller cannot start the invocation', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/invocations/inv-1/start' })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'invoker_ownership_required' })
+  })
+
   it('marks the invocation running and commits', async () => {
     const { app, db } = buildApp()
     const client = {
@@ -278,6 +390,44 @@ describe('PATCH /v1/zones/:zoneId/invocations/:id/complete', () => {
     })
     expect(res.statusCode).toBe(409)
     expect(res.json()).toEqual({ error: 'invocation_not_completable' })
+  })
+
+  it('returns 404 when the invocation to complete is unknown', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH', url: '/v1/zones/z1/invocations/missing/complete',
+      payload: { status: 'succeeded' },
+    })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'invocation_not_found' })
+  })
+
+  it('returns 403 when the caller cannot complete the invocation', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH', url: '/v1/zones/z1/invocations/inv-1/complete',
+      payload: { status: 'succeeded' },
+    })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'invoker_ownership_required' })
   })
 
   it('completes a running invocation', async () => {

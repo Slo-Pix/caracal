@@ -170,7 +170,7 @@ jobs:
                   ;;
               esac
               case "$path" in
-                .github/workflows/test.yml|go.work|go.work.sum|services/**|packages/*/go/**|packages/connectors/*/go/**|packages/transport/*/go/**|tests/go/**)
+                .github/workflows/test.yml|go.work|go.work.sum|services/**|packages/*/go/**|packages/connectors/*/go/**|packages/transport/*/go/**|tests/go/**|tests/source/go/**)
                   go=true
                   ;;
               esac

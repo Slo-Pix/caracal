@@ -6,9 +6,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import Fastify from 'fastify'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
-import { agentsRoutes } from '../../../../../../apps/coordinator/src/routes/agents.js'
+import { agentsRoutes, suspendSubtree, terminateSubtree } from '../../../../../../apps/coordinator/src/routes/agents.js'
 
-function buildApp() {
+function buildApp(scopes = ['coordinator.admin'], clientIdOverride?: string) {
   const app = Fastify({ logger: false })
   const db = { query: vi.fn(), connect: vi.fn() }
   app.decorate('db', db as never)
@@ -22,12 +22,13 @@ function buildApp() {
   })
   app.addHook('preHandler', async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>
-    const clientId = (body.application_id as string)
+    const clientId = clientIdOverride
+      ?? (body.application_id as string)
       ?? (req.params as Record<string, string>)?.id
       ?? 'test-client'
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
       zoneId: (req.params as Record<string, string>)?.zoneId ?? 'z1',
-      scopes: ['coordinator.admin'],
+      scopes,
       subject: 'test',
       clientId,
       sessionId: 'sid-test',
@@ -120,6 +121,23 @@ describe('POST /v1/zones/:zoneId/agents: spawn', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: 'parent_not_found' })
   })
 
+  it('rejects spawning under a parent from another application without delegated scope', async () => {
+    const { app, db } = buildApp(['coordinator.admin'])
+    db.connect.mockResolvedValueOnce(spawnClient({
+      refs: { application_exists: true, session_exists: true },
+      count: { app_n: '0', zone_n: '0' },
+      parent: { depth: 1, child_count: 0, max_children: 10, application_id: 'parent-app' },
+    }))
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', subject_session_id: 'sid-1', parent_id: 'parent-1' },
+    })
+    expect(res.statusCode).toBe(403)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'parent_ownership_required' })
+  })
+
   it('rejects when parent children cap is reached', async () => {
     const { app, db } = buildApp()
     db.connect.mockResolvedValueOnce(spawnClient({
@@ -207,6 +225,58 @@ describe('POST /v1/zones/:zoneId/agents: spawn', () => {
     )
     const outboxCall = client.query.mock.calls.find((call) => String(call[0]).includes('caracal_outbox'))
     expect(outboxCall?.[1]?.[1]).toBe('caracal.agents.lifecycle')
+  })
+
+  it('records topology and increments the parent child count when spawning under a parent', async () => {
+    const { app, db } = buildApp()
+    const client = spawnClient({
+      refs: { application_exists: true, session_exists: true },
+      count: { app_n: '0', zone_n: '0' },
+      parent: { depth: 1, child_count: 0, max_children: 10, application_id: 'app-1' },
+      insert: { rows: [{ agent_session_id: 'agent-child', zone_id: 'z1', application_id: 'app-1', parent_id: 'parent-1' }] },
+      withTopology: true,
+      outbox: true,
+    })
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', subject_session_id: 'sid-1', parent_id: 'parent-1' },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO agent_topology'),
+      ['parent-1', expect.any(String)],
+    )
+    expect(client.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE agent_sessions SET child_count'),
+      ['parent-1'],
+    )
+  })
+
+  it('rolls back and releases the connection when spawn insert fails', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_exists: true, session_exists: true }] })
+        .mockResolvedValueOnce({ rows: [{ app_n: '0', zone_n: '0' }] })
+        .mockRejectedValueOnce(new Error('insert failed'))
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents',
+      payload: { application_id: 'app-1', subject_session_id: 'sid-1' },
+    })
+    expect(res.statusCode).toBe(500)
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalled()
   })
 
   it('defaults subject_session_id from the verified bearer and returns the agent session id', async () => {
@@ -368,6 +438,20 @@ describe('GET /v1/zones/:zoneId/agents/:id/children', () => {
 })
 
 describe('PATCH /v1/zones/:zoneId/agents/:id/suspend', () => {
+  it('returns 403 when the caller cannot suspend the application agent', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = seqClient([
+      { rows: [] },
+      { rows: [{ application_id: 'app1' }] },
+    ])
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/agents/a1/suspend' })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'application_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('returns 404 when the agent is unknown', async () => {
     const { app, db } = buildApp()
     const client = seqClient([{ rows: [] }, { rows: [] }])
@@ -412,6 +496,20 @@ describe('PATCH /v1/zones/:zoneId/agents/:id/suspend', () => {
 })
 
 describe('PATCH /v1/zones/:zoneId/agents/:id/resume', () => {
+  it('returns 403 when the caller cannot resume the application agent', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = seqClient([
+      { rows: [] },
+      { rows: [{ application_id: 'app1' }] },
+    ])
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/agents/a1/resume' })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'application_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('returns 404 when the agent is unknown', async () => {
     const { app, db } = buildApp()
     const client = seqClient([{ rows: [] }, { rows: [] }])
@@ -451,5 +549,56 @@ describe('PATCH /v1/zones/:zoneId/agents/:id/resume', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ resumed: 1 })
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+})
+
+describe('DELETE /v1/zones/:zoneId/agents/:id: guard rails', () => {
+  it('rejects invalid terminate query strings before opening a transaction', async () => {
+    const { app, db } = buildApp()
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/agents/a1?reason=' })
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'invalid_query' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
+  it('returns 403 when the caller cannot terminate the application agent', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = seqClient([
+      { rows: [] },
+      { rows: [] },
+      { rows: [{ application_id: 'app1' }] },
+    ])
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/agents/a1' })
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'application_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
+  it('rolls back when termination finds no active subtree rows', async () => {
+    const { app, db } = buildApp()
+    const client = seqClient([
+      { rows: [] },
+      { rows: [] },
+      { rows: [{ application_id: 'app1' }] },
+      { rows: [] },
+    ])
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/agents/a1' })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'agent_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+})
+
+describe('subtree helpers', () => {
+  it('return zero without querying when no root ids are provided', async () => {
+    const client = { query: vi.fn() }
+    await expect(suspendSubtree(client as never, 'z1', [], 'requested')).resolves.toBe(0)
+    await expect(terminateSubtree(client as never, 'z1', [], 'requested')).resolves.toBe(0)
+    expect(client.query).not.toHaveBeenCalled()
   })
 })

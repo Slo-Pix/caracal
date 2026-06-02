@@ -6,7 +6,7 @@
 import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { AuthError, type Authenticator } from '../../../../apps/control/src/auth.js'
+import { AuthError, type Authenticator, type ControlClaims } from '../../../../apps/control/src/auth.js'
 import { registerInvokeRoute, type InvokeDeps } from '../../../../apps/control/src/handler.js'
 import { RateLimiter } from '../../../../apps/control/src/ratelimit.js'
 import type { EventSink } from '../../../../apps/control/src/audit.js'
@@ -28,6 +28,18 @@ function deps(verify: Authenticator['verify']): InvokeDeps {
     sink: { emit: vi.fn(async () => {}) } as EventSink,
     ctx: { admin: {} } as DispatchContext,
     gate: { enabled: () => true },
+  }
+}
+
+function claims(overrides: Partial<ControlClaims> = {}): ControlClaims {
+  return {
+    sub: 'subject-1',
+    jti: 'jti-1',
+    exp: Math.floor(Date.now() / 1000) + 300,
+    zoneId: 'z1',
+    clientId: 'app-1',
+    scope: 'control:zone:read control:zone:write',
+    ...overrides,
   }
 }
 
@@ -80,5 +92,116 @@ describe('registerInvokeRoute', () => {
     expect(res.statusCode).toBe(503)
     expect(res.json()).toEqual({ error: 'control disabled' })
     expect(verify).not.toHaveBeenCalled()
+  })
+
+  it('rejects replayed tokens before dispatch', async () => {
+    const app = Fastify()
+    apps.push(app)
+    const d = deps(vi.fn(async () => claims()))
+    d.replay.mark = vi.fn(async () => false)
+
+    registerInvokeRoute(app, d)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'list' },
+    })
+
+    expect(res.statusCode).toBe(401)
+    expect(res.json()).toEqual({ error: 'token replay' })
+    expect(d.sink.emit).toHaveBeenCalledWith(expect.objectContaining({ decision: 'deny', reason: 'replay' }))
+  })
+
+  it('rate-limits authenticated subjects before dispatch', async () => {
+    const app = Fastify()
+    apps.push(app)
+    const d = deps(vi.fn(async () => claims()))
+    d.replay.mark = vi.fn(async () => true)
+    d.rate = { allow: vi.fn(() => false) } as unknown as RateLimiter
+
+    registerInvokeRoute(app, d)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'list' },
+    })
+
+    expect(res.statusCode).toBe(429)
+    expect(res.json()).toEqual({ error: 'rate limited' })
+    expect(d.sink.emit).toHaveBeenCalledWith(expect.objectContaining({ decision: 'deny', reason: 'rate limited' }))
+  })
+
+  it('dispatches valid control requests and emits allow audit events', async () => {
+    const app = Fastify()
+    apps.push(app)
+    const d = deps(vi.fn(async () => claims()))
+    d.replay.mark = vi.fn(async () => true)
+    d.ctx = { admin: { zones: { list: vi.fn(async () => [{ id: 'z1' }]) } } } as DispatchContext
+
+    registerInvokeRoute(app, d)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'list', flags: ['ignored'] },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ ok: true, result: [{ id: 'z1' }] })
+    expect(d.sink.emit).toHaveBeenCalledWith(expect.objectContaining({ decision: 'allow', command: 'zone' }))
+  })
+
+  it('maps dispatch denials, invalid requests, and upstream failures', async () => {
+    const denied = Fastify()
+    const invalid = Fastify()
+    const upstream = Fastify()
+    apps.push(denied, invalid, upstream)
+
+    const deniedDeps = deps(vi.fn(async () => claims()))
+    deniedDeps.replay.mark = vi.fn(async () => true)
+    deniedDeps.ctx = { admin: { zones: { list: vi.fn() } } } as DispatchContext
+    registerInvokeRoute(denied, deniedDeps)
+    await denied.ready()
+    const deniedRes = await denied.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'nope' },
+    })
+    expect(deniedRes.statusCode).toBe(403)
+    expect(deniedRes.json()).toEqual({ error: 'denied' })
+
+    const invalidDeps = deps(vi.fn(async () => claims()))
+    invalidDeps.replay.mark = vi.fn(async () => true)
+    invalidDeps.ctx = { admin: { zones: { create: vi.fn() } } } as DispatchContext
+    registerInvokeRoute(invalid, invalidDeps)
+    await invalid.ready()
+    const invalidRes = await invalid.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'create' },
+    })
+    expect(invalidRes.statusCode).toBe(400)
+    expect(invalidRes.json()).toEqual({ error: 'invalid request' })
+
+    const upstreamDeps = deps(vi.fn(async () => claims()))
+    upstreamDeps.replay.mark = vi.fn(async () => true)
+    upstreamDeps.ctx = { admin: { zones: { list: vi.fn(async () => { throw new Error('api down') }) } } } as DispatchContext
+    registerInvokeRoute(upstream, upstreamDeps)
+    await upstream.ready()
+    const upstreamRes = await upstream.inject({
+      method: 'POST',
+      url: '/v1/control/invoke',
+      headers: { authorization: 'Bearer token' },
+      payload: { command: 'zone', subcommand: 'list' },
+    })
+    expect(upstreamRes.statusCode).toBe(502)
+    expect(upstreamRes.json()).toEqual({ error: 'upstream error' })
   })
 })

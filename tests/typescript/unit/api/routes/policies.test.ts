@@ -114,6 +114,26 @@ describe('POST /v1/policies/validate', () => {
 })
 
 describe('POST /v1/zones/:zoneId/policies/:id/versions', () => {
+  it('creates the next policy version under advisory lock', async () => {
+    const { app, clientQuery } = buildApp()
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: 'p-1' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-2', policy_id: 'p-1', version: 2, content_sha256: 'sha-2', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/policies/p-1/versions',
+      payload: { content: validRego },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ id: 'pv-2', version: 2 })
+    expect(clientQuery.mock.calls[1][0]).toContain('pg_advisory_xact_lock')
+  })
+
   it('rejects Rego without package declaration', async () => {
     const { app } = buildApp()
     await app.ready()

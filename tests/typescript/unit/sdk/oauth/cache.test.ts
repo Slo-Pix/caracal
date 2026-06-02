@@ -89,6 +89,17 @@ describe('InMemoryTokenCache', () => {
     expect(bounded.get('subject-c', 'resource://api')).toBe(c)
   })
 
+  it('keeps a bounded cache stable when replacing an existing key', () => {
+    const bounded = new InMemoryTokenCache({ maxEntries: 1 })
+    const first = makeToken(900)
+    const second = makeToken(900)
+
+    bounded.set('subject-a', 'resource://api', first)
+    bounded.set('subject-a', 'resource://api', second)
+
+    expect(bounded.get('subject-a', 'resource://api')).toBe(second)
+  })
+
   it('rejects non-positive maxEntries', () => {
     expect(() => new InMemoryTokenCache({ maxEntries: 0 })).toThrow()
     expect(() => new InMemoryTokenCache({ maxEntries: -5 })).toThrow()

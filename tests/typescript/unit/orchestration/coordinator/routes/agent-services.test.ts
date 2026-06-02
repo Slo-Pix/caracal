@@ -8,17 +8,17 @@ import Fastify from 'fastify'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { agentServicesRoutes } from '../../../../../../apps/coordinator/src/routes/agent-services.js'
 
-function buildApp() {
+function buildApp(scopes = ['coordinator.admin'], clientIdOverride?: string) {
   const app = Fastify({ logger: false })
   const db = { query: vi.fn(), connect: vi.fn() }
   app.decorate('db', db as never)
   app.decorate('redis', {} as never)
   app.addHook('preHandler', async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>
-    const clientId = (body.application_id as string) ?? 'test-client'
+    const clientId = clientIdOverride ?? (body.application_id as string) ?? 'test-client'
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
       zoneId: (req.params as Record<string, string>)?.zoneId ?? 'z1',
-      scopes: ['coordinator.admin'],
+      scopes,
       subject: 'test',
       clientId,
       sessionId: 'sid-test',
@@ -29,6 +29,24 @@ function buildApp() {
 }
 
 describe('POST /v1/zones/:zoneId/agent-services', () => {
+  it('rejects service registration without application ownership or delegated scope', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agent-services',
+      payload: {
+        application_id: 'app-1',
+        endpoint_url: 'https://agent.example.test/invoke',
+      },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'application_ownership_required' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
   it('rejects malformed route params before database access', async () => {
     const { app, db } = buildApp()
     await app.ready()
@@ -95,9 +113,58 @@ describe('POST /v1/zones/:zoneId/agent-services', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: 'application_not_found' })
     expect(client.query).toHaveBeenCalledWith('ROLLBACK')
   })
+
+  it('rolls back registration when the insert fails', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ exists: 1 }] })
+        .mockRejectedValueOnce(new Error('insert failed')),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agent-services',
+      payload: {
+        application_id: 'app-1',
+        endpoint_url: 'https://agent.example.test/invoke',
+      },
+    })
+
+    expect(res.statusCode).toBe(500)
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalled()
+  })
 })
 
 describe('POST /v1/zones/:zoneId/agents/:id/heartbeat', () => {
+  it('rejects heartbeats without application ownership or elevated scope', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1', status: 'active', agent_kind: 'task' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents/agent-1/heartbeat',
+      payload: { status: 'healthy' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'application_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('returns 404 when the agent session is inactive in the zone', async () => {
     const { app, db } = buildApp()
     const client = {
@@ -142,6 +209,29 @@ describe('POST /v1/zones/:zoneId/agents/:id/heartbeat', () => {
       agent: { id: 'agent-1' }, service: { id: 'svc-1' }, active_invocations: 2,
     })
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('rolls back heartbeat updates when the database write fails', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ application_id: 'app-1', status: 'active', agent_kind: 'task' }] })
+        .mockRejectedValueOnce(new Error('update failed')),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/agents/agent-1/heartbeat',
+      payload: { status: 'healthy' },
+    })
+
+    expect(res.statusCode).toBe(500)
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalled()
   })
 })
 

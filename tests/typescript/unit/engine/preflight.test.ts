@@ -94,3 +94,99 @@ describe('runPreflightChecks', () => {
     expect(redis).toMatchObject({ status: 'ok' })
   })
 })
+
+describe('runPreflightChecks failure reporting', () => {
+  let cwd: string
+  let repoRoot: string
+  let home: string
+  const saved = { ...process.env }
+
+  beforeEach(() => {
+    cwd = process.cwd()
+    repoRoot = mkdtempSync(join(tmpdir(), 'caracal-preflight-fail-repo-'))
+    home = mkdtempSync(join(tmpdir(), 'caracal-preflight-fail-home-'))
+    process.chdir(repoRoot)
+    writeFileSync(join(repoRoot, 'pnpm-workspace.yaml'), 'packages: []\n')
+    process.env = {
+      ...saved,
+      CARACAL_HOME: home,
+      CARACAL_MODE: 'dev',
+      DATABASE_URL: 'not a url',
+      REDIS_URL: 'not a url',
+    }
+    delete process.env.CARACAL_REPO_ROOT
+    delete process.env.CARACAL_SECRETS_DIR
+  })
+
+  afterEach(() => {
+    process.env = { ...saved }
+    process.chdir(cwd)
+    rmSync(repoRoot, { recursive: true, force: true })
+    rmSync(home, { recursive: true, force: true })
+  })
+
+  it('reports invalid mode, unreadable secret files, and malformed service URLs deterministically', async () => {
+    process.env.CARACAL_MODE = 'broken'
+    process.env.ZONE_KEK_FILE = join(home, 'missing-kek')
+
+    const checks = await runPreflightChecks()
+
+    expect(checks.find((check) => check.check === 'CARACAL_MODE')).toMatchObject({ status: 'fail' })
+    expect(checks.find((check) => check.check === 'ZONE_KEK')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringContaining('ZONE_KEK_FILE unreadable'),
+    })
+    expect(checks.find((check) => check.check === 'Postgres')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringContaining('parse DATABASE_URL'),
+    })
+    expect(checks.find((check) => check.check === 'Redis')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringContaining('parse REDIS_URL'),
+    })
+  })
+
+  it('reports stable-mode STS and key length failures', async () => {
+    process.env.CARACAL_MODE = 'stable'
+    process.env.ZONE_KEK = 'aa'
+    process.env.AUDIT_HMAC_KEY = 'aa'
+    process.env.STREAMS_HMAC_KEY = 'aa'
+    process.env.GATEWAY_STS_HMAC_KEY = 'aa'
+
+    const checks = await runPreflightChecks()
+
+    expect(checks.find((check) => check.check === 'CARACAL_MODE')).toMatchObject({
+      status: 'fail',
+      detail: 'stable mode requires absolute STS_URL',
+    })
+    expect(checks.find((check) => check.check === 'ZONE_KEK')).toMatchObject({
+      status: 'fail',
+      detail: 'expected 32 bytes, got 1',
+    })
+    expect(checks.find((check) => check.check === 'AUDIT_HMAC_KEY')).toMatchObject({
+      status: 'fail',
+      detail: 'expected at least 32 bytes, got 1',
+    })
+  })
+
+  it('reports incomplete and unparsable TLS file configuration', async () => {
+    const cert = join(home, 'tls.crt')
+    const key = join(home, 'tls.key')
+    writeFileSync(cert, 'not a certificate', 'utf8')
+
+    process.env.TLS_CERT_FILE = cert
+    let checks = await runPreflightChecks()
+    expect(checks.find((check) => check.check === 'TLS files')).toMatchObject({
+      status: 'fail',
+      detail: 'TLS_CERT_FILE and TLS_KEY_FILE must both be set',
+    })
+
+    process.env.TLS_KEY_FILE = key
+    writeFileSync(key, 'key', 'utf8')
+    checks = await runPreflightChecks()
+    expect(checks.find((check) => check.check === 'TLS cert')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringContaining('parse failed'),
+    })
+  })
+})
