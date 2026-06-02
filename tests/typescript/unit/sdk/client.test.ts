@@ -32,6 +32,10 @@ const dummyConfig = {
   subjectToken: "tok",
 };
 
+function resourceMap(resources: { resourceId: string; upstreamPrefix: string }[] | undefined): Record<string, string> {
+  return Object.fromEntries((resources ?? []).map((binding) => [binding.resourceId, binding.upstreamPrefix]));
+}
+
 describe("Caracal.fromEnv", () => {
   it("throws on missing vars", () => {
     expect(() => Caracal.fromEnv({})).toThrow(/CARACAL_/);
@@ -70,6 +74,46 @@ describe("Caracal.fromEnv", () => {
     const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
     expect(body.get("client_secret")).toBe("secret");
     expect(body.getAll("resource").sort()).toEqual(["billing", "calendar"]);
+  });
+
+  it("loads resource bindings from file and lets CARACAL_RESOURCES override conflicts", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caracal-sdk-"));
+    const bindingsPath = join(dir, "resources.json");
+    writeFileSync(bindingsPath, JSON.stringify({
+      calendar: "https://file.example.com/v1",
+      billing: "https://billing.example.com",
+    }), { mode: 0o600 });
+
+    const c = Caracal.fromEnv({
+      CARACAL_COORDINATOR_URL: "http://coord",
+      CARACAL_ZONE_ID: "z",
+      CARACAL_APPLICATION_ID: "app",
+      CARACAL_SUBJECT_TOKEN: "tok",
+      CARACAL_RESOURCES_FILE: bindingsPath,
+      CARACAL_RESOURCES: "calendar=https://env.example.com/v2",
+    } as NodeJS.ProcessEnv);
+
+    expect(resourceMap(c.config.resources)).toEqual({
+      calendar: "https://env.example.com/v2",
+      billing: "https://billing.example.com",
+    });
+  });
+
+  it("rejects malformed resource binding files at startup", () => {
+    const dir = mkdtempSync(join(tmpdir(), "caracal-sdk-"));
+    const bindingsPath = join(dir, "resources.json");
+    writeFileSync(bindingsPath, JSON.stringify([
+      { resource_id: "calendar", upstream_prefix: "not-a-url" },
+      { resource_id: "billing", upstream_prefix: "https://billing.example.com", extra: true },
+    ]), { mode: 0o600 });
+
+    expect(() => Caracal.fromEnv({
+      CARACAL_COORDINATOR_URL: "http://coord",
+      CARACAL_ZONE_ID: "z",
+      CARACAL_APPLICATION_ID: "app",
+      CARACAL_SUBJECT_TOKEN: "tok",
+      CARACAL_RESOURCES_FILE: bindingsPath,
+    } as NodeJS.ProcessEnv)).toThrow(/invalid CARACAL_RESOURCES_FILE/);
   });
 
   it("auto-detects local client secret and credential files", async () => {
@@ -228,6 +272,44 @@ upstream_prefix = "https://billing.example.com"
     const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
     expect(body.get("client_secret")).toBe("secret");
     expect(body.getAll("resource").sort()).toEqual(["billing", "calendar"]);
+  });
+
+  it("loads resource bindings file and env overrides with generated profiles", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "caracal-sdk-"));
+    const secretPath = join(dir, "secret");
+    const profilePath = join(dir, "caracal.toml");
+    const bindingsPath = join(dir, "resources.json");
+    writeFileSync(secretPath, "secret\n", { mode: 0o600 });
+    writeFileSync(bindingsPath, JSON.stringify([
+      { resource_id: "calendar", upstream_prefix: "https://file.example.com/v1" },
+      { resource_id: "billing", upstream_prefix: "https://billing.example.com" },
+    ]), { mode: 0o600 });
+    writeFileSync(profilePath, `
+zone_url = "http://sts"
+coordinator_url = "http://coord"
+zone_id = "z"
+application_id = "app"
+app_client_secret_file = "${secretPath}"
+`, { mode: 0o600 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "fresh-root", expires_in: 900 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const c = Caracal.fromConfig(profilePath, {
+      CARACAL_RESOURCES_FILE: bindingsPath,
+      CARACAL_RESOURCES: "calendar=https://env.example.com/v2",
+    } as NodeJS.ProcessEnv);
+    await c.headersAsync({ allowRoot: true });
+
+    const body = fetchMock.mock.calls[0][1].body as URLSearchParams;
+    expect(body.getAll("resource").sort()).toEqual(["billing", "calendar"]);
+    expect(resourceMap(c.config.resources)).toEqual({
+      calendar: "https://env.example.com/v2",
+      billing: "https://billing.example.com",
+    });
   });
 
   it("loads the default generated profile before env fallback", () => {

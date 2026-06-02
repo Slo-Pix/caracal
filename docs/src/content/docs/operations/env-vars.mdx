@@ -52,12 +52,22 @@ These variables belong to `caracal run` and SDK profile loading, not to service 
 | `CARACAL_GATEWAY_URL` | Cloud/custom Gateway URL override for SDK transports. |
 | `CARACAL_ZONE_ID` | Zone identifier. |
 | `CARACAL_APPLICATION_ID` | Confidential application ID. |
+| `CARACAL_APP_CLIENT_SECRET` | Cloud/custom workload client secret when a file-backed secret is not used. |
 | `CARACAL_APP_CLIENT_SECRET_FILE` | Cloud/custom workload secret file. |
+| `CARACAL_RUN_CREDENTIALS` | Inline JSON credential manifest for resource audiences. |
 | `CARACAL_RUN_CREDENTIALS_FILE` | Cloud/custom JSON credential manifest. |
+| `CARACAL_RESOURCES` | Comma-separated `resource_id=upstream_prefix` bindings for Gateway routing. |
+| `CARACAL_RESOURCES_FILE` | JSON resource binding file for Gateway routing. |
 
 Local dev and stable runtime launches auto-detect credential files from the OS
 Caracal config directory. Use the explicit file variables only when a deployment
 mounts secrets somewhere else.
+
+Resource binding files may contain either a flat JSON object such as
+`{"calendar":"https://api.example.com/v1"}` or an array of
+`{"resource_id":"calendar","upstream_prefix":"https://api.example.com/v1"}`
+objects. When both resource variables are set, entries in `CARACAL_RESOURCES`
+override matching entries from `CARACAL_RESOURCES_FILE`.
 
 Local dev and stable runtime launches also resolve service URLs automatically.
 Use explicit service URL variables only when a deployment does not use the local

@@ -22,10 +22,15 @@ Local dev and stable launches use `CARACAL_ZONE_ID` and
 `CARACAL_APPLICATION_ID`, then auto-detect credential files from the OS Caracal
 config directory. Cloud and custom deployments can provide explicit
 `CARACAL_APP_CLIENT_SECRET_FILE`, `CARACAL_RUN_CREDENTIALS`,
-or `CARACAL_RUN_CREDENTIALS_FILE` values when mounted secret paths differ from
-the local convention.
+`CARACAL_RUN_CREDENTIALS_FILE`, or `CARACAL_RESOURCES_FILE` values when mounted
+secret or config paths differ from the local convention.
 
 Set only one of `CARACAL_RUN_CREDENTIALS` and `CARACAL_RUN_CREDENTIALS_FILE`.
+
+Resource bindings resolve from profile credentials, then
+`CARACAL_RESOURCES_FILE`, then `CARACAL_RESOURCES`. Later bindings with the
+same resource ID override earlier bindings, so a short environment override can
+replace one entry from a mounted JSON file without duplicating the file.
 
 ## File-secret resolution
 
