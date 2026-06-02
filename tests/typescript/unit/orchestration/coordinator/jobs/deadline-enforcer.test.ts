@@ -3,9 +3,9 @@
 //
 // Deadline enforcer unit tests covering retry-aware transitions.
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
-import { runDeadlineSweep } from '../../../../../../apps/coordinator/src/jobs/deadline-enforcer.js'
+import { runDeadlineSweep, startDeadlineEnforcer } from '../../../../../../apps/coordinator/src/jobs/deadline-enforcer.js'
 
 function clientWith(rows: unknown[], acquired = true) {
   return {
@@ -19,6 +19,8 @@ function clientWith(rows: unknown[], acquired = true) {
 }
 
 describe('runDeadlineSweep', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('skips when another node holds the lock', async () => {
     const client = clientWith([], false)
     const db = { connect: vi.fn().mockResolvedValueOnce(client) }
@@ -50,5 +52,36 @@ describe('runDeadlineSweep', () => {
       'invocation.timed_out:inv-2',
     ]))
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('rolls back and releases when the transition query fails', async () => {
+    const err = new Error('deadlock')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ acquired: true }] })
+        .mockRejectedValueOnce(err)
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+
+    await expect(runDeadlineSweep(db as never)).rejects.toThrow(err)
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
+  })
+
+  it('logs interval failures from the start helper', async () => {
+    vi.useFakeTimers()
+    const err = new Error('postgres unavailable')
+    const log = { error: vi.fn() }
+    const db = { connect: vi.fn().mockRejectedValue(err) }
+    const handle = startDeadlineEnforcer(db as never, { intervalMs: 10, log })
+
+    await vi.advanceTimersByTimeAsync(10)
+    await handle.stop()
+
+    expect(log.error).toHaveBeenCalledWith({ err }, 'deadline_sweep_failed')
   })
 })

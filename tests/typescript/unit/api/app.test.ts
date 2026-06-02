@@ -152,6 +152,44 @@ describe('/metrics endpoint', () => {
     expect(res.body).toContain('caracal_api_outbox_dead_total')
     await app.close()
   })
+
+  it('requires a constant-length bearer when metrics auth is configured', async () => {
+    const cfg = makeCfg({ metricsBearer: 'metrics-token' })
+    const app = await buildApp({ cfg, db: makeDb(), redis: makeRedis() })
+
+    const missing = await app.inject({ method: 'GET', url: '/metrics' })
+    const wrongLength = await app.inject({ method: 'GET', url: '/metrics', headers: { authorization: 'Bearer short' } })
+
+    expect(missing.statusCode).toBe(401)
+    expect(wrongLength.statusCode).toBe(401)
+    await app.close()
+  })
+
+  it('renders numeric string and missing outbox health values as metrics', async () => {
+    const cfg = makeCfg({ metricsBearer: 'metrics-token' })
+    const db = {
+      query: vi.fn(async () => ({
+        rows: [{
+          pending_count: '3',
+          dead_count: '0',
+          oldest_pending_age_seconds: '12.5',
+          oldest_dead_age_seconds: null,
+        }],
+        rowCount: 1,
+      })),
+      connect: vi.fn(),
+      end: vi.fn(),
+    } as unknown as DB
+    const app = await buildApp({ cfg, db, redis: makeRedis() })
+
+    const res = await app.inject({ method: 'GET', url: '/metrics', headers: { authorization: 'Bearer metrics-token' } })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('caracal_api_outbox_pending_total 3')
+    expect(res.body).toContain('caracal_api_outbox_oldest_pending_age_seconds 12.5')
+    expect(res.body).toContain('caracal_api_outbox_oldest_dead_age_seconds 0')
+    await app.close()
+  })
 })
 
 describe('/ready endpoint', () => {
@@ -199,6 +237,54 @@ describe('/ready endpoint', () => {
 
     expect(res.statusCode).toBe(503)
     expect(res.json()).toMatchObject({ ok: false, error: 'outbox_dead_messages', deadCount: 1, limit: 0 })
+    await app.close()
+  })
+
+  it('rate-limits readiness checks before touching dependencies', async () => {
+    const cfg = makeCfg({ readyRateLimitPerMin: 1 })
+    const redis = makeRedis(1)
+    const db = makeDb()
+    const app = await buildApp({ cfg, db, redis })
+
+    const res = await app.inject({ method: 'GET', url: '/ready' })
+
+    expect(res.statusCode).toBe(429)
+    expect(res.json()).toMatchObject({ error: 'rate_limited' })
+    expect(db.query).not.toHaveBeenCalled()
+    await app.close()
+  })
+
+  it('returns draining and redis dependency failures explicitly', async () => {
+    const draining = await buildApp({ cfg: makeCfg(), db: makeDb(), redis: makeRedis(), isDraining: () => true })
+    const drainingRes = await draining.inject({ method: 'GET', url: '/ready' })
+    expect(drainingRes.statusCode).toBe(503)
+    expect(drainingRes.json()).toMatchObject({ ok: false, draining: true })
+    await draining.close()
+
+    const redis = makeRedis()
+    vi.mocked(redis.ping).mockResolvedValueOnce('NOPE')
+    const redisApp = await buildApp({ cfg: makeCfg(), db: makeDb(), redis })
+    const redisRes = await redisApp.inject({ method: 'GET', url: '/ready' })
+    expect(redisRes.statusCode).toBe(503)
+    expect(redisRes.json()).toMatchObject({ ok: false, error: 'redis_unreachable', dependency: 'redis' })
+    await redisApp.close()
+  })
+
+  it('returns outbox dependency failures separately from postgres health', async () => {
+    const cfg = makeCfg()
+    const db = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ '?column?': 1 }], rowCount: 1 })
+        .mockRejectedValueOnce(new Error('outbox failed')),
+      connect: vi.fn(),
+      end: vi.fn(),
+    } as unknown as DB
+    const app = await buildApp({ cfg, db, redis: makeRedis() })
+
+    const res = await app.inject({ method: 'GET', url: '/ready' })
+
+    expect(res.statusCode).toBe(503)
+    expect(res.json()).toMatchObject({ ok: false, error: 'outbox_unreachable', dependency: 'postgres' })
     await app.close()
   })
 })

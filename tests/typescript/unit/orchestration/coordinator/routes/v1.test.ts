@@ -38,6 +38,28 @@ function buildApp() {
   return app
 }
 
+function buildFacadeWithRoutes(routes: {
+  deleteAgent?: Parameters<ReturnType<typeof Fastify>['delete']>[1]
+  revokeDelegation?: Parameters<ReturnType<typeof Fastify>['patch']>[1]
+}) {
+  const app = Fastify({ logger: false })
+  app.decorate('db', {} as never)
+  app.decorate('redis', {
+    incr: vi.fn().mockResolvedValue(1),
+    expire: vi.fn().mockResolvedValue(1),
+  } as never)
+  app.addHook('preHandler', async (req) => {
+    ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
+      zoneId: 'z1', scopes: ['coordinator.admin'],
+      subject: 'test', clientId: 'app-1', sessionId: 'sid-test',
+    }
+  })
+  app.delete('/zones/:zoneId/agents/:id', routes.deleteAgent ?? (async (_req, reply) => reply.code(204).send()))
+  app.patch('/zones/:zoneId/delegations/:id/revoke', routes.revokeDelegation ?? (async (_req, reply) => reply.code(204).send()))
+  app.register(v1Routes)
+  return app
+}
+
 describe('POST /v1/begin', () => {
   it('dispatches to the underlying spawn route', async () => {
     const app = buildApp()
@@ -60,6 +82,19 @@ describe('POST /v1/end', () => {
       payload: { zone_id: 'z1', agent_session_id: 'sess-1' },
     })
     expect(res.statusCode).toBe(204)
+  })
+
+  it('forwards non-empty errors from the underlying terminate route', async () => {
+    const app = buildFacadeWithRoutes({
+      deleteAgent: async (_req, reply) => reply.code(404).send({ error: 'agent_not_found' }),
+    })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/end',
+      payload: { zone_id: 'z1', agent_session_id: 'missing', reason: 'operator requested' },
+    })
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'agent_not_found' })
   })
 })
 
@@ -137,9 +172,45 @@ describe('POST /v1/revoke-delegation', () => {
     expect(res.statusCode).toBe(200)
     expect(res.json()).toMatchObject({ revoked: 1 })
   })
+
+  it('forwards empty 204 revoke responses without parsing a body', async () => {
+    const app = buildFacadeWithRoutes({
+      revokeDelegation: async (_req, reply) => reply.code(204).send(),
+    })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/revoke-delegation',
+      payload: { zone_id: 'z1', delegation_edge_id: 'edge-1' },
+    })
+    expect(res.statusCode).toBe(204)
+    expect(res.body).toBe('')
+  })
 })
 
 describe('POST /v1/verify', () => {
+  it('rate-limits verification separately from the v1 façade limit', async () => {
+    const app = Fastify({ logger: false })
+    app.decorate('db', {} as never)
+    app.decorate('redis', {
+      incr: vi.fn().mockResolvedValue(10_000),
+      expire: vi.fn().mockResolvedValue(1),
+    } as never)
+    app.addHook('preHandler', async (req) => {
+      ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
+        zoneId: 'z1', scopes: ['coordinator.admin'],
+        subject: 'test', clientId: 'app-1', sessionId: 'sid-test',
+      }
+    })
+    app.register(v1Routes)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST', url: '/v1/verify',
+      payload: { token: 'not-a-jwt' },
+    })
+    expect(res.statusCode).toBe(429)
+    expect(res.json()).toEqual({ valid: false, error: 'rate_limited' })
+  })
+
   it('rejects when no token provided', async () => {
     const app = buildApp()
     await app.ready()

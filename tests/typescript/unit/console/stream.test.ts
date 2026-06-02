@@ -67,4 +67,48 @@ describe('StreamView', () => {
     view.dispose()
     expect(dispose).toHaveBeenCalled()
   })
+
+  it('renders spawn errors and exit status changes', async () => {
+    const failed = new StreamView({
+      title: 'x',
+      spawn: () => { throw new Error('spawn failed') },
+    })
+    const app = fakeApp()
+    await failed.init(app)
+    expect(failed.render({ app, size: { rows: 3, cols: 80 }, status: '' }).join('\n')).toContain('spawn failed')
+
+    let resolveExit: (code: number) => void = () => {}
+    const exited = new StreamView({
+      title: 'x',
+      spawn: () => ({ dispose: vi.fn(), exitCode: new Promise<number>((resolve) => { resolveExit = resolve }) }),
+    })
+    await exited.init(app)
+    resolveExit(7)
+    await Promise.resolve()
+    expect(exited.render({ app, size: { rows: 3, cols: 80 }, status: '' }).join('\n')).toContain('exited(7)')
+  })
+
+  it('supports scroll, tail, and back keys', async () => {
+    let push: ((l: string) => void) | undefined
+    const view = new StreamView({
+      title: 'x',
+      spawn: (onLine) => {
+        push = onLine
+        return { dispose: vi.fn(), exitCode: new Promise(() => {}) }
+      },
+    })
+    const app = fakeApp()
+    await view.init(app)
+    for (const line of ['one', 'two', 'three']) push!(line)
+
+    view.onKey('up', { app, size: { rows: 3, cols: 80 }, status: '' })
+    view.onKey('pgup', { app, size: { rows: 3, cols: 80 }, status: '' })
+    view.onKey('down', { app, size: { rows: 3, cols: 80 }, status: '' })
+    view.onKey('pgdn', { app, size: { rows: 3, cols: 80 }, status: '' })
+    view.onKey('G', { app, size: { rows: 3, cols: 80 }, status: '' })
+    view.onKey('esc', { app, size: { rows: 3, cols: 80 }, status: '' })
+
+    expect(app.pop).toHaveBeenCalled()
+    expect(view.render({ app, size: { rows: 3, cols: 80 }, status: '' }).join('\n')).toContain('three')
+  })
 })

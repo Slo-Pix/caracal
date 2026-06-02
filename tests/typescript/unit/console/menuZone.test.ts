@@ -168,4 +168,87 @@ describe('menu zone hotkey', () => {
     expect(client.zones.list).toHaveBeenCalledOnce()
     expect(app.push).toHaveBeenCalledWith(expect.objectContaining({ title: 'select zone' }))
   })
+
+  it('clears a stale configured zone on init', async () => {
+    const state = stateStore()
+    state.setSelectedZone('z1', 'pied-piper')
+    const client = clientWithZones([])
+    vi.mocked(client.zones.get).mockRejectedValueOnce({ status: 404 })
+    const menu = new MenuView(client, 'z1', state)
+    const app = fakeApp()
+
+    await menu.init(app)
+
+    expect(menu.currentZoneId()).toBeUndefined()
+    expect(state.selectedZoneId()).toBeUndefined()
+    expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('configured zone z1 no longer exists'), 'error')
+  })
+
+  it('reports zone picker empty and failure states', async () => {
+    const empty = new MenuView(clientWithZones([]), undefined)
+    const emptyApp = fakeApp()
+    await empty.onKey('z', { app: emptyApp, size: { rows: 25, cols: 80 }, status: '' })
+    expect(emptyApp.setStatus).toHaveBeenCalledWith('no zones: open Zones (n) to create one', 'error')
+
+    const failingClient = clientWithZones([])
+    vi.mocked(failingClient.zones.list).mockRejectedValueOnce(new Error('list failed'))
+    const failing = new MenuView(failingClient, undefined)
+    const failingApp = fakeApp()
+    await failing.onKey('z', { app: failingApp, size: { rows: 25, cols: 80 }, status: '' })
+    expect(failingApp.setStatus).toHaveBeenCalledWith('zone list: list failed', 'error')
+  })
+
+  it('blocks zone-scoped entries until a zone is selected', async () => {
+    const menu = new MenuView(clientWithZones([]), undefined)
+    const app = fakeApp()
+
+    await menu.onKey('2', { app, size: { rows: 25, cols: 80 }, status: '' })
+
+    expect(app.push).not.toHaveBeenCalled()
+    expect(app.setStatus).toHaveBeenCalledWith('zone required: press z to set one or pick Zones first', 'error')
+  })
+
+  it('opens every top-level info page from the current selection', async () => {
+    const menu = new MenuView(clientWithZones([]), 'z1')
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 25, cols: 100 }, status: '' }
+
+    for (const key of ['s', '1', '2', '3', '4', '5', '6', '7', '8', 'r', 'g', 'a', 't', 'c', 'd']) {
+      await menu.onKey(key, ctx)
+      await menu.onKey('?', ctx)
+    }
+
+    const pushed = (app as unknown as { _pushed: Array<{ render?: typeof menu.render }> })._pushed
+    const helpText = pushed
+      .filter((view) => typeof view.render === 'function')
+      .map((view) => view.render!(ctx).map(stripAnsi).join('\n'))
+      .join('\n')
+
+    expect(helpText).toContain('Pied Piper zone')
+    expect(helpText).toContain('Hooli OAuth')
+    expect(helpText).toContain('issue token with zones:read resources:write')
+    expect(helpText).toContain('strict readiness before a PiperNet launch smoke run')
+  })
+
+  it('renders and navigates the Control submenu without running lifecycle commands', async () => {
+    const menu = new MenuView(clientWithZones([]), 'z1')
+    const app = fakeApp()
+    const ctx = { app, size: { rows: 25, cols: 100 }, status: '' }
+
+    await menu.onKey('c', ctx)
+    const pushed = (app as unknown as { _pushed: Array<{ title: string; render: typeof menu.render; onKey: typeof menu.onKey; hints: () => string[] }> })._pushed
+    const control = pushed[pushed.length - 1]!
+
+    expect(control.title).toBe('control')
+    expect(control.hints()).toContain('enter:open')
+    expect(control.render(ctx).map(stripAnsi).join('\n')).toContain('Control API')
+
+    await control.onKey('down', ctx)
+    await control.onKey('?', ctx)
+    await control.onKey('l', ctx)
+    await control.onKey('esc', ctx)
+
+    expect(app.push).toHaveBeenCalledWith(expect.objectContaining({ title: 'control / keys' }))
+    expect(app.pop).toHaveBeenCalled()
+  })
 })

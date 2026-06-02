@@ -139,6 +139,13 @@ class SpawnAgentTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CoordinatorLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_http_client_is_created_lazily_with_timeout(self) -> None:
+        c = CoordinatorClient(base_url="http://coordinator.test", timeout=3.5)
+        self.assertIsNone(c._client)
+        client = c._http()
+        self.assertIs(c._client, client)
+        await c.close()
+
     async def test_close_is_idempotent(self) -> None:
         async def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json={"agent_session_id": "a-1"})
@@ -200,6 +207,23 @@ class CreateDelegationTests(unittest.IsolatedAsyncioTestCase):
                 ),
             )
 
+    async def test_raises_when_response_has_no_delegation_edge_id(self) -> None:
+        async def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"other": "field"})
+
+        with self.assertRaises(KeyError):
+            await create_delegation(
+                _client(handler), "tok",
+                DelegationRequest(
+                    zone_id="z",
+                    issuer_application_id="app",
+                    source_session_id="agent-1",
+                    target_session_id="agent-2",
+                    receiver_application_id="app-2",
+                    scopes=["tool:call"],
+                ),
+            )
+
     async def test_sends_constraints_and_ttl(self) -> None:
         captured: list[dict] = []
 
@@ -224,6 +248,31 @@ class CreateDelegationTests(unittest.IsolatedAsyncioTestCase):
         body = captured[0]
         self.assertEqual(body["constraints"], {"resources": ["calendar"], "max_depth": 2})
         self.assertEqual(body["ttl_seconds"], 30)
+
+    async def test_sends_resource_and_parent_edge_when_set(self) -> None:
+        captured: list[dict] = []
+
+        async def handler(req: httpx.Request) -> httpx.Response:
+            import json
+            captured.append(json.loads(req.content))
+            return httpx.Response(200, json={"delegation_edge_id": "edge-1"})
+
+        await create_delegation(
+            _client(handler), "tok",
+            DelegationRequest(
+                zone_id="z",
+                issuer_application_id="app",
+                source_session_id="agent-1",
+                target_session_id="agent-2",
+                receiver_application_id="app-2",
+                scopes=["tool:call"],
+                resource_id="calendar",
+                parent_edge_id="parent-edge",
+            ),
+        )
+
+        self.assertEqual(captured[0]["resource_id"], "calendar")
+        self.assertEqual(captured[0]["parent_edge_id"], "parent-edge")
 
 
 class DelegationConstraintsTests(unittest.TestCase):

@@ -72,6 +72,22 @@ describe('OAuthClient', () => {
     expect(body.getAll('resource')).toEqual(['resource://a', 'resource://b'])
   })
 
+  it('sends ttl seconds and omits blank resource entries', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: 'tok-ttl', expires_in: 900 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+
+    await client.exchange('subject-tok', [' resource://api ', ' '], { ttlSeconds: 60 })
+
+    const body = fetchMock.mock.calls[0][1].body as URLSearchParams
+    expect(body.getAll('resource')).toEqual(['resource://api'])
+    expect(body.get('ttl_seconds')).toBe('60')
+  })
+
   it('returns cached token without calling STS again', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -111,7 +127,10 @@ describe('OAuthClient', () => {
       }),
     }))
     const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
-    await expect(client.exchange('subject-tok', 'resource://api')).rejects.toThrow(InteractionRequiredError)
+    const err = await client.exchange('subject-tok', 'resource://api').catch((error: unknown) => error)
+    expect(err).toBeInstanceOf(InteractionRequiredError)
+    expect(err.challengeId).toBe('chal-1')
+    expect(err.resource).toBe('resource://api')
   })
 
   it('does not share cache across subjects', async () => {
@@ -258,6 +277,49 @@ describe('OAuthClient', () => {
     await expect(client.exchange('subject-tok', 'resource://api')).rejects.toThrow('invalid error response')
   })
 
+  it('formats STS errors from json-only responses and request ids', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ error_description: 'Denied', requestId: 'req-1' }),
+    }))
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+
+    await expect(client.exchange('subject-tok', 'resource://api')).rejects.toThrow('Denied (request_id=req-1)')
+  })
+
+  it('uses retry-after headers for transient STS retries', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        headers: { get: () => '0' },
+        text: async () => JSON.stringify({ error: 'rate_limited' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ access_token: 'tok-retry-after', expires_in: 900 }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+
+    await expect(client.exchange('subject-tok', 'resource://api', { retries: 1 })).resolves
+      .toMatchObject({ accessToken: 'tok-retry-after' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('rethrows final fetch errors and times out expired deadlines', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+
+    await expect(client.exchange('subject-tok', 'resource://api', { retries: 0 }))
+      .rejects.toThrow('network down')
+    await expect(client.exchange('subject-tok', 'resource://api', { timeoutMs: -1 }))
+      .rejects.toThrow('STS request timed out')
+  })
+
   it('rejects non-json successful STS responses', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -280,5 +342,26 @@ describe('OAuthClient', () => {
     const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
 
     await expect(client.exchange('subject-tok', 'resource://api')).rejects.toThrow('access_token is required')
+  })
+
+  it.each([
+    [{ access_token: 'tok', token_type: 'Basic', expires_in: 900 }, 'token_type must be Bearer'],
+    [{ access_token: 'tok', expires_in: 0 }, 'expires_in must be a positive integer'],
+    [{ access_token: 'tok', expires_in: 900, target_resources: ['ok', 1] }, 'target_resources must be a string array'],
+    [{ access_token: 'tok', expires_in: 900, upstreams: [] }, 'upstreams must be an object'],
+    [{ access_token: 'tok', expires_in: 900, upstreams: { r: null } }, 'upstream directive must be an object'],
+    [{ access_token: 'tok', expires_in: 900, upstreams: { r: { allowed_token_hosts: ['a', 1] } } }, 'allowed_token_hosts must be a string array'],
+    [{ access_token: 'tok', expires_in: 900, upstreams: { r: { forward_caracal_identity: 'true' } } }, 'forward_caracal_identity must be a boolean'],
+    [{ access_token: 'tok', expires_in: 900, upstreams: { r: { expires_at: 1.5 } } }, 'expires_at must be an integer'],
+  ])('rejects invalid successful STS response shape %#', async (body, message) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'application/json; charset=utf-8' },
+      json: async () => body,
+    }))
+    const client = new OAuthClient('http://sts:8080', 'zone1', 'app1')
+
+    await expect(client.exchange('subject-tok', 'resource://api')).rejects.toThrow(message)
   })
 })

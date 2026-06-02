@@ -110,6 +110,32 @@ describe('a2aCall', () => {
     )).rejects.toThrow(/requestId mismatch/)
   })
 
+  it('rejects non-object and result-less A2A response bodies', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'agent-token', expires_in: 900 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => null }))
+
+    await expect(a2aCall(
+      { agentUrl: 'http://agent-b:4001', method: 'query', params: {}, requestId: 'req-null' },
+      'tok',
+      'zone1',
+      'app2',
+      { stsUrl: 'http://sts:8080' },
+    )).rejects.toThrow('expected object')
+
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'agent-token', expires_in: 900 }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ requestId: 'req-empty' }) }))
+
+    await expect(a2aCall(
+      { agentUrl: 'http://agent-b:4001', method: 'query', params: {}, requestId: 'req-empty' },
+      'tok',
+      'zone1',
+      'app2',
+      { stsUrl: 'http://sts:8080' },
+    )).rejects.toThrow('result is required')
+  })
+
   it('uses the exchanged token even when caller context is bound', async () => {
     const captured: Record<string, string> = {}
     vi.stubGlobal('fetch', vi.fn()
@@ -174,5 +200,23 @@ describe('a2aCall', () => {
     expect(res).toEqual({ requestId: 'req-4', result: 'ok' })
     expect(fetchMock).toHaveBeenCalledTimes(3)
     expect((fetchMock.mock.calls[2][1].headers as Record<string, string>)['X-Caracal-Retry-Attempt']).toBe('1')
+  })
+
+  it('retries transient fetch errors and rethrows the final failure', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: 'agent-token', expires_in: 900 }) })
+      .mockRejectedValueOnce(new Error('network one'))
+      .mockRejectedValueOnce(new Error('network two'))
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+
+    await expect(a2aCall(
+      { agentUrl: 'http://agent-b:4001', method: 'query', params: {}, requestId: 'req-network' },
+      'tok',
+      'zone1',
+      'app2',
+      { stsUrl: 'http://sts:8080', retries: 1, retryBaseMs: 1 },
+    )).rejects.toThrow('network two')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 })

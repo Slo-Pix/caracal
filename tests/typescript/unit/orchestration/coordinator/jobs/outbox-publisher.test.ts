@@ -74,6 +74,24 @@ describe('publishBatch', () => {
     const deadUpdate = client.query.mock.calls.find((call) => String(call[0]).includes("status = 'dead'"))
     expect(deadUpdate?.[1]).toEqual([['outbox-1']])
   })
+
+  it('rolls back and releases when the outbox select fails', async () => {
+    const err = new Error('select failed')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockRejectedValueOnce(err)
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+    const redis = { xadd: vi.fn() }
+
+    await expect(publishBatch(db as never, redis as never, 50, 10)).rejects.toThrow(err)
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
+  })
 })
 
 describe('startOutboxPublisher', () => {
@@ -89,5 +107,18 @@ describe('startOutboxPublisher', () => {
     await vi.advanceTimersByTimeAsync(100)
     await handle.stop()
     expect(client.release).toHaveBeenCalled()
+  })
+
+  it('logs interval failures through the start helper', async () => {
+    const err = new Error('connect failed')
+    const log = { error: vi.fn() }
+    const db = { connect: vi.fn().mockRejectedValue(err) }
+    const redis = { xadd: vi.fn() }
+
+    const handle = startOutboxPublisher(db as never, redis as never, { intervalMs: 10, log })
+    await vi.advanceTimersByTimeAsync(10)
+    await handle.stop()
+
+    expect(log.error).toHaveBeenCalledWith({ err }, 'outbox_batch_publish_failed')
   })
 })

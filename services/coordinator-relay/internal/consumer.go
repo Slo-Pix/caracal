@@ -37,13 +37,21 @@ type Config struct {
 }
 
 type Consumer struct {
-	redis         *redis.Client
+	redis         redisClient
 	log           zerolog.Logger
 	streamHMACKey []byte
 	requireSig    bool
 	consumerName  string
 	dedupeTTL     time.Duration
 	claimIdle     time.Duration
+}
+
+type redisClient interface {
+	XAck(context.Context, string, string, ...string) *redis.IntCmd
+	XAutoClaim(context.Context, *redis.XAutoClaimArgs) *redis.XAutoClaimCmd
+	XGroupCreateMkStream(context.Context, string, string, string) *redis.StatusCmd
+	XReadGroup(context.Context, *redis.XReadGroupArgs) *redis.XStreamSliceCmd
+	SetNX(context.Context, string, any, time.Duration) *redis.BoolCmd
 }
 
 func New(_ context.Context) (*Consumer, error) {

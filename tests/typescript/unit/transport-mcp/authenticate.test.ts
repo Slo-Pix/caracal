@@ -119,6 +119,19 @@ describe('transport-mcp authentication', () => {
     expect(revocations.isRevoked).not.toHaveBeenCalled()
   })
 
+  it('rejects successful verification when no revocation store is supplied', async () => {
+    const { token, issuer, audience } = await mintToken()
+
+    await expect(authenticate(token, {
+      issuer,
+      audience,
+      revocations: undefined as never,
+    })).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'invalid_token', description: 'Revocation store required' },
+    })
+  })
+
   it('returns the verified principal and checks session revocation', async () => {
     const { token, issuer, audience } = await mintToken({
       agent_session_id: 'agent-1',
@@ -252,6 +265,27 @@ describe('transport-mcp authentication', () => {
     })
   })
 
+  it('rejects active-execution checks with missing sid', async () => {
+    revocations.isRevoked.mockResolvedValue(false)
+
+    await expect(checkActiveAuthority({
+      sub: 'user-1',
+      zoneId: 'zone-1',
+      clientId: 'app-1',
+      sid: '',
+      rootSid: '',
+      use: 'resource',
+      subType: 'user',
+      jti: 'jti-1',
+      issuedAt: 10,
+      expiresAt: 20,
+      scope: 'mcp:call',
+    }, revocations, 10_000)).resolves.toMatchObject({
+      code: 'invalid_token',
+      description: 'Token validation failed',
+    })
+  })
+
   it.each([
     ['missing required scope', { requiredScopes: ['admin:call'] }, {}, 'insufficient_scope', 'Missing scope: admin:call'],
     ['missing required target', { requiredTargets: ['resource://tools/calendar'] }, { target: ['resource://tools/files'] }, 'invalid_token', 'Token validation failed'],
@@ -304,5 +338,22 @@ describe('transport-mcp authentication', () => {
         hint: 'Request a mandate that includes every required scope for this route.',
       },
     })
+  })
+
+  it('warms either an injected JWKS cache or the default issuer cache', async () => {
+    const cache = { warm: vi.fn(async () => undefined) }
+    const cached = createMandateVerifier({
+      issuer: 'https://issuer-cache.example.com',
+      audience: 'resource://api',
+      revocations,
+      jwksCache: cache as never,
+    })
+    await cached.warmup()
+    expect(cache.warm).toHaveBeenCalledWith('https://issuer-cache.example.com')
+
+    const { issuer, audience } = await mintToken()
+    const verifier = createMandateVerifier({ issuer, audience, revocations })
+    await expect(verifier.warmup()).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledWith(`${issuer}/.well-known/jwks.json`, expect.anything())
   })
 })

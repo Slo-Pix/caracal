@@ -1,0 +1,116 @@
+// Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+// Caracal, a product of Garudex Labs
+//
+// Runtime shell entrypoint tests verify command wiring and MCP governance gating.
+
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeConfig } from '../../../../apps/runtime/src/config.ts'
+
+const state = vi.hoisted(() => ({
+  dispatch: vi.fn(),
+  installCrashHandlers: vi.fn(),
+  runCommand: vi.fn(),
+  upCommand: vi.fn(),
+  downCommand: vi.fn(),
+  statusCommand: vi.fn(),
+  purgeCommand: vi.fn(),
+  consoleDispatch: vi.fn(),
+  availableInterfaceCommands: vi.fn(() => ['console']),
+  checkMcpGovernance: vi.fn(),
+}))
+
+vi.mock('@caracalai/engine/scrubCwdEnv', () => ({}))
+vi.mock('@caracalai/engine/crash', () => ({ installCrashHandlers: state.installCrashHandlers }))
+vi.mock('@caracalai/engine/commands', () => ({
+  SHELL_COMMANDS: [
+    { name: 'up', summary: 'up', group: 'stack' },
+    { name: 'down', summary: 'down', group: 'stack' },
+    { name: 'status', summary: 'status', group: 'stack' },
+    { name: 'purge', summary: 'purge', group: 'runtime' },
+    { name: 'run', summary: 'run', group: 'runtime', requiresArgs: true, requiresConfig: true },
+    { name: 'console', summary: 'console', group: 'runtime' },
+  ],
+}))
+vi.mock('../../../../apps/runtime/src/runtime/version.gen.ts', () => ({
+  CARACAL_MODE: 'dev',
+  CARACAL_SHA: 'sha-test',
+  CARACAL_VERSION: '0.0.0-test',
+}))
+vi.mock('../../../../apps/runtime/src/commands/run.ts', () => ({ runCommand: state.runCommand }))
+vi.mock('../../../../apps/runtime/src/commands/stack.ts', () => ({
+  upCommand: state.upCommand,
+  downCommand: state.downCommand,
+  statusCommand: state.statusCommand,
+}))
+vi.mock('../../../../apps/runtime/src/commands/purge.ts', () => ({ purgeCommand: state.purgeCommand }))
+vi.mock('../../../../apps/runtime/src/commands/dispatch.ts', () => ({
+  availableInterfaceCommands: state.availableInterfaceCommands,
+  consoleDispatch: state.consoleDispatch,
+}))
+vi.mock('../../../../apps/runtime/src/mcp.ts', () => ({ checkMcpGovernance: state.checkMcpGovernance }))
+vi.mock('../../../../apps/runtime/src/dispatcher.ts', () => ({ dispatch: state.dispatch }))
+
+async function importShell(): Promise<Awaited<ReturnType<typeof loadShell>>> {
+  vi.resetModules()
+  return loadShell()
+}
+
+async function loadShell() {
+  await import('../../../../apps/runtime/src/shell.ts')
+  const opts = state.dispatch.mock.calls.at(-1)?.[0]
+  return opts
+}
+
+afterEach(() => {
+  vi.clearAllMocks()
+})
+
+describe('runtime shell entrypoint', () => {
+  it('installs crash handlers and dispatches the filtered runtime registry', async () => {
+    const opts = await importShell()
+
+    expect(state.installCrashHandlers).toHaveBeenCalledWith('caracal')
+    expect(state.availableInterfaceCommands).toHaveBeenCalledOnce()
+    expect(state.dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      binary: 'caracal',
+      version: '0.0.0-test',
+      mode: 'dev',
+      sha: 'sha-test',
+      loadConfig: true,
+    }), process.argv.slice(2))
+    expect(opts.registry.byName.has('console')).toBe(true)
+  })
+
+  it('wires stack, purge, run, and console executors without exposing unavailable interfaces', async () => {
+    state.availableInterfaceCommands.mockReturnValueOnce([])
+    const opts = await importShell()
+    const cfg = { zone_url: 'https://sts.example.com' } as RuntimeConfig
+
+    expect(opts.registry.byName.has('console')).toBe(false)
+    await opts.registry.byName.get('up')!.run(['--detach'], cfg)
+    await opts.registry.byName.get('down')!.run(['--volumes'], cfg)
+    await opts.registry.byName.get('status')!.run(['--json'], cfg)
+    await opts.registry.byName.get('purge')!.run(['--force'], cfg)
+    await opts.registry.byName.get('run')!.run(['--', 'node', 'tool.js'], cfg)
+
+    expect(state.upCommand).toHaveBeenCalledWith(['--detach'])
+    expect(state.downCommand).toHaveBeenCalledWith(['--volumes'])
+    expect(state.statusCommand).toHaveBeenCalledWith(['--json'])
+    expect(state.purgeCommand).toHaveBeenCalledWith(['--force'])
+    expect(state.checkMcpGovernance).toHaveBeenCalledWith(['node', 'tool.js'], cfg)
+    expect(state.runCommand).toHaveBeenCalledWith(['--', 'node', 'tool.js'], cfg)
+  })
+
+  it('skips MCP governance when run has no command or no loaded config', async () => {
+    const opts = await importShell()
+
+    await opts.registry.byName.get('run')!.run([], undefined)
+    await opts.registry.byName.get('run')!.run(['python', 'tool.py'], undefined)
+    await opts.registry.byName.get('console')!.run(['zones'])
+
+    expect(state.checkMcpGovernance).not.toHaveBeenCalled()
+    expect(state.runCommand).toHaveBeenCalledWith([], undefined)
+    expect(state.runCommand).toHaveBeenCalledWith(['python', 'tool.py'], undefined)
+    expect(state.consoleDispatch).toHaveBeenCalledWith(['zones'])
+  })
+})

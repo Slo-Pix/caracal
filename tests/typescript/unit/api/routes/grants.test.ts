@@ -122,6 +122,94 @@ describe('POST /v1/zones/:zoneId/grants', () => {
 })
 
 describe('POST /v1/zones/:zoneId/provider-grants', () => {
+  it('rejects invalid provider grant payloads and missing zones', async () => {
+    const invalid = buildRouteApp(grantsRoutes)
+    invalid.db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+    await invalid.app.ready()
+    const invalidRes = await invalid.app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants',
+      payload: { user_id: 'user-1' },
+    })
+    expect(invalidRes.statusCode).toBe(400)
+
+    const missingZone = buildRouteApp(grantsRoutes)
+    missingZone.db.query.mockResolvedValueOnce({ rows: [] })
+    await missingZone.app.ready()
+    const missingZoneRes = await missingZone.app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['read'],
+        access_token: 'token',
+      },
+    })
+    expect(missingZoneRes.statusCode).toBe(404)
+    expect(JSON.parse(missingZoneRes.body)).toMatchObject({ error: 'zone_not_found' })
+  })
+
+  it('rejects unsupported providers, resource mismatches, and oversized scopes', async () => {
+    const unsupported = buildRouteApp(grantsRoutes)
+    unsupported.db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ provider_kind: 'api_key', resource_scopes: ['read'], resource_provider_id: 'provider-1' }] })
+    await unsupported.app.ready()
+    const unsupportedRes = await unsupported.app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['read'],
+        access_token: 'token',
+      },
+    })
+    expect(unsupportedRes.statusCode).toBe(400)
+    expect(JSON.parse(unsupportedRes.body)).toMatchObject({ error: 'provider_grant_unsupported' })
+
+    const mismatch = buildRouteApp(grantsRoutes)
+    mismatch.db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ provider_kind: 'oauth2_authorization_code', resource_scopes: ['read'], resource_provider_id: 'other-provider' }] })
+    await mismatch.app.ready()
+    const mismatchRes = await mismatch.app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['read'],
+        access_token: 'token',
+      },
+    })
+    expect(mismatchRes.statusCode).toBe(400)
+    expect(JSON.parse(mismatchRes.body)).toMatchObject({ error: 'provider_resource_mismatch' })
+
+    const forbidden = buildRouteApp(grantsRoutes)
+    forbidden.db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({ rows: [{ provider_kind: 'oauth2_authorization_code', resource_scopes: ['read'], resource_provider_id: 'provider-1' }] })
+    await forbidden.app.ready()
+    const forbiddenRes = await forbidden.app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['write'],
+        access_token: 'token',
+      },
+    })
+    expect(forbiddenRes.statusCode).toBe(403)
+    expect(JSON.parse(forbiddenRes.body)).toMatchObject({ error: 'grant_scopes_exceed_resource' })
+  })
+
   it('stores delegated provider tokens only for matching authorization-code resources', async () => {
     const { app, db } = buildRouteApp(grantsRoutes)
     db.query
@@ -211,6 +299,38 @@ describe('OAuth provider grant browser flow', () => {
     expect(url.searchParams.get('code_challenge_method')).toBe('S256')
     expect(url.searchParams.get('state')).toBe(body.state)
     expect(redis.set).toHaveBeenCalledWith(`api:provider_oauth_state:${body.state}`, expect.any(String), 'EX', 600)
+  })
+
+  it('rejects authorization setup with invalid provider configuration', async () => {
+    const { app, db } = buildRouteApp(grantsRoutes)
+    db.query
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'provider-1',
+          provider_kind: 'oauth2_authorization_code',
+          config_json: { authorization_endpoint: 'http://accounts.example.com/auth', redirect_uri: 'http://localhost/cb', client_id: 'client' },
+          secret_config_ct: null,
+          secret_config_nonce: null,
+          resource_scopes: ['read'],
+          resource_provider_id: 'provider-1',
+        }],
+      })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants/oauth/authorize',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['read'],
+      },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_authorization_endpoint_invalid' })
   })
 
   it('exchanges callback authorization codes and stores provider grants', async () => {
@@ -401,6 +521,48 @@ describe('OAuth provider grant browser flow', () => {
     expect(res.headers['content-type']).toContain('text/html')
     expect(res.body).toContain('OAuth provider connected')
   })
+
+  it('handles expired, denied, and malformed callback state without provider calls', async () => {
+    const expired = buildRouteApp(grantsRoutes)
+    expired.redis.call.mockResolvedValue(null)
+    await expired.app.ready()
+    const expiredRes = await expired.app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/provider-grants/oauth/callback?state=abcdefghijklmnopqrstuvwxyz1234567890&code=provider-code',
+    })
+    expect(expiredRes.statusCode).toBe(400)
+    expect(JSON.parse(expiredRes.body)).toMatchObject({ error: 'oauth_state_expired' })
+
+    const invalid = buildRouteApp(grantsRoutes)
+    invalid.redis.call.mockResolvedValue('{')
+    await invalid.app.ready()
+    const invalidRes = await invalid.app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/provider-grants/oauth/callback?state=abcdefghijklmnopqrstuvwxyz1234567890&code=provider-code',
+    })
+    expect(invalidRes.statusCode).toBe(400)
+    expect(JSON.parse(invalidRes.body)).toMatchObject({ error: 'oauth_state_invalid' })
+
+    const denied = buildRouteApp(grantsRoutes)
+    denied.redis.call.mockResolvedValue(JSON.stringify({
+      zone_id: 'z1',
+      user_id: 'user-1',
+      resource_id: 'res-1',
+      provider_id: 'provider-1',
+      scopes: ['read'],
+      code_verifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-._~',
+    }))
+    await denied.app.ready()
+    const deniedRes = await denied.app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/provider-grants/oauth/callback?state=abcdefghijklmnopqrstuvwxyz1234567890&error=access_denied',
+      headers: { accept: 'text/html' },
+    })
+    expect(deniedRes.statusCode).toBe(400)
+    expect(deniedRes.headers['content-type']).toContain('text/html')
+    expect(deniedRes.body).toContain('OAuth authorization denied')
+    expect(httpsRequest).not.toHaveBeenCalled()
+  })
 })
 
 describe('POST /v1/zones/:zoneId/provider-grants/revoke', () => {
@@ -425,9 +587,44 @@ describe('POST /v1/zones/:zoneId/provider-grants/revoke', () => {
     expect(JSON.parse(res.body)).toMatchObject({ id: 'provider-grant-1', status: 'revoked' })
     expect(db.query).toHaveBeenCalledWith(expect.stringContaining("status = 'revoked'"), ['z1', 'user-1', 'res-1', 'provider-1'])
   })
+
+  it('returns 404 when there is no active provider grant to revoke', async () => {
+    const { app, db } = buildRouteApp(grantsRoutes)
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/provider-grants/revoke',
+      payload: {
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+      },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_grant_not_found' })
+  })
 })
 
 describe('DELETE /v1/zones/:zoneId/grants/:id bounded session revocation', () => {
+  it('returns 404 when the delegated grant is missing', async () => {
+    const { app, db } = buildRouteApp(grantsRoutes)
+    const client = { query: vi.fn(), release: vi.fn() }
+    client.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    db.connect.mockResolvedValue(client)
+
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/grants/missing' })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'grant_not_found' })
+  })
+
   it('pages session revocation in batches of 1000 and stops at the short batch', async () => {
     const { app, db } = buildRouteApp(grantsRoutes)
 

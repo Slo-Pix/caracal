@@ -93,4 +93,18 @@ describe('coordinator bearer authentication', () => {
     expect(secure.statusCode).toBe(401)
     expect(secure.json()).toEqual({ error: 'invalid_token' })
   })
+
+  it('requires the managed operator token for metrics routes', async () => {
+    const app = buildApp()
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/stats',
+      headers: { authorization: 'Bearer not-the-operator-token' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'operator_token_required' })
+  })
 })

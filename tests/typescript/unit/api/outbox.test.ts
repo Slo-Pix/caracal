@@ -64,6 +64,24 @@ describe('OutboxDispatcher', () => {
     expect(dbCalls.some((c) => c.sql.includes('SET dispatched_at = now()'))).toBe(true)
   })
 
+  it('uses approximate stream trimming and skips null payload fields', async () => {
+    const { db, redis } = makeDeps([
+      { id: 'r1', stream_name: 'stream.x', payload_json: { a: '1', empty: null }, attempts: 1 },
+    ])
+    redis.xadd.mockResolvedValue('0-1')
+    const dispatcher = new OutboxDispatcher({
+      db: db as unknown as DB,
+      redis: redis as unknown as RedisClient,
+      workerId: 'w',
+      streamMaxLen: 50,
+      log: makeLogger(),
+    })
+
+    await dispatcher.tick()
+
+    expect(redis.xadd).toHaveBeenCalledWith('stream.x', 'MAXLEN', '~', '50', '*', 'outbox_id', 'r1', 'a', '1')
+  })
+
   it('reschedules with backoff on dispatch failure below max attempts', async () => {
     const { db, redis, dbCalls } = makeDeps([
       { id: 'r1', stream_name: 'stream.x', payload_json: { a: '1' }, attempts: 2 },
@@ -84,5 +102,41 @@ describe('OutboxDispatcher', () => {
     await dispatcher.tick()
     const park = dbCalls.find((c) => c.sql.includes("available_at = 'infinity'::timestamptz"))
     expect(park).toBeDefined()
+  })
+
+  it('logs claim failures and ignores ticks while stopping', async () => {
+    const log = makeLogger()
+    const db = { query: vi.fn().mockRejectedValueOnce(new Error('claim failed')) }
+    const redis = { xadd: vi.fn() }
+    const dispatcher = new OutboxDispatcher({ db: db as unknown as DB, redis: redis as unknown as RedisClient, workerId: 'w', log })
+
+    await dispatcher.tick()
+    await dispatcher.stop()
+    await dispatcher.tick()
+
+    expect(log).toHaveBeenCalledWith('error', 'outbox dispatcher tick failed', { err: 'claim failed' })
+    expect(log).toHaveBeenCalledWith('info', 'outbox dispatcher stopped', { workerId: 'w' })
+    expect(db.query).toHaveBeenCalledOnce()
+  })
+
+  it('starts only once and stops the polling timer', async () => {
+    vi.useFakeTimers()
+    const { db, redis } = makeDeps([])
+    const log = makeLogger()
+    const dispatcher = new OutboxDispatcher({
+      db: db as unknown as DB,
+      redis: redis as unknown as RedisClient,
+      workerId: 'w',
+      pollIntervalMs: 10,
+      log,
+    })
+
+    dispatcher.start()
+    dispatcher.start()
+    await vi.advanceTimersByTimeAsync(10)
+    await dispatcher.stop()
+
+    expect(log).toHaveBeenCalledWith('info', 'outbox dispatcher started', { workerId: 'w', intervalMs: 10 })
+    expect(db.query).toHaveBeenCalledTimes(1)
   })
 })

@@ -108,6 +108,96 @@ class FromEnvTests(unittest.TestCase):
             })
         self.assertIn("expired", str(cm.exception))
 
+    def test_production_requires_service_urls(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "CARACAL_COORDINATOR_URL"):
+            Caracal.from_env({
+                "NODE_ENV": "production",
+                "CARACAL_ZONE_ID": "z",
+                "CARACAL_APPLICATION_ID": "app",
+                "CARACAL_SUBJECT_TOKEN": "tok",
+            })
+
+    def test_client_secret_env_rejects_conflicting_sources(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "only one"):
+            Caracal.from_env({
+                "CARACAL_ZONE_ID": "z",
+                "CARACAL_APPLICATION_ID": "app",
+                "CARACAL_APP_CLIENT_SECRET": "secret",
+                "CARACAL_APP_CLIENT_SECRET_FILE": "/tmp/secret",
+            })
+
+    def test_credential_manifest_rejects_conflicts_and_bad_shapes(self) -> None:
+        base = {
+            "CARACAL_ZONE_ID": "z",
+            "CARACAL_APPLICATION_ID": "app",
+            "CARACAL_APP_CLIENT_SECRET": "secret",
+        }
+        with self.assertRaisesRegex(RuntimeError, "only one"):
+            Caracal.from_env({
+                **base,
+                "CARACAL_RUN_CREDENTIALS": "[]",
+                "CARACAL_RUN_CREDENTIALS_FILE": "/tmp/credentials.json",
+            })
+        with self.assertRaisesRegex(RuntimeError, "must be an array or object"):
+            Caracal.from_env({**base, "CARACAL_RUN_CREDENTIALS": '"bad"'})
+        with self.assertRaisesRegex(RuntimeError, "credentials\\[0\\]\\.resource"):
+            Caracal.from_env({**base, "CARACAL_RUN_CREDENTIALS": "[{}]"})
+
+
+class ConfigTests(unittest.TestCase):
+    def test_config_requires_exactly_one_token_source(self) -> None:
+        coordinator = CoordinatorClient(base_url="http://coord")
+        with self.assertRaises(ValueError):
+            CaracalConfig(coordinator=coordinator, zone_id="z", application_id="app")
+        with self.assertRaises(ValueError):
+            CaracalConfig(
+                coordinator=coordinator,
+                zone_id="z",
+                application_id="app",
+                subject_token="tok",
+                token_source=lambda: "fresh",
+            )
+
+    def test_token_source_is_read_when_subject_token_is_requested(self) -> None:
+        calls: list[int] = []
+        cfg = CaracalConfig(
+            coordinator=CoordinatorClient(base_url="http://coord"),
+            zone_id="z",
+            application_id="app",
+            token_source=lambda: calls.append(1) or "fresh",
+        )
+        self.assertEqual(cfg.subject_token, "fresh")
+        self.assertEqual(calls, [1])
+
+
+class ConnectTests(unittest.TestCase):
+    def test_missing_explicit_env_config_path_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            missing = Path(root) / "missing.toml"
+            with self.assertRaisesRegex(RuntimeError, "not found"):
+                Caracal.connect(env={"CARACAL_CONFIG": str(missing)})
+
+    def test_config_path_takes_precedence_over_env_credentials(self) -> None:
+        with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as fh:
+            fh.write(
+                'zone_id = "z"\n'
+                'application_id = "app"\n'
+                'app_client_secret = "secret"\n'
+                'sts_url = "https://sts.example.com"\n'
+                'coordinator_url = "https://coord.example.com"\n'
+                '[[credentials]]\n'
+                'resource = "calendar"\n'
+                'upstream_prefix = "https://api.example.com/v1"\n'
+            )
+            cfg_path = fh.name
+
+        c = Caracal.connect(config_path=cfg_path, env={
+            "CARACAL_ZONE_ID": "other",
+            "CARACAL_APPLICATION_ID": "other",
+            "CARACAL_SUBJECT_TOKEN": "tok",
+        })
+        self.assertEqual(c.config.zone_id, "z")
+
 
 class ResourceBindingSortTests(unittest.TestCase):
     def test_post_init_sorts_bindings_longest_prefix_first(self) -> None:
@@ -125,6 +215,35 @@ class ResourceBindingSortTests(unittest.TestCase):
         self.assertEqual([b.resource_id for b in cfg.resources], ["long", "mid", "short"])
 
 
+class FromClientSecretTests(unittest.TestCase):
+    def test_requires_at_least_one_resource(self) -> None:
+        with self.assertRaises(ValueError):
+            Caracal.from_client_secret(
+                coordinator_url="http://coord",
+                sts_url="http://sts",
+                zone_id="z",
+                application_id="app",
+                client_secret="secret",
+                resources=[],
+            )
+
+    def test_accepts_resource_bindings_as_gateway_bindings_and_sts_resources(self) -> None:
+        c = Caracal.from_client_secret(
+            coordinator_url="http://coord",
+            sts_url="http://sts",
+            zone_id="z",
+            application_id="app",
+            client_secret="secret",
+            resources=[ResourceBinding("calendar", "https://api.example.com/v1")],
+            gateway_url="https://gateway.example.com/proxy",
+            scope="custom",
+        )
+        exchanger = getattr(c.config._token_source, "__self__")
+        self.assertEqual(exchanger._resources, ["calendar"])
+        self.assertEqual(exchanger._scope, "custom")
+        self.assertEqual(c.config.resources[0].resource_id, "calendar")
+
+
 def _build_caracal() -> Caracal:
     return Caracal(
         CaracalConfig(
@@ -136,7 +255,7 @@ def _build_caracal() -> Caracal:
     )
 
 
-class HeadersTests(unittest.TestCase):
+class HeadersTests(unittest.IsolatedAsyncioTestCase):
     def test_no_context_raises_without_allow_root(self) -> None:
         c = _build_caracal()
         with self.assertRaises(RuntimeError) as cm:
@@ -150,6 +269,23 @@ class HeadersTests(unittest.TestCase):
         self.assertEqual(h[HEADER_AUTHORIZATION], "Bearer tok")
         self.assertIsNotNone(parse_traceparent(h[HEADER_TRACEPARENT]))
         self.assertEqual(parse_baggage(h.get(HEADER_BAGGAGE)).get(BAGGAGE_HOP), "0")
+
+    async def test_bind_from_headers_allows_trusted_root_and_resets_context(self) -> None:
+        c = _build_caracal()
+        async with c.bind_from_headers({}, allow_root=True) as ctx:
+            self.assertEqual(ctx.subject_token, "tok")
+            self.assertIs(c.current(), ctx)
+        self.assertIsNone(c.current())
+
+    def test_context_middleware_factory_captures_allow_root(self) -> None:
+        c = _build_caracal()
+
+        async def app(_scope, _receive, _send):
+            return None
+
+        middleware = c.context_middleware(allow_root=True)(app)
+        self.assertIs(middleware.caracal, c)
+        self.assertTrue(middleware.allow_root)
 
 
 class GatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
@@ -466,6 +602,77 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             c.gateway_request("", "/events")
         with self.assertRaises(ValueError):
             c.gateway_request("resource://calendar", "https://api.example.com/events")
+
+    async def test_unmatched_provider_call_is_not_routed(self) -> None:
+        c = Caracal(
+            CaracalConfig(
+                coordinator=CoordinatorClient(base_url="http://coord"),
+                zone_id="z",
+                application_id="app",
+                subject_token="tok",
+                gateway_url="https://gateway.example.com/proxy",
+                resources=[ResourceBinding("calendar", "https://api.example.com/v1")],
+            )
+        )
+        seen = {}
+
+        async def handler(request):
+            seen["url"] = str(request.url)
+            seen["resource"] = request.headers.get("X-Caracal-Resource")
+            return httpx.Response(204)
+
+        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+            await client.get("https://other.example.com/v1/events")
+        self.assertEqual(seen, {"url": "https://other.example.com/v1/events", "resource": None})
+
+    async def test_explicit_unbound_resource_routes_to_gateway(self) -> None:
+        c = Caracal(
+            CaracalConfig(
+                coordinator=CoordinatorClient(base_url="http://coord"),
+                zone_id="z",
+                application_id="app",
+                subject_token="tok",
+                gateway_url="https://gateway.example.com/proxy",
+                resources=[],
+            )
+        )
+        self.assertEqual(
+            c._route_through_gateway("https://api.example.com/v1/events?limit=1", "resource://calendar"),
+            ("https://gateway.example.com/proxy/v1/events?limit=1", "resource://calendar"),
+        )
+        self.assertIsNone(c._route_through_gateway("not a url", None))
+        self.assertIsNone(c._route_through_gateway("https://gateway.example.com/proxy/v1/events", None))
+
+    async def test_sync_transport_routes_and_enforces_root_guard(self) -> None:
+        c = Caracal(
+            CaracalConfig(
+                coordinator=CoordinatorClient(base_url="http://coord"),
+                zone_id="z",
+                application_id="app",
+                subject_token="tok",
+                gateway_url="https://gateway.example.com/proxy",
+                resources=[ResourceBinding("calendar", "https://api.example.com/v1")],
+            )
+        )
+        seen = {}
+
+        def handler(request):
+            seen["url"] = str(request.url)
+            seen["auth"] = request.headers[HEADER_AUTHORIZATION]
+            seen["resource"] = request.headers["X-Caracal-Resource"]
+            return httpx.Response(204)
+
+        with c.sync_transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+            self.assertEqual(client.get("https://api.example.com/v1/events").status_code, 204)
+        self.assertEqual(seen, {
+            "url": "https://gateway.example.com/proxy/events",
+            "auth": "Bearer tok",
+            "resource": "calendar",
+        })
+
+        with c.sync_transport(transport=httpx.MockTransport(handler)) as client:
+            with self.assertRaises(RuntimeError):
+                client.get("https://api.example.com/v1/events")
 
 
 class FromConfigBindingsTests(unittest.TestCase):

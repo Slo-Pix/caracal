@@ -22,6 +22,7 @@ import (
 	coremetrics "github.com/garudex-labs/caracal/packages/core/go/metrics"
 	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 )
 
@@ -40,11 +41,23 @@ type Server struct {
 	guard       *upstreamGuard
 	tracker     *jtiTracker
 	bindings    *bindingStore
-	redis       *RedisClient
+	redis       gatewayRedis
 	audit       *audit.Client
 	revocations *revocationStore
 	metrics     *GatewayMetrics
 	pool        *pgxpool.Pool
+}
+
+type gatewayRedis interface {
+	Ping(context.Context) error
+	EnsureGroup(context.Context, string, string) error
+	XReadGroup(context.Context, string, string, string, int64) ([]redis.XMessage, error)
+	XAutoClaim(context.Context, string, string, string, string, time.Duration, int64) ([]redis.XMessage, string, error)
+	XAck(context.Context, string, string, string) error
+	VerifyStream(string, map[string]any) bool
+	SignedXAdd(context.Context, string, map[string]any) error
+	IncrWithExpiry(context.Context, string, time.Duration) (int64, error)
+	Del(context.Context, string) error
 }
 
 // New constructs a Server from environment configuration.

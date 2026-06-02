@@ -8,7 +8,7 @@ import Fastify from 'fastify'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
 import { delegationsRoutes } from '../../../../../../apps/coordinator/src/routes/delegations.js'
 
-function buildApp(scopes = ['coordinator.admin']) {
+function buildApp(scopes = ['coordinator.admin'], clientIdOverride?: string) {
   const app = Fastify({ logger: false })
   const db = {
     query: vi.fn(),
@@ -18,7 +18,8 @@ function buildApp(scopes = ['coordinator.admin']) {
   app.decorate('redis', { xadd: vi.fn() } as never)
   app.addHook('preHandler', async (req) => {
     const body = (req.body ?? {}) as Record<string, unknown>
-    const clientId = (body.issuer_application_id as string)
+    const clientId = clientIdOverride
+      ?? (body.issuer_application_id as string)
       ?? (body.application_id as string)
       ?? 'test-client'
     ;(req as unknown as { caracalAuth: unknown }).caracalAuth = {
@@ -44,6 +45,51 @@ const delegationBody = {
 }
 
 describe('POST /v1/zones/:zoneId/delegations', () => {
+  it('requires an expiry from either the body, constraints, or ttl seconds', async () => {
+    const { app, db } = buildApp()
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: { ...delegationBody, expires_at: undefined },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(res.json()).toEqual({ error: 'delegation_expiry_required' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
+  it('requires issuer ownership before opening a transaction', async () => {
+    const { app, db } = buildApp([], 'other-app')
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: { ...delegationBody, resource_id: 'res-1' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'issuer_ownership_required' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
+  it('requires receiver consent for cross-application delegation', async () => {
+    const { app, db } = buildApp(['coordinator.delegate_from:issuer-1'], 'issuer-1')
+    await app.ready()
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: { ...delegationBody, resource_id: 'res-1' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'receiver_consent_required' })
+    expect(db.connect).not.toHaveBeenCalled()
+  })
+
   it('rejects expired delegation edges', async () => {
     const { app, db } = buildApp()
 
@@ -187,6 +233,30 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: 'delegation_application_mismatch' })
   })
 
+  it('rejects missing active endpoint sessions', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ id: 'src-1', application_id: 'issuer-1' }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: { ...delegationBody, resource_id: 'res-1' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'delegation_endpoint_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('rejects resource references outside the zone', async () => {
     const { app, db } = buildApp()
     const client = {
@@ -212,6 +282,34 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
 
     expect(res.statusCode).toBe(404)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'resource_not_found' })
+  })
+
+  it('rejects resources owned by another application', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'src-1', application_id: 'issuer-1' },
+          { id: 'dst-1', application_id: 'receiver-1' },
+        ] })
+        .mockResolvedValueOnce({ rows: [{ id: 'res-1', identifier: 'calendar', application_id: 'other-app', scopes: ['read'] }] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: { ...delegationBody, resource_id: 'res-1' },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'resource_ownership_required' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
   })
 
   it('rejects delegation scopes outside the resource scope set', async () => {
@@ -287,6 +385,47 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
     const insertCall = client.query.mock.calls.find((call) => String(call[0]).includes('INSERT INTO delegation_edges'))
     const values = insertCall?.[1] as unknown[]
     expect(values[9]).toMatchObject({ resources: ['calendar'], max_depth: 2, max_hops: 2, ttl_seconds: 30 })
+  })
+
+  it('accepts broad delegation for admins and returns warnings plus effective authority', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'src-1', application_id: 'issuer-1' },
+          { id: 'dst-1', application_id: 'receiver-1' },
+        ] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ delegation_edge_id: 'edge-broad', status: 'active' }] })
+        .mockResolvedValueOnce({ rows: [{ epoch: '3' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: delegationBody,
+    })
+
+    expect(res.statusCode).toBe(201)
+    const body = res.json()
+    expect(body).toMatchObject({
+      delegation_edge_id: 'edge-broad',
+      warnings: ['resource_null_delegation_broadens_resource_matching'],
+      effective_authority: {
+        broad: true,
+        resources: [],
+        parent_edges_considered: [],
+      },
+    })
+    expect(body.allow_reason).toContain('broad_delegation_elevated')
   })
 
   it('rejects child delegation that widens parent authority', async () => {
@@ -380,6 +519,50 @@ describe('POST /v1/zones/:zoneId/delegations', () => {
 
     expect(res.statusCode).toBe(409)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'parent_delegation_ambiguous' })
+  })
+
+  it('rejects an explicit parent edge that is not active for the source session', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'src-1', application_id: 'issuer-1' },
+          { id: 'dst-1', application_id: 'receiver-1' },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'res-1', identifier: 'calendar', application_id: 'issuer-1', scopes: ['read'] },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          {
+            id: 'parent-edge-a',
+            resource_id: 'res-1',
+            resource_identifier: 'calendar',
+            scopes: ['read'],
+            constraints_json: { max_hops: 2 },
+            expires_at: '2027-03-16T00:00:00.000Z',
+          },
+        ] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/delegations',
+      payload: {
+        ...delegationBody,
+        parent_edge_id: 'missing-parent',
+        resource_id: 'res-1',
+        constraints: { max_hops: 1 },
+      },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'parent_delegation_not_active' })
   })
 
   it('records the selected parent edge for downstream delegation', async () => {
@@ -479,6 +662,20 @@ describe('GET /v1/zones/:zoneId/delegations/:id/impact', () => {
         { id: 'edge-2', source_session_id: 'agent-2', target_session_id: 'agent-3', depth: 2 },
       ],
     })
+  })
+
+  it('returns 404 when the target edge has no active impact rows', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/delegations/missing/impact',
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(res.json()).toEqual({ error: 'delegation_not_found' })
   })
 })
 
@@ -633,5 +830,47 @@ describe('PATCH /v1/zones/:zoneId/delegations/:id/revoke', () => {
     const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/delegations/e1/revoke' })
     expect(res.statusCode).toBe(403)
     expect(res.json()).toEqual({ error: 'issuer_ownership_required' })
+  })
+
+  it('revokes downstream edges, terminates affected agents, and deduplicates subject revocations', async () => {
+    const { app, db } = buildApp()
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ issuer_application_id: 'issuer-1' }] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'edge-1', target_session_id: 'agent-2' },
+          { id: 'edge-2', target_session_id: 'agent-3' },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'agent-2', subject_session_id: 'sid-shared', parent_id: null },
+          { id: 'agent-3', subject_session_id: 'sid-shared', parent_id: 'agent-2' },
+        ] })
+        .mockResolvedValueOnce({ rows: [
+          { id: 'agent-2', subject_session_id: 'sid-shared', parent_id: null },
+          { id: 'agent-3', subject_session_id: 'sid-shared', parent_id: 'agent-2' },
+        ] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ epoch: '5' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValue({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+    await app.ready()
+
+    const res = await app.inject({ method: 'PATCH', url: '/v1/zones/z1/delegations/edge-1/revoke' })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({
+      revoked_edges: 2,
+      affected_sessions: 1,
+      terminated_agents: 2,
+    })
+    expect(client.query).toHaveBeenCalledWith('COMMIT')
+    const outboxCalls = client.query.mock.calls.filter((call) => String(call[0]).includes('INSERT INTO caracal_outbox'))
+    expect(outboxCalls.length).toBe(3)
   })
 })

@@ -35,6 +35,33 @@ function failingTxClient(code: string) {
   return client
 }
 
+function cursor(ts: string, id: string): string {
+  return Buffer.from(JSON.stringify({ ts, id }), 'utf8').toString('base64url')
+}
+
+describe('GET /v1/zones', () => {
+  it('lists zones with keyset pagination and next link', async () => {
+    const { app, db } = buildRouteApp(zonesRoutes)
+    db.query.mockResolvedValueOnce({
+      rows: [
+        { id: 'z2', name: 'Zone Two', slug: 'zone-two', created_at: '2026-01-02T00:00:00.000Z' },
+        { id: 'z1', name: 'Zone One', slug: 'zone-one', created_at: '2026-01-01T00:00:00.000Z' },
+      ],
+    })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/zones?cursor=${cursor('2026-01-03T00:00:00.000Z', 'z3')}&limit=2`,
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toHaveLength(2)
+    expect(res.headers.link).toContain('cursor=')
+    expect(db.query.mock.calls[0][1]).toEqual(['2026-01-03T00:00:00.000Z', 'z3', 2])
+  })
+})
+
 describe('GET /v1/zones/:id', () => {
   it('returns 404 when zone not found', async () => {
     const { app, db } = buildRouteApp(zonesRoutes)
@@ -66,6 +93,17 @@ describe('GET /v1/zones/:id/dcr-status', () => {
 
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toMatchObject({ id: 'z1', live_dcr_applications: 3 })
+  })
+
+  it('returns 404 when DCR status is requested for a missing zone', async () => {
+    const { app, db } = buildRouteApp(zonesRoutes)
+    db.query.mockResolvedValue({ rows: [] })
+    await app.ready()
+
+    const res = await app.inject({ method: 'GET', url: '/v1/zones/missing/dcr-status' })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'zone_not_found' })
   })
 })
 
@@ -146,6 +184,21 @@ describe('POST /v1/zones', () => {
 })
 
 describe('PATCH /v1/zones/:id', () => {
+  it('rejects shutdown options unless DCR is being disabled', async () => {
+    const { app, db } = buildRouteApp(zonesRoutes)
+    db.query.mockResolvedValue({ rows: [] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1',
+      payload: { dcr_shutdown: 'keep_live' },
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'dcr_shutdown_not_applicable' })
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
   it('returns 400 when no fields supplied', async () => {
     const { app, db } = buildRouteApp(zonesRoutes)
     db.query.mockResolvedValue({ rows: [] })

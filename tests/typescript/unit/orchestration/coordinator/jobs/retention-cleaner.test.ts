@@ -3,9 +3,9 @@
 //
 // Retention cleaner unit tests covering lock gating and Console row pruning.
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
-import { runRetentionCleanup } from '../../../../../../apps/coordinator/src/jobs/retention-cleaner.js'
+import { retentionCleanerStats, runRetentionCleanup, startRetentionCleaner } from '../../../../../../apps/coordinator/src/jobs/retention-cleaner.js'
 
 function clientWithRows(rows: Array<{ rowCount?: number; rows?: unknown[] }>) {
   return {
@@ -15,6 +15,8 @@ function clientWithRows(rows: Array<{ rowCount?: number; rows?: unknown[] }>) {
 }
 
 describe('runRetentionCleanup', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('skips cleanup when another replica holds the lock', async () => {
     const client = clientWithRows([
       { rows: [] },
@@ -72,5 +74,40 @@ describe('runRetentionCleanup', () => {
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM delegation_edges d'), [90, 500])
     expect(client.query).toHaveBeenCalledWith(expect.stringContaining('DELETE FROM caracal_outbox o'), [7, 500])
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('rolls back and releases when expiration fails', async () => {
+    const err = new Error('expire failed')
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ acquired: true }] })
+        .mockRejectedValueOnce(err)
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+
+    await expect(runRetentionCleanup(db as never)).rejects.toThrow(err)
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
+  })
+
+  it('updates start-helper stats and logs interval failures', async () => {
+    vi.useFakeTimers()
+    const beforeRuns = retentionCleanerStats.runs
+    const beforeFailures = retentionCleanerStats.failures
+    const err = new Error('connect failed')
+    const log = { error: vi.fn() }
+    const db = { connect: vi.fn().mockRejectedValue(err) }
+    const handle = startRetentionCleaner(db as never, { intervalMs: 10, log })
+
+    await vi.advanceTimersByTimeAsync(10)
+    await handle.stop()
+
+    expect(retentionCleanerStats.runs).toBe(beforeRuns + 1)
+    expect(retentionCleanerStats.failures).toBe(beforeFailures + 1)
+    expect(log.error).toHaveBeenCalledWith({ err }, 'retention_cleanup_failed')
   })
 })

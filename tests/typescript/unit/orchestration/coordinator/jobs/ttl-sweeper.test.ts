@@ -3,9 +3,9 @@
 //
 // TTL sweeper unit tests covering leader election and cascade termination.
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
-import { runTTLSweep } from '../../../../../../apps/coordinator/src/jobs/ttl-sweeper.js'
+import { runTTLSweep, startTTLSweeper, ttlSweeperStats } from '../../../../../../apps/coordinator/src/jobs/ttl-sweeper.js'
 
 interface Step {
   match?: RegExp
@@ -30,6 +30,8 @@ function clientFromSteps(steps: Step[]) {
 }
 
 describe('runTTLSweep', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('skips work when the advisory lock is held by another node', async () => {
     const client = clientFromSteps([
       { match: /pg_try_advisory_xact_lock/, rows: [{ acquired: false }] },
@@ -91,5 +93,40 @@ describe('runTTLSweep', () => {
     const outboxInserts = client.calls.filter(([sql]) => sql.includes('caracal_outbox'))
     expect(outboxInserts.length).toBe(0)
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('rolls back and releases when expired-session selection fails', async () => {
+    const err = new Error('read failed')
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (/pg_try_advisory_xact_lock/.test(sql)) return { rows: [{ acquired: true }] }
+        if (/FROM agent_sessions[\s\S]*FOR UPDATE SKIP LOCKED/.test(sql)) throw err
+        return { rows: [] }
+      }),
+      release: vi.fn(),
+    }
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+
+    await expect(runTTLSweep(db as never)).rejects.toThrow(err)
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
+  })
+
+  it('updates start-helper stats and logs interval failures', async () => {
+    vi.useFakeTimers()
+    const beforeRuns = ttlSweeperStats.runs
+    const beforeFailures = ttlSweeperStats.failures
+    const err = new Error('connect failed')
+    const log = { error: vi.fn() }
+    const db = { connect: vi.fn().mockRejectedValue(err) }
+    const handle = startTTLSweeper(db as never, { intervalMs: 10, log })
+
+    await vi.advanceTimersByTimeAsync(10)
+    await handle.stop()
+
+    expect(ttlSweeperStats.runs).toBe(beforeRuns + 1)
+    expect(ttlSweeperStats.failures).toBe(beforeFailures + 1)
+    expect(log.error).toHaveBeenCalledWith({ err }, 'ttl_sweep_failed')
   })
 })

@@ -390,6 +390,75 @@ describe('POST /v1/zones/:zoneId/resources', () => {
 })
 
 describe('PATCH /v1/zones/:zoneId/resources/:id', () => {
+  it('rejects gateway application rebinding outside the zone', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/resources/res-1',
+      payload: { gateway_application_id: 'app-other-zone' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'gateway_application_not_found' })
+    expect(db.query).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns 404 when the resource is missing during patch', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/resources/missing',
+      payload: { name: 'Missing' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'resource_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
+  it('returns no_fields when patch does not change resource data or gateway binding', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({
+          rows: [{
+            identifier: 'resource://api',
+            upstream_url: 'https://api.example.com',
+            credential_provider_id: 'provider-1',
+            gateway_application_id: 'app-1',
+          }],
+        })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/resources/res-1',
+      payload: {},
+    })
+
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'no_fields' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('rejects provider rebinding outside the zone', async () => {
     const { app, db } = buildRouteApp(resourcesRoutes)
     db.query.mockResolvedValueOnce({ rows: [] })
@@ -525,6 +594,28 @@ describe('PATCH /v1/zones/:zoneId/resources/:id', () => {
 })
 
 describe('DELETE /v1/zones/:zoneId/resources/:id', () => {
+  it('returns 404 when deleting a missing resource', async () => {
+    const { app, db } = buildRouteApp(resourcesRoutes)
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [] }),
+      release: vi.fn(),
+    }
+    db.connect.mockResolvedValueOnce(client)
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'DELETE',
+      url: '/v1/zones/z1/resources/missing',
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'resource_not_found' })
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+  })
+
   it('archives the resource and removes its gateway binding atomically', async () => {
     const { app, db } = buildRouteApp(resourcesRoutes)
     const client = {

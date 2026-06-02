@@ -35,6 +35,21 @@ function buildApp() {
 }
 
 describe('POST /v1/zones/:zoneId/applications', () => {
+  it('returns 404 when creating in a missing zone', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications',
+      payload: { name: 'Runner', registration_method: 'managed' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'zone_not_found' })
+  })
+
   it('creates managed applications with a generated one-time client secret', async () => {
     const { app, db } = buildApp()
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
@@ -111,6 +126,25 @@ describe('POST /v1/zones/:zoneId/applications', () => {
 })
 
 describe('POST /v1/zones/:zoneId/applications/dcr', () => {
+  it('returns 404 when DCR targets a missing zone', async () => {
+    const { app, clientQuery, redis } = buildApp()
+    redis.incr.mockResolvedValueOnce(1)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/applications/dcr',
+      payload: { name: 'Dynamic App' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'zone_not_found' })
+  })
+
   it('rejects DCR when the zone has disabled it', async () => {
     const { app, clientQuery, redis } = buildApp()
     redis.incr.mockResolvedValueOnce(1)
@@ -232,6 +266,27 @@ describe('GET /v1/zones/:zoneId/applications', () => {
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toHaveLength(2)
   })
+
+  it('includes internal traits only for Control callers and paginates full pages', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({
+      rows: [
+        { id: 'app-2', name: 'Two', traits: ['control:invoke'], created_at: '2026-01-02T00:00:00.000Z' },
+        { id: 'app-1', name: 'One', traits: [], created_at: '2026-01-01T00:00:00.000Z' },
+      ],
+    })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/applications?limit=2',
+      headers: { 'x-caracal-application-internals': 'control' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers.link).toContain('cursor=')
+    expect(String(db.query.mock.calls[0][0])).toContain('traits')
+  })
 })
 
 describe('GET /v1/zones/:zoneId/applications/:id', () => {
@@ -255,6 +310,22 @@ describe('GET /v1/zones/:zoneId/applications/:id', () => {
 
     expect(res.statusCode).toBe(404)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'application_not_found' })
+  })
+
+  it('includes internal traits on detail only for Control callers', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ id: 'app-1', name: 'One', traits: ['control:invoke'] }] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/applications/app-1',
+      headers: { 'x-caracal-application-internals': 'control' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(JSON.parse(res.body)).toMatchObject({ traits: ['control:invoke'] })
+    expect(String(db.query.mock.calls[0][0])).toContain('traits')
   })
 })
 
@@ -304,6 +375,21 @@ describe('PATCH /v1/zones/:zoneId/applications/:id', () => {
 
     expect(res.statusCode).toBe(400)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'client_secret_not_configured' })
+  })
+
+  it('returns 404 before secret rotation when the application is missing', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [] })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/v1/zones/z1/applications/missing',
+      payload: { client_secret: 'cs_newsecretvalue' },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'application_not_found' })
   })
 })
 

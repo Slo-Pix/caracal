@@ -8,13 +8,21 @@ import json
 import logging
 import unittest
 from contextlib import redirect_stderr
+from unittest.mock import patch
 
 from caracalai_core.logging import (
     REDACT_VALUE,
     SECRET_KEYS,
     create_logger,
+    current_trace,
+    bind_trace,
+    dropped_log_records,
     is_secret_key,
+    install_shutdown_handler,
+    parse_traceparent,
     redact,
+    reset_trace,
+    shutdown_logging,
 )
 
 
@@ -39,6 +47,7 @@ def _capture(fn) -> list[dict]:
 
 class LoggingTests(unittest.TestCase):
     def tearDown(self) -> None:
+        shutdown_logging()
         _reset()
 
     def test_emits_structured_json(self):
@@ -115,7 +124,68 @@ class LoggingTests(unittest.TestCase):
     def test_secret_keys_contains_password(self):
         self.assertIn("password", SECRET_KEYS)
 
+    def test_trace_helpers_ignore_partial_and_malformed_headers(self):
+        token = bind_trace(trace_id="trace-only")
+        try:
+            self.assertEqual(current_trace(), {"trace_id": "trace-only"})
+        finally:
+            reset_trace(token)
+        token = bind_trace(span_id="span-only")
+        try:
+            self.assertEqual(current_trace(), {"span_id": "span-only"})
+        finally:
+            reset_trace(token)
+        self.assertEqual(parse_traceparent("00-short-b7ad6b7169203331-01"), {})
+        self.assertEqual(parse_traceparent("00-0af7651916cd43dd8448eb211c80319c-short-01"), {})
+
+    def test_hostname_failure_falls_back_to_unknown(self):
+        with patch("caracalai_core.logging.socket.gethostname", side_effect=OSError("dns")):
+            out = _capture(lambda: create_logger("api", "info").info("ready"))
+        self.assertEqual(out[-1]["hostname"], "unknown")
+
+    def test_queue_full_increments_drop_metric(self):
+        import queue
+        import caracalai_core.logging as caracal_logging
+
+        class FullQueue:
+            def put_nowait(self, _record):
+                raise queue.Full()
+
+        before = dropped_log_records()
+        record = logging.LogRecord("caracal.test", logging.INFO, "", 0, "msg", (), None)
+        with patch.object(caracal_logging, "_log_queue", FullQueue()):
+            caracal_logging._NonBlockingQueueHandler().emit(record)
+        self.assertEqual(dropped_log_records(), before + 1)
+
+    def test_debug_sampling_and_default_env_level(self):
+        import os
+
+        import caracalai_core.logging as caracal_logging
+
+        with patch.dict(os.environ, {"CARACAL_LOG_LEVEL": "debug"}, clear=False):
+            with patch.object(caracal_logging, "_DEBUG_SAMPLE_N", 2):
+                out = _capture(lambda: [
+                    create_logger("api").debug("skip"),
+                    create_logger("api").debug("emit"),
+                ])
+        self.assertEqual([row["msg"] for row in out], ["emit"])
+        self.assertGreaterEqual(caracal_logging.dev_log_metrics()["sampled"], 1)
+
+    def test_shutdown_handler_runs_extra_and_exits_with_signal_code(self):
+        import signal
+
+        handlers = {}
+        calls: list[str] = []
+
+        with patch("caracalai_core.logging.signal.signal", side_effect=lambda sig, handler: handlers.setdefault(sig, handler)):
+            install_shutdown_handler(lambda: calls.append("extra"))
+
+        with self.assertRaises(SystemExit) as cm:
+            handlers[signal.SIGTERM](signal.SIGTERM, None)
+
+        self.assertEqual(calls, ["extra"])
+        self.assertEqual(cm.exception.code, 128 + signal.SIGTERM)
+
 
 if __name__ == "__main__":
     unittest.main()
-

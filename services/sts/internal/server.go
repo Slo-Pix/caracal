@@ -24,6 +24,7 @@ import (
 	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/singleflight"
 )
@@ -37,7 +38,7 @@ const (
 type Server struct {
 	cfg                Config
 	db                 DBQuerier
-	redis              *RedisClient
+	redis              stsRedis
 	opa                *OPAEngine
 	keys               *KeyCache
 	auditBuffer        *AuditBuffer
@@ -48,6 +49,23 @@ type Server struct {
 	stepUpThrottle     *stepUpThrottle
 	consumersReady     chan struct{}
 	log                zerolog.Logger
+}
+
+type stsRedis interface {
+	Ping(context.Context) error
+	SetNXTTL(context.Context, string, string, time.Duration) (bool, error)
+	SetTTL(context.Context, string, any, time.Duration) error
+	Get(context.Context, string) (string, error)
+	Del(context.Context, string) error
+	DelIfValue(context.Context, string, string) error
+	Exists(context.Context, string) (bool, error)
+	IncrWithExpiry(context.Context, string, time.Duration) (int64, error)
+	EnsureGroup(context.Context, string, string) error
+	XReadGroup(context.Context, string, string, string, int64) ([]redis.XMessage, error)
+	XAutoClaim(context.Context, string, string, string, string, time.Duration, int64) ([]redis.XMessage, string, error)
+	VerifyStream(string, map[string]any) bool
+	XAck(context.Context, string, string, string) error
+	SignedXAdd(context.Context, string, map[string]any) error
 }
 
 // New initialises all dependencies and returns a ready-to-run Server.

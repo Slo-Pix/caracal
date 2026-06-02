@@ -43,7 +43,7 @@ const (
 // replayed on next startup so audit loss requires both Redis and disk failure.
 type AuditBuffer struct {
 	ch           chan AuditEvent
-	redis        *RedisClient
+	redis        auditRedis
 	log          zerolog.Logger
 	dropped      atomic.Uint64
 	auditHMACKey []byte
@@ -52,7 +52,11 @@ type AuditBuffer struct {
 	done         chan struct{}
 }
 
-func newAuditBuffer(redis *RedisClient, log zerolog.Logger, production bool, replayDir string, metrics *STSMetrics) (*AuditBuffer, error) {
+type auditRedis interface {
+	XAdd(context.Context, string, map[string]any) error
+}
+
+func newAuditBuffer(redis auditRedis, log zerolog.Logger, production bool, replayDir string, metrics *STSMetrics) (*AuditBuffer, error) {
 	hexKey := os.Getenv("AUDIT_HMAC_KEY")
 	var key []byte
 	if hexKey == "" {

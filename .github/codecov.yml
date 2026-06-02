@@ -8,6 +8,8 @@ ignore:
   - "docs/**"
   - "**/*.gen.ts"
   - "apps/*/src/main.ts"
+  - "services/*/internal/db.go"
+  - "services/*/internal/redis.go"
 
 coverage:
   status:

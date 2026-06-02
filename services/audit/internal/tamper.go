@@ -18,7 +18,7 @@ import (
 )
 
 type TamperSweeper struct {
-	db            *PGWriter
+	db            tamperStore
 	auditHMACKey  []byte
 	log           zerolog.Logger
 	retention     time.Duration
@@ -31,7 +31,11 @@ type TamperSweeper struct {
 	lastFullUnix  atomic.Int64
 }
 
-func newTamperSweeper(db *PGWriter, auditHMACKey []byte, retention, rolling time.Duration, log zerolog.Logger) *TamperSweeper {
+type tamperStore interface {
+	QuerySinceFn(context.Context, time.Time, time.Time, bool, func(EventRow) error) error
+}
+
+func newTamperSweeper(db tamperStore, auditHMACKey []byte, retention, rolling time.Duration, log zerolog.Logger) *TamperSweeper {
 	return &TamperSweeper{db: db, auditHMACKey: auditHMACKey, log: log, retention: retention, rolling: rolling}
 }
 

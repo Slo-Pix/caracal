@@ -3,9 +3,9 @@
 //
 // Service lease sweeper unit tests covering heartbeat-loss suspension and revocation.
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../../../../shared/test-utils/typescript/coordinatorEnv.js'
-import { runServiceLeaseSweep } from '../../../../../../apps/coordinator/src/jobs/service-lease-sweeper.js'
+import { runServiceLeaseSweep, serviceLeaseSweeperStats, startServiceLeaseSweeper } from '../../../../../../apps/coordinator/src/jobs/service-lease-sweeper.js'
 
 interface Step {
   match?: RegExp
@@ -30,6 +30,8 @@ function clientFromSteps(steps: Step[]) {
 }
 
 describe('runServiceLeaseSweep', () => {
+  afterEach(() => { vi.useRealTimers() })
+
   it('skips work when the advisory lock is held by another node', async () => {
     const client = clientFromSteps([
       { match: /pg_try_advisory_xact_lock/, rows: [{ acquired: false }] },
@@ -74,5 +76,53 @@ describe('runServiceLeaseSweep', () => {
       'agent_suspend:agent-2',
     ]))
     expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('commits without subtree work when no leases expired', async () => {
+    const client = clientFromSteps([
+      { match: /pg_try_advisory_xact_lock/, rows: [{ acquired: true }] },
+      { match: /FROM agent_sessions[\s\S]*heartbeat_deadline_at < now\(\)[\s\S]*FOR UPDATE SKIP LOCKED/, rows: [] },
+    ])
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+
+    await expect(runServiceLeaseSweep(db as never)).resolves.toBe(0)
+
+    expect(client.calls.some(([sql]) => sql.includes('WITH RECURSIVE tree'))).toBe(false)
+    expect(client.query).toHaveBeenCalledWith('COMMIT')
+  })
+
+  it('rolls back and releases when service lease selection fails', async () => {
+    const err = new Error('selection failed')
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (/pg_try_advisory_xact_lock/.test(sql)) return { rows: [{ acquired: true }] }
+        if (/FROM agent_sessions[\s\S]*heartbeat_deadline_at < now\(\)/.test(sql)) throw err
+        return { rows: [] }
+      }),
+      release: vi.fn(),
+    }
+    const db = { connect: vi.fn().mockResolvedValueOnce(client) }
+
+    await expect(runServiceLeaseSweep(db as never)).rejects.toThrow(err)
+
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK')
+    expect(client.release).toHaveBeenCalledOnce()
+  })
+
+  it('updates start-helper stats and logs interval failures', async () => {
+    vi.useFakeTimers()
+    const beforeRuns = serviceLeaseSweeperStats.runs
+    const beforeFailures = serviceLeaseSweeperStats.failures
+    const err = new Error('connect failed')
+    const log = { error: vi.fn() }
+    const db = { connect: vi.fn().mockRejectedValue(err) }
+    const handle = startServiceLeaseSweeper(db as never, { intervalMs: 10, log })
+
+    await vi.advanceTimersByTimeAsync(10)
+    await handle.stop()
+
+    expect(serviceLeaseSweeperStats.runs).toBe(beforeRuns + 1)
+    expect(serviceLeaseSweeperStats.failures).toBe(beforeFailures + 1)
+    expect(log.error).toHaveBeenCalledWith({ err }, 'service_lease_sweep_failed')
   })
 })

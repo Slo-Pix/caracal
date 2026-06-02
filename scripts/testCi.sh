@@ -135,13 +135,12 @@ fi
 if $run_go; then
   step "go: race"
   mkdir -p coverage/go
-  "$go_cmd" test -race "${go_pkgs[@]}"
+  bash scripts/runGoSourceTests.sh "$go_cmd" test -race "${go_pkgs[@]}"
 
   step "go: coverage"
-  mapfile -t go_cover_pkgs < <("$go_cmd" list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' "${go_pkgs[@]}" | sed '/^$/d')
-  "$go_cmd" test -covermode=atomic -coverprofile=coverage/go/coverage.out "${go_cover_pkgs[@]}"
+  bash scripts/runGoSourceTests.sh "$go_cmd" test -covermode=atomic -coverprofile=coverage/go/coverage.out "${go_pkgs[@]}"
   "$go_cmd" test -race -covermode=atomic \
-    -coverpkg=github.com/garudex-labs/caracal/transport-mcp,github.com/garudex-labs/caracal/revocation,github.com/garudex-labs/caracal/identity \
+    -coverpkg=github.com/garudex-labs/caracal/packages/transport/mcp/go,github.com/garudex-labs/caracal/packages/revocation/go,github.com/garudex-labs/caracal/packages/identity/go \
     -coverprofile=coverage/go/tests.out \
     ./tests/go/unit/revocation \
     ./tests/go/unit/transport/mcp \

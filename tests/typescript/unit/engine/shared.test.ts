@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { buildAdminClient } from '../../../../packages/engine/src/shared.ts'
+import { buildAdminClient, readContent } from '../../../../packages/engine/src/shared.ts'
 
 describe('buildAdminClient', () => {
   const saved = { ...process.env }
@@ -82,5 +82,21 @@ describe('buildAdminClient', () => {
     expect(fetchMock).toHaveBeenCalledWith('http://localhost:4000/zones/z1/agents', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer coordinator-secret' }),
     }))
+  })
+})
+
+describe('readContent', () => {
+  it('rejects missing content and reads @file references', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'caracal-read-content-'))
+    try {
+      const file = join(dir, 'policy.rego')
+      writeFileSync(file, 'package caracal\n', 'utf8')
+
+      expect(() => readContent(undefined)).toThrow('missing content')
+      expect(readContent('@' + file)).toBe('package caracal\n')
+      expect(readContent('inline policy')).toBe('inline policy')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
