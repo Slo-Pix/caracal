@@ -28,7 +28,7 @@ const (
 )
 
 type ParquetExporter struct {
-	pg        *PGWriter
+	pg        parquetStore
 	s3Client  *s3.Client
 	bucket    string
 	log       zerolog.Logger
@@ -37,7 +37,13 @@ type ParquetExporter struct {
 	onBacklog func(hours int64)
 }
 
-func newParquetExporter(pg *PGWriter, cfg Config, leader *Leader, log zerolog.Logger) (*ParquetExporter, error) {
+type parquetStore interface {
+	LoadWatermark(context.Context, string) (time.Time, error)
+	QuerySinceFn(context.Context, time.Time, time.Time, bool, func(EventRow) error) error
+	SaveWatermark(context.Context, string, time.Time) error
+}
+
+func newParquetExporter(pg parquetStore, cfg Config, leader *Leader, log zerolog.Logger) (*ParquetExporter, error) {
 	if cfg.S3Bucket == "" {
 		return &ParquetExporter{pg: pg, log: log, leader: leader}, nil
 	}

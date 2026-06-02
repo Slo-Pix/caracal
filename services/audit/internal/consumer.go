@@ -31,8 +31,8 @@ const (
 )
 
 type Consumer struct {
-	db           *PGWriter
-	redis        *redis.Client
+	db           auditInserter
+	redis        auditStreamClient
 	log          zerolog.Logger
 	consumerName string
 	auditHMACKey []byte
@@ -47,7 +47,20 @@ type Consumer struct {
 	healthy       atomic.Bool
 }
 
-func newConsumer(db *PGWriter, r *redis.Client, log zerolog.Logger, cfg Config) *Consumer {
+type auditInserter interface {
+	Insert(context.Context, AuditEvent, string) (InsertResult, error)
+}
+
+type auditStreamClient interface {
+	XAck(context.Context, string, string, ...string) *redis.IntCmd
+	XAdd(context.Context, *redis.XAddArgs) *redis.StringCmd
+	XAutoClaim(context.Context, *redis.XAutoClaimArgs) *redis.XAutoClaimCmd
+	XGroupCreateMkStream(context.Context, string, string, string) *redis.StatusCmd
+	XPendingExt(context.Context, *redis.XPendingExtArgs) *redis.XPendingExtCmd
+	XReadGroup(context.Context, *redis.XReadGroupArgs) *redis.XStreamSliceCmd
+}
+
+func newConsumer(db auditInserter, r auditStreamClient, log zerolog.Logger, cfg Config) *Consumer {
 	return &Consumer{
 		db:           db,
 		redis:        r,
@@ -345,7 +358,7 @@ func unmarshalEvent(raw string) (AuditEvent, error) {
 	return ev, nil
 }
 
-func ensureGroup(ctx context.Context, r *redis.Client, stream, group string) error {
+func ensureGroup(ctx context.Context, r auditStreamClient, stream, group string) error {
 	err := r.XGroupCreateMkStream(ctx, stream, group, "$").Err()
 	if err != nil && strings.Contains(err.Error(), "BUSYGROUP") {
 		return nil

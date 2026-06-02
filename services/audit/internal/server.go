@@ -40,8 +40,8 @@ type Server struct {
 	retention    *Retention
 	exporterLead *Leader
 	retentLead   *Leader
-	pg           *PGWriter
-	redis        *redis.Client
+	pg           auditServerStore
+	redis        auditServerRedis
 	log          zerolog.Logger
 
 	inserts       atomic.Int64
@@ -53,6 +53,21 @@ type Server struct {
 	pelOldestAge  atomic.Int64
 	dlqSize       atomic.Int64
 	dlqOldestAge  atomic.Int64
+}
+
+type auditServerStore interface {
+	Ping(context.Context) error
+	Search(context.Context, SearchParams) ([]EventRow, error)
+}
+
+type auditServerRedis interface {
+	Ping(context.Context) *redis.StatusCmd
+	XAdd(context.Context, *redis.XAddArgs) *redis.StringCmd
+	XDel(context.Context, string, ...string) *redis.IntCmd
+	XLen(context.Context, string) *redis.IntCmd
+	XPending(context.Context, string, string) *redis.XPendingCmd
+	XPendingExt(context.Context, *redis.XPendingExtArgs) *redis.XPendingExtCmd
+	XRangeN(context.Context, string, string, string, int64) *redis.XMessageSliceCmd
 }
 
 func New(ctx context.Context) (*Server, error) {

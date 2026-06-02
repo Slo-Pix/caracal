@@ -18,7 +18,7 @@ import (
 const leaderRefreshInterval = 30 * time.Second
 
 type Leader struct {
-	db      *PGWriter
+	db      leaderStore
 	key     int64
 	log     zerolog.Logger
 	conn    *pgxpool.Conn
@@ -26,7 +26,12 @@ type Leader struct {
 	stopped atomic.Bool
 }
 
-func newLeader(db *PGWriter, key int64, log zerolog.Logger) *Leader {
+type leaderStore interface {
+	AcquireAdvisoryLock(context.Context, int64) (*pgxpool.Conn, bool, error)
+	ReleaseAdvisoryLock(context.Context, *pgxpool.Conn, int64) error
+}
+
+func newLeader(db leaderStore, key int64, log zerolog.Logger) *Leader {
 	return &Leader{db: db, key: key, log: log}
 }
 

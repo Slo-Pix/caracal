@@ -336,7 +336,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p coverage/go
-          go test -race -covermode=atomic -coverprofile=coverage/go/coverage.out \
+          bash scripts/runGoSourceTests.sh go test -race -covermode=atomic -coverprofile=coverage/go/coverage.out \
             ./packages/core/go/... \
             ./services/sts/... \
             ./services/audit/... \

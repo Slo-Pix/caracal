@@ -17,27 +17,45 @@ import (
 	"github.com/garudex-labs/caracal/packages/core/go/telemetry"
 )
 
+type runner interface {
+	Run(context.Context) error
+}
+
+var (
+	notifyContext  = signal.NotifyContext
+	setupTelemetry = telemetry.Setup
+	newRunner      = func(ctx context.Context) (runner, error) { return internal.New(ctx) }
+	exitProcess    = os.Exit
+)
+
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	if code := run(context.Background()); code != 0 {
+		exitProcess(code)
+	}
+}
+
+func run(parent context.Context) int {
+	ctx, cancel := notifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	log := logging.New("coordinator-relay")
-	shutdownTelemetry, err := telemetry.Setup(ctx, "caracal-coordinator-relay")
+	shutdownTelemetry, err := setupTelemetry(ctx, "caracal-coordinator-relay")
 	if err != nil {
 		log.Error().Err(err).Msg("telemetry init failed")
-		os.Exit(1)
+		return 1
 	}
 	defer func() { _ = shutdownTelemetry(context.Background()) }()
 
-	c, err := internal.New(ctx)
+	c, err := newRunner(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("startup failed")
 		cancel()
-		os.Exit(1)
+		return 1
 	}
 	if err := c.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error().Err(err).Msg("consumer terminated with error")
 		cancel()
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

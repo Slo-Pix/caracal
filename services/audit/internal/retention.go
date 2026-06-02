@@ -16,7 +16,7 @@ import (
 const retentionInterval = 6 * time.Hour
 
 type Retention struct {
-	db            *PGWriter
+	db            retentionStore
 	leader        *Leader
 	log           zerolog.Logger
 	retentionDays int
@@ -24,7 +24,12 @@ type Retention struct {
 	droppedTotal  atomic.Int64
 }
 
-func newRetention(db *PGWriter, leader *Leader, days int, log zerolog.Logger) *Retention {
+type retentionStore interface {
+	EnsurePartition(context.Context, time.Time) error
+	DropPartitionsBefore(context.Context, time.Time) ([]string, error)
+}
+
+func newRetention(db retentionStore, leader *Leader, days int, log zerolog.Logger) *Retention {
 	return &Retention{db: db, leader: leader, log: log, retentionDays: days}
 }
 
