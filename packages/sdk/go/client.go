@@ -162,6 +162,7 @@ type ClientSecretOptions struct {
 	ResourceBindings []ResourceBinding
 	GatewayURL       string
 	Scope            string
+	HTTPClient       *http.Client
 }
 
 // FromClientSecret returns a Caracal client that refreshes its application subject token through STS.
@@ -265,6 +266,9 @@ func stsURLFromEnv() (string, error) {
 
 func clientSecretTokenSource(opts ClientSecretOptions) TokenSource {
 	client := oauth.NewClient(opts.STSURL, opts.ZoneID, opts.ApplicationID, nil)
+	if opts.HTTPClient != nil {
+		client.SetHTTPClient(opts.HTTPClient)
+	}
 	scope := opts.Scope
 	if scope == "" {
 		scope = "agent:lifecycle"

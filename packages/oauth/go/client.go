@@ -71,6 +71,13 @@ func NewClient(stsURL, zoneID, applicationID string, cache TokenCache) *Client {
 	}
 }
 
+// SetHTTPClient sets a custom HTTP client for the token exchange client.
+func (c *Client) SetHTTPClient(client *http.Client) {
+	if client != nil {
+		c.httpClient = client
+	}
+}
+
 // Exchange performs RFC 8693 token exchange or returns a safe cached response.
 func (c *Client) Exchange(ctx context.Context, subjectToken, resource string, opts ExchangeOptions) (TokenExchangeResponse, error) {
 	return c.ExchangeResources(ctx, subjectToken, []string{resource}, opts)

@@ -580,3 +580,31 @@ describe("config resource sorting and token validation", () => {
     } as NodeJS.ProcessEnv)).toThrow(/invalid CARACAL_RESOURCES/);
   });
 });
+
+describe("Caracal.fromClientSecret", () => {
+  it("uses custom fetchImpl for token exchanges", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({ access_token: "custom-fetch-token", expires_in: 900 }),
+    });
+
+    const c = Caracal.fromClientSecret({
+      coordinatorUrl: "http://coord",
+      stsUrl: "http://sts",
+      zoneId: "z",
+      applicationId: "app",
+      clientSecret: "secret",
+      resources: ["calendar"],
+      fetchImpl: fetchMock as unknown as typeof fetch,
+    });
+
+    const headers = await c.headersAsync({ allowRoot: true });
+    expect(headers[HeaderAuthorization]).toBe("Bearer custom-fetch-token");
+    expect(fetchMock).toHaveBeenCalled();
+    const body = fetchMock.mock.calls[0][1]!.body as URLSearchParams;
+    expect(body.get("client_secret")).toBe("secret");
+  });
+});
+
