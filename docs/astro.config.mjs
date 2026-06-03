@@ -110,6 +110,7 @@ export default defineConfig({
           label: 'Get Started',
           items: [
             { label: 'Overview', link: '/get-started/' },
+            { label: 'Choose Your Path', link: '/get-started/choose-your-path/' },
             { label: 'Welcome', link: '/get-started/welcome/' },
             { label: 'Installation', link: '/get-started/installation/' },
             { label: 'Quickstart: Released Product', link: '/get-started/quickstart/' },

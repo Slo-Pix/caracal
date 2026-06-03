@@ -1,0 +1,27 @@
+# Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+# Caracal, a product of Garudex Labs
+#
+# Self-contained echo upstream for the first Caracal tutorial. The Caracal
+# control plane (gateway, STS, coordinator, redis) runs independently via
+# `caracal up`; this compose file only owns the echo container and joins the
+# external `caracalData` network so the Gateway can reach it by service name.
+
+services:
+
+  echoUpstream:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: caracal-echo-upstream:latest
+    container_name: echoUpstream
+    environment:
+      ECHO_PORT: "8088"
+    ports:
+      - "8088:8088"
+    networks:
+      - caracalData
+
+networks:
+  caracalData:
+    external: true
+    name: caracalData
