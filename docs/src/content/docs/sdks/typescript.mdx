@@ -11,7 +11,7 @@ description: Public API reference for @caracalai/sdk.
 npm install @caracalai/sdk
 ```
 
-The package is ESM-only and targets Node `>=24`.
+The package is ESM-only and targets Node `>=22`. To consume it from a CommonJS project, use a dynamic `await import('@caracalai/sdk')` or set `"type": "module"` in your `package.json`.
 
 ## Configuration entry points
 
@@ -70,5 +70,6 @@ Header and transport helpers refuse to fall back to the application root token u
 ## Related pages
 
 - [Integrate the TypeScript SDK](/guides/sdk-typescript/)
+- [Enforce, propagate, or attribute](/concepts/authority-model/#enforce-propagate-or-attribute)
 - [Delegation Graph](/concepts/delegation/)
 - [A2A Transport](/sdks/transport-a2a/)
