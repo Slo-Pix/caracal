@@ -96,6 +96,7 @@ export interface ClientSecretOptions {
   resources: Array<string | ResourceBinding>;
   gatewayUrl?: string;
   scope?: string;
+  fetchImpl?: typeof fetch;
 }
 
 export interface ConnectOptions {
@@ -202,7 +203,7 @@ export class Caracal {
       coordinator: { baseUrl: opts.coordinatorUrl },
       zoneId: opts.zoneId,
       applicationId: opts.applicationId,
-      tokenSource: createClientSecretTokenSource(opts.stsUrl, opts.zoneId, opts.applicationId, opts.clientSecret, resourceIds, opts.scope),
+      tokenSource: createClientSecretTokenSource(opts.stsUrl, opts.zoneId, opts.applicationId, opts.clientSecret, resourceIds, opts.scope, opts.fetchImpl),
       gatewayUrl: opts.gatewayUrl,
       resources: bindings.length ? bindings : undefined,
     });
@@ -864,8 +865,9 @@ function createClientSecretTokenSource(
   clientSecret: string,
   resources: string[],
   scope = "agent:lifecycle",
+  fetchImpl?: typeof fetch,
 ): TokenSource {
-  const client = new OAuthClient(stsUrl, zoneId, applicationId);
+  const client = new OAuthClient(stsUrl, zoneId, applicationId, undefined, fetchImpl);
   return async () => {
     const token = await client.exchange("", resources, { clientSecret, scopes: [scope] });
     return token.accessToken;

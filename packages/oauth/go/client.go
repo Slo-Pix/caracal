@@ -71,6 +71,15 @@ func NewClient(stsURL, zoneID, applicationID string, cache TokenCache) *Client {
 	}
 }
 
+// SetHTTPClient sets a custom HTTP client for the token exchange client.
+func (c *Client) SetHTTPClient(client *http.Client) {
+	if client != nil {
+		c.mu.Lock()
+		c.httpClient = client
+		c.mu.Unlock()
+	}
+}
+
 // Exchange performs RFC 8693 token exchange or returns a safe cached response.
 func (c *Client) Exchange(ctx context.Context, subjectToken, resource string, opts ExchangeOptions) (TokenExchangeResponse, error) {
 	return c.ExchangeResources(ctx, subjectToken, []string{resource}, opts)
@@ -201,7 +210,10 @@ func (c *Client) doExchange(ctx context.Context, subjectToken string, resources 
 			return TokenExchangeResponse{}, reqErr
 		}
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		res, err = c.httpClient.Do(req)
+		c.mu.Lock()
+		client := c.httpClient
+		c.mu.Unlock()
+		res, err = client.Do(req)
 		cancel()
 		if err == nil && (!transientStatus(res.StatusCode) || attempt == retries) {
 			break

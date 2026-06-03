@@ -888,7 +888,6 @@ func TestFromEnvRejectsMalformedResources(t *testing.T) {
 		t.Fatal("expected malformed resource error")
 	}
 }
-
 func TestFromEnvRejectsMalformedResourceBindingsFile(t *testing.T) {
 	dir := t.TempDir()
 	bindingsPath := filepath.Join(dir, "resources.json")
@@ -914,4 +913,51 @@ func resourceBindingMap(bindings []sdk.ResourceBinding) map[string]string {
 		out[binding.ResourceID] = binding.UpstreamPrefix
 	}
 	return out
+}
+
+func TestFromClientSecretCustomHTTPClient(t *testing.T) {
+	var gotCalled bool
+	sts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"custom-token","token_type":"Bearer","expires_in":3600}`))
+	}))
+	defer sts.Close()
+
+	customClient := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			gotCalled = true
+			return http.DefaultTransport.RoundTrip(req)
+		}),
+	}
+
+	c, err := sdk.FromClientSecret(sdk.ClientSecretOptions{
+		CoordinatorURL: "http://coord",
+		STSURL:         sts.URL,
+		ZoneID:         "z",
+		ApplicationID:  "app",
+		ClientSecret:   "secret",
+		Resources:      []string{"calendar"},
+		HTTPClient:     customClient,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h, err := c.Headers(context.Background(), sdk.RootOptions{AllowRoot: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if h.Get(sdk.HeaderAuthorization) != "Bearer custom-token" {
+		t.Fatalf("unexpected authorization: %s", h.Get(sdk.HeaderAuthorization))
+	}
+	if !gotCalled {
+		t.Fatal("expected custom client to be called")
+	}
+}
+
+type roundTripFunc func(req *http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

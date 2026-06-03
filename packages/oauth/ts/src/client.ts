@@ -56,6 +56,7 @@ export class OAuthClient {
     private readonly zoneId: string,
     private readonly applicationId: string,
     cache?: TokenCache,
+    private readonly fetchImpl?: typeof fetch,
   ) {
     this.cache = cache ?? new InMemoryTokenCache()
     this.identityKey = `${zoneId}::${applicationId}`
@@ -166,7 +167,7 @@ export class OAuthClient {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), remainingMs)
       try {
-        res = await fetch(`${this.stsUrl}/oauth/2/token`, {
+        res = await (this.fetchImpl ?? fetch)(`${this.stsUrl}/oauth/2/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body,

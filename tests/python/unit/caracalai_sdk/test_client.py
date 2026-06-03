@@ -847,5 +847,38 @@ class ResourceBindingsValidationTests(unittest.TestCase):
             _load_resource_bindings_file(self._write('"not-a-binding"'))
 
 
+class ClientSecretCustomHTTPClientTests(unittest.IsolatedAsyncioTestCase):
+    """Verify that from_client_secret integrates custom HTTP clients correctly."""
+
+    async def test_from_client_secret_custom_http_client(self) -> None:
+        called = False
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal called
+            called = True
+            return httpx.Response(200, json={"access_token": "abc.def.ghi", "expires_in": 3600})
+
+        custom_transport = httpx.MockTransport(handler)
+        custom_client = httpx.Client(transport=custom_transport)
+
+        c = Caracal.from_client_secret(
+            coordinator_url="http://coord",
+            sts_url="http://sts",
+            zone_id="z",
+            application_id="app",
+            client_secret="secret",
+            resources=["calendar"],
+            http_client=custom_client,
+        )
+
+        try:
+            headers = c.headers(allow_root=True)
+            self.assertEqual(headers[HEADER_AUTHORIZATION], "Bearer abc.def.ghi")
+            self.assertTrue(called)
+        finally:
+            await c.close()
+            custom_client.close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -54,6 +54,7 @@ class ClientSecretExchanger:
         resources: list[str],
         scope: str = "agent:lifecycle",
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        http_client: httpx.Client | None = None,
     ) -> None:
         if not resources:
             raise ValueError("ClientSecretExchanger requires at least one resource")
@@ -67,6 +68,8 @@ class ClientSecretExchanger:
         self._lock = threading.Lock()
         self._token: str | None = None
         self._exp: float | None = None
+        self._http_client = http_client
+        self._own_client = http_client is None
 
     def get_token(self) -> str:
         with self._lock:
@@ -86,8 +89,9 @@ class ClientSecretExchanger:
             "scope": self._scope,
             "resource": self._resources,
         }
-        with httpx.Client(timeout=self._timeout) as http:
-            resp = http.post(f"{self._sts_url}/oauth/2/token", data=data)
+        if self._http_client is None:
+            self._http_client = httpx.Client(timeout=self._timeout)
+        resp = self._http_client.post(f"{self._sts_url}/oauth/2/token", data=data)
         resp.raise_for_status()
         body = resp.json()
         token = body.get("access_token")
@@ -101,3 +105,9 @@ class ClientSecretExchanger:
                 self._exp = time.time() + float(expires_in)
             else:
                 self._exp = time.time() + 600.0
+
+    def close(self) -> None:
+        with self._lock:
+            if self._own_client and self._http_client is not None:
+                self._http_client.close()
+                self._http_client = None

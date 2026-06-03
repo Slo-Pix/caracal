@@ -590,6 +590,7 @@ class Caracal:
         resources: list[str | ResourceBinding],
         gateway_url: str | None = None,
         scope: str = "agent:lifecycle",
+        http_client: httpx.Client | None = None,
     ) -> Caracal:
         """Build a Caracal client that exchanges an application client_secret
         for an STS access token and refreshes the token automatically.
@@ -616,6 +617,7 @@ class Caracal:
             client_secret=client_secret,
             resources=resource_ids,
             scope=scope,
+            http_client=http_client,
         )
         return cls(
             CaracalConfig(
@@ -884,7 +886,14 @@ class Caracal:
 
     async def close(self) -> None:
         """Release the coordinator's HTTP client. Idempotent."""
-        await self.config.coordinator.close()
+        try:
+            await self.config.coordinator.close()
+        finally:
+            if self.config._token_source is not None:
+                if hasattr(self.config._token_source, "__self__"):
+                    exchanger = self.config._token_source.__self__
+                    if hasattr(exchanger, "close"):
+                        exchanger.close()
 
     def context_middleware(self, *, allow_root: bool = False) -> Callable[[ASGIApp], CaracalContextASGIMiddleware]:
         """ASGI context-propagation middleware factory.
