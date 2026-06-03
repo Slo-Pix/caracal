@@ -264,10 +264,10 @@ function meaningFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (label.includes('forward') && label.includes('caracal identity')) return `${title} tells Gateway to send the Caracal resource mandate to the upstream service in addition to the provider credential.`
   if (label.includes('name')) return `${title} is the operator-facing label shown in lists, pickers, details, and setup output.`
   if (label.includes('provider') && label.includes('identifier')) return `${title} is the stable API-facing name for a configured upstream credential or mandate source.`
-  if (label.includes('resource') && label.includes('identifier')) return `${title} is the stable audience value that grants, policies, tokens, and Gateway bindings use.`
+  if (label.includes('resource') && label.includes('identifier')) return `${title} is the stable audience value that policies, tokens, and Gateway bindings use.`
   if (label.includes('identifier')) return `${title} is a stable API-facing value used by clients, policy input, tokens, and audit records.`
   if (label.includes('upstream oauth scope')) return `${title} defines provider-native OAuth scopes requested during authorization-code consent or client-credentials token acquisition.`
-  if (label.includes('scope')) return `${title} defines named permissions that requests, grants, and policies evaluate.`
+  if (label.includes('scope')) return `${title} defines named permissions that requests and policies evaluate.`
   if (label.includes('subject')) return `${title} identifies the user, workload, or actor receiving authority.`
   if (label.includes('secret') || kind === 'secret') return `${title} is sensitive credential material used to authenticate an application or upstream integration.`
   if (label.includes('token endpoint')) return `${title} is the upstream endpoint used for OAuth token exchange or refresh.`
@@ -313,14 +313,14 @@ function whenFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'request_id') return 'Use this when investigating one Gateway, STS, policy, or audit request.'
   if (key === 'source' || key === 'input_source') return 'Choose file when the content already lives on disk; choose paste when entering it directly in Console.'
   if (label.includes('forward') && label.includes('caracal identity')) return 'Turn this on only for a trusted upstream that authenticates with provider-native credentials but also needs Caracal subject, scopes, target, zone, or audit context.'
-  if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, grants, audit views, and setup output.'
+  if (label.includes('name')) return 'Enter the name operators should recognize later in lists, pickers, audit views, and setup output.'
   if (label.includes('provider') && label.includes('identifier')) return 'Leave blank to let Console generate one from the provider name; set it only when automation needs a specific stable name.'
   if (label.includes('resource') && label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable resource audience that differs from the generated default.'
   if (label.includes('identifier')) return 'Set this only when clients, policies, or automation need a stable identifier that differs from the generated default.'
   if (label.includes('upstream authorization header')) return 'Use this only when the upstream API expects provider credentials in a non-standard HTTP header.'
   if (label.includes('upstream authorization scheme')) return 'Use this only when the upstream API expects a provider credential prefix such as Bearer or ApiKey.'
   if (opts.advanced) return 'Use this only when the inferred default or standard picker does not match an enterprise or non-standard setup.'
-  if (label.includes('scope')) return 'Use the scopes that the application will request and that grants or policies should be able to authorize.'
+  if (label.includes('scope')) return 'Use the scopes that the application will request and that policies should be able to authorize.'
   if (label.includes('subject')) return 'Use the subject identity that should receive or be inspected for authority in this zone.'
   if (label.includes('secret') || kind === 'secret') return 'Paste this only while registering, rotating, or writing a credential that Console cannot retrieve later.'
   if (label.includes('token endpoint')) return 'Use the exact HTTPS endpoint exposed by the upstream provider for token exchange.'
@@ -345,7 +345,7 @@ function entityName(label: string): string {
   if (label.includes('provider')) return 'provider'
   if (label.includes('policy set')) return 'policy set'
   if (label.includes('policy')) return 'policy'
-  if (label.includes('grant')) return 'grant'
+  if (label.includes('grant')) return 'session'
   if (label.includes('session')) return 'session'
   return 'object'
 }
@@ -374,10 +374,10 @@ function impactFor(kind: string, title: string, opts: FieldInfoOpts): string {
   if (key === 'request_path') return 'The generated quickstart command uses this path for the first Gateway request.'
   if (key === 'profile_path' || key === 'secret_file_path') return 'Setup writes generated local output to this path when file writing is enabled.'
   if (key === 'credential_env') return 'Generated runtime commands read the minted token from this environment variable.'
-  if (label.includes('scope')) return 'Scopes bound here constrain what tokens, grants, or policies may authorize later.'
+  if (label.includes('scope')) return 'Scopes bound here constrain what tokens or policies may authorize later.'
   if (label.includes('forward') && label.includes('caracal identity')) return 'Gateway keeps the provider credential in the upstream authorization header and sends the Caracal mandate separately as X-Caracal-Identity.'
-  if (label.includes('provider') && label.includes('identifier')) return 'Resources, grants, setup output, and automation can reference the provider by this stable name.'
-  if (label.includes('resource') && label.includes('identifier')) return 'Changing a resource audience can break clients and grants that request the old value.'
+  if (label.includes('provider') && label.includes('identifier')) return 'Resources, setup output, and automation can reference the provider by this stable name.'
+  if (label.includes('resource') && label.includes('identifier')) return 'Changing a resource audience can break clients that request the old value.'
   if (label.includes('identifier')) return 'Identifiers are stable API-facing names; changing them can affect clients and automation.'
   if (label.includes('upstream authorization header')) return 'Gateway writes the provider credential to this header after removing caller-supplied credential headers.'
   if (label.includes('upstream authorization scheme')) return 'Gateway prefixes the provider credential with this scheme when building the upstream request.'
@@ -414,11 +414,10 @@ function termsFor(title: string): InfoPair[] | undefined {
   const terms: InfoPair[] = []
   if (label.includes('dcr') || label.includes('dynamic client')) terms.push({ label: 'DCR', value: 'Dynamic Client Registration; lets an app be registered through the API when the zone enables it.' })
   if (label.includes('forward') && label.includes('caracal identity')) terms.push({ label: 'X-Caracal-Identity', value: 'Gateway header containing the Caracal mandate when an upstream also needs Caracal authorization context.' })
-  if (label.includes('scope')) terms.push({ label: 'Scope', value: 'A named permission string requested in a token and evaluated by grants and policies.' })
+  if (label.includes('scope')) terms.push({ label: 'Scope', value: 'A named permission string requested in a token and evaluated by policies.' })
   if (label.includes('resource')) terms.push({ label: 'Resource', value: 'The protected API, service, audience, or Gateway target being accessed.' })
   if (label.includes('provider')) terms.push({ label: 'Provider', value: 'An upstream credential source Caracal can use for protected calls.' })
   if (label.includes('policy')) terms.push({ label: 'Policy', value: 'Authorization logic that evaluates requests and returns allow, deny, or partial decisions.' })
-  if (label.includes('grant')) terms.push({ label: 'Grant', value: 'A binding that lets one subject use one application against selected resource scopes.' })
   if (label.includes('agent session')) terms.push({ label: 'Agent session', value: 'A Coordinator record for one agent execution and child activity.' })
   else if (label.includes('session')) terms.push({ label: 'Authority session', value: 'A tracked authority context used for token exchange, delegation, or agent activity.' })
   return terms.length > 0 ? terms : undefined
@@ -431,7 +430,7 @@ function actionMeaning(normalized: string, label: string): string {
   if (normalized.includes('validate')) return 'Checks policy or configuration input without making it active.'
   if (normalized.includes('simulate')) return 'Runs a dry evaluation so you can inspect the decision before changing live behavior.'
   if (normalized.includes('activate')) return 'Makes a selected version the effective policy set used for authorization decisions.'
-  if (normalized.includes('revoke')) return 'Stops a grant, delegation, token, or key from being used again.'
+  if (normalized.includes('revoke')) return 'Stops a delegation, token, or key from being used again.'
   if (normalized.includes('rotate')) return 'Issues replacement credentials while keeping the managed object identity.'
   if (normalized.includes('control')) return 'Opens a Control service workflow for automation keys, tokens, or lifecycle state.'
   return `${label} opens the focused Console workflow for the current page.`

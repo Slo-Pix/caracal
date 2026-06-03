@@ -177,7 +177,7 @@ export class AuditTailView implements View {
         impact: 'Audit is read-only evidence; changing filters or opening request traces does not alter authorization state.',
         example: 'deny token_exchange req_123',
         valid: 'Move to an event, cycle the decision filter, reload, pause streaming, filter, or open details/request trace for a row with a request ID.',
-        after: 'Opening details shows the audit event group for the request; tracing shows the decision path for policies, grants, and evaluation status.',
+        after: 'Opening details shows the audit event group for the request; tracing shows the decision path for policies and evaluation status.',
         terms: [
           { label: 'Decision', value: 'The authorization result: allow, deny, partial, or absent when evaluation did not reach a decision.' },
           { label: 'Request ID', value: 'Correlation value used to fetch the complete event group for one request.' },

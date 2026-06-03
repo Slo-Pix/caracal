@@ -44,7 +44,6 @@ import {
   applicationsView,
   auditView,
   delegationsView,
-  grantsView,
   policiesView,
   policySetsView,
   providersView,
@@ -103,8 +102,7 @@ const BASE_ENTRIES: Entry[] = [
   { key: '4', label: 'resource',   group: 'manage', description: 'Manage protected resources', needsZone: true, open: resourcesView },
   { key: '5', label: 'policy',     group: 'manage', description: 'Manage access policies', needsZone: true, open: policiesView },
   { key: '6', label: 'policy set', group: 'manage', description: 'Manage active policy sets', needsZone: true, open: policySetsView },
-  { key: '7', label: 'grant',      group: 'manage', description: 'Manage access grants', needsZone: true, open: grantsView },
-  { key: '8', label: 'authority session', group: 'sessions', description: 'Inspect active authority sessions', needsZone: true, open: sessionsView },
+  { key: '7', label: 'authority session', group: 'sessions', description: 'Inspect active authority sessions', needsZone: true, open: sessionsView },
   { key: 'r', label: 'agent session', group: 'sessions', description: 'Manage agent sessions', needsZone: true, open: agentsView },
   { key: 'g', label: 'delegation', group: 'sessions', description: 'Manage delegated permissions', needsZone: true, open: delegationsView },
   { key: 'a', label: 'audit',      group: 'observe', description: 'Search audit events and trace requests', needsZone: true, open: auditView },
@@ -786,15 +784,15 @@ function menuHelp(label: string): Pick<InfoPage, 'meaning' | 'when' | 'impact' |
     case 'guided setup':
       return {
         meaning: 'Guided setup creates the minimum connected objects needed for a working Caracal path.',
-        when: 'Use it when bootstrapping a zone or validating that app, resource, policy, grant, and runtime profile concepts fit together.',
+        when: 'Use it when bootstrapping a zone or validating that app, resource, policy, and runtime profile concepts fit together.',
         impact: 'The workflow creates or reuses real Control API objects and ends with an operational setup summary.',
-        example: 'Create Pied Piper zone, Son of Anton app, PiperNet resource, policy, grant, and profile.',
+        example: 'Create Pied Piper zone, Son of Anton app, PiperNet resource, policy, and profile.',
         terms: [{ label: 'Profile', value: 'Runtime configuration used by workloads or SDKs to request tokens.' }],
         notes: ['Guided setup favors implemented defaults and hides uncommon advanced fields until requested.'],
       }
     case 'zone':
       return {
-        meaning: 'Zones are trust boundaries that own applications, resources, policies, grants, sessions, audit, and agents.',
+        meaning: 'Zones are trust boundaries that own applications, resources, policies, sessions, audit, and agents.',
         when: 'Use Zones before any zone-scoped workflow or when separating environments and tenants.',
         impact: 'Selecting a zone changes the active management scope for the rest of Console.',
         example: 'Pied Piper Production',
@@ -820,9 +818,9 @@ function menuHelp(label: string): Pick<InfoPage, 'meaning' | 'when' | 'impact' |
       return {
         meaning: 'Resources are protected APIs, services, audiences, or Gateway targets.',
         when: 'Use this to define what applications request access to and which scopes exist.',
-        impact: 'Resource identifiers and scopes become part of grants, policy input, token audiences, Gateway application bindings, and upstream credential provider bindings.',
+        impact: 'Resource identifiers and scopes become part of policy input, token audiences, Gateway application bindings, and upstream credential provider bindings.',
         example: 'resource://pipernet',
-        terms: [{ label: 'Scope', value: 'A named permission string evaluated by grants and policies.' }],
+        terms: [{ label: 'Scope', value: 'A named permission string evaluated by policies.' }],
       }
     case 'policy':
       return {
@@ -839,14 +837,6 @@ function menuHelp(label: string): Pick<InfoPage, 'meaning' | 'when' | 'impact' |
         impact: 'Activating a policy-set version changes future authorization decisions.',
         example: 'PiperNet baseline v3',
         terms: [{ label: 'Manifest', value: 'The policy-version list included in a policy-set version.' }],
-      }
-    case 'grant':
-      return {
-        meaning: 'Grants bind one subject, application, resource, and scope set into explicit authority.',
-        when: 'Use this for known users or workloads that need scoped access.',
-        impact: 'Grants allow authority to be requested; policies can still narrow or deny a request.',
-        example: 'Richard Hendricks can read resource://pipernet through Son of Anton',
-        terms: [{ label: 'Subject', value: 'The user, workload, or actor receiving authority.' }],
       }
     case 'authority session':
       return {
@@ -877,7 +867,7 @@ function menuHelp(label: string): Pick<InfoPage, 'meaning' | 'when' | 'impact' |
       return {
         meaning: 'Request trace loads a focused decision trace for one audit request ID.',
         when: 'Use it when you already have a request ID from logs, audit tail, or an error report.',
-        impact: 'The result helps identify the determining policies, missing grants, or evaluation status.',
+        impact: 'The result helps identify the determining policies and evaluation status.',
         example: 'req_01HX...',
         terms: [{ label: 'Request ID', value: 'Correlation identifier for one evaluated request.' }],
       }
