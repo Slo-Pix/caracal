@@ -8,7 +8,7 @@
 - Express is a peer dependency; Caracal auth logic stays in transport and SDK packages.
 
 ## Required
-- Must map transport authentication errors to stable HTTP status codes and JSON bodies.
+- Must map transport authentication errors to HTTP responses through `httpStatusForAuthError` from `@caracalai/transport-mcp`; never re-derive status codes locally.
 - Must require caller-provided revocation behavior through middleware options.
 - Must keep Express request augmentation minimal and typed.
 

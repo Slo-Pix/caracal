@@ -8,7 +8,7 @@
 
 ## Required
 - Must use Go 1.26 and the standard library `net/http`.
-- Must map authentication errors to stable HTTP status codes and JSON bodies.
+- Must map authentication errors to HTTP responses through `transportmcp.HTTPStatus`; never re-derive status codes locally.
 - Must keep caller-provided revocation behavior wired through transport authentication.
 
 ## Forbidden
