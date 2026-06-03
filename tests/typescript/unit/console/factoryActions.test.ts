@@ -563,6 +563,26 @@ describe('resources actions', () => {
     expect(body).toContain('upstream credential provider *')
     expect(body).toContain('Advanced options')
   })
+
+  it('binds the resource to the explicitly chosen provider', async () => {
+    const { ctx, client } = newCtx()
+    const list = resourcesView(ctx as unknown as Parameters<typeof resourcesView>[0]) as ListView<unknown>
+    const app = fakeApp()
+    const form = await pressKey(list, 'n', app) as FormView
+    Object.assign((form as unknown as { values: Record<string, string> }).values, {
+      name: 'PiperNet',
+      scopes: 'read',
+      upstream_url: 'https://api.pipernet.example',
+      gateway_application_id: 'app-1',
+      credential_provider_id: 'provider-1',
+    })
+    await (form as unknown as { trySubmit: (app: App) => Promise<void> }).trySubmit(app)
+
+    expect(client.providers.create).not.toHaveBeenCalled()
+    expect(client.resources.create).toHaveBeenCalledWith('z1', expect.objectContaining({
+      credential_provider_id: 'provider-1',
+    }))
+  })
 })
 
 describe('providers actions', () => {

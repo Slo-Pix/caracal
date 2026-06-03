@@ -281,3 +281,26 @@ describe('Control menu views', () => {
     expect(app.setStatus).toHaveBeenCalledWith('token TTL exceeds control key maximum of 600 seconds', 'error')
   })
 })
+
+describe('guided setup menu visibility', () => {
+  function stateStub(setupCompleted: boolean) {
+    return {
+      selectedZoneSlug: () => 'pied-piper',
+      menuCursor: () => 0,
+      setupCompleted: () => setupCompleted,
+      setMenuCursor: vi.fn(),
+      setSelectedZone: vi.fn(),
+      clearSelectedZone: vi.fn(),
+    } as never
+  }
+
+  it('shows guided setup before the golden path has completed', () => {
+    const menu = new MenuView({} as never, 'zone-1', stateStub(false))
+    expect(text(menu, fakeApp())).toContain('guided setup')
+  })
+
+  it('hides guided setup once the golden path has completed', () => {
+    const menu = new MenuView({} as never, 'zone-1', stateStub(true))
+    expect(text(menu, fakeApp())).not.toContain('guided setup')
+  })
+})

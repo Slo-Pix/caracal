@@ -156,9 +156,9 @@ async function openAndSubmit(view: View, app: App, values: Record<string, string
 }
 
 async function completeMainPath(view: View, app: App): Promise<void> {
+  await openAndSubmit(view, app, { preset: 'internal_http' })
   await openAndSubmit(view, app, { zone_name: 'zone-name' })
   await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-  await openAndSubmit(view, app, { provider_name: 'no credential', provider_kind: 'none' })
   await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
   await openAndSubmit(view, app, { policy_mode: 'create' })
   await view.onKey('enter', ctx(app))
@@ -175,14 +175,20 @@ describe('first setup workflow', () => {
 
     const body = view.render(ctx(app)).join('\n')
     expect(body).toContain('Step 1')
+    expect(body).toContain('Scenario')
     expect(body).toContain('Agent app')
-    expect(body).toContain('Provider')
+    expect(body).toContain('Resource')
     expect(body).toContain('Access policy')
-    expect(body.indexOf('Provider')).toBeLessThan(body.indexOf('Resource'))
     expect(body.indexOf('Resource')).toBeLessThan(body.indexOf('Access policy'))
+    expect(body).not.toContain('Provider')
     expect(body).not.toContain('Choose or create a zone')
     expect(body).not.toContain('resource identifier')
     expect(body).not.toContain('profile path')
+
+    await view.onKey('enter', ctx(app))
+    const presetForm = latestForm(app)
+    expect(presetForm.render(ctx(app)).join('\n')).toContain('guided setup / scenario')
+    await submitLatestForm(app, { preset: 'internal_http' })
 
     await view.onKey('enter', ctx(app))
     const appForm = latestForm(app)
@@ -266,7 +272,13 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
+    await openAndSubmit(view, app, { preset: 'custom' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.example.com',
+    })
     await openAndSubmit(view, app, {
       provider_name: 'provider-name',
       provider_kind: 'oauth2_client_credentials',
@@ -274,11 +286,6 @@ describe('first setup workflow', () => {
       provider_client_id: 'hooli-client',
       provider_client_secret: 'hooli-secret',
       provider_token_audience: 'https://api.example.com',
-    })
-    await openAndSubmit(view, app, {
-      resource_name: 'resource-name',
-      resource_scopes: 'scope-name',
-      upstream_url: 'https://api.example.com',
     })
     await openAndSubmit(view, app, { policy_mode: 'create' })
     await view.onKey('enter', ctx(app))
@@ -312,7 +319,13 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
+    await openAndSubmit(view, app, { preset: 'custom' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.example.com',
+    })
     await openAndSubmit(view, app, {
       provider_name: 'provider-name',
       provider_kind: 'oauth2_client_credentials',
@@ -321,11 +334,6 @@ describe('first setup workflow', () => {
       provider_client_credentials_auth_method: 'private_key_jwt',
       provider_private_key: '-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----',
       provider_key_id: 'key-1',
-    })
-    await openAndSubmit(view, app, {
-      resource_name: 'resource-name',
-      resource_scopes: 'scope-name',
-      upstream_url: 'https://api.example.com',
     })
     await openAndSubmit(view, app, { policy_mode: 'skip' })
     await view.onKey('enter', ctx(app))
@@ -353,18 +361,19 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
+    await openAndSubmit(view, app, { preset: 'custom' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, {
+      resource_name: 'resource-name',
+      resource_scopes: 'scope-name',
+      upstream_url: 'https://api.hooli.example',
+    })
     await openAndSubmit(view, app, {
       provider_name: 'Hooli Weather',
       provider_kind: 'api_key',
       provider_api_key_auth_location: 'query',
       provider_api_key_query_param: 'key',
       provider_api_key: 'provider-key',
-    })
-    await openAndSubmit(view, app, {
-      resource_name: 'resource-name',
-      resource_scopes: 'scope-name',
-      upstream_url: 'https://api.hooli.example',
     })
     await openAndSubmit(view, app, { policy_mode: 'skip' })
     await view.onKey('enter', ctx(app))
@@ -391,16 +400,17 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
+    await openAndSubmit(view, app, { preset: 'custom' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-    await openAndSubmit(view, app, {
-      provider_name: 'Hooli Bot',
-      provider_kind: 'bearer_token',
-      provider_bearer_token: 'provider-token',
-    })
     await openAndSubmit(view, app, {
       resource_name: 'resource-name',
       resource_scopes: 'scope-name',
       upstream_url: 'https://api.hooli.example/v1',
+    })
+    await openAndSubmit(view, app, {
+      provider_name: 'Hooli Bot',
+      provider_kind: 'bearer_token',
+      provider_bearer_token: 'provider-token',
     })
     await openAndSubmit(view, app, { policy_mode: 'skip' })
     await view.onKey('enter', ctx(app))
@@ -424,9 +434,10 @@ describe('first setup workflow', () => {
     })
     await view.init?.(app)
 
+    await openAndSubmit(view, app, { preset: 'custom' })
     await openAndSubmit(view, app, { application_mode: 'select', selected_agent_app_id: 'app-1' })
-    await openAndSubmit(view, app, { provider_mode: 'select', selected_provider_id: 'provider-1' })
     await openAndSubmit(view, app, { resource_mode: 'select', selected_resource_id: 'res-1', resource_scopes: 'scope-name' })
+    await openAndSubmit(view, app, { provider_mode: 'select', selected_provider_id: 'provider-1' })
     await openAndSubmit(view, app, { policy_mode: 'create' })
     await view.onKey('enter', ctx(app))
 
@@ -454,8 +465,8 @@ describe('first setup workflow', () => {
     await view.init?.(app)
     Object.assign((view as unknown as { values: Record<string, string> }).values, { generate_profile: 'false' })
 
+    await openAndSubmit(view, app, { preset: 'internal_http' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-    await openAndSubmit(view, app, { provider_name: 'no credential', provider_kind: 'none' })
     await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await openAndSubmit(view, app, { policy_mode: 'skip' })
     await view.onKey('enter', ctx(app))
@@ -492,8 +503,8 @@ describe('first setup workflow', () => {
       write_files: 'true',
     })
 
+    await openAndSubmit(view, app, { preset: 'internal_http' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-    await openAndSubmit(view, app, { provider_name: 'no credential', provider_kind: 'none' })
     await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await openAndSubmit(view, app, { policy_mode: 'create' })
     await view.onKey('enter', ctx(app))
@@ -542,8 +553,8 @@ describe('first setup workflow', () => {
         write_files: 'true',
       })
 
+      await openAndSubmit(view, app, { preset: 'internal_http' })
       await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-      await openAndSubmit(view, app, { provider_name: 'no credential', provider_kind: 'none' })
       await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
       await openAndSubmit(view, app, { policy_mode: 'create' })
       await view.onKey('enter', ctx(app))
@@ -576,8 +587,8 @@ describe('first setup workflow', () => {
       write_files: 'true',
     })
 
+    await openAndSubmit(view, app, { preset: 'internal_http' })
     await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
-    await openAndSubmit(view, app, { provider_name: 'no credential', provider_kind: 'none' })
     await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
     await openAndSubmit(view, app, { policy_mode: 'create' })
     await view.onKey('enter', ctx(app))
@@ -585,5 +596,70 @@ describe('first setup workflow', () => {
     expect(app.setStatus).toHaveBeenCalledWith(expect.stringContaining('refusing to overwrite existing setup file'), 'error')
     expect(client.applications.create).not.toHaveBeenCalled()
     expect(client.resources.create).not.toHaveBeenCalled()
+  })
+
+  it('hides the provider page and auto-creates a none provider for the no-secret scenario', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    })
+    await view.init?.(app)
+
+    await openAndSubmit(view, app, { preset: 'internal_http' })
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://upstream-url' })
+
+    await view.onKey('enter', ctx(app))
+    const policyForm = latestForm(app)
+    expect(policyForm.render(ctx(app)).join('\n')).toContain('guided setup / access policy')
+
+    await submitLatestForm(app, { policy_mode: 'skip' })
+    await view.onKey('enter', ctx(app))
+
+    expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      name: 'resource-name upstream',
+      kind: 'none',
+    }))
+    expect(client.resources.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      credential_provider_id: 'provider-1',
+    }))
+  })
+
+  it('locks the provider type and omits the type selector for a credential scenario', async () => {
+    const client = makeClient()
+    const app = fakeApp()
+    const view = firstSetupView({
+      client: client as never,
+      zoneId: 'zone-1',
+    })
+    await view.init?.(app)
+
+    await openAndSubmit(view, app, { preset: 'api_key' })
+    await openAndSubmit(view, app, { agent_app_name: 'agent-app-name' })
+    await openAndSubmit(view, app, { resource_name: 'resource-name', resource_scopes: 'scope-name', upstream_url: 'https://api.hooli.example' })
+
+    await view.onKey('enter', ctx(app))
+    const providerForm = latestForm(app)
+    expect(providerForm.render(ctx(app)).join('\n')).not.toContain('provider type')
+    await submitLatestForm(app, {
+      provider_name: 'Hooli Weather',
+      provider_api_key_auth_location: 'header',
+      provider_api_key_header: 'X-API-Key',
+      provider_api_key: 'provider-key',
+    })
+    await openAndSubmit(view, app, { policy_mode: 'skip' })
+    await view.onKey('enter', ctx(app))
+
+    expect(client.providers.create).toHaveBeenCalledWith('zone-1', expect.objectContaining({
+      name: 'Hooli Weather',
+      kind: 'api_key',
+      config_json: expect.objectContaining({
+        auth_location: 'header',
+        header_name: 'X-API-Key',
+        api_key: 'provider-key',
+      }),
+    }))
   })
 })

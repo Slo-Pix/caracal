@@ -57,4 +57,14 @@ describe('ConsoleStateStore', () => {
     state.setSelectedZone('zone-2', undefined)
     expect(ConsoleStateStore.load(path).selectedZoneId()).toBe('zone-2')
   })
+
+  it('persists the one-time guided setup completion flag', () => {
+    const path = statePath()
+    const state = new ConsoleStateStore(path)
+    expect(state.setupCompleted()).toBe(false)
+
+    state.markSetupCompleted()
+    expect(state.setupCompleted()).toBe(true)
+    expect(ConsoleStateStore.load(path).setupCompleted()).toBe(true)
+  })
 })
