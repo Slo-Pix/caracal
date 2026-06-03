@@ -30,6 +30,8 @@ helm upgrade --install caracal infra/helm/caracal \
 
 Before installing, provide the runtime Secret named by `secrets.runtimeSecretName` or set `secrets.create=true` with plaintext values only for a controlled evaluation environment.
 
+For a managed-cloud install with the runtime Secret provisioned by the External Secrets Operator, a production overlay, and cert-manager TLS ingress, follow [Cloud Reference Deployments](/operations/cloud-reference-deployments/).
+
 ## Service ports
 
 | Component | Port |
