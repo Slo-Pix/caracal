@@ -36,7 +36,7 @@ DEFAULT_COORDINATOR_URL = "http://localhost:4000"
 DEFAULT_GATEWAY_URL = "http://localhost:8081"
 
 if TYPE_CHECKING:
-    from .http import ASGIApp, CaracalContextASGIMiddleware
+    from .http import ASGIApp, CaracalContextASGIMiddleware, Verifier
 
 
 @dataclass
@@ -888,27 +888,48 @@ class Caracal:
         """Release the coordinator's HTTP client. Idempotent."""
         await self.config.coordinator.close()
 
-    def context_middleware(self, *, allow_root: bool = False) -> Callable[[ASGIApp], CaracalContextASGIMiddleware]:
-        """ASGI context-propagation middleware factory.
+    def context_middleware(
+        self,
+        *,
+        allow_root: bool = False,
+        verifier: Verifier | None = None,
+    ) -> Callable[[ASGIApp], CaracalContextASGIMiddleware]:
+        """ASGI middleware factory for the inbound request boundary.
 
-        This binds an existing Caracal envelope into request context after a
-        verifier boundary. It does not verify JWT signatures, audience, scopes,
-        token use, or revocation.
+        Without ``verifier`` it only binds the inbound envelope into request
+        context (propagation): it does not check JWT signatures, audience,
+        scopes, token use, or revocation. Use this when a Gateway already
+        enforced the mandate upstream.
 
-        Install at module load: `app.add_middleware()`
-        only registers middleware before Starlette/FastAPI startup, so this cannot
-        be called from inside a `lifespan` context manager.
+        Pass ``verifier`` to enforce at the boundary. The callable receives the
+        bearer token and must raise on failure; back it with
+        ``caracalai_identity.verify_token`` so the application sees a request
+        only after the mandate is proven. The SDK never inspects token internals
+        itself. This middleware is framework-agnostic and runs on any ASGI app
+        (FastAPI, Starlette, Quart, Django ASGI).
+
+        Install at module load: `app.add_middleware()` only registers middleware
+        before Starlette/FastAPI startup, so this cannot be called from inside a
+        `lifespan` context manager.
+
+            from caracalai_identity import verify_token
 
             caracal = Caracal.from_env()
             app = FastAPI()
-            app.add_middleware(caracal.context_middleware())
+
+            async def verify(token: str) -> None:
+                await verify_token(token, issuer=ISSUER, audience=AUDIENCE)
+
+            app.add_middleware(caracal.context_middleware(verifier=verify))
         """
         from .http import CaracalContextASGIMiddleware
 
         outer = self
 
         def factory(app: ASGIApp) -> CaracalContextASGIMiddleware:
-            return CaracalContextASGIMiddleware(app, outer, allow_root=allow_root)
+            return CaracalContextASGIMiddleware(
+                app, outer, allow_root=allow_root, verifier=verifier
+            )
 
         return factory
 
