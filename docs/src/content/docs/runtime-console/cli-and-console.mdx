@@ -42,7 +42,6 @@ Runtime CLI commands must not require admin tokens, selected zones, product cred
 | Register protected resources and scopes | `resource` |
 | Author access policies | `policy` |
 | Simulate and activate policy sets | `policy set` |
-| Issue or revoke grants | `grant` |
 | Inspect authority sessions | `authority session` |
 | Enable and manage Control API access | `control` |
 | Search audit records and trace selected requests | `audit` |
@@ -55,7 +54,7 @@ Product-management workflows are not mirrored as top-level runtime CLI commands.
 
 ## Automation
 
-Use the Admin SDK from trusted operator environments when scripts need to create zones. Use the Control API for zone-bound automation over applications, resources, policies, grants, authority sessions, agents, delegation edges, audit queries, and Control credentials. Enable Control from the Console `control` menu, then call the authenticated HTTP surface from CI or automation.
+Use the Admin SDK from trusted operator environments when scripts need to create zones. Use the Control API for zone-bound automation over applications, resources, policies, authority sessions, agents, delegation edges, audit queries, and Control credentials. Enable Control from the Console `control` menu, then call the authenticated HTTP surface from CI or automation.
 
 Automation must run with operator credentials only in trusted control-plane environments. Agent workloads should use `caracal run` or application credentials and must not receive `CARACAL_ADMIN_TOKEN`, `CARACAL_COORDINATOR_TOKEN`, `CARACAL_SECRETS_DIR`, or mounted operator secret files.
 
@@ -64,6 +63,6 @@ Automation must run with operator credentials only in trusted control-plane envi
 | Symptom | Check |
 | --- | --- |
 | `caracal console` is hidden or unavailable | Use `caracal-console` directly, or reinstall so the Console binary/workspace shim is available. Runtime lifecycle commands remain available. |
-| A command for zones, policies, grants, or audit is missing from `caracal` | Open the Console. Those workflows are intentionally Console-owned. |
+| A command for zones, policies, or audit is missing from `caracal` | Open the Console. Those workflows are intentionally Console-owned. |
 | Console fails in CI | Use the Control API or Admin SDK. The Console requires an interactive TTY. |
 | Runtime command asks for product-management context | Treat it as a bug; runtime lifecycle must not depend on admin or zone state. |
