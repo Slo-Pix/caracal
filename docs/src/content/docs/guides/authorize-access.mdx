@@ -1,9 +1,9 @@
 ---
-title: Authorize Access and Invite Members
-description: Authorize applications to request resource scopes through policy, and invite new members into a zone.
+title: Authorize Access
+description: Authorize applications to request resource scopes through policy.
 ---
 
-Applications and subjects are authorized to request resource scopes by the policy set that is active in the zone. Invitations bring people into a zone so they can administer, review, or approve work.
+Applications and subjects are authorized to request resource scopes by the policy set that is active in the zone.
 
 ## Authorize an application
 
@@ -14,19 +14,6 @@ Access is decided by policy at request time. There is no separate access-binding
 3. Activate the policy set so the rule takes effect. See [Activate a Policy Set](/guides/activate-policy-set/).
 4. Run a token exchange or Gateway request that asks for those scopes.
 5. Inspect `audit` or `request trace` to confirm the decision.
-
-## Invite a member
-
-Use invitations when a new operator or reviewer needs zone access.
-
-| Field | Meaning |
-| --- | --- |
-| Email | Person being invited. |
-| Role | Zone role or team role being assigned. |
-| Invited by | Subject ID of the inviter. |
-| Expiration | Optional expiry; defaults to the service-defined invite window when omitted. |
-
-The Admin API exposes invitation list, create, and cancel endpoints for automation.
 
 ## Authorization design rules
 
