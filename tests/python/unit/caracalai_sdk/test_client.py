@@ -877,6 +877,7 @@ class ClientSecretCustomHTTPClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(called)
         finally:
             await c.close()
+            self.assertFalse(custom_client.is_closed)
             custom_client.close()
 
 

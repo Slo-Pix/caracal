@@ -125,7 +125,6 @@ func TestSamplingHookDropsByRate(t *testing.T) {
 		t.Fatalf("hook write info: %v", err)
 	}
 	w.Flush(time.Second)
-	time.Sleep(10 * time.Millisecond)
 	if got := strings.Count(sink.String(), "sampled"); got != 2 {
 		t.Fatalf("1-in-3 sampling of 6 debug lines should emit 2, got %d", got)
 	}
