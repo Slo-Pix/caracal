@@ -1,12 +1,12 @@
 ---
-title: Architecture
-description: Current Caracal system architecture, service flows, storage, events, keys, and trust boundaries.
+title: Understand Architecture
+description: Current Caracal system architecture, request flows, state propagation, storage, keys, and trust boundaries.
 pageType: landing
 ---
 
 Caracal is a pre-execution authority system for AI agents. It separates control-plane management, token exchange, protected-resource routing, audit evidence, and agent/delegation coordination into independent services backed by Postgres and Redis Streams.
 
-## System at a glance
+## System Overview
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,7 @@ flowchart LR
   Control[Control API] --> API
 ```
 
-## Core design choices
+## Core Design Choices
 
 | Choice | Effect |
 | --- | --- |
@@ -38,14 +38,25 @@ flowchart LR
 | Coordinator for agent authority | Agent sessions, service leases, delegation edges, and invocation lifecycle stay explicit. |
 | Console/API boundary | Human management uses Console; automation uses Control/Admin APIs; runtime CLI remains lifecycle-only. |
 
-## Reading path
+## System Flows
 
-1. [System Topology](/architecture/system-topology/)
-2. [Token Exchange Flow](/architecture/token-exchange-flow/)
-3. [Delegation and Coordinator Flow](/architecture/delegation-flow/)
-4. [Event Streams and Outbox](/architecture/event-streams/)
-5. [Storage Model](/architecture/storage-model/)
-6. [Cryptography and Keys](/architecture/crypto-keys/)
-7. [Trust Boundaries](/architecture/trust-boundaries/)
+| Need | Page |
+| --- | --- |
+| Identify services, clients, and dependencies | [Map the System](/architecture/system-topology/) |
+| Understand STS mandate issuance | [Exchange Tokens](/architecture/token-exchange-flow/) |
+| Understand agent sessions and delegation | [Coordinate Agents](/architecture/delegation-flow/) |
+
+## State and Safety
+
+| Need | Page |
+| --- | --- |
+| Understand Redis Streams and outboxes | [Propagate Events](/architecture/event-streams/) |
+| Understand durable data ownership | [Store State](/architecture/storage-model/) |
+| Understand signing, HMACs, JWKS, and rotation | [Manage Keys](/architecture/crypto-keys/) |
+| Understand security and command boundaries | [Enforce Boundaries](/architecture/trust-boundaries/) |
+
+## Next Step
+
+Start with [Map the System](/architecture/system-topology/) before tracing request and state flows.
 
 For service-by-service detail, continue to [Services](/services/). For deployment detail, use [Operations](/operations/).

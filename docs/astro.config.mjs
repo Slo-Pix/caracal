@@ -448,14 +448,26 @@ export default defineConfig({
           label: 'Architecture',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/architecture/' },
-            { label: 'System Topology', link: '/architecture/system-topology/' },
-            { label: 'Token Exchange Flow', link: '/architecture/token-exchange-flow/' },
-            { label: 'Delegation and Coordinator Flow', link: '/architecture/delegation-flow/' },
-            { label: 'Event Streams and Outbox', link: '/architecture/event-streams/' },
-            { label: 'Storage Model', link: '/architecture/storage-model/' },
-            { label: 'Cryptography and Keys', link: '/architecture/crypto-keys/' },
-            { label: 'Trust Boundaries', link: '/architecture/trust-boundaries/' },
+            { label: 'Understand Architecture', link: '/architecture/' },
+            {
+              label: 'System Flows',
+              collapsed: true,
+              items: [
+                { label: 'Map the System', link: '/architecture/system-topology/' },
+                { label: 'Exchange Tokens', link: '/architecture/token-exchange-flow/' },
+                { label: 'Coordinate Agents', link: '/architecture/delegation-flow/' },
+              ],
+            },
+            {
+              label: 'State and Safety',
+              collapsed: true,
+              items: [
+                { label: 'Propagate Events', link: '/architecture/event-streams/' },
+                { label: 'Store State', link: '/architecture/storage-model/' },
+                { label: 'Manage Keys', link: '/architecture/crypto-keys/' },
+                { label: 'Enforce Boundaries', link: '/architecture/trust-boundaries/' },
+              ],
+            },
           ],
         },
         {

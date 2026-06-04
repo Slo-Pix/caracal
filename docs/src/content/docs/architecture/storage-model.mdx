@@ -1,5 +1,5 @@
 ---
-title: Storage Model
+title: Store State
 description: Durable Postgres tables, Redis streams, replay files, and ownership boundaries.
 pageType: architecture
 ---
@@ -13,7 +13,7 @@ Caracal separates durable state from propagation state.
 | Replay volumes | Temporary audit emission buffer for STS and Gateway. |
 | Secret manager/files | Runtime credentials and HMAC/encryption material. |
 
-## Postgres ownership
+## Postgres Ownership
 
 | Domain | Tables |
 | --- | --- |
@@ -24,7 +24,7 @@ Caracal separates durable state from propagation state.
 | Agents | `agent_sessions`, `agent_topology`, `agent_services`, `agent_invocations`, `delegation_edges`, `delegation_graph_epochs` |
 | Operations | `event_outbox`, `caracal_outbox`, `admin_tokens`, `gateway_resource_bindings`, `gateway_binding_revision`, `resource_rate_limits` |
 
-## Integrity controls
+## Integrity Controls
 
 - Migrations are forward-only in production tooling.
 - `schema_migrations` records applied versions.
@@ -33,18 +33,22 @@ Caracal separates durable state from propagation state.
 - Zone-scoped tables use fail-closed row-level security.
 - Audit partitions are maintained for the rolling window.
 
-## Redis ownership
+## Redis Ownership
 
 Redis keeps delivery state, pending entries, consumer groups, rate-limit coordination, and revocation/invalidation streams. Redis does not replace Postgres for durable product state.
 
-## Restore priority
+## Restore Priority
 
 1. Postgres and runtime secrets.
 2. STS/Gateway replay volumes.
 3. Redis streams/pending entries when available.
 4. Audit exports and SIEM archive.
 
-## Related pages
+## Next Step
+
+Use [Manage Keys](/architecture/crypto-keys/) to understand how signing, encryption, and HMAC keys protect stored and propagated state.
+
+## Related Pages
 
 - [Operate PostgreSQL](/operations/postgres/)
 - [Operate Redis Streams](/operations/redis/)

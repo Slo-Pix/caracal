@@ -1,12 +1,12 @@
 ---
-title: Trust Boundaries
+title: Enforce Boundaries
 description: Security boundaries between users, runtime CLI, Console, Control API, services, storage, and upstreams.
 pageType: architecture
 ---
 
 Caracal’s trust model depends on clear boundaries. Do not blur runtime lifecycle, product management, token issuance, protected-resource routing, and audit evidence.
 
-## Boundary map
+## Boundary Map
 
 | Boundary | Trusted side | Untrusted or constrained side |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ Caracal’s trust model depends on clear boundaries. Do not blur runtime lifecyc
 | Postgres | Service roles and fail-closed RLS | Cross-zone reads without zone context. |
 | Control | Enabled gate, verified JWT, replay-safe JTI, rate limit | Disabled gate, replayed tokens, unsupported commands. |
 
-## Gateway fail-closed checks
+## Gateway Fail-Closed Checks
 
 Gateway denies before upstream dispatch when:
 
@@ -30,11 +30,11 @@ Gateway denies before upstream dispatch when:
 - STS exchange fails or the STS circuit is open;
 - upstream host safety rules reject the destination.
 
-## Control boundary
+## Control Boundary
 
 Control is optional. It requires a gate file, JWKS-backed JWT verification, replay protection, rate limits, and an API token for dispatch. It must not be exposed as a top-level runtime CLI command.
 
-## Related pages
+## Related Pages
 
 - [Harden Production](/operations/tls-hardening/)
 - [Control Service](/services/control/)

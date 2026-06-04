@@ -1,12 +1,12 @@
 ---
-title: Cryptography and Keys
+title: Manage Keys
 description: Key material, signatures, HMACs, JWKS, and rotation boundaries in Caracal.
 pageType: architecture
 ---
 
 Caracal uses separate keys for encryption, mandate signing, audit integrity, stream integrity, and service-to-service exchange.
 
-## Key map
+## Key Map
 
 | Material | Used by | Purpose |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ Caracal uses separate keys for encryption, mandate signing, audit integrity, str
 | `GATEWAY_STS_HMAC_KEY` | Gateway and STS | Authenticate Gateway token-exchange requests to STS. |
 | Admin and Coordinator tokens | API, Coordinator, Console, Control | Authenticate management and agent/delegation operations. |
 
-## Mandate verification
+## Mandate Verification
 
 ```mermaid
 sequenceDiagram
@@ -33,16 +33,20 @@ sequenceDiagram
 
 STS JWKS responses are cacheable; rotation plans must preserve overlap until verifier caches expire.
 
-## Gateway exchange signature
+## Gateway Exchange Signature
 
 Gateway signs STS exchange requests with timestamp, request ID, method, path, and form body. STS checks the signature, skew, request ID, and nonce before accepting the Gateway-authenticated path.
 
-## Published-mode requirements
+## Published-Mode Requirements
 
 In `rc` and `stable`, HMAC keys used by services must be present and at least 32 bytes where validated. Missing keys cause startup or readiness failure rather than silent downgrade.
 
-## Related pages
+## Next Step
+
+Use [Enforce Boundaries](/architecture/trust-boundaries/) to connect keys, services, commands, and data stores to trust boundaries.
+
+## Related Pages
 
 - [Rotate Keys and Secrets](/operations/key-management/)
 - [Identity Package](/sdks/identity/)
-- [Trust Boundaries](/architecture/trust-boundaries/)
+- [Enforce Boundaries](/architecture/trust-boundaries/)

@@ -1,12 +1,12 @@
 ---
-title: Event Streams and Outbox
+title: Propagate Events
 description: Redis Streams, transactional outboxes, consumer groups, and replay paths in Caracal.
 pageType: architecture
 ---
 
 Caracal uses Postgres outboxes for durable enqueue and Redis Streams for asynchronous delivery. Published modes sign stream messages with `STREAMS_HMAC_KEY`.
 
-## Event pipeline
+## Event Pipeline
 
 ```mermaid
 flowchart LR
@@ -32,18 +32,22 @@ flowchart LR
 | `caracal.delegations.invalidate` | Coordinator | Delegation observers |
 | `caracal.providers.ratelimit` | Redis provisioner/provider coordination | Provider rate-limit coordination |
 
-## Outbox behavior
+## Outbox Behavior
 
 | Outbox | Owner | Behavior |
 | --- | --- | --- |
 | `event_outbox` | API | Durable enqueue inside API transactions, cooperative dispatcher, signed Redis `XADD`, retry/backoff, dead-row metrics. |
 | `caracal_outbox` | Coordinator | Dedupe by producer/topic/dedupe key and publishes Coordinator topics. |
 
-## Audit replay
+## Audit Replay
 
 STS and Gateway use replay directories under `/var/lib/caracal/audit-replay`. When Redis or Audit is unavailable, replay files preserve pending audit events so they can drain after recovery.
 
-## Related pages
+## Next Step
+
+Use [Store State](/architecture/storage-model/) to understand which data is durable, transient, or recoverable.
+
+## Related Pages
 
 - [Operate Redis Streams](/operations/redis/)
 - [Audit Service](/services/audit/)

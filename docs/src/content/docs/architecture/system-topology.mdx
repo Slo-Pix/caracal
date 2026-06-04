@@ -1,5 +1,5 @@
 ---
-title: System Topology
+title: Map the System
 description: Runtime topology for Caracal services, dependencies, and external clients.
 pageType: architecture
 ---
@@ -49,7 +49,7 @@ flowchart TB
   Coordinator --> Redis
 ```
 
-## Service responsibilities
+## Service Responsibilities
 
 | Service | Responsibility |
 | --- | --- |
@@ -60,7 +60,7 @@ flowchart TB
 | Coordinator | Agent sessions, agent services, delegations, invocations, sweeper jobs, Coordinator outbox. |
 | Control | Optional remote management invoke endpoint gated by token auth, replay protection, rate limiting, and runtime gate file. |
 
-## Deployment shapes
+## Deployment Shapes
 
 | Shape | Source |
 | --- | --- |
@@ -68,7 +68,11 @@ flowchart TB
 | Self-hosted Compose | `infra/docker/runtime-compose.yml`. |
 | Kubernetes | `infra/helm/caracal`. |
 
-## Related pages
+## Next Step
+
+Use [Exchange Tokens](/architecture/token-exchange-flow/) to follow how workloads receive scoped mandates.
+
+## Related Pages
 
 - [Services](/services/)
 - [Deploy with Docker Compose](/operations/docker-compose/)

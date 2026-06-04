@@ -1,12 +1,12 @@
 ---
-title: Token Exchange Flow
+title: Exchange Tokens
 description: How STS exchanges authority for scoped Caracal mandates.
 pageType: architecture
 ---
 
 STS implements the token exchange boundary. Workloads, SDKs, `caracal run`, and Gateway submit existing authority plus requested resources and receive scoped mandates.
 
-## Exchange sequence
+## Exchange Sequence
 
 ```mermaid
 sequenceDiagram
@@ -42,7 +42,7 @@ sequenceDiagram
 | `session_id`, `agent_session_id`, `delegation_edge_id` | Authority anchors for session/delegation checks. |
 | `challenge_id` / `challenge_response` | Step-up completion. |
 
-## Current TTL contracts
+## TTL Contracts
 
 | Mandate type | Contract |
 | --- | --- |
@@ -52,11 +52,15 @@ sequenceDiagram
 
 Gateway performs a per-request exchange and rejects inbound tokens that are too close to expiry before proxying.
 
-## Gateway-authenticated exchange
+## Gateway-Authenticated Exchange
 
 Gateway exchanges with STS using a request signature, timestamp, and nonce over the token exchange request. STS verifies the Gateway HMAC key and consumes the nonce before trusting the Gateway-authenticated path.
 
-## Related pages
+## Next Step
+
+Use [Coordinate Agents](/architecture/delegation-flow/) to see how agent sessions and delegation edges feed token exchange.
+
+## Related Pages
 
 - [STS Service](/services/sts/)
 - [Mandates](/concepts/mandate/)
