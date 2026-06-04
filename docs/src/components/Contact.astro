@@ -3,66 +3,35 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Contact section with sales, support, and security routes.
+ * Reference routing section for the documentation landing page.
  */
 ---
 
-<section id="contact" class="contact" aria-labelledby="contact-heading">
+<section id="reference" class="contact" aria-labelledby="reference-heading">
   <div class="contact__inner">
-    <h2 id="contact-heading" class="contact__heading">
-      <span class="contact__heading-lead">Get in touch</span>
-      <span class="contact__heading-name">Talk to Caracal</span>
+    <p class="contact__lede">Reference</p>
+    <h2 id="reference-heading" class="contact__heading">
+      <span class="contact__heading-name">Look up exact answers.</span>
     </h2>
-    <p class="contact__lede">
-      Pick the channel that fits your question. We answer fast.
-    </p>
 
     <div class="contact__grid">
-      <a class="contact__card" href="https://cal.com/garudex" target="_blank" rel="noreferrer noopener">
-        <span class="contact__card-glyph" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3.5" y="5" width="17" height="15" rx="2" />
-            <path d="M3.5 9h17" />
-            <path d="M8 3v4" />
-            <path d="M16 3v4" />
-          </svg>
-        </span>
-        <p class="contact__card-eyebrow">Sales &amp; demos</p>
-        <h3 class="contact__card-title">Book a 30-min call</h3>
-        <p class="contact__card-body">
-          Walk through your use case, see Caracal Enterprise live, and scope a deployment.
-        </p>
-        <span class="contact__card-cta">Schedule on Cal.com →</span>
+      <a class="contact__card" href="/reference/faq/">
+        <p class="contact__card-eyebrow">FAQ</p>
+        <h3 class="contact__card-title">Common questions</h3>
+        <p class="contact__card-body">Direct answers with stable anchors for recurring integration and modeling questions.</p>
+        <span class="contact__card-cta">Open FAQ →</span>
       </a>
-
-      <a class="contact__card" href="mailto:hello@garudexlabs.com">
-        <span class="contact__card-glyph" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <path d="m4 7 8 6 8-6" />
-          </svg>
-        </span>
-        <p class="contact__card-eyebrow">General inquiries</p>
-        <h3 class="contact__card-title">Email us</h3>
-        <p class="contact__card-body">
-          Partnerships, press, support escalations, and everything else.
-        </p>
-        <span class="contact__card-cta">hello@garudexlabs.com →</span>
+      <a class="contact__card" href="/reference/errors/">
+        <p class="contact__card-eyebrow">Errors</p>
+        <h3 class="contact__card-title">Error Reference</h3>
+        <p class="contact__card-body">Shared error codes, likely source, and first check for each failure.</p>
+        <span class="contact__card-cta">Debug errors →</span>
       </a>
-
-      <a class="contact__card" href="mailto:security@garudexlabs.com">
-        <span class="contact__card-glyph" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2 4 6v6c0 4.4 3.4 8.4 8 10 4.6-1.6 8-5.6 8-10V6l-8-4Z" />
-            <path d="m9 12 2 2 4-4" />
-          </svg>
-        </span>
-        <p class="contact__card-eyebrow">Security disclosures</p>
-        <h3 class="contact__card-title">Report a vulnerability</h3>
-        <p class="contact__card-body">
-          PGP-signed reports welcome. We acknowledge within one business day.
-        </p>
-        <span class="contact__card-cta">security@garudexlabs.com →</span>
+      <a class="contact__card" href="/security/threat-model/">
+        <p class="contact__card-eyebrow">Security</p>
+        <h3 class="contact__card-title">Threat Model</h3>
+        <p class="contact__card-body">Boundaries, invariants, and the security assumptions behind Caracal.</p>
+        <span class="contact__card-cta">Review security →</span>
       </a>
     </div>
   </div>

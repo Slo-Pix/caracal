@@ -3,47 +3,32 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Two-column comparison of Caracal Open Source and Caracal Enterprise.
+ * Core model routing section for the documentation landing page.
  */
 ---
 
-<section class="editions" aria-labelledby="editions-heading">
+<section id="model" class="editions" aria-labelledby="model-heading">
   <div class="editions__inner">
-    <h2 id="editions-heading" class="editions__heading">
-      <span class="editions__heading-lead">Choose your edition</span>
-      <span class="editions__heading-name">Open Source &amp; Enterprise</span>
+    <p class="editions__lede">Core model</p>
+    <h2 id="model-heading" class="editions__heading">
+      <span class="editions__heading-name">Learn the nouns once.</span>
     </h2>
-    <p class="editions__lede">
-      The same enforcement core. Pick the distribution that fits how you ship.
-    </p>
 
     <div class="editions__grid">
-      <a class="editions__card editions__card--oss" href="/get-started/">
-        <p class="editions__card-eyebrow">Caracal Open Source</p>
-        <h3 class="editions__card-title">For builders and self-hosted teams</h3>
-        <ul class="editions__list">
-          <li>Full enforcement runtime, Console, and SDKs</li>
-          <li>Mandates, policies, constraints, delegation</li>
-          <li>Local audit ledger</li>
-          <li>MCP adapter and tool integrations</li>
-          <li>Apache-2.0 licensed</li>
-          <li>Community support</li>
-        </ul>
-        <span class="editions__card-cta">Read the OSS docs →</span>
+      <a class="editions__card" href="/concepts/model-overview/">
+        <p class="editions__card-eyebrow">Overview</p>
+        <h3 class="editions__card-title">One-Minute Model</h3>
+        <p class="editions__card-body">The smallest useful picture of zones, applications, resources, policy, and mandates.</p>
       </a>
-
-      <a class="editions__card editions__card--ent" href="/#contact">
-        <p class="editions__card-eyebrow">Caracal Enterprise</p>
-        <h3 class="editions__card-title">For regulated and large-scale deployments</h3>
-        <ul class="editions__list">
-          <li>Everything in Open Source</li>
-          <li>Tamper-evident, signed audit ledger</li>
-          <li>SSO, RBAC, and multi-tenant control plane</li>
-          <li>Air-gapped and on-prem deployment</li>
-          <li>SLA-backed support and incident response</li>
-          <li>Compliance reporting and exports</li>
-        </ul>
-        <span class="editions__card-cta">Talk to us →</span>
+      <a class="editions__card" href="/guides/modeling-recipes/">
+        <p class="editions__card-eyebrow">Design</p>
+        <h3 class="editions__card-title">Modeling Recipes</h3>
+        <p class="editions__card-body">Map environments, customers, sensitive resources, and agent types onto Caracal objects.</p>
+      </a>
+      <a class="editions__card" href="/concepts/delegation/">
+        <p class="editions__card-eyebrow">Agents</p>
+        <h3 class="editions__card-title">Delegation Graph</h3>
+        <p class="editions__card-body">Understand bounded authority transfer between agent sessions.</p>
       </a>
     </div>
   </div>
