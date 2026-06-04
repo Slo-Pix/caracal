@@ -1,14 +1,14 @@
 ---
-title: Operator Debugging
+title: Debug Infrastructure Issues
 description: Diagnose Caracal deployment, configuration, token exchange, Gateway, audit, and delegation issues.
 pageType: workflow
 ---
 
 Debug from the boundary inward: runtime lifecycle, readiness, storage, streams, service config, then request-specific audit evidence.
 
-For an application-level failure where you have an error or request ID but not the failing surface, start from the symptom-first [Troubleshooting Decision Tree](/operations/troubleshooting/) instead.
+For an application-level failure where you have an error or request ID but not the failing surface, start from the symptom-first [Troubleshoot by Symptom](/operations/troubleshooting/) instead.
 
-## Triage flow
+## Triage Flow
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ flowchart TD
 | Storage | `infra/postgres/scripts/validateMigrations.sh`, `infra/redis/scripts/verify.sh` |
 | App-level | Console `diagnostics`, `audit`, and `request trace` |
 
-## Common cases
+## Common Cases
 
 | Symptom | Likely area |
 | --- | --- |
@@ -39,7 +39,7 @@ flowchart TD
 | Agent views fail | Coordinator URL/token, selected zone, or Coordinator readiness. |
 | Audit event missing | Redis stream health, Audit readiness, DLQ, replay backlog, or request never reaching protected boundary. |
 
-## Request investigation
+## Request Investigation
 
 1. Capture request ID, zone ID, subject, resource, and timestamp.
 2. Open Console `audit` or `request trace`.
@@ -47,6 +47,10 @@ flowchart TD
 4. Compare token claims with resource-server verifier settings.
 5. Check revocation and step-up state when authority appears valid but access fails.
 
-## Escalation bundle
+## Escalation Bundle
 
 Include readiness output, relevant logs, service versions, Helm values diff, Redis stream status, Postgres migration status, request ID, audit explanation, and any recent secret or policy changes.
+
+## Next Step
+
+Use [Recover from Failures](/operations/failure-modes/) when infrastructure debugging identifies a degraded dependency, service, stream, or safety guarantee.

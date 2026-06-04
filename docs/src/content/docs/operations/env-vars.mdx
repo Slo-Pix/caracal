@@ -1,12 +1,12 @@
 ---
-title: Environment Variables
+title: Configure Service Environment
 description: Operational environment variables for Caracal services and runtime workloads.
 pageType: reference
 ---
 
 Caracal services load configuration from environment variables and `*_FILE` secret variants. Use file-backed secrets in `rc` and `stable` modes.
 
-## Mode requirements
+## Mode Requirements
 
 | Mode | Expectation |
 | --- | --- |
@@ -16,7 +16,7 @@ Caracal services load configuration from environment variables and `*_FILE` secr
 
 Published modes require valid HMAC keys, deny unsafe Gateway fail-open settings, and reject incomplete service configuration before readiness succeeds.
 
-## Shared service variables
+## Shared Service Variables
 
 | Variable | Mode | Used by | Meaning |
 | --- | --- | --- | --- |
@@ -30,7 +30,7 @@ Published modes require valid HMAC keys, deny unsafe Gateway fail-open settings,
 | `AUDIT_HMAC_KEY` / `AUDIT_HMAC_KEY_FILE` | rc+stable | API, STS, Gateway, Audit, Control | Signs or verifies audit events. |
 | `METRICS_BEARER` / `METRICS_BEARER_FILE` | optional | STS, Gateway, API | Metrics endpoint bearer token. |
 
-## Service-specific variables
+## Service-Specific Variables
 
 | Service | Variables |
 | --- | --- |
@@ -41,7 +41,7 @@ Published modes require valid HMAC keys, deny unsafe Gateway fail-open settings,
 | Coordinator | `ISSUER_URL`, `STS_URL`, `AGENT_COORDINATOR_SCOPE`, `CARACAL_COORDINATOR_TOKEN`, sweep intervals, retention windows, rate limits |
 | Control | `STS_JWKS_URL`, `STS_ISSUER_URL`, `CONTROL_AUDIENCE`, `CONTROL_REDIS_URL`, `CONTROL_API_TOKEN`, `CARACAL_API_URL`, rate and replay controls |
 
-## Runtime workload variables
+## Runtime Workload Variables
 
 These variables belong to `caracal run` and SDK profile loading, not to service deployment:
 
@@ -73,7 +73,7 @@ Local dev and stable runtime launches also resolve service URLs automatically.
 Use explicit service URL variables only when a deployment does not use the local
 stack defaults.
 
-## Published-mode rules
+## Published-Mode Rules
 
 Before a published deployment becomes ready:
 
@@ -91,3 +91,7 @@ Before a published deployment becomes ready:
 | File secret is ignored | Confirm the variable uses the `*_FILE` suffix supported by that service. |
 | Wrong port error | Use the fixed port for the service; several services reject arbitrary `PORT` values. |
 | Runtime workload cannot find config | Use [Configure Workloads](/runtime-console/config-file/) rather than service env vars. |
+
+## Next Step
+
+Use [Harden Production](/operations/tls-hardening/) to confirm published-mode, network, secret, and upstream safety settings.

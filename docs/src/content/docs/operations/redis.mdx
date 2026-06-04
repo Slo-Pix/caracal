@@ -1,12 +1,12 @@
 ---
-title: Redis Streams
+title: Operate Redis Streams
 description: Operate Redis Streams for Caracal events, invalidation, revocation, and coordination.
 pageType: workflow
 ---
 
 Redis Streams move operational events between Caracal services. Redis is not the durable source of product state; Postgres remains authoritative.
 
-## Streams and groups
+## Streams and Groups
 
 | Stream | Consumer groups |
 | --- | --- |
@@ -40,7 +40,7 @@ bash infra/redis/scripts/verify.sh
 
 Verification checks stream existence, consumer group existence, and provisioner idempotency.
 
-## Event path
+## Event Path
 
 ```mermaid
 flowchart LR
@@ -64,3 +64,7 @@ Stream messages are signed with `STREAMS_HMAC_KEY` in published modes.
 | Policy changes do not take effect | `caracal.policy.invalidate` group health and STS policy age metrics. |
 | Revocation is delayed | `caracal.sessions.revoke` pending entries and Gateway/STS consumer health. |
 | Provisioner warns about length | Plan an explicit stream retention/reset; provisioning does not rewrite stream policy silently. |
+
+## Next Step
+
+Use [Scale Capacity](/operations/scale-capacity/) when storage, streams, or service pools approach operational limits.

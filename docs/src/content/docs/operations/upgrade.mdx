@@ -1,12 +1,12 @@
 ---
-title: Upgrade Procedure
+title: Upgrade Caracal
 description: Upgrade Caracal safely across images, Helm chart values, migrations, and runtime configuration.
 pageType: workflow
 ---
 
 Caracal upgrades are forward-only at the database layer. Plan upgrades as roll-forward changes with compatibility checks and rollback to the previous application revision only when it remains schema-compatible.
 
-## Pre-upgrade
+## Pre-Upgrade
 
 1. Read release notes and changed chart values.
 2. Render the new Helm/Compose configuration.
@@ -15,7 +15,7 @@ Caracal upgrades are forward-only at the database layer. Plan upgrades as roll-f
 5. Confirm Redis streams/groups and audit health.
 6. Prepare canary token exchange and Gateway request.
 
-## Helm upgrade
+## Helm Upgrade
 
 ```bash
 helm -n caracal diff upgrade caracal infra/helm/caracal -f values.production.yaml
@@ -26,7 +26,7 @@ kubectl -n caracal rollout status deploy/caracal-api
 
 The migration Job runs as a pre-install/pre-upgrade hook when migrations are enabled.
 
-## Compose upgrade
+## Compose Upgrade
 
 ```bash
 export CARACAL_VERSION=<new-version>
@@ -35,7 +35,7 @@ docker compose -f infra/docker/runtime-compose.yml up -d
 bash infra/scripts/smokeTest.sh
 ```
 
-## Post-upgrade validation
+## Post-Upgrade Validation
 
 | Check | Expected |
 | --- | --- |
@@ -57,3 +57,7 @@ Prefer roll-forward fixes after migrations. If rolling back app images, verify t
 | Migration hook fails | Stop rollout, inspect Job logs, restore only if no migration committed; otherwise roll forward. |
 | New pods fail config validation | Compare env vars and mounted secret keys with current service config. |
 | Readiness fails after app rollback | Schema or Redis stream expectations may no longer match the old app. |
+
+## Next Step
+
+Use [Export Audit Evidence](/operations/compliance-audit-integration/) when audit retention, SIEM export, or compliance evidence needs a durable path.

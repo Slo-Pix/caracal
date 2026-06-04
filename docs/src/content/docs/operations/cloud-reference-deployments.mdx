@@ -1,10 +1,10 @@
 ---
-title: Cloud Reference Deployments
+title: Deploy on Managed Kubernetes
 description: Concrete managed-Kubernetes reference for Caracal with External Secrets, cert-manager TLS, and managed Postgres and Redis.
 pageType: workflow
 ---
 
-This page turns the [Cloud-Native Deployment Profiles](/operations/cloud-native-profiles/) map into a concrete, copy-paste deployment. The chart is cloud-agnostic by design; the only per-cloud surface is the secret-store authentication, the storage class, and the ingress annotations.
+This page turns the [Choose a Cloud Profile](/operations/cloud-native-profiles/) map into a concrete, copy-paste deployment. The chart is cloud-agnostic by design; the only per-cloud surface is the secret-store authentication, the storage class, and the ingress annotations.
 
 The reference artifacts live in `infra/helm/caracal/examples`:
 
@@ -21,7 +21,7 @@ The reference artifacts live in `infra/helm/caracal/examples`:
 | [cert-manager](https://cert-manager.io/) | Issues TLS certificates for the Gateway and API ingress. |
 | Prometheus Operator | Consumes the chart `ServiceMonitor` and `PrometheusRule`. |
 
-## 1. Store secret material
+## 1. Store Secret Material
 
 Load the Caracal secret material into your secret manager under the keys the `ExternalSecret` reads:
 
@@ -34,7 +34,7 @@ Load the Caracal secret material into your secret manager under the keys the `Ex
 | `caracal/admin-token`, `caracal/coordinator-token` | Control-plane tokens. |
 | `caracal/sts-admin-token`, `caracal/audit-admin-token`, `caracal/metrics-bearer` | Optional service tokens. |
 
-## 2. Apply the secret store and ExternalSecret
+## 2. Apply the Secret Store and ExternalSecret
 
 Pick the store for your cloud and apply it with the agnostic `ExternalSecret`:
 
@@ -46,7 +46,7 @@ kubectl apply -f external-secrets/externalsecret-runtime.yaml
 
 The `ExternalSecret` composes `databaseUrl` and `redisUrl` and materializes the exact keys the chart mounts, so `secrets.create` stays `false`.
 
-## 3. Install the chart with the overlay
+## 3. Install the Chart with the Overlay
 
 ```bash
 helm upgrade --install caracal infra/helm/caracal \
@@ -58,7 +58,7 @@ helm upgrade --install caracal infra/helm/caracal \
 
 Stable mode enforces externalized Postgres and Redis hosts and forbids in-chart plaintext secrets, so the render fails fast if either is left at a default.
 
-## Per-cloud substitutions
+## Per-Cloud Substitutions
 
 | Setting | AWS (EKS) | GCP (GKE) | Azure (AKS) |
 | --- | --- | --- | --- |
@@ -71,11 +71,11 @@ Stable mode enforces externalized Postgres and Redis hosts and forbids in-chart 
 
 Keep `networkPolicy.allowOpenDns` and `allowOpenHttps` `false`; set `dnsEgress` and `extraEgress` to the named CIDRs of your managed Postgres, Redis, identity provider, and provider APIs.
 
-## Upgrades and rollback
+## Upgrades and Rollback
 
-Caracal database migrations are forward-only by design. Plan upgrades as roll-forward changes and only roll back application images when they remain schema-compatible. See [Upgrade Procedure](/operations/upgrade/).
+Caracal database migrations are forward-only by design. Plan upgrades as roll-forward changes and only roll back application images when they remain schema-compatible. See [Upgrade Caracal](/operations/upgrade/).
 
-## Why no Terraform module
+## Why No Terraform Module
 
 Caracal ships standardized, portable interfaces — External Secrets Operator, cert-manager, and the Helm chart — rather than per-cloud infrastructure-as-code modules. This keeps the deployment surface agnostic and avoids coupling Caracal to a single provider's resource model. Use your own IaC to provision the managed Postgres, Redis, secret manager, and cluster, then apply these artifacts.
 
@@ -86,3 +86,7 @@ Caracal ships standardized, portable interfaces — External Secrets Operator, c
 3. Confirm cert-manager issued the Gateway and API TLS certificates.
 4. Confirm the `ServiceMonitor` is scraped and `PrometheusRule` alerts are loaded.
 5. Run a canary token exchange and a Gateway-protected request, then confirm audit evidence.
+
+## Next Step
+
+Use [Harden Production](/operations/tls-hardening/) before opening external API or Gateway ingress to production traffic.

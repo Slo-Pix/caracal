@@ -1,12 +1,12 @@
 ---
-title: Troubleshooting Decision Tree
+title: Troubleshoot by Symptom
 description: Start from the symptom of a failing or denied Caracal call, locate the surface that failed, inspect the right object, and use the matching diagnostic tool.
 pageType: workflow
 ---
 
-Most Caracal failures are easy to fix once you know **where** they happened. This page starts from the symptom you can see — usually an SDK error or an HTTP status — and routes you to the failing surface, the object to inspect, and the tool that confirms it. It complements [Operator Debugging](/operations/debugging/), which works from infrastructure inward; start here when you have an application-level failure and an error or request ID.
+Most Caracal failures are easy to fix once you know **where** they happened. This page starts from the symptom you can see — usually an SDK error or an HTTP status — and routes you to the failing surface, the object to inspect, and the tool that confirms it. It complements [Debug Infrastructure Issues](/operations/debugging/), which works from infrastructure inward; start here when you have an application-level failure and an error or request ID.
 
-## Locate the surface first
+## Locate the Surface First
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ The Console **request trace** is the fastest disambiguator: it ties one request 
 [What is the difference between a 403 from STS and a 403 from Gateway?](/reference/faq/#faq-sts-403-versus-gateway-403)
 :::
 
-## Route by symptom
+## Route by Symptom
 
 | Symptom | Surface | Inspect | Tool |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ The Console **request trace** is the fastest disambiguator: it ties one request 
 | Call works but no audit event appears | Audit pipeline | Selected zone, time window, Redis stream health, and Audit readiness. | Console `diagnostics`, `audit` |
 | Access continues after revocation | Resource verifier | Whether revocation consumers run on the resource server. | [Sessions and Revocation](/concepts/sessions-revocation/) |
 
-## The denied SDK call, step by step
+## Denied SDK Call Steps
 
 When an SDK call returns access denied and you are not sure why, walk these in order. Each step either fixes the problem or hands you to the next surface.
 
@@ -54,7 +54,7 @@ When an SDK call returns access denied and you are not sure why, walk these in o
 7. **Check the Gateway route or verifier.** If STS allowed the exchange but the resource rejected it, inspect the Gateway binding and upstream allowlist, or the in-process verifier's scope and identity checks. See [Gateway Behavior](/api/gateway/).
 8. **Confirm the audit trace.** Open Console `audit` for the request ID to read the final decision and diagnostics.
 
-## The diagnostic bundle
+## Diagnostic Bundle
 
 Caracal exposes the triage bundle through existing surfaces rather than a separate command. Gather these together when you open an incident or escalate:
 
@@ -73,10 +73,14 @@ The Console `diagnostics` Doctor view runs `health`, `readiness`, `zones`, and `
 [Where is the diagnostic bundle or doctor command?](/reference/faq/#faq-diagnostic-bundle)
 :::
 
-## Related pages
+## Related Pages
 
 - [Error Reference](/reference/errors/)
-- [Operator Debugging](/operations/debugging/)
+- [Debug Infrastructure Issues](/operations/debugging/)
 - [Inspect Diagnostics and Audit](/runtime-console/observability/)
 - [Debug Authorization Decisions](/guides/authorize-access/)
-- [Failure Modes and Recovery](/operations/failure-modes/)
+- [Recover from Failures](/operations/failure-modes/)
+
+## Next Step
+
+Use [Debug Infrastructure Issues](/operations/debugging/) when the symptom points to readiness, storage, streams, service configuration, or deployment state.

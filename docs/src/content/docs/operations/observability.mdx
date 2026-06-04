@@ -1,12 +1,12 @@
 ---
-title: Observability and Health
+title: Monitor Health and Metrics
 description: Monitor Caracal health, readiness, metrics, audit flow, and runtime diagnostics.
 pageType: workflow
 ---
 
 Every service exposes health/readiness endpoints; most services also expose metrics. Use readiness for automation gates and health for liveness.
 
-## Endpoint map
+## Endpoint Map
 
 | Service | Health | Readiness | Metrics |
 | --- | --- | --- | --- |
@@ -17,7 +17,7 @@ Every service exposes health/readiness endpoints; most services also expose metr
 | Coordinator | `/health` | `/ready` | `/metrics` |
 | Control | `/health` | `/ready` | Not primary operator surface |
 
-## Readiness ladder
+## Readiness Ladder
 
 ```mermaid
 flowchart TB
@@ -35,7 +35,7 @@ flowchart TB
 | Service readiness | Service-specific invariants are met. | That service should not receive production traffic. |
 | End-to-end smoke test | API, STS, Gateway, Audit, and Coordinator work together. | User workflows may fail even when individual services look healthy. |
 
-## Local checks
+## Local Checks
 
 ```bash
 caracal status
@@ -45,7 +45,7 @@ bash infra/scripts/smokeTest.sh
 
 `smokeTest.sh` probes API `/ready` and `/health`, Gateway `/ready`, STS `/ready`, Audit `/ready`, and Coordinator `/ready`.
 
-## Kubernetes checks
+## Kubernetes Checks
 
 ```bash
 kubectl -n caracal get pods
@@ -55,7 +55,7 @@ kubectl -n caracal logs deploy/caracal-api
 
 Enable `serviceMonitor.enabled` when using Prometheus Operator. Keep chart alert rules enabled or provide equivalent alerts.
 
-## Operator diagnostics
+## Operator Diagnostics
 
 Use Console `diagnostics` for API health, readiness, zone diagnostics, and local preflight checks. Use Console `audit` and `request trace` views for decision investigation.
 
@@ -67,3 +67,7 @@ Use Console `diagnostics` for API health, readiness, zone diagnostics, and local
 | Metrics scrape returns unauthorized | Match scraper bearer token to `METRICS_BEARER`. |
 | Readiness flaps | CPU throttling, OOM, Postgres/Redis latency, probe timeouts, or dependency restarts. |
 | Smoke test fails only for API `/health` | Confirm the API liveness endpoint responds in the deployment shape being tested. |
+
+## Next Step
+
+Use [Configure Alerts](/operations/alerts/) to wire the readiness, audit, revocation, policy, and capacity signals into on-call response.

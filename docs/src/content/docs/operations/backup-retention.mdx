@@ -1,12 +1,12 @@
 ---
-title: Backup and Retention
+title: Back Up and Retain Data
 description: Back up and retain Caracal database, secrets, audit evidence, and replay state.
 pageType: workflow
 ---
 
 Backups must preserve both access state and evidence state. A restore that loses audit, revocation, keys, or delegation data can produce unsafe or unauditable behavior.
 
-## What to protect
+## What to Protect
 
 | Asset | Why it matters |
 | --- | --- |
@@ -16,7 +16,7 @@ Backups must preserve both access state and evidence state. A restore that loses
 | Redis snapshot or managed backup | Optional operational recovery for stream pending entries; Postgres remains authoritative. |
 | Audit exports | Long-term evidence and SIEM/compliance integration. |
 
-## Backup flow
+## Backup Flow
 
 ```mermaid
 flowchart LR
@@ -27,7 +27,7 @@ flowchart LR
   Backup --> RestoreTest[Scheduled restore test]
 ```
 
-## Retention controls
+## Retention Controls
 
 | Area | Controls |
 | --- | --- |
@@ -36,7 +36,7 @@ flowchart LR
 | Redis streams | Provisioner intended max lengths and managed Redis retention. |
 | Backups | Platform backup policy and legal/compliance requirements. |
 
-## Restore validation
+## Restore Validation
 
 1. Restore Postgres into an isolated environment.
 2. Restore required secrets into the environment secret store.
@@ -53,3 +53,7 @@ flowchart LR
 | Audit chain verification fails | Missing audit rows, wrong `AUDIT_HMAC_KEY`, or partial restore. |
 | Gateway cannot route | Missing gateway binding rows or stale binding revision. |
 | Revocation state is incomplete | Restore Postgres revocation/session state and replay Redis revocation events where needed. |
+
+## Next Step
+
+Use [Respond to Incidents](/operations/incident-response/) to define containment, evidence preservation, and recovery validation.

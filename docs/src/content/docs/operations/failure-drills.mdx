@@ -1,14 +1,14 @@
 ---
-title: Failure Drills
+title: Run Failure Drills
 description: Rehearse Caracal failures by injecting faults and confirming the expected alerts, readiness behavior, and recovery.
 pageType: workflow
 ---
 
-A failure drill injects one fault, confirms the **expected alert** fires, observes readiness behavior, then validates recovery. Run these against a non-production cluster before you depend on Caracal in production. The alerts referenced here are the [PrometheusRule recipes](/operations/alerts/) shipped by the chart; the recovery steps extend [Failure Modes and Recovery](/operations/failure-modes/).
+A failure drill injects one fault, confirms the **expected alert** fires, observes readiness behavior, then validates recovery. Run these against a non-production cluster before you depend on Caracal in production. The alerts referenced here are the [PrometheusRule recipes](/operations/alerts/) shipped by the chart; the recovery steps extend [Recover from Failures](/operations/failure-modes/).
 
 Caracal fails closed for access-safety boundaries, so a healthy drill ends with evidence, revocation, and policy freshness restored **before** traffic resumes.
 
-## How to run a drill
+## How to Run a Drill
 
 1. Confirm a green baseline: all `/ready` endpoints pass and no alerts are firing.
 2. Inject the fault from the drill.
@@ -17,7 +17,7 @@ Caracal fails closed for access-safety boundaries, so a healthy drill ends with 
 5. Remove the fault and complete the recovery validation.
 6. Record time-to-detect and time-to-recover.
 
-## Drill catalog
+## Drill Catalog
 
 ### Redis outage
 
@@ -100,6 +100,10 @@ Caracal fails closed for access-safety boundaries, so a healthy drill ends with 
 | Expected behavior | The integrity check flags the break; treat as a [security incident](/operations/incident-response/). |
 | Recover | Restore from a trusted backup, identify the blast radius, and follow incident response. |
 
-## After the drill
+## After the Drill
 
 For every drill, confirm the green baseline returns: readiness passes, the alert clears, the DLQ and replay backlogs are empty, and revocation and policy freshness are confirmed. Capture the detect and recover timings so you can set realistic alert thresholds and on-call expectations.
+
+## Next Step
+
+Use [Back Up and Retain Data](/operations/backup-retention/) to make sure recovery evidence, secrets, audit records, and durable state can be restored.

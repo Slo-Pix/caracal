@@ -1,5 +1,5 @@
 ---
-title: Deployment with Docker Compose
+title: Deploy with Docker Compose
 description: Run and verify the local or self-hosted Caracal stack with Docker Compose.
 pageType: workflow
 ---
@@ -42,7 +42,7 @@ Local ports are bound to `127.0.0.1` so the OSS stack does not expose services e
 - Generated runtime secrets under the expected secrets directory.
 - For the self-hosted runtime file, `CARACAL_VERSION` and optional `CARACAL_REGISTRY`.
 
-## Local development flow
+## Local Development Flow
 
 ```bash
 pnpm secrets:init
@@ -53,7 +53,7 @@ bash infra/scripts/smokeTest.sh
 
 `caracal up` builds local images in development mode. It writes operator secrets outside the repository under the managed dev secret directory, exports `CARACAL_SECRETS_DIR` to Compose, and keeps the host directory private so only the operator account can mount those files into services. `caracal status --ready` checks dependency readiness, and `smokeTest.sh` probes `/ready` for API, Gateway, STS, Audit, and Coordinator, plus the API `/health` liveness endpoint.
 
-## Self-hosted runtime flow
+## Self-Hosted Runtime Flow
 
 ```bash
 export CARACAL_VERSION=2026.05.27-rc.1
@@ -64,7 +64,7 @@ bash infra/scripts/smokeTest.sh
 
 The runtime compose file expects secrets under `./secrets/` relative to the compose file unless `CARACAL_SECRETS_DIR` points at a platform-managed secret mount. Keep the secret directory private to the operator account and never place inline secrets in the compose file.
 
-## Operator secret boundary
+## Operator Secret Boundary
 
 Admin, Coordinator, database, Redis, HMAC, and KEK material are operator secrets. Do not place those files in a source workspace, agent workspace, MCP tool workspace, or any directory mounted into untrusted agent containers.
 
@@ -76,7 +76,7 @@ Admin, Coordinator, database, Redis, HMAC, and KEK material are operator secrets
 
 Run agents with workload credentials only. If an agent must execute untrusted code, run it as a separate OS user, container, VM, or sandbox that cannot read `CARACAL_SECRETS_DIR`, `$CARACAL_HOME/secrets`, Docker socket credentials, or repository control-plane files.
 
-## Control profile
+## Control Profile
 
 The Control service is behind the `control` Compose profile and a runtime gate. Enable it only when the Console or platform automation is ready to manage Control exposure and credentials.
 
@@ -100,3 +100,7 @@ docker compose -f infra/docker/runtime-compose.yml --profile control up -d contr
 | STS or Gateway fails in `rc`/`stable` | Confirm `AUDIT_HMAC_KEY`, `STREAMS_HMAC_KEY`, and `GATEWAY_STS_HMAC_KEY` are hex-encoded and at least 32 bytes. |
 | Gateway rejects upstreams | In published modes, configure `UPSTREAM_HOST_ALLOWLIST` when private upstreams are allowed. |
 | Audit gaps appear after Redis outage | Keep STS and Gateway replay volumes intact and wait for replay metrics to drain. |
+
+## Next Step
+
+Use [Configure Service Environment](/operations/env-vars/) to review required service variables and secret-file settings.

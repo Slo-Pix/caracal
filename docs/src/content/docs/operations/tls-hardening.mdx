@@ -1,12 +1,12 @@
 ---
-title: TLS and Production Hardening
+title: Harden Production
 description: Harden network exposure, secrets, service processes, and upstream access for production Caracal.
 pageType: workflow
 ---
 
 Production Caracal should run in `CARACAL_MODE=stable` or `rc`, use TLS at external boundaries, and keep stateful dependencies private.
 
-## Hardening checklist
+## Hardening Checklist
 
 | Area | Required stance |
 | --- | --- |
@@ -18,7 +18,7 @@ Production Caracal should run in `CARACAL_MODE=stable` or `rc`, use TLS at exter
 | Gateway upstreams | Keep private upstreams disabled unless explicitly allowed and allowlisted. |
 | Runtime CLI | Do not expose product management as top-level runtime CLI commands. |
 
-## Gateway upstream safety
+## Gateway Upstream Safety
 
 Gateway protects against unsafe upstream routing. In `rc` and `stable`, private upstreams require both:
 
@@ -29,7 +29,7 @@ UPSTREAM_HOST_ALLOWLIST=internal-api.example.svc,provider.example.com
 
 Do not enable broad private upstream access for production. Prefer exact hosts.
 
-## HMAC and signing keys
+## HMAC and Signing Keys
 
 Published modes require production-grade keys:
 
@@ -42,7 +42,7 @@ Published modes require production-grade keys:
 
 HMAC keys must be hex-encoded and at least 32 bytes where validated.
 
-## Kubernetes controls
+## Kubernetes Controls
 
 The Helm chart sets non-root pods, RuntimeDefault seccomp, dropped capabilities, read-only root filesystem for service containers, optional NetworkPolicy, PDBs, HPAs, and optional Ingress TLS.
 
@@ -54,3 +54,7 @@ The Helm chart sets non-root pods, RuntimeDefault seccomp, dropped capabilities,
 | Gateway cannot reach upstream | NetworkPolicy egress, DNS egress, HTTPS egress, and upstream allowlist. |
 | Metrics endpoint denied | Confirm `METRICS_BEARER` and scraper configuration. |
 | TLS works externally but clients fail token validation | Confirm STS `ISSUER_URL` matches the URL clients use for JWKS and token issuer checks. |
+
+## Next Step
+
+Use [Rotate Keys and Secrets](/operations/key-management/) to plan secret storage, key overlap, and rotation evidence.

@@ -1,12 +1,12 @@
 ---
-title: Kubernetes with Helm
+title: Deploy with Helm
 description: Deploy Caracal on Kubernetes with the repository Helm chart.
 pageType: workflow
 ---
 
 The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes resources for API, STS, Gateway, Audit, Coordinator, and optional Control.
 
-## Rendered resources
+## Rendered Resources
 
 | Resource | Purpose |
 | --- | --- |
@@ -19,7 +19,7 @@ The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes reso
 | PDB/HPA | Availability and scaling controls per service. |
 | ServiceMonitor/PrometheusRule | Metrics scraping and built-in alert recipes. |
 
-## Minimal install shape
+## Minimal Install Shape
 
 ```bash
 helm upgrade --install caracal infra/helm/caracal \
@@ -30,9 +30,9 @@ helm upgrade --install caracal infra/helm/caracal \
 
 Before installing, provide the runtime Secret named by `secrets.runtimeSecretName` or set `secrets.create=true` with plaintext values only for a controlled evaluation environment.
 
-For a managed-cloud install with the runtime Secret provisioned by the External Secrets Operator, a production overlay, and cert-manager TLS ingress, follow [Cloud Reference Deployments](/operations/cloud-reference-deployments/).
+For a managed-cloud install with the runtime Secret provisioned by the External Secrets Operator, a production overlay, and cert-manager TLS ingress, follow [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/).
 
-## Service ports
+## Service Ports
 
 | Component | Port |
 | --- | --- |
@@ -43,7 +43,7 @@ For a managed-cloud install with the runtime Secret provisioned by the External 
 | Coordinator | `4000` |
 | Control | `8087` when enabled |
 
-## Production values to review
+## Production Values to Review
 
 | Area | Values |
 | --- | --- |
@@ -54,7 +54,7 @@ For a managed-cloud install with the runtime Secret provisioned by the External 
 | Replay | `replayPersistence.enabled`, `storageClassName`, `size` |
 | Observability | `serviceMonitor.enabled`, `alertRules.enabled`, `global.otelExporterOtlpEndpoint` |
 
-## Validation flow
+## Validation Flow
 
 ```bash
 helm lint infra/helm/caracal
@@ -82,3 +82,7 @@ Migrations are forward-only. Rollbacks must use application versions compatible 
 | Pods fail readiness | Inspect dependency readiness, mounted secrets, and service-specific required env vars. |
 | Gateway Ingress works but upstream calls fail | Check NetworkPolicy egress and upstream allowlist configuration. |
 | STS or Gateway loses audit replay | Ensure replay persistence is enabled and PVCs are not deleted during rollouts. |
+
+## Next Step
+
+Use [Choose a Cloud Profile](/operations/cloud-native-profiles/) when the Helm deployment needs managed storage, ingress, external secrets, or production network policy.

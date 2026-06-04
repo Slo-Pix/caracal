@@ -1,12 +1,12 @@
 ---
-title: Alerting Recipes
+title: Configure Alerts
 description: Alert names, meanings, and first-response actions for Caracal operations.
 pageType: reference
 ---
 
 The Helm chart can render PrometheusRule alerts for policy freshness, audit health, outbox health, Gateway exchange, revocation safety, database saturation, and readiness flapping.
 
-## Built-in alerts
+## Built-In Alerts
 
 | Alert | Severity | First response |
 | --- | --- | --- |
@@ -106,7 +106,7 @@ A service is holding most of its Postgres connection pool. Inspect long-running 
 
 A Caracal pod is repeatedly toggling Ready or NotReady. Check dependency health, CPU throttling, OOM events, and readiness probe timeouts.
 
-## Alert routing
+## Alert Routing
 
 | Severity | Route |
 | --- | --- |
@@ -114,6 +114,10 @@ A Caracal pod is repeatedly toggling Ready or NotReady. Check dependency health,
 | Critical data-flow alerts | On-call plus release owner; freeze rollouts. |
 | Warning readiness/capacity alerts | Service owner or platform queue. |
 
-## First-response rule
+## First-Response Rule
 
 When an alert involves audit, revocation, or policy freshness, prefer fail-closed recovery over traffic continuation. Restore evidence and revocation guarantees before resuming high-risk changes.
+
+## Next Step
+
+Use [Troubleshoot by Symptom](/operations/troubleshooting/) when an alert or user report starts from an SDK error, HTTP status, or request ID.

@@ -1,12 +1,12 @@
 ---
-title: Incident Response
+title: Respond to Incidents
 description: Respond to Caracal access-safety, audit-integrity, and platform incidents.
 pageType: workflow
 ---
 
 Treat incidents involving audit tamper evidence, stale revocation state, STS/Gateway fail-open risk, secret exposure, or policy corruption as security incidents.
 
-## Severity triggers
+## Severity Triggers
 
 | Trigger | Severity |
 | --- | --- |
@@ -17,7 +17,7 @@ Treat incidents involving audit tamper evidence, stale revocation state, STS/Gat
 | Secret exposure | Critical until rotated and blast radius is understood. |
 | Policy activation causes unexpected broad allow | Critical authorization incident. |
 
-## Response flow
+## Response Flow
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ flowchart TD
   Validate --> Review[Post-incident review]
 ```
 
-## First-hour runbook
+## First-Hour Runbook
 
 | Symptom | Severity | Contain | Preserve | Validate recovery |
 | --- | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ flowchart TD
 | Bad policy allow | Critical | Activate last known-good policy set. | Policy set version, request IDs, audit/explain output. | Canary allow/deny decisions match expected policy. |
 | Secret exposure | Critical | Rotate exposed material and invalidate affected sessions. | Secret location, key IDs, affected services, audit records. | Old material no longer authenticates. |
 
-## Evidence to preserve
+## Evidence to Preserve
 
 - Alert name, firing time, and labels.
 - Request IDs, zone IDs, resource IDs, policy-set versions, agent session IDs, delegation edge IDs.
@@ -48,7 +48,7 @@ flowchart TD
 - Postgres backup or snapshot before manual remediation.
 - Helm values or Compose config diff.
 
-## Containment actions
+## Containment Actions
 
 | Incident | Containment |
 | --- | --- |
@@ -57,10 +57,14 @@ flowchart TD
 | Bad policy allow | Activate last known-good policy set, verify canary denies/allows, inspect audit impact. |
 | Secret exposure | Rotate exposed material, roll dependent services, invalidate sessions/grants as needed. |
 
-## Recovery complete when
+## Recovery Complete When
 
 - Relevant `/ready` endpoints pass.
 - Audit DLQ/replay/outbox backlogs are understood or drained.
 - Revocation and policy freshness metrics are healthy.
 - Canary token exchange and Gateway requests match expected decisions.
 - Evidence and timeline are preserved for review.
+
+## Next Step
+
+Use [Plan a Platform Rollout](/operations/platform-rollout-kit/) when the environment is stable and ready for controlled change.

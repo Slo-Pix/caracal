@@ -1,12 +1,12 @@
 ---
-title: Policy Deployment Runbook
+title: Deploy Policy Changes
 description: Safely validate, activate, observe, and roll back Caracal policy changes.
 pageType: workflow
 ---
 
 Policy changes affect STS decisions and Gateway access. Treat them as production changes with simulation, activation, audit review, and rollback readiness.
 
-## Deployment sequence
+## Deployment Sequence
 
 ```mermaid
 sequenceDiagram
@@ -25,7 +25,7 @@ sequenceDiagram
   STS->>Audit: emit decisions using current bundle
 ```
 
-## Pre-deployment
+## Pre-Deployment
 
 1. Confirm the policy uses current resource IDs, scopes, and canonical terminology.
 2. Validate syntax and invariants through Console or Admin API.
@@ -58,3 +58,7 @@ Activate the last known-good policy-set version. Then verify STS policy freshnes
 | Activation succeeds but decisions do not change | Policy invalidation stream, STS policy age, and STS logs. |
 | Simulation differs from live decisions | Input shape, active grants, resource IDs, subject/session claims, and step-up state. |
 | Policy fails closed unexpectedly | Rego compile errors, missing scope/resource, or invalid grant. |
+
+## Next Step
+
+Use [Upgrade Caracal](/operations/upgrade/) for image, chart, migration, and runtime configuration upgrades.

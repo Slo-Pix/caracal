@@ -1,12 +1,12 @@
 ---
-title: Operations
-description: Operator runbooks for deploying, securing, scaling, observing, and recovering Caracal.
+title: Operate Caracal
+description: Operator runbooks for deploying, configuring, securing, observing, recovering, releasing, and handing off Caracal.
 pageType: landing
 ---
 
-Use Operations when Caracal is running as infrastructure: Docker Compose for self-hosted installs, Helm for Kubernetes, managed Postgres and Redis, production secrets, rollout gates, observability, incident handling, and upgrades.
+Use Operations when Caracal is running as infrastructure: Docker Compose for self-hosted installs, Helm for Kubernetes, managed Postgres and Redis, production secrets, rollout gates, observability, incident handling, upgrades, and platform handoff.
 
-## Operating model
+## Operating Model
 
 ```mermaid
 flowchart LR
@@ -20,17 +20,17 @@ flowchart LR
   Services --> Redis[(Redis Streams)]
 ```
 
-## First pages by role
+## Start by Role
 
 | Role | Start with |
 | --- | --- |
-| Local or self-hosted operator | [Deployment with Docker Compose](/operations/docker-compose/) |
-| Kubernetes platform team | [Kubernetes with Helm](/operations/kubernetes-helm/) and [Cloud Reference Deployments](/operations/cloud-reference-deployments/) |
-| Security reviewer | [TLS and Production Hardening](/operations/tls-hardening/) and [Key Management and Rotation](/operations/key-management/) |
-| SRE/on-call | [Observability and Health](/operations/observability/), [Alerting Recipes](/operations/alerts/), [Failure Modes and Recovery](/operations/failure-modes/), and [Failure Drills](/operations/failure-drills/) |
-| Release owner | [Platform Rollout Kit](/operations/platform-rollout-kit/), [Policy Deployment Runbook](/operations/policy-deployment/), and [Upgrade Procedure](/operations/upgrade/) |
+| Local or self-hosted operator | [Deploy with Docker Compose](/operations/docker-compose/) |
+| Kubernetes platform team | [Deploy with Helm](/operations/kubernetes-helm/) and [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/) |
+| Security reviewer | [Harden Production](/operations/tls-hardening/) and [Rotate Keys and Secrets](/operations/key-management/) |
+| SRE or on-call engineer | [Monitor Health and Metrics](/operations/observability/), [Configure Alerts](/operations/alerts/), [Recover from Failures](/operations/failure-modes/), and [Run Failure Drills](/operations/failure-drills/) |
+| Release owner | [Plan a Platform Rollout](/operations/platform-rollout-kit/), [Deploy Policy Changes](/operations/policy-deployment/), and [Upgrade Caracal](/operations/upgrade/) |
 
-## Deployment choices
+## Deployment Choices
 
 | Environment | Recommended path | Notes |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ flowchart LR
 | Self-hosted runtime | `infra/docker/runtime-compose.yml` | Uses versioned GHCR images and mounted secrets. |
 | Kubernetes | `infra/helm/caracal` | Uses Deployments/StatefulSets, pre-install/pre-upgrade migration Job, ClusterIP Services, optional Ingress, NetworkPolicy, PDBs, HPAs, ServiceMonitor, and PrometheusRule. |
 
-## Core operational invariants
+## Core Operational Invariants
 
 - Postgres is the durable control-plane store.
 - Redis Streams move audit, policy invalidation, session revocation, key invalidation, agent, invocation, and delegation events.
@@ -46,17 +46,17 @@ flowchart LR
 - Published modes are `rc` and `stable`; they require production-grade HMAC keys and reject unsafe fallbacks.
 - Product-management operations happen through Console, Admin SDK, or Control API; the top-level runtime CLI only manages local lifecycle and `caracal run`.
 
-## Section map
+## Section Map
 
 | Need | Page |
 | --- | --- |
-| Compose deployment | [Deployment with Docker Compose](/operations/docker-compose/) |
-| Helm deployment | [Kubernetes with Helm](/operations/kubernetes-helm/) |
-| Runtime profiles | [Environment Variables](/operations/env-vars/) and [Cloud-Native Deployment Profiles](/operations/cloud-native-profiles/) |
-| Cloud deployment | [Cloud Reference Deployments](/operations/cloud-reference-deployments/) |
-| Storage | [PostgreSQL](/operations/postgres/) and [Redis Streams](/operations/redis/) |
-| Hardening | [TLS and Production Hardening](/operations/tls-hardening/) |
-| Rotation | [Key Management and Rotation](/operations/key-management/) |
-| Scaling | [Scale and Capacity Guidance](/operations/scale-capacity/) |
-| Observability | [Observability and Health](/operations/observability/) and [Alerting Recipes](/operations/alerts/) |
-| Recovery | [Failure Modes and Recovery](/operations/failure-modes/), [Failure Drills](/operations/failure-drills/), [Backup and Retention](/operations/backup-retention/), and [Incident Response](/operations/incident-response/) |
+| Compose deployment | [Deploy with Docker Compose](/operations/docker-compose/) |
+| Helm deployment | [Deploy with Helm](/operations/kubernetes-helm/) |
+| Runtime profiles | [Configure Service Environment](/operations/env-vars/) and [Choose a Cloud Profile](/operations/cloud-native-profiles/) |
+| Cloud deployment | [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/) |
+| Storage | [Operate PostgreSQL](/operations/postgres/) and [Operate Redis Streams](/operations/redis/) |
+| Hardening | [Harden Production](/operations/tls-hardening/) |
+| Rotation | [Rotate Keys and Secrets](/operations/key-management/) |
+| Scaling | [Scale Capacity](/operations/scale-capacity/) |
+| Observability | [Monitor Health and Metrics](/operations/observability/) and [Configure Alerts](/operations/alerts/) |
+| Recovery | [Recover from Failures](/operations/failure-modes/), [Run Failure Drills](/operations/failure-drills/), [Back Up and Retain Data](/operations/backup-retention/), and [Respond to Incidents](/operations/incident-response/) |

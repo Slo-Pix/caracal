@@ -1,12 +1,12 @@
 ---
-title: Compliance and Audit Integration
+title: Export Audit Evidence
 description: Export, verify, and preserve Caracal audit evidence for compliance workflows.
 pageType: workflow
 ---
 
 Caracal audit records provide decision evidence for STS, Gateway, Coordinator, policy evaluation, Control, and administrative activity. Treat audit as a protected evidence pipeline.
 
-## Evidence path
+## Evidence Path
 
 ```mermaid
 flowchart LR
@@ -20,7 +20,7 @@ flowchart LR
 
 Audit events are HMAC-protected in published modes. Audit storage includes tamper checks and append-only permission validation.
 
-## Integration points
+## Integration Points
 
 | Need | Surface |
 | --- | --- |
@@ -30,7 +30,7 @@ Audit events are HMAC-protected in published modes. Audit storage includes tampe
 | Evidence archive | Postgres backup plus object-store export. |
 | Tamper response | `CaracalAuditTamperDetected` alert and incident runbook. |
 
-## Operational controls
+## Operational Controls
 
 - Monitor Audit DLQ, consumer lag, tamper metrics, and export watermarks.
 - Preserve audit HMAC keys according to retention requirements.
@@ -44,3 +44,7 @@ Audit events are HMAC-protected in published modes. Audit storage includes tampe
 | SIEM is missing events | Redis group lag, export watermark, Audit readiness, and network egress. |
 | DLQ has HMAC failures | Producer key mismatch or corrupted stream payload. |
 | Request explanation missing | Confirm request ID, zone, retention window, and that the protected request reached Caracal. |
+
+## Next Step
+
+Use [Hand Off to Platform Teams](/operations/platform-team-handoff/) when deployment, recovery, audit, alerting, and ownership evidence are ready.

@@ -1,12 +1,12 @@
 ---
-title: Key Management and Rotation
+title: Rotate Keys and Secrets
 description: Manage Caracal secret material, signing keys, HMAC keys, and rotation evidence.
 pageType: workflow
 ---
 
 Caracal uses secret material for zone encryption, mandate signing, audit integrity, stream signatures, service exchange, admin access, Coordinator access, database access, and Redis access.
 
-## Key inventory
+## Key Inventory
 
 | Material | Purpose |
 | --- | --- |
@@ -19,20 +19,20 @@ Caracal uses secret material for zone encryption, mandate signing, audit integri
 | `CARACAL_COORDINATOR_TOKEN` | Coordinator agent/delegation management. |
 | Postgres and Redis passwords | Storage access. |
 
-## Storage boundary
+## Storage Boundary
 
 Generated operator secrets are file-backed inside a private operator directory. Local development stores them outside the repository; released self-hosted runtimes store them under `$CARACAL_HOME/secrets` unless `CARACAL_SECRETS_DIR` points to another operator-managed directory. Cloud deployments should use the platform secret manager and mount secrets into services through `*_FILE` paths or `CARACAL_SECRETS_DIR`.
 
 Never mount operator secrets into agent workspaces or containers. Agents should receive only application client secrets at provisioning time or short-lived resource mandates from `caracal run`.
 
-## Rotation principles
+## Rotation Principles
 
 - Rotate one class of material at a time.
 - Keep old verification material available until existing tokens, stream messages, or audit replay windows drain.
 - Verify `/ready`, audit ingestion, revocation propagation, and Gateway exchange after each rotation.
 - Record who rotated, when, why, new secret location, and rollback window.
 
-## Suggested rotation order
+## Suggested Rotation Order
 
 ```mermaid
 flowchart LR
@@ -42,7 +42,7 @@ flowchart LR
   Verify --> Retire[Retire old material after safety window]
 ```
 
-## Rotation checklist
+## Rotation Checklist
 
 | Key | Services to roll | Verify |
 | --- | --- | --- |
@@ -62,3 +62,7 @@ flowchart LR
 | Audit DLQ grows | Producer and Audit `AUDIT_HMAC_KEY` mismatch. |
 | Stream consumers reject messages | Producer and consumer `STREAMS_HMAC_KEY` mismatch. |
 | Gateway exchange fails | `GATEWAY_STS_HMAC_KEY` mismatch between Gateway and STS. |
+
+## Next Step
+
+Use [Operate PostgreSQL](/operations/postgres/) and [Operate Redis Streams](/operations/redis/) to verify durable state and event propagation.

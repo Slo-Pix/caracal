@@ -154,7 +154,7 @@ Use [request trace](/operations/troubleshooting/) with the request ID to identif
 
 The diagnostic bundle is exposed through existing surfaces instead of a separate top-level command. Use `caracal status --json` for runtime status, Console `diagnostics` for Doctor checks (`health`, `readiness`, `zones`, `preflight`), `audit` for recent decisions, and `request trace` for a known request ID.
 
-See the [Troubleshooting Decision Tree](/operations/troubleshooting/#the-diagnostic-bundle).
+See [Troubleshoot by Symptom](/operations/troubleshooting/#diagnostic-bundle).
 
 <a id="faq-missing-audit-event"></a>
 
@@ -162,7 +162,7 @@ See the [Troubleshooting Decision Tree](/operations/troubleshooting/#the-diagnos
 
 First confirm the request reached a Caracal-protected boundary. If it did, check the selected zone, time window, request ID, Audit service readiness, Redis stream health, replay backlog, and DLQ. If the request failed before STS, Gateway, Coordinator, or a connector emitted evidence, there may be no action-result event for that boundary.
 
-Start with [Inspect Diagnostics and Audit](/runtime-console/observability/) and [Operator Debugging](/operations/debugging/).
+Start with [Inspect Diagnostics and Audit](/runtime-console/observability/) and [Debug Infrastructure Issues](/operations/debugging/).
 
 ## Enterprise
 

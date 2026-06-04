@@ -1,12 +1,12 @@
 ---
-title: Enterprise Install Kit
+title: Package an Install Kit
 description: Package and hand off production Caracal installation materials without crossing product boundaries.
 pageType: workflow
 ---
 
 Use the enterprise install kit pattern when a platform team needs a controlled bundle of Caracal deployment assets, values, secrets instructions, verification steps, and rollback guidance. Keep the open-source and enterprise products isolated: do not import, copy, or depend on files across product roots.
 
-## Kit contents
+## Kit Contents
 
 | Artifact | Purpose |
 | --- | --- |
@@ -16,14 +16,14 @@ Use the enterprise install kit pattern when a platform team needs a controlled b
 | Runbook | Install, verify, rollback, backup, restore, and incident steps. |
 | Evidence checklist | Rendered manifest, migration result, readiness output, smoke test, alert wiring, backup proof, and owner sign-off. |
 
-## Required boundaries
+## Required Boundaries
 
 - Keep OSS local ports and enterprise local ports non-overlapping in examples.
 - Do not reference private source paths from open-source docs or configs.
 - Share behavior only through documented deployment contracts: images, chart values, APIs, event topics, and secrets.
 - Keep customer-specific values outside the repository.
 
-## Installation sequence
+## Installation Sequence
 
 ```mermaid
 flowchart LR
@@ -35,7 +35,7 @@ flowchart LR
   Verify --> Handoff[Operations handoff]
 ```
 
-## Verification evidence
+## Verification Evidence
 
 | Check | Evidence |
 | --- | --- |
@@ -47,6 +47,10 @@ flowchart LR
 | Observability | ServiceMonitor and PrometheusRule are installed or equivalent alerts exist. |
 | Recovery | Backup and restore runbook has been tested for Postgres and runtime secrets. |
 
-## Handoff package
+## Handoff Package
 
-Include links to [Kubernetes with Helm](/operations/kubernetes-helm/), [Environment Variables](/operations/env-vars/), [Backup and Retention](/operations/backup-retention/), [Alerting Recipes](/operations/alerts/), and [Incident Response](/operations/incident-response/).
+Include links to [Deploy with Helm](/operations/kubernetes-helm/), [Configure Service Environment](/operations/env-vars/), [Back Up and Retain Data](/operations/backup-retention/), [Configure Alerts](/operations/alerts/), and [Respond to Incidents](/operations/incident-response/).
+
+## Next Step
+
+Use [Hand Off to Platform Teams](/operations/platform-team-handoff/) when the install bundle is ready for production ownership.

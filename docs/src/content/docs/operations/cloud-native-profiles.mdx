@@ -1,14 +1,14 @@
 ---
-title: Cloud-Native Deployment Profiles
+title: Choose a Cloud Profile
 description: Configure Caracal for managed Kubernetes, managed Postgres, Redis, ingress, secrets, and observability.
 pageType: reference
 ---
 
 Cloud-native Caracal deployments should use the Helm chart with externalized state: managed Postgres, managed Redis, platform secrets, ingress, NetworkPolicy, and cluster observability.
 
-For a concrete, copy-paste version of this profile — including External Secrets manifests, a production overlay, cert-manager TLS ingress, and a per-cloud (EKS/GKE/AKS) substitution table — see [Cloud Reference Deployments](/operations/cloud-reference-deployments/).
+For a concrete, copy-paste version of this profile — including External Secrets manifests, a production overlay, cert-manager TLS ingress, and a per-cloud (EKS/GKE/AKS) substitution table — see [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/).
 
-## Profile map
+## Profile Map
 
 | Profile | Values to adjust |
 | --- | --- |
@@ -17,7 +17,7 @@ For a concrete, copy-paste version of this profile — including External Secret
 | Private cluster | Disable public ingress; expose API/Gateway through internal load balancers or service mesh. |
 | Regulated workload | Enforce external secret manager, immutable backups, audit export, restricted egress, and incident evidence retention. |
 
-## Managed dependency contract
+## Managed Dependency Contract
 
 | Dependency | Requirements |
 | --- | --- |
@@ -26,7 +26,7 @@ For a concrete, copy-paste version of this profile — including External Secret
 | Secrets | Runtime Secret with database, Redis, admin, Coordinator, zone KEK, audit HMAC, stream HMAC, and Gateway-STS HMAC keys. |
 | Observability | Metrics scraping for all services and alerts equivalent to the chart PrometheusRule. |
 
-## Network stance
+## Network Stance
 
 The chart NetworkPolicy allows Caracal pod-to-pod traffic and storage egress. Add explicit DNS, HTTPS, identity provider, object store, and provider API egress only as needed.
 
@@ -40,7 +40,7 @@ networkPolicy:
   extraIngress: []
 ```
 
-## Ingress stance
+## Ingress Stance
 
 Expose only the endpoints required by your environment:
 
@@ -60,3 +60,7 @@ The chart currently has optional Ingress templates for Gateway and API.
 3. Confirm NetworkPolicy egress covers required provider APIs and object stores.
 4. Confirm ServiceMonitor or equivalent metrics scraping is active.
 5. Confirm backup and restore evidence exists for Postgres and runtime secrets.
+
+## Next Step
+
+Use [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/) for a concrete External Secrets, cert-manager, managed Postgres, and managed Redis deployment.

@@ -1,12 +1,12 @@
 ---
-title: Failure Modes and Recovery
+title: Recover from Failures
 description: Recover Caracal from storage, stream, policy, Gateway, STS, audit, and Coordinator failures.
 pageType: workflow
 ---
 
 Caracal is designed to fail closed for access-safety boundaries. Recovery should restore evidence, revocation, and policy freshness before reopening risky traffic.
 
-## Failure matrix
+## Failure Matrix
 
 | Failure | User impact | Recovery |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Caracal is designed to fail closed for access-safety boundaries. Recovery should
 | Coordinator unhealthy | Agent/delegation views and lifecycle management fail. | Restore Coordinator readiness, token, DB, Redis, and sweeper health. |
 | Control unhealthy | Automation dispatch unavailable. | Use Console/Admin SDK directly if appropriate; restore Control gate, token, JWKS, Redis, and API reachability. |
 
-## Recovery order
+## Recovery Order
 
 ```mermaid
 flowchart TD
@@ -29,7 +29,7 @@ flowchart TD
   Safety --> Resume[Resume traffic or rollout]
 ```
 
-## Data-flow reconciliation
+## Data-Flow Reconciliation
 
 1. Check Postgres migrations and expected tables.
 2. Check Redis stream groups and pending entries.
@@ -44,3 +44,7 @@ flowchart TD
 | Requests fail closed after outage | Confirm STS policy freshness, revocation snapshot, and audit replay drain. |
 | Events appear duplicated | Verify idempotent consumers and dedupe keys before manual cleanup. |
 | Rollback does not restore service | Schema may have moved forward; roll forward with a compatible fix. |
+
+## Next Step
+
+Use [Run Failure Drills](/operations/failure-drills/) to rehearse the recovery path before a production incident.

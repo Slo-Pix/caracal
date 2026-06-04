@@ -1,12 +1,12 @@
 ---
-title: Platform Rollout Kit
+title: Plan a Platform Rollout
 description: Plan, gate, execute, and roll back Caracal platform rollouts.
 pageType: workflow
 ---
 
 Use this runbook for version upgrades, configuration changes, chart changes, secret rotations, ingress changes, and policy rollout waves.
 
-## Rollout gates
+## Rollout Gates
 
 | Gate | Pass condition |
 | --- | --- |
@@ -17,7 +17,7 @@ Use this runbook for version upgrades, configuration changes, chart changes, sec
 | Event health | Redis streams, outbox dispatch, audit ingestion, revocation propagation, and replay backlog are healthy. |
 | Rollback plan | Previous image tag, chart revision, values, and compatible schema plan are documented. |
 
-## Rollout sequence
+## Rollout Sequence
 
 ```mermaid
 sequenceDiagram
@@ -50,7 +50,7 @@ kubectl -n caracal rollout status statefulset/caracal-sts
 kubectl -n caracal rollout status statefulset/caracal-gateway
 ```
 
-## Stop conditions
+## Stop Conditions
 
 Stop the rollout when any of these occur:
 
@@ -64,3 +64,7 @@ Stop the rollout when any of these occur:
 ## Rollback
 
 Use `helm rollback` only after confirming the previous app version is compatible with the current database schema. If schema compatibility is uncertain, roll forward with a corrected app image instead of applying down migrations.
+
+## Next Step
+
+Use [Deploy Policy Changes](/operations/policy-deployment/) for policy-specific rollout gates, simulation, activation, and rollback.

@@ -1,12 +1,12 @@
 ---
-title: Scale and Capacity Guidance
+title: Scale Capacity
 description: Size Caracal services, storage, and queues for production traffic.
 pageType: reference
 ---
 
 Scale Caracal around three bottlenecks: token exchange and policy evaluation in STS, upstream proxying in Gateway, and durable writes in Postgres/Audit.
 
-## Scaling levers
+## Scaling Levers
 
 | Component | Primary levers |
 | --- | --- |
@@ -18,7 +18,7 @@ Scale Caracal around three bottlenecks: token exchange and policy evaluation in 
 | Postgres | Connection limits, indexes, partitions, storage IOPS, backup windows. |
 | Redis | Stream memory, pending entries, consumer lag, persistence, network latency. |
 
-## Helm defaults
+## Helm Defaults
 
 The chart defaults to two replicas for API, STS, Gateway, Audit, and Coordinator. Gateway has a higher maximum HPA ceiling because protected traffic fans through it.
 
@@ -30,7 +30,7 @@ The chart defaults to two replicas for API, STS, Gateway, Audit, and Coordinator
 | Audit | `9090` | `8` |
 | Coordinator | `4000` | `8` |
 
-## Capacity signals
+## Capacity Signals
 
 | Signal | Meaning |
 | --- | --- |
@@ -41,7 +41,7 @@ The chart defaults to two replicas for API, STS, Gateway, Audit, and Coordinator
 | Revocation propagation lag | Access-safety state is not reaching Gateway within the expected window. |
 | Readiness flapping | Pods or dependencies are unstable under current load. |
 
-## Scale procedure
+## Scale Procedure
 
 1. Identify the bottleneck from metrics and logs.
 2. Scale stateless service replicas first when storage is healthy.
@@ -49,7 +49,7 @@ The chart defaults to two replicas for API, STS, Gateway, Audit, and Coordinator
 4. Verify readiness, lag, replay backlog, and DLQ after each change.
 5. Document the new limit and alert threshold.
 
-## Worked escalation patterns
+## Worked Escalation Patterns
 
 | Signal | First action | Expected outcome |
 | --- | --- | --- |
@@ -65,3 +65,7 @@ The chart defaults to two replicas for API, STS, Gateway, Audit, and Coordinator
 | Higher replicas make failures worse | Postgres connection pressure or Redis latency. |
 | Gateway latency spikes | STS exchange latency, upstream timeout, JWKS cache, and private upstream egress. |
 | Audit cannot catch up | Postgres write IOPS, partition health, Audit replicas, and Redis pending entries. |
+
+## Next Step
+
+Use [Monitor Health and Metrics](/operations/observability/) to turn capacity signals into readiness gates and operator dashboards.
