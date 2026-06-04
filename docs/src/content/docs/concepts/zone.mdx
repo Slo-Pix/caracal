@@ -28,6 +28,8 @@ Common zone boundaries include:
 - isolated product areas with different policy owners;
 - high-sensitivity resources that need distinct keys and audit trails.
 
+When several boundaries could apply at once, use [Modeling Recipes](/guides/modeling-recipes/) to choose between a separate zone, a shared zone with separate resources, and a customer attribute in policy input.
+
 ## Zone lifecycle
 
 ```mermaid
@@ -57,4 +59,5 @@ Each zone has its own signing-key and JWKS context. Resource servers verify mand
 
 - [Principal and Application](/concepts/principal/)
 - [Resource and Grant](/concepts/resource-grant/)
+- [Modeling Recipes](/guides/modeling-recipes/)
 - [Audit Ledger](/concepts/audit-ledger/)

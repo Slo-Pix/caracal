@@ -147,6 +147,7 @@ export default defineConfig({
             { label: 'Author a Rego Policy', link: '/guides/author-policy/' },
             { label: 'Activate a Policy Set', link: '/guides/activate-policy-set/' },
             { label: 'Define Resources and Providers', link: '/guides/resources-providers/' },
+            { label: 'Modeling Recipes', link: '/guides/modeling-recipes/' },
             { label: 'Provider Recipes', link: '/guides/provider-recipes/' },
             { label: 'Authorize Access', link: '/guides/authorize-access/' },
             { label: 'Implement Multi-Agent Delegation', link: '/guides/delegation/' },
@@ -331,6 +332,13 @@ export default defineConfig({
             { label: 'STS Token Endpoint', link: '/api/sts/' },
             { label: 'Gateway Behavior', link: '/api/gateway/' },
             { label: 'Event Topics', link: '/api/event-topics/' },
+          ],
+        },
+        {
+          label: 'Enterprise Edition',
+          collapsed: true,
+          items: [
+            { label: 'Overview', link: '/enterprise/' },
           ],
         },
       ],

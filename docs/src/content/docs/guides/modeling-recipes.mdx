@@ -1,0 +1,116 @@
+---
+title: Modeling Recipes
+description: Decision-oriented recipes for mapping zones, applications, resources, and grants onto real deployments, from single-tenant apps to multi-customer platforms.
+---
+
+The [concept pages](/concepts/) define each noun, and [Provider Recipes](/guides/provider-recipes/) give concrete upstream auth setups. This page sits between them: it helps you decide **how to map your architecture onto Caracal's nouns** before you create anything.
+
+Every recipe states the modeling decision, what maps to each noun, and the trade-off. Use the [One-Minute Model](/concepts/model-overview/) as the vocabulary reference while you read.
+
+## Start with the zone decision
+
+The most common question is "what is a zone — an environment, a customer, a team, or a product area?" A zone is none of those by default. It is the isolation boundary that owns signing keys, policy sets, sessions, audit, and authority data. You decide what trust boundary it represents.
+
+Use a **separate zone** whenever two workloads must not share signing keys, policy activation, or audit trails. Use a **shared zone with separate resources** when workloads belong to the same trust boundary but target different upstreams.
+
+| Question | If yes, lean toward |
+| --- | --- |
+| Must these workloads have independent signing keys and JWKS? | Separate zones |
+| Must a policy change for one never affect the other? | Separate zones |
+| Must audit and explain traces never mix? | Separate zones |
+| Do they share keys, policy owners, and audit, but call different upstreams? | One zone, separate resources |
+| Do they share an upstream but need different actions? | One resource, separate scopes |
+
+Keep [resource identifiers](/concepts/resource-grant/) stable across zones so policy, grants, and audit refer to the same target even when upstream URLs differ.
+
+## Single application, single environment
+
+The simplest deployment: one team, one runtime, a handful of upstreams.
+
+| Noun | Mapping |
+| --- | --- |
+| Zone | One zone for the whole deployment. |
+| Application | One managed application per durable workload; one DCR application per spawned ephemeral agent. |
+| Resource | One resource per protected upstream, with action-oriented scopes. |
+| Grant | One grant per application and subject that may request a resource's scopes. |
+
+Trade-off: lowest operational overhead. Add zones only when you need key, policy, or audit isolation — not before.
+
+## Per-environment zones
+
+Separate production, staging, and development so a policy or key change in one cannot affect another.
+
+| Noun | Mapping |
+| --- | --- |
+| Zone | One zone per environment: `prod`, `staging`, `dev`. |
+| Resource | The same stable identifier in each zone, such as `resource://pipernet`, pointing at that environment's upstream URL. |
+| Policy set | Authored and activated independently per zone. |
+| Keys | Each zone has its own signing key and JWKS. |
+
+Trade-off: clean blast-radius isolation and independent key rotation, at the cost of registering resources and activating policy in each zone. Automate this with the Admin API so environments stay consistent.
+
+## Multiple customers or workspaces
+
+A platform with many customer workspaces and one shared agent service must choose how customer isolation maps onto zones. The open-source edition gives you the **zone** as the isolation primitive; you provision and automate customer onboarding yourself through the Admin API. Managed tenant, team, and SSO lifecycle features live in the [enterprise edition](/enterprise/).
+
+| Model | When to use | Trade-off |
+| --- | --- | --- |
+| Zone per customer | Customers require isolated signing keys, isolated audit, and policy that one customer's change can never affect another's. | Strongest isolation; you automate per-zone provisioning and key rotation, and one shared agent service authenticates separately into each zone. |
+| Shared zone, resource per customer | Customers share a trust boundary and policy owner but target distinct upstreams or data sets. | Lower overhead; isolation is enforced by policy and grants, not by keys or audit separation. |
+| Shared zone, customer in policy input | Customer is a runtime attribute of the same resource, carried in the request and checked by policy. | Lowest overhead; relies entirely on policy correctness, so audit and keys are shared. |
+
+Decide on the strongest isolation a customer actually requires, then pick the least complex model that satisfies it. Do not encode customer identity into [scope names](/concepts/resource-grant/); keep it in the zone, the principal, or the policy input.
+
+## High-sensitivity resource isolation
+
+For resources whose compromise is unacceptable — payouts, key material, production data deletion.
+
+| Option | Mapping |
+| --- | --- |
+| Dedicated zone | Put the sensitive resource in its own zone with distinct signing keys and a separate audit trail. |
+| Tight scopes | Split actions into the smallest scopes, such as `payments:read` and `payments:refund`, so grants stay minimal. |
+| Step-up | Require a fresh proof before the sensitive action through [Step-Up Re-Authentication](/guides/step-up/). |
+
+Trade-off: a dedicated zone gives the cleanest audit and key separation; in-zone tight scopes plus step-up are lighter and often enough. Combine them for the highest-risk targets.
+
+## App-only agents versus user-delegated agents
+
+The principal type decides who the authority belongs to and which provider flow fits.
+
+| Dimension | App-only (service) agent | User-delegated agent |
+| --- | --- | --- |
+| Principal | Service identity bound to an application. | User subject session the agent acts on behalf of. |
+| Session | Application-bound exchange subject. | Subject session, then spawned agent and delegation sessions. |
+| Upstream credential | Shared broker credential the agent never sees: `oauth2_client_credentials`, `api_key`, or `bearer_token`. | Per-user delegated consent: `oauth2_authorization_code`. |
+| Audit attribution | Application and agent session. | User subject plus the agent and delegation chain. |
+
+Policy can tell these apart with `input.principal.registration_method`, `input.principal.agent_session_id`, and `input.principal.capabilities`, so you author one policy set that handles both without SDK-specific branching. See [Principal and Application](/concepts/principal/).
+
+## Per-user OAuth grants versus a shared credential
+
+Choose how the upstream credential is held.
+
+| Choose | When | Provider kind |
+| --- | --- | --- |
+| Per-user OAuth grant | Each end user must consent, and the upstream call must act as that user. | `oauth2_authorization_code` |
+| Shared service credential | The agent acts as the application, not a specific user. | `oauth2_client_credentials`, `api_key`, or `bearer_token` |
+
+For per-user grants, Caracal owns `client_id`, `redirect_uri`, `state`, and PKCE; use the provider `connect` action to mint a consent URL for a user and resource, and `disconnect` to revoke it. Reconnecting the same user, resource, and provider replaces the active grant rather than duplicating it. The concrete field tables are in [Provider Recipes](/guides/provider-recipes/).
+
+## Validate the model
+
+After you map your architecture, confirm it end to end before relying on it:
+
+- Author and activate a policy set that allows the intended application, subject, resource, and scopes.
+- Run the [Provider Preflight](/examples/) to check resource-to-provider binding and that the active policy set returns `allow`.
+- Send a successful request, a denied request, and a revoked-session request, then confirm each has a clear audit trail in the Console.
+
+## Related
+
+- [Zone](/concepts/zone/)
+- [Principal and Application](/concepts/principal/)
+- [Resource and Grant](/concepts/resource-grant/)
+- [Define Resources and Providers](/guides/resources-providers/)
+- [Provider Recipes](/guides/provider-recipes/)
+- [Enterprise Runtime Patterns](/guides/enterprise-runtime-patterns/)
+- [Enterprise Edition](/enterprise/)
