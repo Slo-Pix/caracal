@@ -34,7 +34,7 @@ def test_scopes_for_unknown_role_falls_back_to_role_only():
 
 def test_constraints_for_carries_allowed_tools():
     c = caracal_module._constraints_for("invoice-intake")
-    assert c.actions == list(ROLES["invoice-intake"].allowed_tools)
+    assert c.resources == list(ROLES["invoice-intake"].allowed_tools)
     assert c.max_depth == 4
 
 

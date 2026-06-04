@@ -75,8 +75,8 @@ def _scopes_for(role: str, region: str | None, scope: str | None) -> list[str]:
 
 def _constraints_for(role: str) -> DelegationConstraints:
     rdef = ROLES.get(role)
-    actions = list(rdef.allowed_tools) if rdef and rdef.allowed_tools else None
-    return DelegationConstraints(actions=actions, max_depth=4)
+    resources = list(rdef.allowed_tools) if rdef and rdef.allowed_tools else None
+    return DelegationConstraints(resources=resources, max_depth=4)
 
 
 async def enter(

@@ -113,7 +113,7 @@ const input = trace.denied[0]?.policy_input;
 
 Feed that `input` straight into [simulation](/guides/activate-policy-set/) against
 a candidate policy-set version to confirm your fix before activating it. The
-[`policyIterate` example](/examples/) automates this denial-to-simulation loop.
+[Iterate Policy Safely](/examples/policy-iterate/) automates this denial-to-simulation loop.
 Actor and subject claims are never written to audit, so add any claim-dependent
 fields to the input before simulating.
 

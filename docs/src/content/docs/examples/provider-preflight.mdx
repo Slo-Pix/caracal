@@ -1,0 +1,57 @@
+---
+title: Check Provider Readiness
+description: Validate provider binding, reachability, runtime injection, and policy authorization before a Gateway call.
+pageType: workflow
+---
+
+Provider Preflight is an automatable readiness check under `examples/providerPreflight`. Use it after creating a provider-backed resource and before the first Gateway call that depends on that provider.
+
+## What it checks
+
+| Check | What it confirms |
+| --- | --- |
+| Resource binding | The resource resolves to exactly one credential provider and a Gateway application. |
+| Token endpoint host | OAuth token endpoints are HTTPS and publicly routable. |
+| Callback reachability | Authorization-code callback origins are reachable. |
+| Upstream reachability | The protected upstream is reachable from the host running the preflight. |
+| Runtime injection | Runtime-injection eligibility is enabled when required. |
+| Policy authorization | The active policy set returns `allow` for the application, resource, and scopes. |
+
+The preflight fails closed. Any failed check exits non-zero.
+
+## Run the preflight
+
+```bash
+cd examples/providerPreflight
+CARACAL_API_URL=http://127.0.0.1:3000 \
+CARACAL_ADMIN_TOKEN=<admin-token> \
+PREFLIGHT_ZONE_ID=<zone-id> \
+PREFLIGHT_RESOURCE_ID=<resource-id> \
+PREFLIGHT_APPLICATION_ID=<app-id> \
+PREFLIGHT_SCOPES=pipernet:read,pipernet:write \
+npm run preflight
+```
+
+Optional settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `PREFLIGHT_PRINCIPAL_ID` | Defaults to the application id. |
+| `PREFLIGHT_REQUIRE_RUNTIME_INJECTION=true` | Requires providers to allow runtime injection. |
+
+## Network position
+
+`Upstream reachability` and `Callback reachability` run from the host executing the script. Run it from a network position comparable to Gateway, or inside the cluster, when you need the reachability result to match production routing.
+
+## Test
+
+```bash
+cd examples/providerPreflight
+npm test
+```
+
+The tests inject network, DNS, and policy responses and do not call live systems.
+
+## Next step
+
+Continue to [Iterate Policy Safely](/examples/policy-iterate/) when a denied request needs to become a tested policy change.

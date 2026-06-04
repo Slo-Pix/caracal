@@ -379,8 +379,31 @@ export default defineConfig({
           label: 'Examples',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/examples/' },
-            { label: 'Lynx Capital: Autonomous Payouts', link: '/examples/lynx-capital/' },
+            { label: 'Use Examples', link: '/examples/' },
+            {
+              label: 'Local Targets',
+              collapsed: true,
+              items: [{ label: 'Run Echo Upstream', link: '/examples/echo-upstream/' }],
+            },
+            {
+              label: 'Automation',
+              collapsed: true,
+              items: [
+                { label: 'Bootstrap Control State', link: '/examples/control-bootstrap/' },
+                { label: 'Check Provider Readiness', link: '/examples/provider-preflight/' },
+                { label: 'Iterate Policy Safely', link: '/examples/policy-iterate/' },
+              ],
+            },
+            {
+              label: 'Agent Launch',
+              collapsed: true,
+              items: [{ label: 'Launch Research Agent', link: '/examples/research-agent/' }],
+            },
+            {
+              label: 'Reference Lab',
+              collapsed: true,
+              items: [{ label: 'Run Lynx Capital', link: '/examples/lynx-capital/' }],
+            },
           ],
         },
         {

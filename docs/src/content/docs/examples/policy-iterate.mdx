@@ -1,0 +1,47 @@
+---
+title: Iterate Policy Safely
+description: Reproduce a denied request against a staged policy-set version before activating a policy fix.
+pageType: workflow
+---
+
+Policy Iterate is a denial-to-simulation loop under `examples/policyIterate`. Use it when a real request is denied and you want to test a candidate policy change against the exact redaction-safe audit input before activation.
+
+## Loop
+
+1. A request is denied and you capture its audit `request_id`.
+2. The audit explain endpoint reconstructs the denied `policy_input`.
+3. You edit the policy and stage a candidate policy-set version.
+4. The example simulates the denied input against the candidate version.
+5. You activate only after the simulation returns `allow`.
+
+## Run the iteration
+
+```bash
+cd examples/policyIterate
+CARACAL_API_URL=http://127.0.0.1:3000 \
+CARACAL_ADMIN_TOKEN=<admin-token> \
+CARACAL_ZONE_ID=<zone-id> \
+PREFLIGHT_REQUEST_ID=<denied-request-id> \
+CANDIDATE_POLICY_SET_ID=<policy-set-id> \
+CANDIDATE_POLICY_SET_VERSION_ID=<staged-version-id> \
+npm run iterate
+```
+
+Exit code `0` means the candidate policy-set version allows the previously denied request.
+
+## Claims note
+
+Actor and subject claims are not written to audit, so reconstructed input does not contain them. For a claim-dependent denial, add the relevant `context.actor_claims` to the printed input before simulating.
+
+## Test
+
+```bash
+cd examples/policyIterate
+npm test
+```
+
+The tests inject the Admin API transport and do not call a live Caracal stack.
+
+## Next step
+
+Continue to [Launch Research Agent](/examples/research-agent/) to see runtime credential injection for a plain CLI agent.

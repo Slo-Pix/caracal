@@ -1,0 +1,70 @@
+---
+title: Bootstrap Control State
+description: Provision a demo provider, resource, and policy through a scoped Control API automation key.
+pageType: workflow
+---
+
+Control Bootstrap is a non-interactive provisioning example under `examples/controlBootstrap`. It creates and tears down demo product state through the Control API without adding product-management verbs to the runtime CLI.
+
+## What it demonstrates
+
+| Area | Behavior |
+| --- | --- |
+| Automation surface | Calls `/v1/control/invoke` instead of using a root admin token. |
+| Identity model | Uses a scoped, short-lived control key created in Console. |
+| Provisioned state | Creates a PiperNet provider, resource, and baseline policy. |
+| Safety model | Uses replay protection, rate limits, scoped control permissions, and audit. |
+
+## Console setup
+
+1. Start the runtime and open Console:
+
+   ```bash
+   caracal up
+   caracal status --ready
+   caracal console
+   ```
+
+2. Create or select the target zone.
+3. Create a control key with only the provider, resource, and policy scopes this example needs.
+4. Save the one-time `client_id`, `client_secret`, zone id, and control audience.
+
+## Run the bootstrap
+
+```bash
+cd examples/controlBootstrap
+cp env.example .env
+$EDITOR .env
+. .env
+npm run bootstrap
+```
+
+Run teardown when you want to remove the demo state:
+
+```bash
+npm run teardown
+```
+
+The bootstrap is idempotent. It skips existing objects and can be rerun on the same local stack.
+
+## Files to study
+
+| File | Purpose |
+| --- | --- |
+| `controlClient.mjs` | Exchanges client credentials at STS and calls the Control API. |
+| `provisionPlan.mjs` | Defines demo objects, required scopes, and environment-driven config. |
+| `bootstrap.mjs` | Creates the provider, resource, and policy. |
+| `teardown.mjs` | Removes the policy, resource, and provider in dependency order. |
+
+## Test
+
+```bash
+cd examples/controlBootstrap
+npm test
+```
+
+The tests use mock transport and do not call a live Caracal stack.
+
+## Next step
+
+Continue to [Check Provider Readiness](/examples/provider-preflight/) before sending traffic through a provider-backed Gateway resource.

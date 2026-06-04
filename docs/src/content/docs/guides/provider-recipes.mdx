@@ -109,7 +109,7 @@ When an existing CLI or client cannot route through the Gateway but still needs 
 
 ## Validate before the first call
 
-After you create the provider, bind it to the resource, and activate a policy, run the [Provider Preflight](/examples/) (`examples/providerPreflight`). It checks the resource-to-provider binding, OAuth token endpoint host, callback reachability, upstream reachability, runtime-injection eligibility, and that the active policy set actually returns `allow` for your application, resource, and scopes.
+After you create the provider, bind it to the resource, and activate a policy, run [Check Provider Readiness](/examples/provider-preflight/) (`examples/providerPreflight`). It checks the resource-to-provider binding, OAuth token endpoint host, callback reachability, upstream reachability, runtime-injection eligibility, and that the active policy set actually returns `allow` for your application, resource, and scopes.
 
 ## Related
 

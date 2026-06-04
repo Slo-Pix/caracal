@@ -1,31 +1,42 @@
 ---
-title: Examples
-description: Runnable examples and reference labs for learning Caracal integration patterns.
+title: Use Examples
+description: Choose the right runnable example for learning, automation, validation, or full reference-lab integration.
 pageType: landing
 ---
 
-Examples show Caracal integrated into concrete applications. Use them after completing the introductory tutorials and before building your own production flow.
+Examples show Caracal integrated into concrete applications and automation scripts. Use them after the first tutorials when you want runnable code that matches a specific integration job.
 
-## Available examples
+## Choose an example
 
-| Example | What it demonstrates |
-| --- | --- |
-| [Lynx Capital: Autonomous Payouts](/examples/lynx-capital/) | FastAPI + LangGraph agent swarm, Console setup, Control key, runtime profile, provider resources, Caracal SDK, Gateway, STS, Coordinator, and live run inspection. |
-| Echo Upstream (`examples/echoUpstream`) | A zero-dependency local upstream that makes the first tutorial self-contained, so you can confirm a brokered Gateway call without hosting an API of your own. |
-| Control Bootstrap (`examples/controlBootstrap`) | A non-interactive script that creates and tears down a demo zone, resource, and policy through the Control API, for repeatable per-laptop or CI setup. |
-| Provider Preflight (`examples/providerPreflight`) | An automatable preflight that validates a resource-to-provider binding, OAuth token endpoint host, callback and upstream reachability, runtime-injection eligibility, and policy authorization before the first Gateway call. |
-| Policy Iterate (`examples/policyIterate`) | Turns a denied request into a reproducible policy-set simulation, so teams can fix policies from real audit data and confirm the fix before activating. |
+| Goal | Start here | Code path |
+| --- | --- | --- |
+| Need a local protected target for the first Gateway call. | [Run Echo Upstream](/examples/echo-upstream/) | `examples/echoUpstream` |
+| Want repeatable demo setup through the Control API. | [Bootstrap Control State](/examples/control-bootstrap/) | `examples/controlBootstrap` |
+| Need to prove a provider-backed resource is ready. | [Check Provider Readiness](/examples/provider-preflight/) | `examples/providerPreflight` |
+| Need to turn a denial into a safe policy fix. | [Iterate Policy Safely](/examples/policy-iterate/) | `examples/policyIterate` |
+| Want to launch a plain CLI agent with injected provider credentials. | [Launch Research Agent](/examples/research-agent/) | `examples/ResearchAgent` |
+| Want a full app reference lab with agents, providers, Gateway, STS, and Console inspection. | [Run Lynx Capital](/examples/lynx-capital/) | `examples/lynxCapital` |
 
-## How to read examples
+## Recommended order
 
-1. Read the scenario and architecture first.
-2. Start Caracal with the released runtime/Console path described by the example.
-3. Use Console to create real zones, resources, provider configuration, and profiles.
-4. Run the example tests before changing behavior.
-5. Keep provider fixtures separate from Caracal product state.
+1. Start with [Run Echo Upstream](/examples/echo-upstream/) if you have not completed a Gateway-mediated request yet.
+2. Use [Bootstrap Control State](/examples/control-bootstrap/) when you need repeatable setup instead of manual Console clicks.
+3. Run [Check Provider Readiness](/examples/provider-preflight/) before the first real provider-backed Gateway call.
+4. Use [Iterate Policy Safely](/examples/policy-iterate/) when an audit denial needs to become a tested policy change.
+5. Try [Launch Research Agent](/examples/research-agent/) to see `caracal run` inject provider-native credentials into an existing-style CLI process.
+6. Study [Run Lynx Capital](/examples/lynx-capital/) when you need a full app topology and live Console inspection path.
+
+## Use examples safely
+
+- Start Caracal through the released runtime and Console path described by the example.
+- Use Console for zones, applications, providers, resources, policies, control keys, and runtime profiles.
+- Keep example fixtures inside their own `examples/<name>` directory.
+- Run each example's offline tests before adapting it.
+- Do not commit provider secrets, admin tokens, or real third-party credentials.
 
 ## Related sections
 
+- [Get Started](/get-started/)
 - [Tutorials](/tutorials/)
 - [Guides](/guides/)
 - [SDKs](/sdks/)
