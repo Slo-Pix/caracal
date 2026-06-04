@@ -1,5 +1,5 @@
 ---
-title: Local Setup
+title: Set Up Locally
 description: Install dependencies and start a local Caracal development stack.
 pageType: workflow
 ---
@@ -15,7 +15,7 @@ pageType: workflow
 | Python | 3.14+ |
 | Bun | latest stable used by package scripts |
 
-## Clone and install
+## Install Dependencies
 
 ```bash
 git clone https://github.com/Garudex-Labs/caracal.git
@@ -23,7 +23,7 @@ cd caracal
 pnpm install
 ```
 
-## Start the local stack
+## Start the Local Stack
 
 ```bash
 pnpm secrets:init
@@ -41,7 +41,7 @@ pnpm caracal console
 
 Use Console for zones, applications, providers, resources, policies, sessions, audit, agents, delegation, diagnostics, and Control. Do not expect top-level runtime CLI commands for product management.
 
-## Stop or reset
+## Stop or Reset
 
 ```bash
 pnpm caracal down
@@ -50,8 +50,12 @@ pnpm caracal purge
 
 Use `purge` only when you intentionally want to remove local stack/runtime state.
 
-## Related pages
+## Next Step
+
+Read [Follow Project Standards](/contributing/style/) before editing source files.
+
+## Related Pages
 
 - [Runtime and Console](/runtime-console/)
 - [Deploy with Docker Compose](/operations/docker-compose/)
-- [Testing](/contributing/testing/)
+- [Validate Changes](/contributing/testing/)

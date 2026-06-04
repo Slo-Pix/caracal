@@ -1,10 +1,10 @@
 ---
-title: Development Workflow
+title: Make a Change
 description: How to plan, implement, validate, and submit Caracal changes.
 pageType: workflow
 ---
 
-## Standard flow
+## Standard Flow
 
 1. Start from `main`.
 2. Keep the change focused on one component or workflow.
@@ -13,7 +13,7 @@ pageType: workflow
 5. Run targeted tests first, then broader checks when shared boundaries changed.
 6. Open a pull request with the problem, solution, validation, and risk notes.
 
-## Work by area
+## Choose the Area
 
 | Area | Common sources |
 | --- | --- |
@@ -26,10 +26,14 @@ pageType: workflow
 | Infra | `infra/docker`, `infra/helm`, Postgres/Redis scripts. |
 | Docs | `docs/src/content/docs`, `docs/astro.config.mjs`, generated docs pages. |
 
-## Product-management boundary
+## Command Boundary
 
 Do not add top-level runtime CLI commands for zones, policies, grants, audit, agents, delegation, or Control. Human workflows belong to Console; automation belongs to Control/Admin APIs.
 
-## Security workflow
+## Security Reports
 
 Do not discuss suspected vulnerabilities in public issues. Use GitHub private advisories or the email path in [Report a Vulnerability](/security/disclosure/).
+
+## Next Step
+
+Use [Validate Changes](/contributing/testing/) to choose the narrowest useful test command before opening a pull request.

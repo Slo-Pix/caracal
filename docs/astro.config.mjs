@@ -387,13 +387,25 @@ export default defineConfig({
           label: 'Contributing',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/contributing/' },
-            { label: 'Local Setup', link: '/contributing/setup/' },
-            { label: 'Development Workflow', link: '/contributing/workflow/' },
-            { label: 'Code Style', link: '/contributing/style/' },
-            { label: 'Testing', link: '/contributing/testing/' },
-            { label: 'Release and Versioning', link: '/contributing/release/' },
-            { label: 'Governance', link: '/contributing/governance/' },
+            { label: 'Contribute to Caracal', link: '/contributing/' },
+            {
+              label: 'Contributor Path',
+              collapsed: true,
+              items: [
+                { label: 'Set Up Locally', link: '/contributing/setup/' },
+                { label: 'Follow Project Standards', link: '/contributing/style/' },
+                { label: 'Make a Change', link: '/contributing/workflow/' },
+                { label: 'Validate Changes', link: '/contributing/testing/' },
+              ],
+            },
+            {
+              label: 'Maintainer Path',
+              collapsed: true,
+              items: [
+                { label: 'Understand Governance', link: '/contributing/governance/' },
+                { label: 'Release Caracal', link: '/contributing/release/' },
+              ],
+            },
           ],
         },
         {

@@ -1,12 +1,12 @@
 ---
-title: Code Style
-description: Repository conventions for code, docs, naming, and boundaries.
+title: Follow Project Standards
+description: Repository conventions for code, docs, naming, command ownership, and product boundaries.
 pageType: reference
 ---
 
 Caracal style favors small, explicit boundaries and source-aligned documentation.
 
-## Code conventions
+## Code Conventions
 
 | Convention | Apply it |
 | --- | --- |
@@ -16,7 +16,7 @@ Caracal style favors small, explicit boundaries and source-aligned documentation
 | Respect command ownership | Runtime CLI is lifecycle/setup; Console/Admin/Control own product management. |
 | Use existing shared layers | Reuse core config, errors, crypto, logging, engine dispatch, and SDK helpers. |
 
-## Documentation conventions
+## Documentation Conventions
 
 | Page type | Pattern |
 | --- | --- |
@@ -27,6 +27,17 @@ Caracal style favors small, explicit boundaries and source-aligned documentation
 
 Do not use docs to preserve stale command names, screenshots, package names, or workflows. Update the whole affected page coherently.
 
+## Project Boundaries
+
+- Top-level `caracal` commands are limited to runtime lifecycle, setup, and `caracal run`.
+- Product-management workflows for zones, policies, grants, audit, agents, delegation, and Control belong in Console, Admin SDK, or Control API docs.
+- Open-source code must not import, reference, or depend on enterprise-only code.
+- Security-sensitive findings must follow [Report a Vulnerability](/security/disclosure/), not public issues.
+
 ## Naming
 
 Use canonical terms from [Glossary](/reference/glossary/): zone, principal, resource, grant, policy, policy set, mandate, agent session, delegation edge, audit ledger, Console, Control API, STS, Gateway.
+
+## Next Step
+
+Use [Make a Change](/contributing/workflow/) to plan and submit a focused pull request.

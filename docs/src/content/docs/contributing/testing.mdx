@@ -1,12 +1,12 @@
 ---
-title: Testing
+title: Validate Changes
 description: Test commands and validation strategy for Caracal contributors.
 pageType: reference
 ---
 
 Run the smallest relevant suite first, then broaden when a change touches shared code, security boundaries, generated artifacts, or deployment behavior.
 
-## Root commands
+## Root Commands
 
 | Command | Purpose |
 | --- | --- |
@@ -19,7 +19,7 @@ Run the smallest relevant suite first, then broaden when a change touches shared
 | `pnpm run test:python` | Python package tests. |
 | `pnpm run ci` | Build, lint, typecheck, and test sequence. |
 
-## Targeted examples
+## Targeted Examples
 
 | Area | Command |
 | --- | --- |
@@ -34,7 +34,7 @@ Run the smallest relevant suite first, then broaden when a change touches shared
 | Docs | `pnpm --dir docs build` |
 | Lynx Capital | `cd examples/lynxCapital && pytest tests/` |
 
-## CI mirror
+## CI Mirror
 
 ```bash
 scripts/testCi.sh
@@ -45,3 +45,7 @@ scripts/testCi.sh --ts
 ```
 
 Use broader checks when a change affects auth, crypto, config, release, infra, shared packages, SDK contracts, or interoperability schemas.
+
+## Next Step
+
+After validation, review [Understand Governance](/contributing/governance/) for contribution scale, review ownership, and private security process.

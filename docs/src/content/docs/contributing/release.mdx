@@ -1,12 +1,12 @@
 ---
-title: Release and Versioning
+title: Release Caracal
 description: CalVer releases, package publishing, protected workflows, and rollback rules.
 pageType: reference
 ---
 
 Caracal release artifacts use CalVer product versions and package versions defined in `release.config.json`.
 
-## Release surfaces
+## Release Surfaces
 
 | Surface | Source |
 | --- | --- |
@@ -18,11 +18,11 @@ Caracal release artifacts use CalVer product versions and package versions defin
 | npm packages | Public `@caracalai/*` packages from `release.config.json`. |
 | PyPI packages | Public `caracalai-*` packages from `release.config.json`. |
 
-## Build targets
+## Build Targets
 
 Runtime and Console release builds compile Linux x64/arm64, macOS x64/arm64, and Windows x64 binaries through Bun compile scripts.
 
-## Release flow
+## Release Flow
 
 | Stage | Command pattern |
 | --- | --- |
@@ -37,11 +37,11 @@ Protected GitHub workflows publish npm and PyPI packages. Local stable publishin
 
 Only public `@caracalai/*` packages under `packages/` are released through Changesets. Internal-only packages must stay in the Changesets ignore list.
 
-## Rollback rule
+## Rollback Rule
 
 Do not delete published tags. Roll forward with a new CalVer tag. Pinned `v<calver>` tags are immutable; floating monthly tags move with the new cut.
 
-## Related pages
+## Related Pages
 
 - [Release and Package Versions](/reference/release-package-runtime-map/)
 - [Upgrade Caracal](/operations/upgrade/)

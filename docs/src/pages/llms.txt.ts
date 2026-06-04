@@ -131,7 +131,7 @@ const sections: Record<string, string[]> = {
   'API Reference': ['api', 'api/control-plane', 'api/coordinator', 'api/sts', 'api/gateway', 'api/event-topics'],
   'Security': ['security', 'security/threat-model', 'security/hardening', 'security/disclosure'],
   'Reference': ['reference', 'enterprise', 'reference/glossary', 'reference/errors', 'reference/configuration', 'reference/config-precedence', 'reference/defaults-and-limits', 'reference/compatibility'],
-  'Contributing': ['contributing', 'contributing/setup', 'contributing/workflow', 'contributing/testing', 'contributing/release', 'contributing/governance'],
+  'Contributing': ['contributing', 'contributing/setup', 'contributing/style', 'contributing/workflow', 'contributing/testing', 'contributing/governance', 'contributing/release'],
 }
 
 export async function GET() {

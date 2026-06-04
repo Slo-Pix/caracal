@@ -131,9 +131,13 @@ const pageOrder = [
   'reference/config-precedence',
   'reference/defaults-and-limits',
   'reference/compatibility',
+  'contributing',
   'contributing/setup',
-  'contributing/workflow',
   'contributing/style',
+  'contributing/workflow',
+  'contributing/testing',
+  'contributing/governance',
+  'contributing/release',
 ]
 
 export async function GET() {
