@@ -1,18 +1,18 @@
 ---
-title: Inspect an Agent Session
-description: Trace one agent session through authority sessions, delegation, authorization decisions, and action-result audit.
+title: Trace One Protected Request
+description: Follow one protected request through sessions, policy decisions, Gateway action-result audit, and diagnostics.
 pageType: workflow
 ---
 
-This tutorial shows how to trace what happened during one agent session. You will find the session, inspect its authority chain, review audit events, and trace one request ID.
+This tutorial shows how to prove what happened during one protected request. You will find the request, inspect the session context, review audit events, and trace the final decision.
 
-The flow assumes you already completed [Protect an API](../protect-an-api/) and [Connect an Agent](../connect-an-agent/).
+The flow assumes you already completed [Protect Your First Real API](../protect-an-api/) and [Connect Your App with the SDK](../connect-an-agent/).
 
-## 1. Find the agent session
+## 1. Find the Request
 
 Open the Console:
 
-```bash
+```sh
 caracal console
 ```
 
@@ -20,17 +20,18 @@ Use these Console entries:
 
 | Entry | Use it for |
 | --- | --- |
+| **audit** | Find recent authorization and action-result events. |
+| **request trace** | Explain one request ID. |
 | **agent session** | Find the tracked agent session for the selected zone. |
-| **authority session** | Inspect the underlying authority sessions and parent relationships. |
-| **delegation** | Follow authority edges from parent sessions to child sessions. |
+| **authority session** | Inspect underlying authority sessions and parent relationships. |
 
-Record the agent session ID or request ID that belongs to the session you want to inspect.
+Record the request ID from the SDK, Gateway, STS error, audit event, or Console trace.
 
-## 2. Read the audit timeline
+## 2. Read the Audit Timeline
 
 Open **audit**. The live audit view opens recent events immediately and supports request details, request tracing, advanced filters, reload, and pause/resume.
 
-A Gateway-mediated protected call usually produces:
+A Gateway-routed protected call usually produces:
 
 | Event class | What it proves |
 | --- | --- |
@@ -39,7 +40,7 @@ A Gateway-mediated protected call usually produces:
 
 If you see authorization events without matching action-result events, check whether the call reached the Gateway. For connector-verified services, confirm the service writes its own result audit after mandate verification.
 
-## 3. Trace one decision
+## 3. Trace the Decision
 
 Pick an audit event with a request ID. Press the trace action on the selected event in **audit**, or open **request trace** and paste the request ID.
 
@@ -52,11 +53,11 @@ The request trace should show:
 - diagnostics from policy evaluation;
 - delegation edge constraints when present.
 
-Use the request trace as the source of truth for why a request got its result. If an agent session behaves differently than expected, compare the trace against the active policy set, resource configuration, and runtime profile.
+Use the request trace as the source of truth for why a request got its result. If an app behaves differently than expected, compare the trace against the active policy set, resource configuration, and runtime profile.
 
-## 4. Follow delegation
+## 4. Check Delegation Context
 
-If the agent session delegated authority, open **delegation** and inspect the edge:
+If the request used delegated authority, open **delegation** and inspect the edge:
 
 | Field | Why it matters |
 | --- | --- |
@@ -66,16 +67,16 @@ If the agent session delegated authority, open **delegation** and inspect the ed
 | TTL and hop limits | The lifetime and graph depth of the permission. |
 | Resource constraints | The targets the delegated permission can affect. |
 
-Repeat the audit and request trace flow for the target session to trace child work.
+Use [Implement Multi-Agent Delegation](/guides/delegation/) when you need to design or debug delegation flows.
 
-## 5. Check revocation behavior
+## 5. Check Revocation Behavior
 
-Revoking a session, grant, delegation edge, or zone/application emergency state invalidates authority anchored to it. Gateway-mediated calls check revocation before accepting a request and while streaming responses. Audit records revocation events and marks interrupted action results.
+Revoking a session, grant, delegation edge, or zone/application emergency state invalidates authority anchored to it. Gateway-routed calls check revocation before accepting a request and while streaming responses. Audit records revocation events and marks interrupted action results.
 
-## Optional export path
+## Wrap Up
 
-For SIEM or long-term retention, use the audit exporter and Redis Streams consumer contract in [Tail and Query the Audit Stream](/guides/audit-stream/). Console is the interactive investigation path; exporter consumers are for automation.
+You can now trace one protected request from application identity to policy decision, Gateway action, delegation context, and revocation state.
 
-## Wrap-up
+## Next Step
 
-You can now trace one agent session from application identity to policy decision, Gateway action, delegation chain, and revocation state. That evidence is the operational value of routing protected work through Caracal.
+Continue with [Choose Your Production Integration Path](../choose-production-path/).

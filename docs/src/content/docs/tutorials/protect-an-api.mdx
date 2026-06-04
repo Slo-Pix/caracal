@@ -1,27 +1,27 @@
 ---
-title: Protect an API
-description: Put a Caracal-enforced boundary in front of a service or provider route.
+title: Protect Your First Real API
+description: Put a Caracal-enforced boundary in front of one real HTTP service or provider route.
 pageType: workflow
 ---
 
-This tutorial protects one API-style resource. The recommended first boundary is Gateway-mediated HTTP because it centralizes mandate verification, replay and revocation checks, provider credential brokering, routing, and action-result audit.
+This tutorial moves from the demo resource in Get Started to one API-style resource that belongs to your stack. The recommended first boundary is Gateway-routed HTTP because it centralizes mandate verification, replay and revocation checks, provider credential brokering, routing, and action-result audit.
 
 Use connector-verified services only when you own the service boundary and can preserve the same enforcement contract inside that service.
 
-## 1. Choose the boundary
+## 1. Choose What Caracal Should Protect
 
 | Boundary | Use when | What writes action-result audit |
 | --- | --- | --- |
-| Gateway-mediated | The resource is HTTP, REST, MCP-over-HTTP, or another Gateway-routable upstream. | Gateway. |
-| Connector-verified | You own the service process and can verify mandates there. | Your service or adapter after connector verification. |
+| Gateway-routed HTTP | The resource is HTTP, REST, MCP-over-HTTP, or another Gateway-routable upstream. | Gateway. |
+| In-process connector | You own the service process and can verify mandates there. | Your service or adapter after connector verification. |
 
-Start with Gateway-mediated unless your service must enforce directly in process.
+Start with Gateway-routed HTTP unless your service must enforce directly in process.
 
-## 2. Register or select the resource
+## 2. Create or Select the Real Resource
 
 Open the Console with:
 
-```bash
+```sh
 caracal console
 ```
 
@@ -33,12 +33,12 @@ Define:
 | --- | --- |
 | Resource identifier | Use a stable ID, for example `resource://billing-api`. |
 | Scopes | Use short action names such as `billing:read` or `billing:submit`. |
-| Upstream URL | Required for Gateway-mediated routing. Use a URL reachable from the Gateway. To make this tutorial self-contained, start the bundled echo upstream (`examples/echoUpstream`) and use `http://echoUpstream:8088`. |
+| Upstream URL | Use a URL reachable from the Gateway. |
 | Provider | Select one for the route. Use a `None` provider only when Gateway should enforce access but the upstream needs no brokered credential. |
 
-Keep the resource ID; SDK code, policy, Gateway headers, and audit events all refer to it.
+Keep the resource ID. SDK code, policy, Gateway headers, and audit events all refer to it.
 
-## 3. Activate a policy
+## 3. Allow This App to Use This Resource
 
 Caracal denies by default. Use Console **guided setup** to create the starter policy, or open **policy** to register and activate a Rego policy set for the zone.
 
@@ -51,20 +51,20 @@ A complete first policy should allow only:
 
 See [Author a Rego Policy](/guides/author-policy/) and [Activate a Policy Set](/guides/activate-policy-set/) for the policy contract.
 
-## 4. Configure the enforcement path
+## 4. Choose Gateway or In-Process Enforcement
 
-### Gateway-mediated
+### Gateway-routed HTTP
 
-For Gateway-mediated calls, the resource route needs an upstream URL and, when required, a provider credential source. The Gateway receives:
+For Gateway-routed calls, the resource route needs an upstream URL and, when required, a provider credential source. The Gateway receives:
 
 | Request part | Meaning |
 | --- | --- |
 | `Authorization: Bearer <mandate>` | The Caracal access token issued by STS. |
 | `X-Caracal-Resource: <resource-id>` | The stable resource identifier. |
 
-The SDK `transport()` helper can also rewrite matching upstream URLs through the Gateway when the runtime profile contains resource bindings and `gateway_url`.
+Use [Protect a Gateway-Routed HTTP API](/guides/protect-gateway-http/) when you need the durable implementation guide for routes, provider auth modes, and validation.
 
-### Connector-verified
+### In-process connector
 
 For services you own, mount the connector at the request boundary:
 
@@ -77,19 +77,17 @@ For services you own, mount the connector at the request boundary:
 
 Connector verification is not enough by itself for a complete production boundary. The protected service must also handle replay protection where applicable, revocation checks, and result audit for accepted work.
 
-## 5. Verify the boundary
+## 5. Verify Allowed, Denied, and Audited Calls
 
-Call the resource from an agent app configured with the generated runtime profile.
-
-Valid outcomes:
+Call the resource from an app configured with the generated runtime profile.
 
 | Outcome | What to expect |
 | --- | --- |
-| Allowed | The call reaches the upstream and audit shows both authorization and action-result evidence. |
+| Allowed | The call reaches the upstream and audit shows authorization plus action-result evidence. |
 | Denied | STS returns a denial and request trace shows which policy or missing state caused it. |
 
-Open Console **audit** and **request trace** with the request ID. If an accepted Gateway-mediated call has authorization audit but no action-result audit, check the Gateway route and resource header. If a connector-verified call lacks result audit, the service-side enforcement path is incomplete.
+Open Console **audit** and **request trace** with the request ID. If an accepted Gateway-routed call has authorization audit but no action-result audit, check the Gateway route and resource header. If a connector-verified call lacks result audit, the service-side enforcement path is incomplete.
 
-## Next step
+## Next Step
 
-Continue with [Connect an Agent](../connect-an-agent/) to wire application code through the resource you just protected.
+Continue with [Connect Your App with the SDK](../connect-an-agent/) to wire application code through the resource you just protected.

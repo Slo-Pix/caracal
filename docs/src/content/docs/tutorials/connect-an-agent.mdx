@@ -1,23 +1,23 @@
 ---
-title: Connect an Agent
-description: Wire an agent app through the SDK so protected calls carry Caracal authority and audit context.
+title: Connect Your App with the SDK
+description: Wire app code through the SDK so protected calls carry Caracal authority and audit context.
 pageType: workflow
 ---
 
 This tutorial connects application code to Caracal. The examples use a generated runtime profile, open one agent session, and call a Gateway-protected resource.
 
-## 1. Confirm the app and profile
+## 1. Confirm the App and Profile
 
 In the Console, confirm that the selected zone has:
 
 - one confidential agent app;
 - a client secret stored in the secret file named by the generated runtime profile;
 - one protected resource with an active policy;
-- a Gateway URL and resource binding when using Gateway-mediated HTTP.
+- a Gateway URL and resource binding when using Gateway-routed HTTP.
 
 Set the profile path and the resource target for the examples:
 
-```bash
+```sh
 export CARACAL_CONFIG=/path/to/caracal.toml
 export CARACAL_RESOURCE_ID=resource://billing-api
 export CARACAL_RESOURCE_PATH=/charge
@@ -122,7 +122,7 @@ if err != nil {
 }
 ```
 
-## 3. Understand the runtime behavior
+## 3. Understand the Runtime Behavior
 
 | SDK call | What happens |
 | --- | --- |
@@ -133,37 +133,17 @@ if err != nil {
 
 `spawn()` is the session boundary. If the function exits or raises, the SDK terminates the agent session and active authority for that session is revoked.
 
-## 4. Optional delegation
+If your app spawns child agents or delegates work, continue to [Implement Multi-Agent Delegation](/guides/delegation/) after this tutorial path.
 
-Use delegation when a parent run needs to hand narrower authority to another run:
+## 4. Verify Audit
 
-```typescript
-await caracal.spawn(async () => {
-  await caracal.delegate(
-    {
-      to: childAgentSessionId,
-      toApplicationId: "child-app",
-      scopes: ["billing:read"],
-      constraints: { ttlSeconds: 300, maxHops: 1 },
-    },
-    async () => {
-      console.log("Delegated edge:", caracal.current()?.delegationEdgeId);
-    },
-  );
-});
-```
-
-Use [Implement Multi-Agent Delegation](/guides/delegation/) before designing production delegation flows.
-
-## 5. Verify audit
-
-Open Console **audit** and find the request. A complete Gateway-mediated call produces:
+Open Console **audit** and find the request. A complete Gateway-routed call produces:
 
 1. an authorization event from STS;
 2. an action-result event from Gateway.
 
 Open **explain** with the request ID to confirm the application, resource, scopes, policy, policy set version, and decision.
 
-## Next step
+## Next Step
 
-Continue with [Inspect a Run](../inspect-a-run/) to trace this run through sessions, delegations, and audit.
+Continue with [Trace One Protected Request](../inspect-a-run/) to investigate the request you just made.

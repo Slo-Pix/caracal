@@ -1,0 +1,91 @@
+---
+title: Protect a Gateway-Routed HTTP API
+description: Configure a resource route so Caracal Gateway verifies mandates, brokers provider credentials, forwards the request, and records action-result audit.
+---
+
+Use Gateway-routed protection when the upstream is HTTP-routable and you want Caracal to enforce every request before it reaches the target. The agent receives a short-lived Caracal mandate; Gateway verifies it, resolves the resource route, attaches the configured upstream credential when needed, forwards the request, and writes action-result audit.
+
+## When to Use Gateway
+
+| Use Gateway when | Use another guide when |
+| --- | --- |
+| The upstream is HTTP, REST, MCP-over-HTTP, or another Gateway-routable target. | The service must verify mandates inside its own process. |
+| You want provider credentials to stay inside the trusted Gateway/STS boundary. | The application must call the provider directly and only needs attribution. |
+| You want action-result audit from the central Gateway. | The resource server owns result audit after connector verification. |
+
+For in-process enforcement, use [Protect an Express App](/guides/protect-express/), [Protect a FastMCP App](/guides/protect-fastmcp/), [Protect a Go net/http Service](/guides/protect-nethttp/), or [Protect an MCP Server](/guides/protect-mcp/).
+
+## Create or Select the Resource
+
+Open the Console:
+
+```sh
+caracal console
+```
+
+Create or select a resource with:
+
+| Field | Guidance |
+| --- | --- |
+| Resource identifier | Stable audience URI, such as `resource://billing-api`. |
+| Scopes | Action-oriented scopes, such as `billing:read` and `billing:submit`. |
+| Upstream URL | Network URL the Gateway can reach. |
+| Gateway application | The Caracal application identity Gateway uses for upstream exchanges. |
+| Upstream credential provider | The provider record Gateway uses to attach no credential, a Caracal mandate, OAuth token, API key, or bearer token. |
+
+Keep the resource identifier stable even when upstream hosts or provider bindings change.
+
+## Choose Provider Auth Mode
+
+| Provider type | Use when |
+| --- | --- |
+| None | Gateway enforces Caracal access and the upstream expects no credential. |
+| Caracal mandate | The upstream verifies Caracal mandates directly. |
+| OAuth client credentials | Gateway needs a machine OAuth token. |
+| OAuth authorization code | Gateway needs per-user delegated OAuth consent. |
+| API key | Gateway attaches a sealed static API key in a configured header. |
+| Bearer token | Gateway attaches a sealed pre-issued bearer token. |
+
+Use [Define Resources and Providers](/guides/resources-providers/) for field definitions and [Provider Recipes](/guides/provider-recipes/) for concrete OpenAI, Google, GitHub, Slack, and internal API examples.
+
+## Route Calls Through Gateway
+
+Gateway-routed requests include:
+
+| Request part | Value |
+| --- | --- |
+| URL | Gateway URL from the generated profile or Console result view. |
+| `Authorization` | `Bearer <Caracal mandate>`. |
+| `X-Caracal-Resource` | Resource identifier. |
+| Path | The protected path you configured for the upstream. |
+
+SDKs can build the Gateway request and inject headers for you:
+
+- TypeScript: `caracal.gatewayRequest()` and `caracal.transport()`
+- Python: `caracal.gateway_request()` and `caracal.transport()`
+- Go: `GatewayRequest()` and `Transport()`
+
+## Verify Authorization and Audit
+
+Run these checks before treating the route as ready:
+
+| Check | Expected result |
+| --- | --- |
+| Allowed request | Gateway forwards to upstream and records action-result audit. |
+| Missing mandate | Gateway rejects the request. |
+| Missing scope | STS or Gateway rejects the request. |
+| Wrong resource header | Gateway rejects or routes to a different configured resource. |
+| Revoked session | Gateway rejects the old mandate. |
+
+Open Console **audit** and **request trace** with the request ID. A complete Gateway-routed call has both authorization evidence from STS and action-result evidence from Gateway.
+
+## Troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| Gateway returns 403 | Token expiry, resource ID, scopes, revocation, and `X-Caracal-Resource`. |
+| Upstream is unreachable | Upstream URL must be reachable from the Gateway container or deployment. |
+| Provider credential not attached | Resource must bind exactly one upstream credential provider. |
+| Authorization audit exists but action-result audit is missing | The request did not reach Gateway or failed before route execution. |
+
+Related pages: [Debug Authorization Decisions](/guides/authorize-access/) and [Tail and Query the Audit Stream](/guides/audit-stream/).
