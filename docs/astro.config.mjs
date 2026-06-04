@@ -369,11 +369,10 @@ export default defineConfig({
           label: 'Security',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/security/' },
-            { label: 'Threat Model', link: '/security/threat-model/' },
-            { label: 'Hardening Checklist', link: '/security/hardening/' },
-            { label: 'Disclosure Policy', link: '/security/disclosure/' },
-            { label: 'Enterprise Edition', link: '/enterprise/' },
+            { label: 'Secure Caracal', link: '/security/' },
+            { label: 'Review the Threat Model', link: '/security/threat-model/' },
+            { label: 'Harden Security Posture', link: '/security/hardening/' },
+            { label: 'Report a Vulnerability', link: '/security/disclosure/' },
           ],
         },
         {
@@ -403,6 +402,7 @@ export default defineConfig({
           items: [
             { label: 'Overview', link: '/reference/' },
             { label: 'Frequently Asked Questions', link: '/reference/faq/' },
+            { label: 'Enterprise Edition', link: '/enterprise/' },
             { label: 'Glossary', link: '/reference/glossary/' },
             { label: 'Error Reference', link: '/reference/errors/' },
             { label: 'Configuration Reference', link: '/reference/configuration/' },

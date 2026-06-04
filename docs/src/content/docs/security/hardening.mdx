@@ -1,12 +1,12 @@
 ---
-title: Hardening Checklist
-description: Security checklist for production Caracal deployments.
+title: Harden Security Posture
+description: Security hardening guidance for production Caracal deployments.
 pageType: reference
 ---
 
 Use this checklist before exposing Caracal to production workloads or protected upstreams.
 
-## Deployment mode
+## Deployment Mode
 
 | Check | Expected |
 | --- | --- |
@@ -15,7 +15,7 @@ Use this checklist before exposing Caracal to production workloads or protected 
 | Network | NetworkPolicy or equivalent restricts ingress and egress. |
 | Containers | Non-root, dropped capabilities, no-new-privileges, read-only root filesystem where supported. |
 
-## Secrets and keys
+## Secrets and Keys
 
 | Check | Expected |
 | --- | --- |
@@ -25,7 +25,7 @@ Use this checklist before exposing Caracal to production workloads or protected 
 | Admin/Coordinator tokens | Stored privately, rotated, and scoped to operator need. |
 | Runtime profiles | `caracal.toml` and secret files are owner-only when written locally. |
 
-## Access enforcement
+## Access Enforcement
 
 | Check | Expected |
 | --- | --- |
@@ -34,7 +34,7 @@ Use this checklist before exposing Caracal to production workloads or protected 
 | Control | Disabled unless explicitly needed; invoke endpoint requires gate, JWT, replay protection, rate limit, and audit. |
 | Resource servers | Verify mandate signature, issuer, audience, scopes, token use, agent/delegation requirements, hop limits, and revocation. |
 
-## Audit and recovery
+## Audit and Recovery
 
 | Check | Expected |
 | --- | --- |
@@ -43,7 +43,11 @@ Use this checklist before exposing Caracal to production workloads or protected 
 | Backups | Postgres, runtime secrets, and audit exports are restorable. |
 | Replay | STS/Gateway audit replay volumes are preserved through rollouts. |
 
-## Related pages
+## Next Step
+
+Use [Report a Vulnerability](/security/disclosure/) if hardening review uncovers a suspected vulnerability.
+
+## Related Pages
 
 - [Harden Production](/operations/tls-hardening/)
 - [Rotate Keys and Secrets](/operations/key-management/)

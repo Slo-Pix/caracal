@@ -1,12 +1,12 @@
 ---
-title: Threat Model
+title: Review the Threat Model
 description: Assets, boundaries, threats, mitigations, and validation checks for Caracal.
 pageType: reference
 ---
 
 The repository threat model covers the current open-source Caracal runtime, services, packages, deployment assets, and release artifacts.
 
-## In-scope areas
+## In-Scope Areas
 
 | Area | Scope |
 | --- | --- |
@@ -33,7 +33,7 @@ Enterprise-only code and customer deployments outside the provided deployment mo
 | Redis Streams and outboxes | Carry lifecycle, invalidation, audit, and revocation events. |
 | Images, installers, releases, lockfiles | Define what users execute. |
 
-## Threats and mitigations
+## Threats and Mitigations
 
 | Threat | Required mitigation |
 | --- | --- |
@@ -53,7 +53,11 @@ Enterprise-only code and customer deployments outside the provided deployment mo
 
 Use targeted suites for the changed boundary: API/Coordinator TypeScript tests, STS/Gateway/Audit Go tests, Control/Engine tests, stream consumer tests, release checks, and broader `pnpm run ci` when shared packages, crypto, config, release, or infra change.
 
-## Related pages
+## Next Step
+
+Use [Harden Security Posture](/security/hardening/) to translate the threat model into deployment checks.
+
+## Related Pages
 
 - [Trust Boundaries](/architecture/trust-boundaries/)
 - [Respond to Incidents](/operations/incident-response/)
