@@ -1,5 +1,5 @@
 ---
-title: Console
+title: Use the Console
 description: Launch, navigate, and operate caracal-console.
 pageType: reference
 ---
@@ -20,7 +20,7 @@ caracal-console
 
 The Console requires an interactive TTY. In non-interactive environments, use the Control API or Admin SDK.
 
-## Credentials and endpoints
+## Credentials and Endpoints
 
 | Input | Purpose |
 | --- | --- |
@@ -31,7 +31,7 @@ The Console requires an interactive TTY. In non-interactive environments, use th
 
 For default local services, generated secret files from `caracal up` are preferred over exported token values so local reset cycles do not keep stale shell credentials. Those files live outside the source workspace by default and must not be mounted into agent workspaces.
 
-## Screen model
+## Screen Model
 
 ```text
 +------------------------------------------------------------------+
@@ -49,7 +49,7 @@ For default local services, generated secret files from `caracal up` are preferr
 
 The Console redraws when content changes and reacts to terminal resize events.
 
-## Main menu
+## Main Menu
 
 | Group | Key | Label | Zone required |
 | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ The Console redraws when content changes and reacts to terminal resize events.
 
 Press `z` to open the zone picker before navigating to zone-scoped views.
 
-## Guided setup
+## Guided Setup
 
 `guided setup` creates or selects the first working objects:
 
@@ -85,7 +85,7 @@ Important guided fields include `upstream URL`, `first request path`, `runtime p
 
 Use file writing when you want the Console to create the runtime profile and secret file locally. Leave it disabled when a platform secret manager or CI system will provide those values.
 
-## Navigation keys
+## Navigation Keys
 
 | Key | Action |
 | --- | --- |
@@ -113,3 +113,7 @@ Forms can expose advanced options for manual identifiers, raw JSON, shadow versi
 | Connection error | Run `caracal status --ready`; custom deployments should confirm the Management API URL override. |
 | Coordinator views fail | Confirm the Coordinator token and, for custom deployments, the Coordinator URL override. |
 | A zone-scoped view will not open | Press `z` and select a zone first. |
+
+## Next Step
+
+Use [Configure Workloads](/runtime-console/config-file/) when a workload needs a runtime profile, credential manifest, secret file, or service endpoint override.

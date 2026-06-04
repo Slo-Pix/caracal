@@ -34,7 +34,7 @@ The Console **request trace** is the fastest disambiguator: it ties one request 
 | Symptom | Surface | Inspect | Tool |
 | --- | --- | --- | --- |
 | SDK throws `config_missing` or cannot start | SDK / runtime config | Runtime profile, secret file, and required environment variables. | `caracal status --json`, profile file |
-| `401` from API or Console | Authentication | Admin or Control token, or workload credential source. | [Console](/runtime-console/console/) credential inputs |
+| `401` from API or Console | Authentication | Admin or Control token, or workload credential source. | [Use the Console](/runtime-console/console/) credential inputs |
 | `403` from a token exchange (`access_denied`) | STS policy | Active policy-set activation, application ID, subject, requested scopes, and grant. | `request trace`, Console `audit` |
 | `403` at the resource (`invalid_token`, `scope_insufficient`) | Gateway or in-process verifier | Mandate validity, issuer/JWKS trust, `X-Caracal-Resource`, binding, and verifier scope checks. | [Gateway Behavior](/api/gateway/), verifier logs |
 | `scope_insufficient` even after a policy allow | Resource definition | Whether the resource defines the scope and the policy authorizes it. | Console `resource`, `request trace` |
@@ -77,6 +77,6 @@ The Console `diagnostics` Doctor view runs `health`, `readiness`, `zones`, and `
 
 - [Error Reference](/reference/errors/)
 - [Operator Debugging](/operations/debugging/)
-- [Observability Workflows](/runtime-console/observability/)
+- [Inspect Diagnostics and Audit](/runtime-console/observability/)
 - [Debug Authorization Decisions](/guides/authorize-access/)
 - [Failure Modes and Recovery](/operations/failure-modes/)

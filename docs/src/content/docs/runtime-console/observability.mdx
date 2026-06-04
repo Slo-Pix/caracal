@@ -1,5 +1,5 @@
 ---
-title: Observability Workflows
+title: Inspect Diagnostics and Audit
 description: Inspect diagnostics, audit events, and request traces through the Console.
 pageType: reference
 ---
@@ -25,7 +25,7 @@ Open `audit` with `a`. Audit records tie STS, Gateway, Coordinator, policy, and 
 
 The audit view opens recent events immediately. Use row actions to open request details or trace the selected request. Advanced filters remain available for decision, event type, time window, request ID, and result limit.
 
-## Request trace
+## Request Trace
 
 Open `request trace` with `t` when you already have a request ID and need the decision trace directly. Trace output connects the request, selected resource, subject, scopes, determining policies, diagnostics, and result.
 
@@ -42,3 +42,7 @@ For a symptom-first path from a failing application call to the right surface an
 :::note[FAQ]
 [Why is an audit event missing?](/reference/faq/#faq-missing-audit-event)
 :::
+
+## Next Step
+
+Use [Manage Agents and Delegation](/runtime-console/agents/) when a request involves agent sessions, child sessions, or delegated authority.

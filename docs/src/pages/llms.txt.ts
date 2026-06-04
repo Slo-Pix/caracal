@@ -71,7 +71,17 @@ const sections: Record<string, string[]> = {
     'architecture/crypto-keys',
     'architecture/trust-boundaries',
   ],
-  'Runtime and Console Reference': ['runtime-console', 'runtime-console/config-file', 'runtime-console/runtime', 'runtime-console/stack', 'runtime-console/observability', 'runtime-console/agents'],
+  'Runtime and Console': [
+    'runtime-console',
+    'runtime-console/cli-and-console',
+    'runtime-console/stack',
+    'runtime-console/console',
+    'runtime-console/config-file',
+    'runtime-console/runtime',
+    'runtime-console/admin',
+    'runtime-console/observability',
+    'runtime-console/agents',
+  ],
   'SDKs': [
     'sdks',
     'sdks/typescript',

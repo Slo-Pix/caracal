@@ -1,12 +1,12 @@
 ---
-title: Configuration File
-description: Runtime configuration sources, caracal.toml schema, permission rules, and credential injection settings.
+title: Configure Workloads
+description: Configure runtime profiles, credential manifests, secret files, and workload service endpoints.
 pageType: config
 ---
 
 Runtime config is workload input for `caracal run` and SDK credential loaders. It is not Console state and it does not create, select, or manage zones.
 
-## Source precedence
+## Source Precedence
 
 | Order | Source |
 | --- | --- |
@@ -16,7 +16,7 @@ Runtime config is workload input for `caracal run` and SDK credential loaders. I
 
 The runtime does not read `./caracal.toml` from the current working directory.
 
-## Environment config
+## Environment Config
 
 | Variable | Meaning |
 | --- | --- |
@@ -47,7 +47,7 @@ credential manifest from the OS Caracal config directory:
 Local dev and stable service URLs also resolve automatically. Set service URL
 overrides only for cloud deployments, containers, or custom service locations.
 
-## TOML schema
+## TOML Schema
 
 ```toml
 zone_id = "zone_prod"
@@ -70,7 +70,7 @@ on_failure = "warn"
 mode = "block"
 ```
 
-## Field reference
+## Field Reference
 
 | Field | Meaning |
 | --- | --- |
@@ -89,7 +89,7 @@ mode = "block"
 
 Credential entries use `env`, `resource`, optional `upstream_prefix`, and optional `credential_type`. `provider_token` is the `caracal run` golden path and requires a provider with `allow_runtime_injection = true`; `caracal_mandate` is for workloads that consume Caracal mandates directly. SDKs can also use entries as resource audiences and Gateway routing hints.
 
-## Security rules
+## Security Rules
 
 - Use auto-detected local credential files for dev and stable runtime launches.
 - Use explicit secret-file paths for cloud deployments, containers, or external secret stores.
@@ -98,7 +98,7 @@ Credential entries use `env`, `resource`, optional `upstream_prefix`, and option
 - Non-local insecure `http://` STS URLs are rejected unless explicitly allowed by environment.
 - Environment names that affect runtime loading, such as `NODE_OPTIONS`, `LD_PRELOAD`, and dynamic-library path variables, are blocked.
 
-## Cloud and custom secret paths
+## Cloud and Custom Secret Paths
 
 Cloud deployments, containers, and external secret stores can override the
 auto-detected local paths with `CARACAL_APP_CLIENT_SECRET_FILE`,
@@ -110,7 +110,7 @@ Cloud deployments and custom service locations can also set `CARACAL_STS_URL`,
 `CARACAL_GATEWAY_URL`, `CARACAL_COORDINATOR_URL`, `sts_url`, `gateway_url`, or
 `coordinator_url`. Do not set these for the default local stack.
 
-## Generated profiles
+## Generated Profiles
 
 Console `guided setup` can generate a complete profile and one-time secret file using real zone, application, provider, resource, policy, and credential values. Enable file writing when you want the Console to write the profile and secret file with owner-only permissions.
 
@@ -123,3 +123,7 @@ Console `guided setup` can generate a complete profile and one-time secret file 
 | Provider key is not injected | Confirm the credential uses `credential_type = "provider_token"` and the provider config allows runtime injection. |
 | SDK Gateway routing does not happen | Confirm `gateway_url` and `upstream_prefix` are present. |
 | Optional credential stops the process | Set `on_failure = "warn"` for optional credentials that may be absent. |
+
+## Next Step
+
+Use [Run Workloads](/runtime-console/runtime/) when the profile is ready and you need to inject scoped credentials into a process.

@@ -1,5 +1,5 @@
 ---
-title: Management Workflows
+title: Manage Product Objects
 description: Manage zones, applications, providers, resources, policies, authority sessions, and Control through the Console.
 pageType: reference
 ---
@@ -16,7 +16,7 @@ or:
 caracal-console
 ```
 
-## Management flow
+## Management Flow
 
 ```text
 zone -> application -> provider -> resource -> policy -> policy set -> authority session/audit
@@ -24,7 +24,7 @@ zone -> application -> provider -> resource -> policy -> policy set -> authority
 
 Console `guided setup` walks the first version of that flow and can write a runtime profile for `caracal run` and SDKs.
 
-## Menu workflows
+## Menu Workflows
 
 | Menu label | What it manages |
 | --- | --- |
@@ -37,11 +37,11 @@ Console `guided setup` walks the first version of that flow and can write a runt
 | `authority session` | Active authority-session records. |
 | `control` | Control API exposure and Control credentials. |
 
-## Secrets and credentials
+## Secrets and Credentials
 
 Application client secrets are shown once when created. Provider secrets are accepted only in provider create or rotation-style edit flows and are stored sealed by the Control API. Store application secrets in a secret manager, mounted secret file, or Console-generated local profile before leaving the result screen. The Console masks secret-shaped fields and error output.
 
-## Automation handoff
+## Automation Handoff
 
 Use the Console `control` menu when management needs to move from interactive operations to automation. Control API calls are authenticated and audited. They use the same product-management boundary as the Console; they are not exposed as top-level runtime CLI commands.
 
@@ -53,3 +53,7 @@ Use the Console `control` menu when management needs to move from interactive op
 | A created client secret is no longer visible | Generate or rotate a new secret; one-time secrets are not recoverable. |
 | Policy activation fails | Run simulation, inspect validation errors, and confirm the policy set references the intended policy versions. |
 | Control API calls fail | Confirm Control is enabled from the Console `control` menu and the automation token targets the Control resource. |
+
+## Next Step
+
+Use [Inspect Diagnostics and Audit](/runtime-console/observability/) when you need health checks, audit records, or request traces.

@@ -1,6 +1,6 @@
 ---
-title: Runtime Execution
-description: Use caracal run to inject scoped tokens into subprocesses.
+title: Run Workloads
+description: Use caracal run to inject scoped resource tokens into subprocesses.
 pageType: reference
 ---
 
@@ -12,7 +12,7 @@ caracal run -- python3 agent.py
 
 Use `--` when the child command accepts flags.
 
-## Execution flow
+## Execution Flow
 
 ```text
 runtime config -> MCP governance check -> STS token exchange -> env injection -> child process
@@ -28,7 +28,7 @@ runtime config -> MCP governance check -> STS token exchange -> env injection ->
 
 Injected tokens have a 15-minute TTL from the runtime exchange.
 
-## Required runtime identity
+## Required Runtime Identity
 
 `caracal run` needs:
 
@@ -46,11 +46,11 @@ config directory after the zone and application IDs are known. Service URLs use
 local defaults automatically unless cloud/custom deployment docs configure
 explicit overrides.
 
-## Step-up challenges
+## Step-Up Challenges
 
 When STS returns `interaction_required`, the runtime writes the challenge notice, polls the step-up endpoint every two seconds, and retries exchange for up to five minutes. If the challenge is not satisfied in time, the subprocess is not spawned.
 
-## Environment safety
+## Environment Safety
 
 The runtime injects only configured credential environment variables and a small inherited allowlist such as path, home, shell, temporary directory, locale, color, CI, XDG, and Docker-related variables. Credential names that can alter process loading, such as `NODE_OPTIONS`, `LD_PRELOAD`, or dynamic-library path variables, are blocked.
 
@@ -72,3 +72,7 @@ mode = "block"
 | Token exchange fails | Confirm `caracal status --ready`, zone ID, application ID, client secret, resource ID, and policy coverage. |
 | Child command never starts | Required credential exchange, step-up, config validation, or MCP governance failed before spawn. |
 | Child command exits non-zero | The runtime returns the child process exit code after successful token injection. |
+
+## Next Step
+
+Use [Manage Product Objects](/runtime-console/admin/) for ongoing Console work after the workload path is running.

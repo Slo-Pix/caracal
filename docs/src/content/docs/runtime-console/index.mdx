@@ -1,55 +1,43 @@
 ---
-title: Runtime and Console
-description: Complete reference for the Caracal runtime CLI and Console.
+title: Operate Runtime and Console
+description: Start the local stack, run Console setup, configure workloads, run agents, and inspect operations.
 pageType: landing
 ---
 
-Caracal has two local operator surfaces with a deliberate boundary:
+Use this section after installation when you need to operate Caracal locally or understand which operator surface owns a task.
 
-| Surface | Owns | Does not own |
+Caracal has two local operator surfaces:
+
+| Surface | Use it for | Do not use it for |
 | --- | --- | --- |
-| `caracal` | Local stack lifecycle, readiness, local reset, token-injected process execution, and Console launch. | Product-management workflows. |
-| `caracal console` / `caracal-console` | Human management for zones, applications, providers, resources, policies, policy sets, authority sessions, Control, audit, request traces, agent sessions, delegation, and diagnostics. | Starting/stopping the stack or running workloads. |
+| `caracal` | Local stack lifecycle, readiness checks, local reset, token-injected process execution, and Console launch. | Zones, applications, providers, resources, policies, audit, agents, delegation, or Control setup. |
+| `caracal console` / `caracal-console` | Human management for zones, applications, providers, resources, policies, policy sets, authority sessions, Control, audit, request traces, agent sessions, delegation, and diagnostics. | Starting or stopping the stack, purging local runtime state, or running workloads. |
 
-The runtime CLI stays small so local lifecycle and workload execution do not depend on admin tokens, zone selection, or Control credentials. Product management belongs to the Console or to the authenticated Control/Admin APIs.
+The runtime CLI stays small so lifecycle and workload execution do not depend on admin tokens, zone selection, or Control credentials. Product management belongs to the Console, Control API, or Admin SDK.
 
-## Runtime map
+## Recommended Path
 
-| Command | Purpose |
+1. [Choose the Right Surface](/runtime-console/cli-and-console/) to confirm whether a task belongs in `caracal`, Console, Control API, or Admin SDK.
+2. [Start and Check the Stack](/runtime-console/stack/) with `caracal up` and `caracal status --ready`.
+3. [Use the Console](/runtime-console/console/) to run guided setup and create the first runtime profile.
+4. [Configure Workloads](/runtime-console/config-file/) when a workload needs explicit profile, credential, or service endpoint settings.
+5. [Run Workloads](/runtime-console/runtime/) with `caracal run -- <command>`.
+6. [Manage Product Objects](/runtime-console/admin/) for ongoing zone, application, provider, resource, policy, policy-set, and Control work.
+7. [Inspect Diagnostics and Audit](/runtime-console/observability/) when debugging health, readiness, audit, or request decisions.
+8. [Manage Agents and Delegation](/runtime-console/agents/) when workloads create agent sessions or delegation edges.
+
+## Command Map
+
+| Outcome | Surface |
 | --- | --- |
-| `caracal up` | Start the local Docker Compose stack. |
-| `caracal down` | Stop the stack; pass `-v` to remove volumes. |
-| `caracal status` | Probe service health. |
-| `caracal status --ready` | Probe dependency readiness. |
-| `caracal purge` | Remove stack artifacts and selected local state. |
-| `caracal run -- <command>` | Run a subprocess with scoped resource tokens injected. |
-| `caracal console` | Launch the Console when the Console binary or workspace shim is available. |
+| Start, stop, check, or purge the local runtime stack | `caracal` |
+| Launch the terminal Console | `caracal console` |
+| Run an agent process with scoped resource tokens | `caracal run -- <command>` |
+| Create a zone, app, provider, resource, policy, or policy set | Console |
+| Enable Control automation | Console `control` |
+| Script management workflows | Control API or Admin SDK |
+| Inspect audit events, request traces, diagnostics, agents, or delegation | Console |
 
-No other top-level `caracal` product-management commands are part of the runtime CLI.
+## Next Step
 
-## Console map
-
-| Group | Menu label | Key | Purpose |
-| --- | --- | --- | --- |
-| start | `guided setup` | `s` | Create the first zone, agent app, provider, resource, policy, and runtime profile. |
-| manage | `zone` | `1` | Manage zones. |
-| manage | `application` | `2` | Manage confidential agent applications. |
-| manage | `provider` | `3` | Manage provider credential sources. |
-| manage | `resource` | `4` | Manage protected resources. |
-| manage | `policy` | `5` | Manage access policies. |
-| manage | `policy set` | `6` | Manage active policy sets. |
-| sessions | `authority session` | `7` | Inspect active authority sessions. |
-| sessions | `agent session` | `r` | Manage agent sessions. |
-| sessions | `delegation` | `g` | Manage delegated permissions. |
-| observe | `audit` | `a` | Search audit events and trace selected requests. |
-| observe | `request trace` | `t` | Trace one audit request ID. |
-| runtime | `control` | `c` | Manage the Control automation service and credentials. |
-| runtime | `diagnostics` | `d` | Run operator diagnostics. |
-
-## Learning path
-
-1. Start with [CLI and Console](/runtime-console/cli-and-console/) to choose the right surface.
-2. Use [Runtime Lifecycle](/runtime-console/stack/) to start and check the local stack.
-3. Run [Console guided setup](/runtime-console/console/) to create a real runtime profile.
-4. Use [Configuration File](/runtime-console/config-file/) and [Runtime Execution](/runtime-console/runtime/) when running workloads.
-5. Use [Management Workflows](/runtime-console/admin/), [Observability Workflows](/runtime-console/observability/), and [Agents and Delegation](/runtime-console/agents/) for day-to-day operations.
+Start with [Choose the Right Surface](/runtime-console/cli-and-console/) if you are deciding where an operation belongs. If you already know you need a local stack, go directly to [Start and Check the Stack](/runtime-console/stack/).

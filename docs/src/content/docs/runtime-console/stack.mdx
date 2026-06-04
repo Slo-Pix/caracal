@@ -1,12 +1,12 @@
 ---
-title: Runtime Lifecycle
+title: Start and Check the Stack
 description: Use caracal up, down, status, and purge to manage the local runtime stack.
 pageType: reference
 ---
 
 Runtime lifecycle commands manage local infrastructure only. They delegate to Docker Compose and keep product state changes in the Console.
 
-## Service layout
+## Service Layout
 
 | Service | Default local port |
 | --- | --- |
@@ -35,7 +35,7 @@ caracal down -v
 
 Use `-v` only when you intend to remove Docker volumes.
 
-## Check health and readiness
+## Check Health and Readiness
 
 ```bash
 caracal status
@@ -45,7 +45,7 @@ caracal status --ready --json
 
 `status` probes service health endpoints. `status --ready` probes readiness endpoints and dependencies. The command exits `0` only when the selected probes pass.
 
-## Purge local state
+## Purge Local State
 
 ```bash
 caracal purge
@@ -63,3 +63,7 @@ After a full purge, recreate product state through the Console: zones, applicati
 | Console cannot connect after `up` | Check `caracal status --ready`; custom deployments should confirm the Management API URL override. |
 | Workloads cannot exchange tokens | Readiness for STS, Gateway, and audit must pass before debugging workload config. |
 | Local tokens are stale after `purge` and `up` | Prefer local generated secret files over exported shell tokens for localhost Console sessions. |
+
+## Next Step
+
+Use [Use the Console](/runtime-console/console/) to create the first zone, application, provider, resource, policy, and runtime profile.

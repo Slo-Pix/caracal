@@ -138,7 +138,7 @@ The concrete setup fields are in [Provider Recipes](/guides/provider-recipes/).
 
 The top-level `caracal` CLI is intentionally limited to local runtime lifecycle and process execution: `up`, `down`, `status`, `purge`, `run`, and `console`. Product-management workflows such as zones, applications, providers, resources, policies, audit, diagnostics, agents, and delegation live in the Console, Admin API, and SDKs so they use one management surface and do not drift into duplicated CLI commands.
 
-See [CLI and Console](/runtime-console/cli-and-console/).
+See [Choose the Right Surface](/runtime-console/cli-and-console/).
 
 <a id="faq-sts-403-versus-gateway-403"></a>
 
@@ -162,7 +162,7 @@ See the [Troubleshooting Decision Tree](/operations/troubleshooting/#the-diagnos
 
 First confirm the request reached a Caracal-protected boundary. If it did, check the selected zone, time window, request ID, Audit service readiness, Redis stream health, replay backlog, and DLQ. If the request failed before STS, Gateway, Coordinator, or a connector emitted evidence, there may be no action-result event for that boundary.
 
-Start with [Observability Workflows](/runtime-console/observability/) and [Operator Debugging](/operations/debugging/).
+Start with [Inspect Diagnostics and Audit](/runtime-console/observability/) and [Operator Debugging](/operations/debugging/).
 
 ## Enterprise
 
