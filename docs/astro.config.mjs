@@ -256,6 +256,7 @@ export default defineConfig({
             { label: 'Threat Model', link: '/security/threat-model/' },
             { label: 'Hardening Checklist', link: '/security/hardening/' },
             { label: 'Disclosure Policy', link: '/security/disclosure/' },
+            { label: 'Enterprise Edition', link: '/enterprise/' },
           ],
         },
         {
@@ -332,13 +333,6 @@ export default defineConfig({
             { label: 'STS Token Endpoint', link: '/api/sts/' },
             { label: 'Gateway Behavior', link: '/api/gateway/' },
             { label: 'Event Topics', link: '/api/event-topics/' },
-          ],
-        },
-        {
-          label: 'Enterprise Edition',
-          collapsed: true,
-          items: [
-            { label: 'Overview', link: '/enterprise/' },
           ],
         },
       ],
