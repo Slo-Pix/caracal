@@ -1,12 +1,12 @@
 ---
-title: Frequently Asked Questions
-description: Stable answers to recurring Caracal modeling, runtime, provider, troubleshooting, and enterprise questions.
+title: FAQ
+description: Stable answers to recurring Caracal modeling, runtime, provider, troubleshooting, and edition questions.
 pageType: reference
 ---
 
 This FAQ collects high-friction questions that come up across the docs. Each entry has a stable anchor so other pages can link directly to the answer instead of repeating it.
 
-## Question index
+## Question Index
 
 | Area | Question |
 | --- | --- |
@@ -26,9 +26,9 @@ This FAQ collects high-friction questions that come up across the docs. Each ent
 | Troubleshooting | [What is the difference between a 403 from STS and a 403 from Gateway?](#faq-sts-403-versus-gateway-403) |
 | Troubleshooting | [Where is the diagnostic bundle or doctor command?](#faq-diagnostic-bundle) |
 | Troubleshooting | [Why is an audit event missing?](#faq-missing-audit-event) |
-| Enterprise | [Which features are Enterprise Edition only?](#faq-enterprise-only-features) |
+| Editions | [Which features are Enterprise Edition only?](#faq-enterprise-only-features) |
 
-## Fit and product boundary
+## Fit and Product Boundary
 
 <a id="faq-what-problem-does-caracal-solve"></a>
 
@@ -46,7 +46,7 @@ No. Caracal is an authority broker for agent and workload actions. It can sit in
 
 Use an IdP for human login, a secret manager for static application configuration, and Caracal when an agent or service needs scoped, auditable authority for a resource.
 
-## Core model
+## Core Model
 
 <a id="faq-what-should-a-zone-represent"></a>
 
@@ -62,7 +62,7 @@ For examples, see [Model Your Application in Caracal](/guides/modeling-recipes/)
 
 No. The open-source Community Edition gives you zones as a manual isolation primitive. You can model customers, environments, or trust tiers with zones and automate them through the Admin API, but managed tenant, team, SSO, and hosted lifecycle features are Enterprise Edition features.
 
-See [Enterprise Edition](/enterprise/) for the commercial feature boundary.
+See [Compare Editions](/enterprise/) for the commercial feature boundary.
 
 <a id="faq-application-principal-agent-session"></a>
 
@@ -80,7 +80,7 @@ Use a managed application for durable software you intentionally operate: a back
 
 See [Identities and Applications](/concepts/principal/).
 
-## Resources, scopes, and grants
+## Resources, Scopes, and Grants
 
 <a id="faq-resource-versus-provider"></a>
 
@@ -112,7 +112,7 @@ In the current Console flow, you usually define resources, scopes, applications,
 
 If access is denied, inspect the active policy, subject, application, resource, and scopes through [request trace](/operations/troubleshooting/).
 
-## Providers and upstream credentials
+## Providers and Upstream Credentials
 
 <a id="faq-app-secret-versus-provider-credential"></a>
 
@@ -130,7 +130,7 @@ Use per-user OAuth (`oauth2_authorization_code`) when the upstream call must act
 
 The concrete setup fields are in [Provider Recipes](/guides/provider-recipes/).
 
-## Runtime, Console, and troubleshooting
+## Runtime, Console, and Troubleshooting
 
 <a id="faq-why-console-instead-of-cli"></a>
 
@@ -164,7 +164,7 @@ First confirm the request reached a Caracal-protected boundary. If it did, check
 
 Start with [Inspect Diagnostics and Audit](/runtime-console/observability/) and [Debug Infrastructure Issues](/operations/debugging/).
 
-## Enterprise
+## Editions
 
 <a id="faq-enterprise-only-features"></a>
 
@@ -172,4 +172,8 @@ Start with [Inspect Diagnostics and Audit](/runtime-console/observability/) and 
 
 Managed multi-tenancy, hosted management UI, managed Gateway and service operation, SSO, SCIM provisioning, teams, organization-level RBAC, commercial support, and enterprise lifecycle features are Enterprise Edition features. The Community Edition remains self-hosted and uses zones, Admin API automation, Console workflows, SDKs, and connectors.
 
-See [Enterprise Edition](/enterprise/) or [book an enterprise call](https://cal.com/rawx18/caracal-enterprise-sales).
+See [Compare Editions](/enterprise/) or [book an enterprise call](https://cal.com/rawx18/caracal-enterprise-sales).
+
+## Next Step
+
+Use [Glossary](/reference/glossary/) when you need canonical terms for concepts, API names, Console labels, and examples.

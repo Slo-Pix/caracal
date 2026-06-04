@@ -1,5 +1,5 @@
 ---
-title: Error Reference
+title: Error Codes
 description: Shared Caracal error codes and response shape.
 pageType: reference
 ---
@@ -17,7 +17,7 @@ Caracal packages and services use a shared machine-readable error shape.
 
 `details` appears only when a service or package provides structured context. The same code can be emitted by different surfaces — an `access_denied` from STS is a policy decision, while an `access_denied` surfaced by an in-process verifier is a missing scope on an otherwise valid mandate. Use the `requestId` with Console **request trace** to confirm which surface produced the error before acting.
 
-## Well-known codes
+## Well-Known Codes
 
 The **Likely source** column names the surface that most often emits the code, and **First check** is the fastest thing to confirm. When a call fails, start from the surface, not the code.
 
@@ -44,7 +44,7 @@ The **Likely source** column names the surface that most often emits the code, a
 
 Transport packages may map these codes into framework-specific HTTP responses.
 
-## When you do not know where it failed
+## Unknown Failure Surface
 
 If you only have an SDK error and not the surface, start from the symptom-first [Troubleshoot by Symptom](/operations/troubleshooting/). It routes a denied or failing call to the right surface, the object to inspect, and the diagnostic tool to use.
 
@@ -52,7 +52,11 @@ If you only have an SDK error and not the surface, start from the symptom-first 
 [What is the difference between a 403 from STS and a 403 from Gateway?](/reference/faq/#faq-sts-403-versus-gateway-403)
 :::
 
-## Related pages
+## Next Step
+
+Use [Configuration Keys](/reference/configuration/) when an error points to missing runtime, service, or deployment configuration.
+
+## Related Pages
 
 - [Troubleshoot by Symptom](/operations/troubleshooting/)
 - [Debug Infrastructure Issues](/operations/debugging/)

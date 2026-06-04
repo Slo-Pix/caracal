@@ -1,5 +1,5 @@
 ---
-title: Configuration Reference
+title: Configuration Keys
 description: Runtime profile, service environment, and deployment configuration keys.
 pageType: config
 ---
@@ -23,7 +23,7 @@ flowchart TD
   Deploy --> Platform[Operations deployment pages]
 ```
 
-## Runtime profile fields
+## Runtime Profile Fields
 
 | Field | Meaning |
 | --- | --- |
@@ -48,7 +48,7 @@ credential manifest from the OS Caracal config directory. Use explicit
 secret-file paths and service URLs only for cloud deployments, containers, or
 custom infrastructure.
 
-## Core service env keys
+## Core Service Environment Keys
 
 | Key | Services |
 | --- | --- |
@@ -62,11 +62,15 @@ custom infrastructure.
 | `CARACAL_ADMIN_TOKEN` / `CARACAL_ADMIN_TOKEN_FILE` | API and management clients. |
 | `CARACAL_COORDINATOR_TOKEN` / `CARACAL_COORDINATOR_TOKEN_FILE` | Coordinator and Console agent/delegation views. |
 
-## Deployment values
+## Deployment Values
 
 Helm values live under `infra/helm/caracal/values.yaml`. Compose environment and secrets are defined by `infra/docker/docker-compose.yml` and `infra/docker/runtime-compose.yml`.
 
-## Related pages
+## Next Step
+
+Use [Configuration Order](/reference/config-precedence/) to understand which file, environment variable, or deployment value wins.
+
+## Related Pages
 
 - [Configure Workloads](/runtime-console/config-file/)
 - [Configure Service Environment](/operations/env-vars/)

@@ -130,7 +130,7 @@ const sections: Record<string, string[]> = {
   ],
   'API Reference': ['api', 'api/control-plane', 'api/coordinator', 'api/sts', 'api/gateway', 'api/event-topics'],
   'Security': ['security', 'security/threat-model', 'security/hardening', 'security/disclosure'],
-  'Reference': ['reference', 'enterprise', 'reference/glossary', 'reference/errors', 'reference/configuration', 'reference/config-precedence', 'reference/defaults-and-limits', 'reference/compatibility'],
+  'Reference': ['reference', 'reference/faq', 'reference/glossary', 'reference/errors', 'reference/configuration', 'reference/config-precedence', 'reference/defaults-and-limits', 'reference/runtime-exit-codes', 'reference/compatibility', 'reference/release-package-runtime-map', 'reference/interoperability-contracts', 'enterprise'],
   'Contributing': ['contributing', 'contributing/setup', 'contributing/style', 'contributing/workflow', 'contributing/testing', 'contributing/governance', 'contributing/release'],
 }
 

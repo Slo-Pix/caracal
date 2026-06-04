@@ -17,7 +17,7 @@ pageType: reference
 | Postgres | `5432` |
 | Redis | `6379` |
 
-## Token and authority lifetimes
+## Token and Authority Lifetimes
 
 | Limit | Default |
 | --- | --- |
@@ -29,7 +29,7 @@ pageType: reference
 | Runtime step-up polling | every 2 seconds for up to 5 minutes |
 | Gateway expiring-token preflight window | 35 seconds |
 
-## Service limits
+## Service Limits
 
 | Limit | Default |
 | --- | --- |
@@ -46,7 +46,7 @@ pageType: reference
 | Control rate window | 60 seconds |
 | Control replay TTL | 3600 seconds |
 
-## Storage and stream defaults
+## Storage and Stream Defaults
 
 | Default | Value |
 | --- | --- |
@@ -58,7 +58,7 @@ pageType: reference
 | Redis audit DLQ intended max length | 100,000 |
 | Redis policy/revocation/key stream intended max length | 10,000 |
 
-## Helm defaults
+## Helm Defaults
 
 | Service | Replicas | Max HPA replicas |
 | --- | --- | --- |
@@ -68,3 +68,7 @@ pageType: reference
 | Audit | 2 | 8 |
 | Coordinator | 2 | 8 |
 | Control | disabled | 2 when enabled |
+
+## Next Step
+
+Use [CLI Exit Codes](/reference/runtime-exit-codes/) when automating top-level `caracal` runtime commands.

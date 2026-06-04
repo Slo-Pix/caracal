@@ -1,10 +1,10 @@
 ---
-title: Release and Package Versions
+title: Release Map
 description: Release, package, runtime, and service image naming map.
 pageType: reference
 ---
 
-## Repository release surfaces
+## Repository Release Surfaces
 
 | Surface | Current source |
 | --- | --- |
@@ -14,7 +14,7 @@ pageType: reference
 | Helm chart | `infra/helm/caracal/Chart.yaml` and values files. |
 | Docs build | `docs/package.json`. |
 
-## Service images
+## Service Images
 
 | Component | Image name |
 | --- | --- |
@@ -29,7 +29,7 @@ pageType: reference
 
 Runtime Compose references `${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}<image>:v${CARACAL_VERSION}`.
 
-## Published package names
+## Published Package Names
 
 | Area | TypeScript | Python | Go |
 | --- | --- | --- | --- |
@@ -40,8 +40,12 @@ Runtime Compose references `${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}<image>:v$
 | MCP transport | `@caracalai/transport-mcp` | `caracalai-transport-mcp` | `github.com/garudex-labs/caracal/packages/transport/mcp/go` |
 | A2A transport | `@caracalai/transport-a2a` | Not published in this repository | Not published in this repository |
 
-## Versioning notes
+## Versioning Notes
 
 - Pin exact image tags in production values.
 - Run migration and readiness validation after image or chart changes.
 - Do not use product-management runtime CLI aliases as release surfaces; management automation belongs to Control/Admin APIs.
+
+## Next Step
+
+Use [Wire Contracts](/reference/interoperability-contracts/) when validating SDK, connector, exporter, or provider-plugin compatibility.

@@ -31,9 +31,13 @@ Use these terms consistently across docs, API names, Console labels, and example
 | Subject session | Original authenticated user or service context that initiates a chain of agent authority. |
 | Zone | Tenant and trust boundary for product state, policies, grants, sessions, and audit. |
 
-## Naming rules
+## Naming Rules
 
 - Use `Caracal`, not informal product nicknames.
 - Use `mandate` for Caracal-issued JWT authority, not generic “token” when the distinction matters.
 - Use `Console` for the terminal UI and `Control API` for automation.
 - Use top-level `caracal` only for runtime lifecycle and `caracal run`.
+
+## Next Step
+
+Use [Error Codes](/reference/errors/) when a service, SDK, Gateway, or verifier returns a machine-readable error.

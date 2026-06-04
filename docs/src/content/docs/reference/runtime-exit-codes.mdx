@@ -1,12 +1,12 @@
 ---
-title: Runtime Exit Codes
+title: CLI Exit Codes
 description: Exit behavior for top-level caracal runtime CLI commands and Console launch.
 pageType: reference
 ---
 
 Top-level `caracal` commands are limited to local runtime lifecycle, status, purge, `run`, and Console launch.
 
-## Exit behavior
+## Exit Behavior
 
 | Command | Success | Failure |
 | --- | --- | --- |
@@ -18,11 +18,15 @@ Top-level `caracal` commands are limited to local runtime lifecycle, status, pur
 | `caracal run -- <command>` | Child process exit code after credentials are acquired. | Non-zero before spawn when config, credential exchange, step-up, or governance fails. |
 | `caracal console` | Console process exit code. | Non-zero when Console launcher or TTY requirements fail. |
 
-## Structured output
+## Structured Output
 
 `caracal status --json` emits machine-readable status. Console-owned diagnostics are available through the Console `diagnostics` view and management command catalog, not as top-level runtime CLI workflows.
 
-## Related pages
+## Next Step
+
+Use [Compatibility](/reference/compatibility/) before changing supported runtime, package manager, deployment, or docs build targets.
+
+## Related Pages
 
 - [Choose the Right Surface](/runtime-console/cli-and-console/)
 - [Start and Check the Stack](/runtime-console/stack/)

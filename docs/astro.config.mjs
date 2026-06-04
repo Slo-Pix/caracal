@@ -412,18 +412,36 @@ export default defineConfig({
           label: 'Reference',
           collapsed: true,
           items: [
-            { label: 'Overview', link: '/reference/' },
-            { label: 'Frequently Asked Questions', link: '/reference/faq/' },
-            { label: 'Enterprise Edition', link: '/enterprise/' },
-            { label: 'Glossary', link: '/reference/glossary/' },
-            { label: 'Error Reference', link: '/reference/errors/' },
-            { label: 'Configuration Reference', link: '/reference/configuration/' },
-            { label: 'Configuration Precedence', link: '/reference/config-precedence/' },
-            { label: 'Defaults and Limits', link: '/reference/defaults-and-limits/' },
-            { label: 'Runtime Exit Codes', link: '/reference/runtime-exit-codes/' },
-            { label: 'Compatibility Matrix', link: '/reference/compatibility/' },
-            { label: 'Release and Package Versions', link: '/reference/release-package-runtime-map/' },
-            { label: 'Interoperability Contracts', link: '/reference/interoperability-contracts/' },
+            { label: 'Use Reference', link: '/reference/' },
+            {
+              label: 'Find Answers',
+              collapsed: true,
+              items: [
+                { label: 'FAQ', link: '/reference/faq/' },
+                { label: 'Glossary', link: '/reference/glossary/' },
+                { label: 'Error Codes', link: '/reference/errors/' },
+              ],
+            },
+            {
+              label: 'Configure and Run',
+              collapsed: true,
+              items: [
+                { label: 'Configuration Keys', link: '/reference/configuration/' },
+                { label: 'Configuration Order', link: '/reference/config-precedence/' },
+                { label: 'Defaults and Limits', link: '/reference/defaults-and-limits/' },
+                { label: 'CLI Exit Codes', link: '/reference/runtime-exit-codes/' },
+              ],
+            },
+            {
+              label: 'Versions and Contracts',
+              collapsed: true,
+              items: [
+                { label: 'Compatibility', link: '/reference/compatibility/' },
+                { label: 'Release Map', link: '/reference/release-package-runtime-map/' },
+                { label: 'Wire Contracts', link: '/reference/interoperability-contracts/' },
+              ],
+            },
+            { label: 'Compare Editions', link: '/enterprise/' },
           ],
         },
         {

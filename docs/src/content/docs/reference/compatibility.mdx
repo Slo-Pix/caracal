@@ -1,10 +1,10 @@
 ---
-title: Compatibility Matrix
+title: Compatibility
 description: Supported runtimes, package manager, service deployment targets, and docs build assumptions.
 pageType: reference
 ---
 
-## Language runtimes
+## Language Runtimes
 
 | Area | Current target |
 | --- | --- |
@@ -13,7 +13,7 @@ pageType: reference
 | Go modules | Go `1.26` where modules declare a version. |
 | Root package manager | `pnpm@11.1.1`. |
 
-## Deployment targets
+## Deployment Targets
 
 | Target | Source |
 | --- | --- |
@@ -22,14 +22,18 @@ pageType: reference
 | Kubernetes | `infra/helm/caracal`. |
 | Docs site | Astro `^6.3.1` and Starlight `0.39.2`. |
 
-## Platform notes
+## Platform Notes
 
 - Runtime and Console binaries are documented for Linux, macOS, and Windows launchers where release packaging provides them.
 - Local OSS ports must remain distinct from any enterprise product ports.
 - Published modes are `rc` and `stable`; both enforce stricter service config.
 
-## Related pages
+## Next Step
 
-- [Release and Package Versions](/reference/release-package-runtime-map/)
+Use [Release Map](/reference/release-package-runtime-map/) to map product versions to packages, images, and release surfaces.
+
+## Related Pages
+
+- [Release Map](/reference/release-package-runtime-map/)
 - [Deploy with Helm](/operations/kubernetes-helm/)
 - [Set Up Locally](/contributing/setup/)

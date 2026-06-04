@@ -1,10 +1,10 @@
 ---
-title: Configuration Precedence
+title: Configuration Order
 description: How Caracal chooses runtime profiles, environment values, file secrets, and deployment values.
 pageType: config
 ---
 
-## Runtime workload config
+## Runtime Workload Config
 
 `caracal run` and SDK loaders use this order:
 
@@ -15,7 +15,7 @@ pageType: config
 
 The runtime does not read `./caracal.toml` from the current working directory.
 
-## Environment runtime config detection
+## Environment Runtime Config Detection
 
 Environment config is considered when workload identity variables are present.
 Local dev and stable launches use `CARACAL_ZONE_ID` and
@@ -32,11 +32,11 @@ Resource bindings resolve from profile credentials, then
 same resource ID override earlier bindings, so a short environment override can
 replace one entry from a mounted JSON file without duplicating the file.
 
-## File-secret resolution
+## File-Secret Resolution
 
 Services support `*_FILE` variants for configured secret keys. File values are resolved before validation so deployment templates can mount secrets instead of placing sensitive material directly in environment variables.
 
-## Deployment values
+## Deployment Values
 
 | Deployment path | Precedence model |
 | --- | --- |
@@ -51,3 +51,7 @@ Services support `*_FILE` variants for configured secret keys. File values are r
 | Expected profile is ignored | `CARACAL_CONFIG` may point elsewhere or environment runtime config may be winning. |
 | Service fails with missing secret | Confirm the `*_FILE` variable name is supported by that service and the file is readable. |
 | Helm values render unexpected defaults | Check values file order and CLI overrides. |
+
+## Next Step
+
+Use [Defaults and Limits](/reference/defaults-and-limits/) to confirm ports, TTLs, request limits, and stream defaults.
