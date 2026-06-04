@@ -236,6 +236,7 @@ export default defineConfig({
             { label: 'Key Management and Rotation', link: '/operations/key-management/' },
             { label: 'Scale and Capacity Guidance', link: '/operations/scale-capacity/' },
             { label: 'Observability and Health', link: '/operations/observability/' },
+            { label: 'Troubleshooting Decision Tree', link: '/operations/troubleshooting/' },
             { label: 'Operator Debugging', link: '/operations/debugging/' },
             { label: 'Alerting Recipes', link: '/operations/alerts/' },
             { label: 'Failure Modes and Recovery', link: '/operations/failure-modes/' },

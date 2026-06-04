@@ -165,7 +165,7 @@ func main() {
 | `gatewayRequest()` / `GatewayRequest()` | Builds the Gateway URL and `X-Caracal-Resource` header for explicit resource routing. |
 | `transport()` / `Transport()` | Injects Caracal context, authorization, trace, and baggage headers on outbound calls. |
 
-If policy denies the exchange, STS returns HTTP 403 and the SDK surfaces an error. Open the Console **audit** or **explain** flow with the request ID to see the policy and diagnostics that determined the result.
+If policy denies the exchange, STS returns HTTP 403 and the SDK surfaces an error. Open the Console **audit** or **explain** flow with the request ID to see the policy and diagnostics that determined the result. If you cannot tell which surface failed, use the [Troubleshooting Decision Tree](/operations/troubleshooting/).
 
 ## Next step
 

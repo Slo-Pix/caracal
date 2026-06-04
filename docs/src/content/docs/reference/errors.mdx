@@ -15,35 +15,42 @@ Caracal packages and services use a shared machine-readable error shape.
 }
 ```
 
-`details` appears only when a service or package provides structured context.
+`details` appears only when a service or package provides structured context. The same code can be emitted by different surfaces — an `access_denied` from STS is a policy decision, while an `access_denied` surfaced by an in-process verifier is a missing scope on an otherwise valid mandate. Use the `requestId` with Console **request trace** to confirm which surface produced the error before acting.
 
 ## Well-known codes
 
-| Code | Meaning |
-| --- | --- |
-| `access_denied` | Request is authenticated but not authorized. |
-| `invalid_token` | Token is missing, malformed, expired, invalid, replayed, or fails verification. |
-| `resource_not_found` | Requested resource does not exist or is unavailable in the current scope. |
-| `internal_error` | Service failed unexpectedly. |
-| `policy_eval_failed` | Policy evaluation failed. |
-| `provider_rate_limited` | Provider or provider coordination rate limit denied work. |
-| `interaction_required` | Step-up challenge is required. |
-| `sts_unavailable` | STS could not satisfy an exchange. |
-| `credential_expired_not_renewable` | Credential is too close to expiry or cannot be renewed. |
-| `payload_too_large` | Request body or token exceeded the configured limit. |
-| `zone_invalid` | Zone claim or route zone is invalid. |
-| `scope_insufficient` | Required scope is missing. |
-| `agent_identity_required` | A verifier requires an agent identity. |
-| `delegation_required` | A verifier requires delegated authority. |
-| `chain_mismatch` | Delegation chain does not contain a required application/session. |
-| `hop_count_exceeded` | Delegation hop count exceeds the allowed maximum. |
-| `http_request_failed` | HTTP call failed before a valid response could be used. |
-| `config_missing` | Runtime or service configuration is missing. |
+The **Likely source** column names the surface that most often emits the code, and **First check** is the fastest thing to confirm. When a call fails, start from the surface, not the code.
+
+| Code | Meaning | Likely source | First check |
+| --- | --- | --- | --- |
+| `access_denied` | Request is authenticated but not authorized. | STS policy decision, or an in-process verifier scope check. | Run `request trace`: confirm the active policy set allows the application, subject, resource, and scopes. |
+| `invalid_token` | Token is missing, malformed, expired, invalid, replayed, or fails verification. | Gateway or a resource verifier. | Confirm the mandate is unexpired, the verifier trusts the issuing zone JWKS, and the token was not already consumed. |
+| `resource_not_found` | Requested resource does not exist or is unavailable in the current scope. | API, or Gateway binding resolution. | Confirm the resource identifier and that a Gateway binding exists for `(zone, resource)`. |
+| `internal_error` | Service failed unexpectedly. | Any service. | Check service readiness and logs for the `requestId`. |
+| `policy_eval_failed` | Policy evaluation failed. | STS policy engine. | Confirm the active policy set compiles and that required `input` fields are present. |
+| `provider_rate_limited` | Provider or provider coordination rate limit denied work. | Gateway upstream or provider coordination. | Inspect provider limits and retry/backoff; confirm the provider grant is active. |
+| `interaction_required` | Step-up challenge is required. | STS step-up gate. | Complete the step-up flow; see [Step-Up Re-Authentication](/guides/step-up/). |
+| `sts_unavailable` | STS could not satisfy an exchange. | STS, or Gateway's STS circuit. | Run `caracal status --ready`; confirm STS readiness, JWKS, and policy bundle freshness. |
+| `credential_expired_not_renewable` | Credential is too close to expiry or cannot be renewed. | STS provider-token refresh. | Reconnect the provider grant; confirm OAuth refresh configuration. |
+| `payload_too_large` | Request body or token exceeded the configured limit. | Gateway or API preflight. | Reduce payload size or adjust the configured limit. |
+| `zone_invalid` | Zone claim or route zone is invalid. | Gateway or STS. | Confirm the request targets the correct zone and the mandate carries a matching zone claim. |
+| `scope_insufficient` | Required scope is missing. | A resource verifier, or Gateway. | Confirm the resource defines the scope and the active policy authorizes it for this subject. |
+| `agent_identity_required` | A verifier requires an agent identity. | In-process verifier or MCP transport. | Run the call from an agent session, not a bare subject session. |
+| `delegation_required` | A verifier requires delegated authority. | In-process verifier. | Confirm the call carries a delegation edge granting the required scopes. |
+| `chain_mismatch` | Delegation chain does not contain a required application/session. | Verifier delegation check. | Inspect the delegation edge in the Console; confirm the chain includes the required hop. |
+| `hop_count_exceeded` | Delegation hop count exceeds the allowed maximum. | Coordinator or verifier. | Reduce delegation depth or raise the configured hop limit. |
+| `http_request_failed` | HTTP call failed before a valid response could be used. | SDK or Gateway upstream call. | Confirm endpoint URL, network reachability, and upstream allowlist. |
+| `config_missing` | Runtime or service configuration is missing. | SDK or service startup. | Confirm the runtime profile, secret file, and required environment variables. |
 
 Transport packages may map these codes into framework-specific HTTP responses.
 
+## When you do not know where it failed
+
+If you only have an SDK error and not the surface, start from the symptom-first [Troubleshooting Decision Tree](/operations/troubleshooting/). It routes a denied or failing call to the right surface, the object to inspect, and the diagnostic tool to use.
+
 ## Related pages
 
+- [Troubleshooting Decision Tree](/operations/troubleshooting/)
+- [Operator Debugging](/operations/debugging/)
 - [MCP Transport](/sdks/transport-mcp/)
 - [Gateway Behavior](/api/gateway/)
-- [Operator Debugging](/operations/debugging/)
