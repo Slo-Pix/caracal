@@ -1,0 +1,14 @@
+{
+  "name": "@caracal-examples/policy-iterate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Turns a denied request into a reproducible policy-set simulation so teams can iterate policies from real audit data.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "iterate": "node run.mjs",
+    "test": "node --test"
+  }
+}
