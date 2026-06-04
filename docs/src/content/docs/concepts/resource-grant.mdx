@@ -1,5 +1,5 @@
 ---
-title: Resource and Grant
+title: Resources and Grants
 description: Resources expose protected targets and scopes; grants bind principals to subsets of those scopes.
 sidebar:
   order: 6
@@ -40,7 +40,7 @@ A grant binds:
 
 Grants are not the final decision. They are one input to policy. The active policy set can still deny, require step-up, or constrain the exchange.
 
-## Exchange relationship
+## Exchange Relationship
 
 ```mermaid
 flowchart LR
@@ -52,7 +52,7 @@ flowchart LR
   STS -->|"allow"| Mandate["Mandate with resource and scopes"]
 ```
 
-## Scope design
+## Scope Design
 
 Prefer small, action-oriented scopes:
 
@@ -68,9 +68,12 @@ Use resource identifiers for targets and scopes for actions. Do not encode envir
 [How should I design scopes?](/reference/faq/#faq-scope-design) and [do I manage grants directly?](/reference/faq/#faq-do-i-manage-grants-directly)
 :::
 
-## Related pages
+## Next Step
+
+Read [Policies and Policy Sets](/concepts/policy/) to understand how grants become allow, deny, or step-up decisions.
+
+## Related Pages
 
 - [Define Resources and Providers](/guides/resources-providers/)
 - [Model Your Application in Caracal](/guides/modeling-recipes/)
 - [Debug Authorization Decisions](/guides/authorize-access/)
-- [Policy](/concepts/policy/)

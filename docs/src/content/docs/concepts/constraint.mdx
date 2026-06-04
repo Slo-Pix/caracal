@@ -1,5 +1,5 @@
 ---
-title: Typed Delegation Constraints
+title: Delegation Constraints
 description: Resource, TTL, hop, budget, and approval restrictions that travel with a delegation edge.
 sidebar:
   order: 10
@@ -7,7 +7,7 @@ sidebar:
 
 Typed constraints make delegated authority explicit. They are stored on delegation edges and evaluated by policy, SDK context, and resource-server verification.
 
-## Constraint types
+## Constraint Types
 
 | Constraint | Use it to limit |
 | --- | --- |
@@ -19,7 +19,7 @@ Typed constraints make delegated authority explicit. They are stored on delegati
 | Approval | Whether policy or a reviewer has approved a sensitive edge. |
 | Chain membership | Which applications must appear in the delegation path. |
 
-## Example shape
+## Example Shape
 
 ```json
 {
@@ -34,7 +34,7 @@ Typed constraints make delegated authority explicit. They are stored on delegati
 
 The exact constraint object can vary by policy design, but it should stay typed, stable, and auditable.
 
-## Where constraints are enforced
+## Where Constraints Are Enforced
 
 ```mermaid
 flowchart TD
@@ -45,7 +45,7 @@ flowchart TD
   Mandate --> Connector["Gateway or connector checks claims"]
 ```
 
-## Design guidance
+## Design Guidance
 
 - Put durable business rules in policy.
 - Put per-edge runtime limits in constraints.
@@ -53,8 +53,12 @@ flowchart TD
 - Keep constraints small enough to review in audit traces.
 - Use consistent field names across agents so policies stay readable.
 
-## Related pages
+## Next Step
 
-- [Delegation Graph](/concepts/delegation/)
-- [Policy](/concepts/policy/)
+Read [Sessions and Revocation](/concepts/sessions-revocation/) to understand how active authority ends.
+
+## Related Pages
+
+- [Agent Delegation](/concepts/delegation/)
+- [Policies and Policy Sets](/concepts/policy/)
 - [Implement Multi-Agent Delegation](/guides/delegation/)

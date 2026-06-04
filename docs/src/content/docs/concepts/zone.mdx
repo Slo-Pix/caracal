@@ -1,5 +1,5 @@
 ---
-title: Zone
+title: Zones
 description: The tenancy boundary that owns policies, keys, resources, sessions, and audit.
 sidebar:
   order: 4
@@ -7,7 +7,7 @@ sidebar:
 
 A zone is the main isolation boundary in Caracal. It groups the configuration and runtime state needed to decide, issue, verify, revoke, and audit authority.
 
-## What a zone owns
+## What a Zone Owns
 
 | Area | Zone-owned data |
 | --- | --- |
@@ -17,7 +17,7 @@ A zone is the main isolation boundary in Caracal. It groups the configuration an
 | Delegation | Delegation edges, constraints, depth limits, and cascade revocation state. |
 | Audit | Decision events, diagnostics, request IDs, and explain traces. |
 
-## Why zones exist
+## Why Zones Exist
 
 Zones let teams run separate environments, tenants, or trust domains without mixing authority data.
 
@@ -34,7 +34,7 @@ When several boundaries could apply at once, use [Model Your Application in Cara
 [What should a zone represent?](/reference/faq/#faq-what-should-a-zone-represent)
 :::
 
-## Zone lifecycle
+## Zone Lifecycle
 
 ```mermaid
 flowchart LR
@@ -48,20 +48,23 @@ flowchart LR
 
 Zone setup is normally managed through the Console. The Admin API exposes the same objects for automation.
 
-## Key and policy isolation
+## Key and Policy Isolation
 
 Each zone has its own signing-key and JWKS context. Resource servers verify mandates against the issuer, audience, and expected zone. Policy activation is also zone-scoped: activating a policy set in one zone does not affect another zone.
 
-## Operational guidance
+## Operational Guidance
 
 - Keep production and non-production authority in separate zones.
 - Name zones after the trust boundary, not a single service.
 - Keep resource identifiers stable because policies, grants, and audit traces refer to them.
 - Rotate zone signing keys using the operations workflow, then confirm resource servers load the current JWKS.
 
-## Related pages
+## Next Step
 
-- [Principal and Application](/concepts/principal/)
-- [Resource and Grant](/concepts/resource-grant/)
+Read [Identities and Applications](/concepts/principal/) to understand who acts inside a zone.
+
+## Related Pages
+
+- [Resources and Grants](/concepts/resource-grant/)
 - [Model Your Application in Caracal](/guides/modeling-recipes/)
-- [Audit Ledger](/concepts/audit-ledger/)
+- [Audit and Request Traces](/concepts/audit-ledger/)

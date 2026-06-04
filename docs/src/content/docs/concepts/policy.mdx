@@ -1,5 +1,5 @@
 ---
-title: Policy
+title: Policies and Policy Sets
 description: Versioned Rego documents evaluated by OPA inside the STS at token-exchange time.
 sidebar:
   order: 7
@@ -7,7 +7,7 @@ sidebar:
 
 Policies decide whether the STS may issue a mandate. They are written in Rego, versioned immutably, bundled into policy sets, and activated per zone.
 
-## Policy objects
+## Policy Objects
 
 | Object | Purpose |
 | --- | --- |
@@ -17,7 +17,7 @@ Policies decide whether the STS may issue a mandate. They are written in Rego, v
 | Policy set version | A specific manifest of policy versions. |
 | Active policy set version | The version the STS evaluates for a zone. |
 
-## Decision contract
+## Decision Contract
 
 Caracal policies return a `result` object from `package caracal.authz`.
 
@@ -57,7 +57,7 @@ Example input values:
 | `input.context.requested_scopes` | `["payments:read", "payments:write"]` |
 | `input.delegation_edge` | Present when authority was delegated from another agent session. |
 
-## Common input areas
+## Common Input Areas
 
 | Input area | Contains | Common check |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ Example input values:
 | `input.grant` | Matching grant data when available. | Enforce grant expiry and scope bounds. |
 | `input.delegation_edge` | Delegation path and typed constraints when exchange is delegated. | Enforce hop count, chain match, and constraint limits. |
 
-## Policy outcomes
+## Policy Outcomes
 
 | Outcome | Effect |
 | --- | --- |
@@ -78,7 +78,7 @@ Example input values:
 
 Step-up is expressed as a diagnostic such as `{"step_up_required": "mfa"}`. The STS creates a challenge and expects a later exchange with the challenge proof.
 
-## Authoring rules
+## Authoring Rules
 
 - Keep policies deterministic and side-effect free.
 - Use the Console or Admin API validation endpoint before activation.
@@ -86,8 +86,11 @@ Step-up is expressed as a diagnostic such as `{"step_up_required": "mfa"}`. The 
 - Use diagnostics to explain denies and step-up triggers.
 - Keep reusable decision logic in separate policy versions only when it improves ownership or review.
 
-## Related pages
+## Next Step
+
+Read [Step-Up Challenges](/concepts/step-up/) to understand how policies pause sensitive exchanges for fresh proof.
+
+## Related Pages
 
 - [Author a Rego Policy](/guides/author-policy/)
 - [Activate a Policy Set](/guides/activate-policy-set/)
-- [Step-Up Challenge](/concepts/step-up/)

@@ -1,5 +1,5 @@
 ---
-title: Step-Up Challenge
+title: Step-Up Challenges
 description: How policies require fresh proof of authority for sensitive resources.
 sidebar:
   order: 13
@@ -9,7 +9,7 @@ Step-up is Caracal's way to pause a token exchange and require fresh proof befor
 
 Policy triggers step-up by returning a diagnostic such as `{"step_up_required": "mfa"}`. The STS converts that diagnostic into an `interaction_required` error with a challenge ID.
 
-## Step-up flow
+## Step-Up Flow
 
 ```mermaid
 sequenceDiagram
@@ -37,7 +37,7 @@ sequenceDiagram
 | Console or Admin API | Lists, inspects, and satisfies challenges after an external proof step. |
 | SDK or OAuth client | Surfaces `interaction_required` so the application can guide the user or operator. |
 
-## Challenge lifecycle
+## Challenge Lifecycle
 
 | State | Meaning |
 | --- | --- |
@@ -46,7 +46,7 @@ sequenceDiagram
 | Consumed | STS accepted the proof during retry and issued the mandate. |
 | Expired or invalid | The challenge can no longer be used. |
 
-## Design guidance
+## Design Guidance
 
 - Use step-up for high-risk resources, sensitive scopes, or unusual context.
 - Keep the proof step outside policy; policy should decide that proof is needed, not perform the proof.
@@ -54,8 +54,12 @@ sequenceDiagram
 - Include enough diagnostics for the Console and audit views to explain the requirement.
 - Retry token exchange only after the challenge is satisfied.
 
-## Related pages
+## Next Step
+
+Read [Mandates](/concepts/mandate/) to understand what the STS issues after an exchange is allowed or satisfied.
+
+## Related Pages
 
 - [Step-Up Re-Authentication](/guides/step-up/)
-- [Policy](/concepts/policy/)
-- [Audit Ledger](/concepts/audit-ledger/)
+- [Policies and Policy Sets](/concepts/policy/)
+- [Audit and Request Traces](/concepts/audit-ledger/)

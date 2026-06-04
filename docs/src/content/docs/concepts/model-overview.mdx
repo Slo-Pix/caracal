@@ -1,5 +1,5 @@
 ---
-title: One-Minute Model
+title: Caracal Mental Model
 description: Six nouns, three verbs, and one decision point that explain Caracal.
 sidebar:
   order: 2
@@ -23,7 +23,7 @@ flowchart TD
   Mandate --> Audit
 ```
 
-## Six nouns
+## Six Core Nouns
 
 | Noun | What it means |
 | --- | --- |
@@ -34,9 +34,9 @@ flowchart TD
 | Policy | Rego logic that evaluates the requested exchange. |
 | Mandate | The short-lived JWT that proves authority to a Gateway or connector. |
 
-You configure these directly. A *grant* — a permission binding for resource scopes — is an internal input that policy can read during evaluation, not a separate object you manage in the Console.
+Most of these are configured directly. A *grant* is a permission binding for resource scopes that policy can read during evaluation; it is not the mandate a resource server verifies.
 
-## Three verbs
+## Three Runtime Verbs
 
 | Verb | Meaning |
 | --- | --- |
@@ -44,17 +44,17 @@ You configure these directly. A *grant* — a permission binding for resource sc
 | Spawn | Open an agent session derived from a subject session. |
 | Delegate | Pass constrained authority from one agent session to another. |
 
-## One decision point
+## One Decision Point
 
 The STS is the decision point. It evaluates the active policy set with the principal, session, resource, scopes, grant, delegation edge, and step-up context. If policy allows the request, the STS signs a mandate. If policy denies the request, no mandate is issued.
 
 Resource servers still verify mandates locally through the Gateway or connectors. That keeps every request protected even after token exchange succeeds.
 
-## Why this model matters
+## Why This Model Matters
 
 - Long-lived provider secrets stay out of agents.
 - Authority expires quickly and can be revoked.
 - Delegation carries typed constraints instead of informal trust.
 - Every allow, deny, step-up, and revocation path is auditable.
 
-Next, read [Authority Model](/concepts/authority-model/) to see where each enforcement layer fits.
+Next, read [Authority and Enforcement](/concepts/authority-model/) to see where each enforcement layer fits.

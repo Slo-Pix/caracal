@@ -1,5 +1,5 @@
 ---
-title: Mandate
+title: Mandates
 description: The short-lived, signed JWT that carries approved session or resource authority.
 sidebar:
   order: 8
@@ -7,7 +7,7 @@ sidebar:
 
 A mandate is the token Caracal issues after the STS approves an exchange. It is a short-lived JWT signed with the zone signing key and verified by the Gateway or resource connectors.
 
-## What a mandate proves
+## What a Mandate Proves
 
 A valid mandate proves:
 
@@ -18,7 +18,7 @@ A valid mandate proves:
 - whether authority came from an agent session or delegation edge;
 - when the authority expires.
 
-## Issuance path
+## Issuance Path
 
 ```mermaid
 flowchart LR
@@ -29,7 +29,7 @@ flowchart LR
   Verify --> Resource["Protected resource"]
 ```
 
-## Mandate use
+## Mandate Use
 
 | Use | Verification focus |
 | --- | --- |
@@ -38,13 +38,13 @@ flowchart LR
 | SDK outbound call | Context propagation and mandate header injection. |
 | Delegated exchange | Agent session, delegation edge, scopes, hop count, and constraints. |
 
-## Mandates are not API keys
+## Mandates Are Not API Keys
 
 Mandates are intentionally short lived and context bound. They should not be stored as durable credentials, copied into configuration files, or reused across unrelated resources.
 
 Resource servers should always verify a mandate at request time. Verification includes signature and claim checks plus revocation-anchor checks for the session, root session, agent session, and delegation edge when present.
 
-## Failure modes
+## Failure Modes
 
 | Failure | Meaning |
 | --- | --- |
@@ -56,7 +56,11 @@ Resource servers should always verify a mandate at request time. Verification in
 | `chain_mismatch` | The delegation chain does not include the required application. |
 | `hop_count_exceeded` | The delegation path exceeds the configured hop limit. |
 
-## Related pages
+## Next Step
+
+Read [Agent Delegation](/concepts/delegation/) to understand how agent sessions pass bounded authority.
+
+## Related Pages
 
 - [Sessions and Revocation](/concepts/sessions-revocation/)
 - [Protect an MCP Server](/guides/protect-mcp/)

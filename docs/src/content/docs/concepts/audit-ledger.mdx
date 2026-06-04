@@ -1,5 +1,5 @@
 ---
-title: Audit Ledger
+title: Audit and Request Traces
 description: Decision events and diagnostics that explain Caracal authority.
 sidebar:
   order: 12
@@ -7,7 +7,7 @@ sidebar:
 
 The audit ledger records what Caracal decided, why it decided it, and which request or run produced the event.
 
-## What gets audited
+## What Gets Audited
 
 | Event area | Examples |
 | --- | --- |
@@ -18,7 +18,7 @@ The audit ledger records what Caracal decided, why it decided it, and which requ
 | Sessions | Spawn, terminate, revoke, expire. |
 | Administration | Zone, application, resource, provider, grant, and challenge changes. |
 
-## Audit flow
+## Audit Flow
 
 ```mermaid
 flowchart LR
@@ -31,7 +31,7 @@ flowchart LR
   Postgres --> API["Admin API audit endpoints"]
 ```
 
-## How to use audit
+## How to Use Audit
 
 | Question | Where to look |
 | --- | --- |
@@ -45,11 +45,15 @@ flowchart LR
 
 Request IDs tie multiple events together. Keep the request ID from an SDK, Gateway, STS error, or Console trace whenever debugging. The explain view uses it to collect related decision events and diagnostics.
 
-## Integrity and retention
+## Integrity and Retention
 
 Audit events should be treated as operational evidence. Configure retention, export, and SIEM forwarding according to your deployment requirements. Do not rely on local process logs as the only authority trail.
 
-## Related pages
+## Next Step
+
+Use [Guides](/guides/) when you are ready to apply the model.
+
+## Related Pages
 
 - [Tail and Query the Audit Stream](/guides/audit-stream/)
 - [Trace One Protected Request](/tutorials/inspect-a-run/)

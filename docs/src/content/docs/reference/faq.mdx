@@ -36,7 +36,7 @@ This FAQ collects high-friction questions that come up across the docs. Each ent
 
 Caracal gives agents and automated workflows short-lived, policy-approved authority instead of long-lived credentials. The agent asks for scoped authority at the moment it acts, STS evaluates policy, Gateway or a connector enforces the mandate, and Audit records the decision and result.
 
-See the [Authority Model](/concepts/authority-model/) and the [One-Minute Model](/concepts/model-overview/).
+See [Authority and Enforcement](/concepts/authority-model/) and the [Caracal Mental Model](/concepts/model-overview/).
 
 <a id="faq-is-caracal-an-idp-secrets-manager-or-api-gateway"></a>
 
@@ -78,7 +78,7 @@ Policy decisions consider all of them: which application is asking, which princi
 
 Use a managed application for durable software you intentionally operate: a backend service, Gateway application, orchestrator, or known agent runtime. Use DCR for spawned, high-churn, short-lived agent identities that need isolated credentials. Do not reuse one DCR application across multiple spawned agents.
 
-See [Principal and Application](/concepts/principal/).
+See [Identities and Applications](/concepts/principal/).
 
 ## Resources, scopes, and grants
 

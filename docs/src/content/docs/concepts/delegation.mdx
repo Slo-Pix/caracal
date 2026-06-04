@@ -1,5 +1,5 @@
 ---
-title: Delegation Graph
+title: Agent Delegation
 description: Directed, cycle-checked edges that pass scoped authority between agent sessions.
 sidebar:
   order: 9
@@ -9,7 +9,7 @@ Delegation lets one agent session pass a narrower, typed slice of authority to a
 
 It is represented as a graph of directed edges. Each edge connects a source session to a target session, carries scopes and constraints, and can be revoked independently.
 
-## Graph model
+## Graph Model
 
 ```mermaid
 flowchart LR
@@ -20,7 +20,7 @@ flowchart LR
   B -. cascade .-> C
 ```
 
-## Delegation edge fields
+## Delegation Edge Fields
 
 | Field | Purpose |
 | --- | --- |
@@ -41,7 +41,7 @@ flowchart LR
 - Revoking an upstream edge should invalidate downstream authority.
 - Resource servers should verify delegation claims when they require delegated access.
 
-## SDK relationship
+## SDK Relationship
 
 The SDKs expose the same pattern in each language:
 
@@ -53,8 +53,11 @@ The SDKs expose the same pattern in each language:
 
 These helpers propagate session and delegation context so later token exchanges include the correct graph proof.
 
-## Related pages
+## Next Step
 
-- [Typed Delegation Constraints](/concepts/constraint/)
+Read [Delegation Constraints](/concepts/constraint/) to understand the limits carried by each edge.
+
+## Related Pages
+
 - [Implement Multi-Agent Delegation](/guides/delegation/)
-- [Audit Ledger](/concepts/audit-ledger/)
+- [Audit and Request Traces](/concepts/audit-ledger/)

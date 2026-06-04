@@ -1,5 +1,5 @@
 ---
-title: Principal and Application
+title: Identities and Applications
 description: Applications, users, services, and agents that act inside a zone.
 sidebar:
   order: 5
@@ -7,7 +7,7 @@ sidebar:
 
 A principal is the acting identity. An application is the registered client or workload that authenticates and requests authority for that principal.
 
-## Principal types
+## Principal Types
 
 | Principal | Typical source | How Caracal sees it |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ A principal is the acting identity. An application is the registered client or w
 
 Principals are not enough on their own. A request also needs an application, session, resource, scopes, and policy approval.
 
-## Application roles
+## Application Roles
 
 Applications represent software that can participate in Caracal flows:
 
@@ -29,7 +29,7 @@ Applications represent software that can participate in Caracal flows:
 
 Applications have registration metadata, a server-owned token credential, and a registration method. Managed applications are operator-provisioned for known durable software. Dynamically registered applications are short-lived identities created through the zone DCR endpoint for spawned or high-churn agents.
 
-## Managed and DCR applications
+## Managed and DCR Applications
 
 | Method | Identity boundary | Operational rule |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Disabling DCR on a zone has two separate operational meanings. The zone flag alw
 
 Policies receive `input.principal.registration_method`, `input.principal.agent_session_id`, `input.principal.agent_kind`, and `input.principal.capabilities`, so policy authors can distinguish durable managed clients from ephemeral DCR clients without relying on SDK-specific behavior. Audit metadata records the application id, application name, registration method, agent session id, parent/delegation context, requested scopes, and resource for each token-exchange decision.
 
-## Sessions bind identity to time
+## Sessions Bind Identity to Time
 
 ```mermaid
 flowchart TD
@@ -61,7 +61,7 @@ flowchart TD
 
 Sessions make authority revocable. A mandate contains session anchors, and resource servers check those anchors through the revocation layer.
 
-## Naming guidance
+## Naming Guidance
 
 - Use **application** for registered software.
 - Use **principal** for the acting identity.
@@ -69,8 +69,12 @@ Sessions make authority revocable. A mandate contains session anchors, and resou
 - Use **subject session** for the original authenticated subject context.
 - Avoid using "client" unless you are describing OAuth protocol fields.
 
-## Related pages
+## Next Step
+
+Read [Resources and Grants](/concepts/resource-grant/) to understand what identities can request.
+
+## Related Pages
 
 - [Sessions and Revocation](/concepts/sessions-revocation/)
-- [Delegation Graph](/concepts/delegation/)
+- [Agent Delegation](/concepts/delegation/)
 - [Integrate the TypeScript SDK](/guides/sdk-typescript/)

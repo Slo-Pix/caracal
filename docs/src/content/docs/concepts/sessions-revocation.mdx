@@ -7,7 +7,7 @@ sidebar:
 
 Sessions make Caracal authority temporary and revocable. A mandate includes session anchors, and resource servers check those anchors before accepting the mandate.
 
-## Session types
+## Session Types
 
 | Session | Role |
 | --- | --- |
@@ -15,7 +15,7 @@ Sessions make Caracal authority temporary and revocable. A mandate includes sess
 | Agent session | Runtime context for a spawned agent. |
 | Delegated session | Agent session receiving constrained authority through a delegation edge. |
 
-## Revocation anchors
+## Revocation Anchors
 
 Resource servers check every relevant anchor:
 
@@ -26,7 +26,7 @@ Resource servers check every relevant anchor:
 
 If any anchor is revoked, the mandate should be rejected as `session_revoked`.
 
-## Revocation flow
+## Revocation Flow
 
 ```mermaid
 sequenceDiagram
@@ -44,7 +44,7 @@ sequenceDiagram
 
 The Redis stream name is `caracal.sessions.revoke`. Redis-backed connector packages can consume the stream and populate local revocation stores.
 
-## Cascade behavior
+## Cascade Behavior
 
 Revocation should follow authority:
 
@@ -53,12 +53,16 @@ Revocation should follow authority:
 - revoking a delegation edge invalidates downstream delegated authority;
 - revoking a grant prevents future exchange and can invalidate active sessions depending on workflow.
 
-## Resource-server responsibility
+## Resource-Server Responsibility
 
 The Gateway and connectors must be configured with a revocation store. For development, an in-memory store can be useful. For production, use a shared store and stream consumer so revocations propagate across resource-server instances.
 
-## Related pages
+## Next Step
 
-- [Mandate](/concepts/mandate/)
+Read [Audit and Request Traces](/concepts/audit-ledger/) to understand how decisions and requests are explained.
+
+## Related Pages
+
+- [Mandates](/concepts/mandate/)
 - [Protect an MCP Server](/guides/protect-mcp/)
 - [Tail and Query the Audit Stream](/guides/audit-stream/)

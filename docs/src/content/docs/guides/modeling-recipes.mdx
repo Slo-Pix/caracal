@@ -5,7 +5,7 @@ description: Map zones, applications, resources, providers, and scopes onto real
 
 The [concept pages](/concepts/) define each noun, and [Provider Recipes](/guides/provider-recipes/) give concrete upstream auth setups. This page helps you decide how to map your architecture onto Caracal before you create production objects.
 
-Every recipe states the modeling decision, what maps to each noun, and the trade-off. Use the [One-Minute Model](/concepts/model-overview/) as the vocabulary reference while you read.
+Every recipe states the modeling decision, what maps to each noun, and the trade-off. Use the [Caracal Mental Model](/concepts/model-overview/) as the vocabulary reference while you read.
 
 ## Choose the Zone Boundary
 
@@ -88,7 +88,7 @@ The principal type decides who the authority belongs to and which provider flow 
 | Upstream credential | Shared broker credential the agent never sees: `oauth2_client_credentials`, `api_key`, or `bearer_token`. | Per-user delegated consent: `oauth2_authorization_code`. |
 | Audit attribution | Application and agent session. | User subject plus the agent and delegation chain. |
 
-Policy can tell these apart with `input.principal.registration_method`, `input.principal.agent_session_id`, and `input.principal.capabilities`, so you author one policy set that handles both without SDK-specific branching. See [Principal and Application](/concepts/principal/).
+Policy can tell these apart with `input.principal.registration_method`, `input.principal.agent_session_id`, and `input.principal.capabilities`, so you author one policy set that handles both without SDK-specific branching. See [Identities and Applications](/concepts/principal/).
 
 ## Per-User OAuth or Shared Credential
 
@@ -111,9 +111,9 @@ After you map your architecture, confirm it end to end before relying on it:
 
 ## Related
 
-- [Zone](/concepts/zone/)
-- [Principal and Application](/concepts/principal/)
-- [Resource and Grant](/concepts/resource-grant/)
+- [Zones](/concepts/zone/)
+- [Identities and Applications](/concepts/principal/)
+- [Resources and Grants](/concepts/resource-grant/)
 - [Define Resources and Providers](/guides/resources-providers/)
 - [Provider Recipes](/guides/provider-recipes/)
 - [Production Integration Patterns](/guides/enterprise-runtime-patterns/)

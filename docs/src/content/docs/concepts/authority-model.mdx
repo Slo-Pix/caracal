@@ -1,5 +1,5 @@
 ---
-title: Authority Model
+title: Authority and Enforcement
 description: How Caracal enforces authority before a request reaches its target.
 sidebar:
   order: 3
@@ -10,7 +10,7 @@ Caracal separates **granting authority** from **using authority**.
 - The STS grants authority by issuing a short-lived mandate after policy evaluation.
 - The Gateway or connector uses authority by verifying the mandate before forwarding a request or running a tool.
 
-## Enforcement flow
+## Enforcement Flow
 
 ```mermaid
 sequenceDiagram
@@ -36,7 +36,7 @@ sequenceDiagram
   end
 ```
 
-## Layers of control
+## Control Layers
 
 | Layer | Responsibility | Source of truth |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ sequenceDiagram
 | Gateway or connector | Verifies mandate claims and revocation before use. | Runtime and resource server config |
 | Audit ledger | Records decisions, diagnostics, and request correlation. | API, Console, and storage |
 
-## Default posture
+## Default Posture
 
 Caracal should be treated as deny-by-default:
 
@@ -58,13 +58,13 @@ Caracal should be treated as deny-by-default:
 
 Missing configuration, invalid signatures, expired mandates, insufficient scopes, revoked sessions, and failed delegation checks all stop the request.
 
-## Gateway and connector roles
+## Gateway and Connector Roles
 
 Use the Gateway when you want Caracal to front an HTTP upstream and mediate requests centrally. Use a connector when the resource server should verify mandates inside its own framework, such as Express, FastMCP, net/http, or MCP transport.
 
 Both patterns share the same authority model. The difference is only where mandate verification runs.
 
-## Enforce, propagate, or attribute
+## Enforce, Propagate, or Attribute
 
 The SDK exposes several call paths. They are not interchangeable: each does a different job, and only some **enforce** authority. Pick by what you need at that boundary.
 
@@ -78,8 +78,12 @@ The SDK exposes several call paths. They are not interchangeable: each does a di
 
 Rule of thumb: **use the Gateway or a connector verifier to enforce; use transport/propagation to carry identity after enforcement; treat app-managed provider calls as attribution only.** If a path says "no" under *verifies the mandate*, something upstream must have already enforced it.
 
-## What to read next
+## Next Step
 
-- [Policy](/concepts/policy/) explains the decision contract.
-- [Mandate](/concepts/mandate/) explains the issued token.
+Read [Zones](/concepts/zone/) to understand the tenant boundary that owns authority data.
+
+## Related Pages
+
+- [Policies and Policy Sets](/concepts/policy/) explains the decision contract.
+- [Mandates](/concepts/mandate/) explains the issued token.
 - [Sessions and Revocation](/concepts/sessions-revocation/) explains how active authority ends.
