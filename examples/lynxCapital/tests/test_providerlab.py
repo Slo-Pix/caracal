@@ -510,6 +510,17 @@ def test_overview_shows_configuration_and_status():
     assert "operational" in body
 
 
+def test_secrets_masked_in_credentials_ui():
+    c = client("meridian-pay")
+    body = c.get("/__lab/credentials").text
+    assert "toggleSecret" in body
+    assert 'class="secret"' in body
+    seed_key = seed("meridian-pay")["apiKey"]
+    # the live value is only carried for reveal-on-click, never shown as bare text
+    assert f"<span>{seed_key}</span>" not in body
+    assert f'data-value="{seed_key}"' in body
+
+
 # --------------------------------------------------------------------------- #
 # UI pages render
 # --------------------------------------------------------------------------- #

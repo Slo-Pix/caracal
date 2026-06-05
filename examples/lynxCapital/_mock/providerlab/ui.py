@@ -36,6 +36,21 @@ def _ts(value) -> str:
         return "—"
 
 
+def _secret(value) -> str:
+    """Render a secret masked by default, revealed on click, so shared demos
+    never expose live credential material at a glance."""
+    raw = str(value)
+    if not raw:
+        return '<code class="muted">—</code>'
+    mask = raw[:4] + "…" + "•" * 6 if len(raw) > 4 else "•" * 8
+    return (f'<code class="secret" data-value="{_esc(raw)}" data-mask="{_esc(mask)}" '
+            f'data-shown="0" onclick="toggleSecret(this)"><span>{_esc(mask)}</span></code>')
+
+
+_SECRET_FIELDS = {"apiKey", "bearerToken", "clientSecret", "accessToken", "mandate",
+                  "signing_key", "refreshToken"}
+
+
 def _config_rows(provider: catalog.Provider) -> list[tuple[str, str]]:
     """Real-world connection settings a caller configures to integrate, named
     with each provider's own wire vocabulary rather than any internal scheme."""
@@ -110,8 +125,17 @@ def layout(provider: catalog.Provider, active: str, body: str) -> str:
   .pill {{ font-size: 11px; padding: 1px 7px; border-radius: 9px; }}
   .ok {{ background: #1d3b2a; color: #7fe0a6; }}
   .gone {{ background: #3b1d22; color: #e08a98; }}
+  .secret {{ cursor: pointer; user-select: none; }}
+  .secret::after {{ content: " 👁"; font-size: 10px; opacity: 0.6; }}
 </style></head>
 <body>
+<script>
+function toggleSecret(el) {{
+  const shown = el.dataset.shown === "1";
+  el.dataset.shown = shown ? "0" : "1";
+  el.firstChild.textContent = shown ? el.dataset.mask : el.dataset.value;
+}}
+</script>
 <header>
   <h1>{_esc(provider.brand)} <span class="badge">{_esc(_CATEGORY_LABEL[provider.category])}</span></h1>
   <div class="tag">{_esc(provider.tagline)} · localhost:{provider.port}</div>
@@ -125,7 +149,7 @@ def overview(provider: catalog.Provider) -> str:
     store = credentials.load(provider.id)
     seed = store.data["seed"]
     rows = "".join(
-        f"<tr><td>{_esc(k)}</td><td><code>{_esc(v)}</code></td></tr>"
+        f"<tr><td>{_esc(k)}</td><td>{_secret(v) if k in _SECRET_FIELDS else '<code>' + _esc(v) + '</code>'}</td></tr>"
         for k, v in seed.items() if not isinstance(v, (list, dict))
     )
     ops = "".join(f"<li><code>{_esc(o)}</code></li>" for o in provider.operations)
@@ -215,7 +239,7 @@ def credentials_page(provider: catalog.Provider) -> str:
 
     if cat in ("api_key", "sdk"):
         rows = [
-            f"<tr><td><code>{_esc(r['keyId'])}</code></td><td><code>{_esc(r['apiKey'])}</code></td>"
+            f"<tr><td><code>{_esc(r['keyId'])}</code></td><td>{_secret(r['apiKey'])}</td>"
             f"<td>{_esc(r['label'])}</td><td>{_ts(r.get('createdAt'))}</td>"
             f"<td>{_usage(r)}</td><td>{_status_pill(r['revoked'])}</td>"
             f"<td>{_action_btns('apiKey', r['keyId'], r['revoked'])}</td></tr>"
@@ -228,7 +252,7 @@ def credentials_page(provider: catalog.Provider) -> str:
 
     if cat == "bearer_token" or (cat == "mcp" and provider.mcp_auth == "bearer"):
         rows = [
-            f"<tr><td><code>{_esc(r['tokenId'])}</code></td><td><code>{_esc(r['accessToken'])}</code></td>"
+            f"<tr><td><code>{_esc(r['tokenId'])}</code></td><td>{_secret(r['accessToken'])}</td>"
             f"<td>{_esc(r['label'])}</td><td>{_ts(r.get('createdAt'))}</td>"
             f"<td>{_usage(r)}</td><td>{_status_pill(r['revoked'])}</td>"
             f"<td>{_action_btns('bearer', r['tokenId'], r['revoked'])}</td></tr>"
@@ -241,7 +265,7 @@ def credentials_page(provider: catalog.Provider) -> str:
 
     if cat in ("oauth2_client_credentials", "oauth2_authorization_code"):
         rows = [
-            f"<tr><td><code>{_esc(r['clientId'])}</code></td><td><code>{_esc(r['clientSecret'])}</code></td>"
+            f"<tr><td><code>{_esc(r['clientId'])}</code></td><td>{_secret(r['clientSecret'])}</td>"
             f"<td>{_esc(', '.join(r['scopes']))}</td><td>{_ts(r.get('createdAt'))}</td>"
             f"<td>{_status_pill(r['revoked'])}</td></tr>"
             for r in store.data["clients"]
@@ -258,9 +282,9 @@ def credentials_page(provider: catalog.Provider) -> str:
         sections.append(f"""
 <h2>Zone signing key</h2>
 <table><tr><th>zone</th><th>signing key (HS256)</th></tr>
-<tr><td><code>{_esc(store.data['zone'])}</code></td><td><code>{_esc(store.data['signing_key'])}</code></td></tr></table>
+<tr><td><code>{_esc(store.data['zone'])}</code></td><td>{_secret(store.data['signing_key'])}</td></tr></table>
 <h2>Seed mandate</h2>
-<p><code>{_esc(seed)}</code></p>
+<p>{_secret(seed)}</p>
 <h2>Revoked anchors</h2>
 <table><tr><th>anchor</th></tr>{revoked}</table>
 <form class="inline" method="post" action="/__lab/api/revoke-anchor">
@@ -346,12 +370,13 @@ def clients_page(provider: catalog.Provider) -> str:
     if cat in ("oauth2_client_credentials", "oauth2_authorization_code"):
         rows = [
             f"<tr><td><code>{_esc(r['clientId'])}</code></td><td>{_esc(r['name'])}</td>"
+            f"<td>{_secret(r['clientSecret'])}</td>"
             f"<td>{_esc(', '.join(r['redirectUris']))}</td><td>{_esc(', '.join(r['scopes']))}</td>"
             f"<td>{_status_pill(r['revoked'])}</td>"
             f"<td>{_action_btns('client', r['clientId'], r['revoked'])}</td></tr>"
             for r in store.data["clients"]
         ]
-        table = _cred_table("Registered OAuth clients", ["clientId", "name", "redirectUris", "scopes", "status", ""], rows)
+        table = _cred_table("Registered OAuth clients", ["clientId", "name", "clientSecret", "redirectUris", "scopes", "status", ""], rows)
         form = f"""
 <h2>Register client</h2>
 <form class="inline" method="post" action="/__lab/api/register-client">
