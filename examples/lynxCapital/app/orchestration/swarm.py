@@ -405,7 +405,7 @@ def _build_regional_domain_tools(run_id, runner, parent, region):
 
         Use for third-party services beyond the core flow: meridian-pay/quetzal-payouts/halcyon-bank
         (payments, payouts, open banking), inkwell-ocr (document extraction), slate-ledger (journals),
-        vela-notify (email/SMS), cordoba-fx (fx convert), ironbark-erp/tallyhall-books (vendors/bills),
+        vela-notify (email/SMS), cordoba-fx (fx quotes/conversions/settlement payments), ironbark-erp/tallyhall-books (vendors/bills),
         beacon-crm (contacts/deals), core-billing, lumen-identity (directory), atlas-vendor (vendor MDM),
         sabre-tax, pulse-market (market data), junction-procure (requisitions/POs/budgets).
         relay-automation, aegis-screening, and verafin-monitor require a Caracal mandate and are

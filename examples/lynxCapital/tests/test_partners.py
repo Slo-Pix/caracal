@@ -99,8 +99,12 @@ def test_bearer_custom_header_invalid_channel(providerlab):
 # oauth2 client credentials (basic vs post) — distinct cases
 # --------------------------------------------------------------------------- #
 def test_oauth_cc_basic_convert(providerlab):
-    res = partners.call("cordoba-fx", "convert", {"from": "USD", "to": "EUR", "amount": 1000})
-    assert res["status"] == 200 and "out" in res["data"]
+    res = partners.call("cordoba-fx", "create_conversion",
+                        {"buy_currency": "EUR", "sell_currency": "USD", "amount": 1000,
+                         "fixed_side": "sell", "term_agreement": True})
+    assert res["status"] == 200
+    assert res["data"]["status"] == "awaiting_funds"
+    assert "client_buy_amount" in res["data"] and res["data"]["currency_pair"] == "EURUSD"
 
 
 def test_oauth_cc_post_vendor_not_found(providerlab):

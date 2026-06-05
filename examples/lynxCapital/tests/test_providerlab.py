@@ -113,7 +113,7 @@ def test_oauth_client_credentials_basic():
                  headers={"Authorization": "Basic " + basic})
     assert tok.status_code == 200
     access = tok.json()["access_token"]
-    quote = {"from": "USD", "to": "EUR", "amount": 100}
+    quote = {"buy_currency": "EUR", "sell_currency": "USD", "amount": 100}
     assert c.post("/api/get_quote", json=quote, headers={"Authorization": f"Bearer {access}"}).status_code == 200
     assert c.post("/api/get_quote", json=quote, headers={"Authorization": "Bearer no"}).status_code == 401
 
@@ -130,6 +130,90 @@ def test_oauth_client_credentials_post_and_bad_secret():
         "grant_type": "client_credentials", "client_id": s["clientId"], "client_secret": "wrong",
     })
     assert bad.status_code == 401
+
+
+def _cordoba_token(c, scope: str = "fx.read fx.convert fx.transfer") -> dict:
+    s = seed("cordoba-fx")
+    basic = base64.b64encode(f"{s['clientId']}:{s['clientSecret']}".encode()).decode()
+    access = c.post("/oauth/token", data={"grant_type": "client_credentials", "scope": scope},
+                    headers={"Authorization": "Basic " + basic}).json()["access_token"]
+    return {"Authorization": f"Bearer {access}"}
+
+
+def test_cordoba_quote_schema_and_spread():
+    c = client("cordoba-fx")
+    h = _cordoba_token(c)
+    quote = c.post("/api/get_quote",
+                   json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 100,
+                         "fixed_side": "sell"}, headers=h).json()["data"]
+    assert quote["currency_pair"] == "EURUSD"
+    assert {"client_buy_amount", "client_sell_amount", "client_rate",
+            "mid_market_rate", "quote_expiry_time"} <= quote.keys()
+    # The client rate is worse than mid-market by the spread.
+    assert float(quote["client_rate"]) < float(quote["mid_market_rate"])
+    # Amounts are decimal strings, as FX platforms emit them.
+    assert quote["client_sell_amount"] == "100.00"
+
+
+def test_cordoba_settlement_lifecycle_end_to_end():
+    c = client("cordoba-fx")
+    h = _cordoba_token(c)
+    conv = c.post("/api/create_conversion",
+                  json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 5000,
+                        "fixed_side": "buy", "term_agreement": True}, headers=h).json()["data"]
+    assert conv["status"] == "awaiting_funds" and conv["short_reference"][:8].isdigit()
+
+    ben = c.post("/api/create_beneficiary",
+                 json={"bank_account_holder_name": "Granite Industries", "bank_country": "DE",
+                       "currency": "EUR", "iban": "DE89370400440532013000",
+                       "beneficiary_entity_type": "company"}, headers=h).json()["data"]
+    assert ben["status"] == "enabled" and ben["beneficiary_entity_type"] == "company"
+
+    pay = c.post("/api/create_payment",
+                 json={"currency": "EUR", "amount": 5000, "beneficiary_id": ben["id"],
+                       "conversion_id": conv["id"], "reference": "INV-9001"},
+                 headers=h).json()["data"]
+    assert pay["status"] == "ready_to_send" and pay["conversion_id"] == conv["id"]
+
+    # Polling advances the payment toward completion.
+    after = c.post("/api/get_payment", json={"payment_id": pay["id"]}, headers=h).json()["data"]
+    assert after["status"] == "submitted"
+    final = c.post("/api/get_payment", json={"payment_id": pay["id"]}, headers=h).json()["data"]
+    assert final["status"] == "completed"
+
+
+def test_cordoba_realistic_validation_errors():
+    c = client("cordoba-fx")
+    h = _cordoba_token(c)
+    no_terms = c.post("/api/create_conversion",
+                      json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 5000},
+                      headers=h)
+    assert no_terms.status_code == 422 and no_terms.json()["error"] == "term_agreement_required"
+
+    below = c.post("/api/create_conversion",
+                   json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 5,
+                         "fixed_side": "sell", "term_agreement": True}, headers=h)
+    assert below.status_code == 422 and below.json()["error"] == "amount_below_minimum"
+
+    unsupported = c.post("/api/get_quote",
+                         json={"buy_currency": "XAU", "sell_currency": "USD", "amount": 100},
+                         headers=h)
+    assert unsupported.status_code == 422 and unsupported.json()["error"] == "currency_pair_not_supported"
+
+    missing = c.post("/api/create_payment",
+                     json={"currency": "EUR", "amount": 100, "beneficiary_id": "ben_missing"},
+                     headers=h)
+    assert missing.status_code == 404 and missing.json()["error"] == "beneficiary_not_found"
+
+
+def test_cordoba_seeded_book_present():
+    c = client("cordoba-fx")
+    h = _cordoba_token(c)
+    balances = c.post("/api/list_balances", json={}, headers=h).json()["data"]
+    assert balances["total"] >= 1 and all("amount" in b for b in balances["balances"])
+    beneficiaries = c.post("/api/list_beneficiaries", json={"currency": "GBP"}, headers=h).json()["data"]
+    assert beneficiaries["total"] >= 1
+    assert all(b["currency"] == "GBP" for b in beneficiaries["items"])
 
 
 # --------------------------------------------------------------------------- #
@@ -500,8 +584,11 @@ def test_oauth_cc_pair_distinct_cases():
     read = c.post("/oauth/token", data={"grant_type": "client_credentials", "client_id": s["clientId"],
                                         "client_secret": s["clientSecret"], "scope": "fx.read"}).json()["access_token"]
     h = {"Authorization": f"Bearer {read}"}
-    assert c.post("/api/get_quote", json={"from": "USD", "to": "EUR", "amount": 1}, headers=h).status_code == 200
-    denied = c.post("/api/convert", json={"from": "USD", "to": "EUR", "amount": 100}, headers=h)
+    assert c.post("/api/get_quote", json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 1},
+                  headers=h).status_code == 200
+    denied = c.post("/api/create_conversion",
+                    json={"buy_currency": "EUR", "sell_currency": "USD", "amount": 100,
+                          "term_agreement": True}, headers=h)
     assert denied.status_code == 403 and denied.json()["error"] == "insufficient_scope"
     # Ironbark ERP: post-auth token, vendor not-found case.
     e = client("ironbark-erp")
