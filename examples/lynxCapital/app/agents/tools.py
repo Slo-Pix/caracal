@@ -137,7 +137,7 @@ def quickbooks_match_bill(run_id: str, agent_id: str, vendor_id: str, invoice_id
     created = _run(run_id, agent_id, "quickbooks_match_bill", "tallyhall-books", "create_bill",
                    {"vendorId": vendor_id, "amount": amount, "currency": currency})
     bill = created.get("data") if isinstance(created, dict) else None
-    bill_id = bill.get("billId") if isinstance(bill, dict) else None
+    bill_id = bill.get("Id") if isinstance(bill, dict) else None
     if not bill_id:
         return created
     return _run(run_id, agent_id, "quickbooks_match_bill", "tallyhall-books", "match_bill",
@@ -147,6 +147,53 @@ def quickbooks_match_bill(run_id: str, agent_id: str, vendor_id: str, invoice_id
 def quickbooks_get_vendor(run_id: str, agent_id: str, vendor_id: str) -> dict[str, object]:
     return _run(run_id, agent_id, "quickbooks_get_vendor", "tallyhall-books", "get_vendor",
                 {"vendorId": vendor_id})
+
+
+def quickbooks_pay_bill(run_id: str, agent_id: str, bill_id: str,
+                        amount: float | None = None, pay_type: str = "Check") -> dict[str, object]:
+    """Settle an open vendor bill in QuickBooks via a BillPayment."""
+    payload: dict[str, object] = {"billId": bill_id, "payType": pay_type}
+    if amount is not None:
+        payload["amount"] = amount
+    return _run(run_id, agent_id, "quickbooks_pay_bill", "tallyhall-books", "pay_bill", payload)
+
+
+def quickbooks_record_expense(run_id: str, agent_id: str, vendor_id: str, amount: float,
+                              currency: str, account: str = "6200",
+                              payment_type: str = "CreditCard") -> dict[str, object]:
+    """Book a cash or card expense against an expense account in QuickBooks."""
+    return _run(run_id, agent_id, "quickbooks_record_expense", "tallyhall-books", "create_expense",
+                {"vendorId": vendor_id, "amount": amount, "currency": currency,
+                 "account": account, "paymentType": payment_type})
+
+
+def quickbooks_issue_invoice(run_id: str, agent_id: str, customer_id: str, amount: float,
+                             currency: str) -> dict[str, object]:
+    """Raise a customer invoice in QuickBooks and email it to the customer."""
+    created = _run(run_id, agent_id, "quickbooks_issue_invoice", "tallyhall-books", "create_invoice",
+                   {"customerId": customer_id, "amount": amount, "currency": currency})
+    invoice = created.get("data") if isinstance(created, dict) else None
+    invoice_id = invoice.get("Id") if isinstance(invoice, dict) else None
+    if not invoice_id:
+        return created
+    return _run(run_id, agent_id, "quickbooks_issue_invoice", "tallyhall-books", "send_invoice",
+                {"invoiceId": invoice_id})
+
+
+def quickbooks_apply_payment(run_id: str, agent_id: str, invoice_id: str,
+                             amount: float | None = None) -> dict[str, object]:
+    """Receive a customer payment and apply it to an open QuickBooks invoice."""
+    payload: dict[str, object] = {"invoiceId": invoice_id}
+    if amount is not None:
+        payload["amount"] = amount
+    return _run(run_id, agent_id, "quickbooks_apply_payment", "tallyhall-books", "record_payment", payload)
+
+
+def quickbooks_run_report(run_id: str, agent_id: str, report_type: str = "ProfitAndLoss") -> dict[str, object]:
+    """Pull a financial report (P&L, BalanceSheet, AgedPayables, AgedReceivables,
+    TrialBalance) from the QuickBooks company file."""
+    return _run(run_id, agent_id, "quickbooks_run_report", "tallyhall-books", "get_report",
+                {"reportType": report_type})
 
 
 # -- policy-check tools --
@@ -379,19 +426,39 @@ def transfer_funds(run_id: str, agent_id: str, from_region: str, to_region: str,
 
 # -- close tools --
 
+def list_ledger_accounts(run_id: str, agent_id: str, account_type: str = "") -> dict[str, object]:
+    payload = {"type": account_type} if account_type else {}
+    return _run(run_id, agent_id, "list_ledger_accounts", "slate-ledger", "list_accounts", payload)
+
+
 def post_journal_entry(run_id: str, agent_id: str, account_id: str, amount: float, currency: str, period: str) -> dict[str, object]:
+    lines = [
+        {"accountNo": account_id, "debit": amount, "credit": 0.0, "memo": "Close journal"},
+        {"accountNo": "2100", "debit": 0.0, "credit": amount, "memo": "Accrued liability"},
+    ]
     return _run(run_id, agent_id, "post_journal_entry", "slate-ledger", "post_entry",
-                {"period": period, "lines": [{"debit": amount}, {"credit": amount}]})
+                {"period": period, "currency": currency, "type": "standard",
+                 "description": "Period-close journal", "lines": lines})
 
 
 def reconcile_account(run_id: str, agent_id: str, account_id: str) -> dict[str, object]:
-    return _run(run_id, agent_id, "reconcile_account", "slate-ledger", "reconcile_account",
-                {"accountId": account_id, "statementBalance": 0})
+    started = _run(run_id, agent_id, "reconcile_account", "slate-ledger", "reconcile_account",
+                   {"accountId": account_id})
+    rec = started.get("data") if isinstance(started, dict) else None
+    if not isinstance(rec, dict) or "reconciliationId" not in rec:
+        return started
+    return _run(run_id, agent_id, "reconcile_account", "slate-ledger", "get_reconciliation",
+                {"reconciliationId": rec["reconciliationId"]})
 
 
 def compute_accrual(run_id: str, agent_id: str, category: str, period: str) -> dict[str, object]:
-    return _run(run_id, agent_id, "compute_accrual", "slate-ledger", "compute_accrual",
-                {"amount": 12000, "periods": 12, "category": category})
+    return _run(run_id, agent_id, "compute_accrual", "slate-ledger", "create_accrual",
+                {"amount": 12000, "periods": 12, "description": category})
+
+
+def get_trial_balance(run_id: str, agent_id: str, period: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_trial_balance", "slate-ledger", "trial_balance",
+                {"period": period})
 
 
 def close_period(run_id: str, agent_id: str, period: str) -> dict[str, object]:
@@ -528,6 +595,11 @@ TOOLS: dict[str, Callable] = {
     "netsuite_get_ap_account": netsuite_get_ap_account,
     "quickbooks_match_bill": quickbooks_match_bill,
     "quickbooks_get_vendor": quickbooks_get_vendor,
+    "quickbooks_pay_bill": quickbooks_pay_bill,
+    "quickbooks_record_expense": quickbooks_record_expense,
+    "quickbooks_issue_invoice": quickbooks_issue_invoice,
+    "quickbooks_apply_payment": quickbooks_apply_payment,
+    "quickbooks_run_report": quickbooks_run_report,
     "check_vendor": check_vendor,
     "check_transaction": check_transaction,
     "get_withholding_rate": get_withholding_rate,
@@ -554,8 +626,10 @@ TOOLS: dict[str, Callable] = {
     "place_fx_hedge": place_fx_hedge,
     "transfer_funds": transfer_funds,
     "post_journal_entry": post_journal_entry,
+    "list_ledger_accounts": list_ledger_accounts,
     "reconcile_account": reconcile_account,
     "compute_accrual": compute_accrual,
+    "get_trial_balance": get_trial_balance,
     "close_period": close_period,
     "aml_monitor_transaction": aml_monitor_transaction,
     "sanctions_screen_batch": sanctions_screen_batch,

@@ -328,8 +328,14 @@ class ProviderStore:
         return False
 
     def refresh(self, refresh_token: str) -> dict | None:
+        """Exchange a refresh token, rotating it the way QuickBooks and Xero do:
+        each refresh token is single-use, so the presented one is consumed and a
+        fresh refresh token is issued alongside the new access token. Replaying a
+        consumed refresh token no longer grants a session."""
         for t in self.data["tokens"]:
-            if t.get("refreshToken") == refresh_token:
+            if t.get("refreshToken") == refresh_token and not t.get("refreshConsumed"):
+                t["refreshConsumed"] = True
+                t["refreshConsumedAt"] = _now()
                 return self.issue_token(t["clientId"], t["scope"], subject=t["subject"],
                                         refresh=True, audience=t.get("audience"))
         return None
