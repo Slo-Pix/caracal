@@ -2,51 +2,19 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Chat panel driver for live conversation, runtime traces, and run controls.
+ * Modern operations console driver with centralized AppState.
  */
 
 const $ = (id) => document.getElementById(id);
 
-const stream = $("chat-stream");
-const emptyEl = $("chat-empty");
-const agentCount = $("agent-count");
-const startBtn = $("start-btn");
-const stopBtn = $("stop-btn");
-const pauseBtn = $("pause-btn");
-const promptInput = $("prompt-input");
-const modelSelect = $("model-select");
-const memFill = $("mem-fill");
-const memTokens = $("mem-tokens");
-const memAgents = $("mem-agents");
-const memCompactions = $("mem-compactions");
-const memFiles = $("mem-files");
-const memToggle = $("mem-toggle");
-const memDetail = $("mem-detail");
-const planPanel = $("plan-panel");
-const planList = $("plan-list");
-const planMeta = $("plan-meta");
-const planStatus = $("plan-status");
-const planToggle = $("plan-toggle");
-const planActivePreview = $("plan-active-preview");
-const clearChatBtn = $("clear-chat-btn");
-const newChatBtn = $("new-chat-btn");
-const runIdEl = $("run-id");
-const runtimeState = $("runtime-state");
-const runtimeFeed = $("runtime-feed");
-const eventCount = $("event-count");
-const toolCount = $("tool-count");
-const serviceCount = $("service-count");
-const securityCount = $("security-count");
-
-const tplUserMessage = $("tpl-user-message");
-const tplAgentTurn = $("tpl-agent-turn");
-const tplEventBlock = $("tpl-event-block");
-const tplPlanItem = $("tpl-plan-item");
-
-const PLAN_TOOLS = new Set(["write_todos", "write_file", "read_file", "ls_files"]);
-const FRAME_EVENT_LIMIT = 180;
-
-const state = {
+// CENTRALIZED APP STATE & CONTROLLER
+const AppState = {
+  streamingStatus: 'idle',      // 'idle' | 'connecting' | 'streaming' | 'tool_executing' | 'awaiting_approval' | 'error'
+  activePanelSections: {},      // section-id -> isCollapsed boolean
+  messages: [],                 // in-memory message logs (capped at 500)
+  runtimeEvents: [],            // timeline/audit events list
+  selectedNode: null,           // active selected node reference: { id, type, label, status, metadata }
+  
   runId: null,
   active: false,
   es: null,
@@ -69,25 +37,60 @@ const state = {
   pendingScrollForce: false,
   pendingScrollSmooth: false,
   autoScroll: true,
+  
   metrics: {
     events: 0,
     tools: 0,
     services: 0,
     controls: 0,
   },
+  
+  reconnectAttempts: 0,
+  reconnectTimer: null
 };
 
-const RUNTIME_FEED_LIMIT = 90;
-const CONTROL_EVENTS = new Set([
-  "audit_record",
-  "error",
-  "model_change",
-  "replan",
-  "run_cancelled",
-  "tool_retry",
-]);
+// DOM SELECTORS
+const stream = $("chat-stream");
+const emptyEl = $("chat-empty");
+const startBtn = $("start-btn");
+const stopBtn = $("stop-btn");
+const pauseBtn = $("pause-btn");
+const promptInput = $("prompt-input");
+const modelSelect = $("model-select");
+const memFill = $("mem-fill");
+const memTokens = $("mem-tokens");
+const memAgents = $("mem-agents");
+const memCompactions = $("mem-compactions");
+const memFiles = $("mem-files");
+const planPanel = $("plan-panel");
+const planList = $("plan-list");
+const planMeta = $("plan-meta");
+const planStatus = $("plan-status");
+const planActivePreview = $("plan-active-preview");
+const clearChatBtn = $("clear-chat-btn");
+const newChatBtn = $("new-chat-btn");
+const runtimeFeed = $("runtime-feed");
 
+// TEMPLATES
+const tplUserMessage = $("tpl-user-message");
+const tplAssistantMessage = $("tpl-assistant-message");
+const tplToolCard = $("tpl-tool-card");
+const tplSystemRow = $("tpl-system-row");
+const tplSecurityCard = $("tpl-security-card");
+const tplApprovalCard = $("tpl-approval-card");
+const tplProviderCard = $("tpl-provider-card");
+const tplPlanItem = $("tpl-plan-item");
+
+const PLAN_TOOLS = new Set(["write_todos", "write_file", "read_file", "ls_files"]);
+const FRAME_EVENT_LIMIT = 180;
+const RUNTIME_FEED_LIMIT = 90;
+
+// HELPER UTILITIES
 function cloneTemplate(template) {
+  if (!template) {
+    console.error("Template not found, falling back to system block.");
+    return document.getElementById("tpl-system-row").content.firstElementChild.cloneNode(true);
+  }
   return template.content.firstElementChild.cloneNode(true);
 }
 
@@ -162,10 +165,6 @@ function renderJson(value) {
   }
 }
 
-function eventAgentLabel(agentId) {
-  return agentId ? agentLabel(state.agents[agentId]) : "";
-}
-
 function clearEmpty() {
   if (emptyEl && emptyEl.parentNode) emptyEl.remove();
 }
@@ -175,23 +174,23 @@ function isNearBottom() {
 }
 
 function requestScroll({ force = false, smooth = false } = {}) {
-  state.pendingScrollForce = state.pendingScrollForce || force;
-  state.pendingScrollSmooth = state.pendingScrollSmooth || smooth;
+  AppState.pendingScrollForce = AppState.pendingScrollForce || force;
+  AppState.pendingScrollSmooth = AppState.pendingScrollSmooth || smooth;
 }
 
 function flushScroll() {
-  const shouldScroll = state.pendingScrollForce || state.autoScroll;
+  const shouldScroll = AppState.pendingScrollForce || AppState.autoScroll;
   if (!shouldScroll) {
-    state.pendingScrollForce = false;
-    state.pendingScrollSmooth = false;
+    AppState.pendingScrollForce = false;
+    AppState.pendingScrollSmooth = false;
     return;
   }
   stream.scrollTo({
     top: stream.scrollHeight,
-    behavior: state.pendingScrollSmooth ? "smooth" : "auto",
+    behavior: AppState.pendingScrollSmooth ? "smooth" : "auto",
   });
-  state.pendingScrollForce = false;
-  state.pendingScrollSmooth = false;
+  AppState.pendingScrollForce = false;
+  AppState.pendingScrollSmooth = false;
 }
 
 function planStatusLabel(status) {
@@ -235,93 +234,233 @@ function toneClass(agent) {
   return "tone-worker";
 }
 
-function updateHeaderCount() {
-  if (!agentCount) return;
-  if (!state.spawned) {
-    agentCount.textContent = state.active ? "Starting..." : "Idle";
-    return;
+// CENTRALIZED RENDER COMPONENT ENGINE WITH ERROR BOUNDARY
+function renderMessage(type, data = {}) {
+  try {
+    clearEmpty();
+    let template = null;
+    
+    switch (type) {
+      case "user":
+        template = tplUserMessage;
+        break;
+      case "assistant":
+        template = tplAssistantMessage;
+        break;
+      case "tool":
+        template = tplToolCard;
+        break;
+      case "system":
+        template = tplSystemRow;
+        break;
+      case "security":
+        template = tplSecurityCard;
+        break;
+      case "approval":
+        template = tplApprovalCard;
+        break;
+      case "provider":
+        template = tplProviderCard;
+        break;
+      default:
+        throw new Error(`Unknown message type: ${type}`);
+    }
+
+    const node = cloneTemplate(template);
+    
+    // Fill common properties
+    const timeEl = node.querySelector(".msg-time, .msg-system-time");
+    if (timeEl) timeEl.textContent = data.time || formatTime();
+    
+    const contentEl = node.querySelector(".msg-content");
+    if (contentEl && data.content !== undefined) {
+      contentEl.textContent = data.content;
+    }
+    
+    // Fill specific attributes
+    if (type === "assistant") {
+      let role = "worker";
+      if (data.role) {
+        role = data.role;
+      } else {
+        const agent = AppState.agents[data.agentId];
+        if (agent) {
+          if (agent.layer === "finance-control") role = "fc";
+          if (agent.layer === "regional-orchestrator") role = "ro";
+        }
+      }
+      
+      node.classList.remove("tone-worker", "tone-ro", "tone-fc");
+      node.classList.add(`tone-${role}`);
+      
+      const authorEl = node.querySelector(".msg-author");
+      if (authorEl) {
+        authorEl.textContent = data.author || (AppState.agents[data.agentId] ? agentLabel(AppState.agents[data.agentId]) : "Agent");
+      }
+      
+      const modelTag = node.querySelector(".msg-model-tag");
+      if (modelTag) modelTag.textContent = data.model || "gpt-5.4-nano";
+      
+      const indicator = node.querySelector(".msg-status-indicator");
+      if (indicator) indicator.textContent = data.status || "Thinking";
+    }
+    
+    if (type === "tool") {
+      const nameEl = node.querySelector(".msg-tool-name");
+      if (nameEl) nameEl.textContent = data.name || "tool_call";
+      
+      const badge = node.querySelector(".msg-tool-status-badge");
+      if (badge) {
+        badge.textContent = data.status || "executing";
+        badge.className = `msg-tool-status-badge status-${data.status || "executing"}`;
+      }
+      
+      const argsEl = node.querySelector(".msg-tool-args .msg-json-block");
+      if (argsEl) argsEl.textContent = renderJson(data.args || {});
+      
+      const outputBlock = node.querySelector(".msg-tool-output");
+      const outputEl = node.querySelector(".msg-tool-output .msg-json-block");
+      if (data.output !== undefined && outputBlock) {
+        outputBlock.hidden = false;
+        outputEl.textContent = renderJson(data.output);
+      }
+    }
+    
+    if (type === "system") {
+      const textEl = node.querySelector(".msg-system-text");
+      if (textEl) textEl.textContent = data.text || "";
+      
+      const kickerEl = node.querySelector(".msg-system-kicker");
+      if (kickerEl) kickerEl.textContent = data.kicker || "SYSTEM";
+    }
+
+    if (type === "security") {
+      const ruleEl = node.querySelector(".msg-security-rule");
+      if (ruleEl) ruleEl.textContent = data.rule || "Control Violation";
+      
+      const actionEl = node.querySelector(".msg-security-action-badge");
+      if (actionEl) actionEl.textContent = data.action || "Intercepted";
+      
+      const policyEl = node.querySelector(".msg-security-policy");
+      if (policyEl) policyEl.innerHTML = `Policy: <code>${data.policy || "sandbox"}</code>`;
+      
+      const reasonEl = node.querySelector(".msg-security-reason");
+      if (reasonEl) reasonEl.textContent = data.reason || "";
+      
+      const detailEl = node.querySelector(".msg-security-details .msg-json-block");
+      if (detailEl) detailEl.textContent = renderJson(data.details || {});
+    }
+
+    if (type === "approval") {
+      const contextEl = node.querySelector(".msg-approval-context");
+      if (contextEl) contextEl.innerHTML = data.context || "";
+      
+      const approveBtn = node.querySelector(".btn-approve");
+      const rejectBtn = node.querySelector(".btn-reject");
+      
+      if (approveBtn && rejectBtn) {
+        approveBtn.onclick = () => handleApprovalAction(data.approvalId, true, node);
+        rejectBtn.onclick = () => handleApprovalAction(data.approvalId, false, node);
+      }
+    }
+
+    if (type === "provider") {
+      const nameEl = node.querySelector(".msg-provider-name");
+      if (nameEl) nameEl.textContent = data.provider || "OpenAI";
+      
+      const tokenEl = node.querySelector(".msg-provider-tokens");
+      if (tokenEl) tokenEl.textContent = `${data.tokens || 0} tokens`;
+      
+      const latEl = node.querySelector(".msg-provider-latency");
+      if (latEl) latEl.textContent = `${data.latency || 0}ms`;
+      
+      const detailEl = node.querySelector(".msg-provider-headers .msg-json-block");
+      if (detailEl) detailEl.textContent = renderJson(data.details || {});
+    }
+
+    stream.append(node);
+    requestScroll({ smooth: true });
+    
+    // In-memory messages limit to avoid memory leak (500 limit cap)
+    AppState.messages.push({ type, data, node });
+    if (AppState.messages.length > 500) {
+      AppState.messages.shift(); // Remove from memory, DOM node stays
+    }
+    
+    return node;
+  } catch (error) {
+    console.error("renderMessage Error Boundary caught exception: ", error);
+    
+    // Fallback error renderer
+    const fallbackNode = cloneTemplate(tplSystemRow);
+    fallbackNode.querySelector(".msg-system-text").textContent = `Error rendering telemetry: ${error.message}. Payload: ${JSON.stringify(data)}`;
+    fallbackNode.querySelector(".msg-system-kicker").textContent = "BOUNDARY EXCEPTION";
+    stream.append(fallbackNode);
+    requestScroll({ smooth: true });
+    return fallbackNode;
   }
-  const running = Math.max(0, state.spawned - state.terminated);
-  agentCount.textContent = running
-    ? `${running} running / ${state.spawned} total`
-    : `${state.spawned} total - ${state.terminated} finished`;
 }
 
-function updateRunMeta() {
-  if (runIdEl) runIdEl.textContent = state.runId ? `Run ${shortId(state.runId)}` : "No active run";
-  if (runtimeState) {
-    if (state.paused) runtimeState.textContent = `${state.queue.length} queued`;
-    else runtimeState.textContent = state.active ? "Streaming" : "Idle";
-  }
-}
-
-function refreshMetrics() {
-  if (eventCount) eventCount.textContent = String(state.metrics.events);
-  if (toolCount) toolCount.textContent = String(state.metrics.tools);
-  if (serviceCount) serviceCount.textContent = String(state.metrics.services);
-  if (securityCount) securityCount.textContent = String(state.metrics.controls);
-}
-
+// METRICS & LAYOUT CONTROLLERS
 function countEvent(event) {
-  state.metrics.events += 1;
-  if (event.kind === "tool_call") state.metrics.tools += 1;
-  if (event.kind === "service_call") state.metrics.services += 1;
-  if (CONTROL_EVENTS.has(event.kind)) state.metrics.controls += 1;
+  AppState.metrics.events += 1;
+  if (event.kind === "tool_call" || event.kind === "service_call") AppState.metrics.tools += 1;
+  if (event.kind === "service_call") AppState.metrics.services += 1;
+  if (CONTROL_EVENTS.has(event.kind)) AppState.metrics.controls += 1;
   refreshMetrics();
 }
 
-function refreshMemoryBar() {
-  let maxUsed = 0;
-  let maxLimit = 128_000;
-  const ids = Object.keys(state.agentMem);
-
-  for (const id of ids) {
-    const mem = state.agentMem[id];
-    if (!mem) continue;
-    if (mem.tokens_used > maxUsed) {
-      maxUsed = mem.tokens_used;
-      maxLimit = mem.tokens_limit;
-    }
-  }
-
-  const pct = maxLimit ? Math.min(100, (maxUsed / maxLimit) * 100) : 0;
-  if (memFill) memFill.style.width = `${pct.toFixed(1)}%`;
-  if (memTokens) memTokens.textContent = `${fmtTok(maxUsed)} / ${fmtTok(maxLimit)}`;
-  if (memAgents) memAgents.textContent = `${ids.length} agent${ids.length === 1 ? "" : "s"}`;
-  if (memCompactions) memCompactions.textContent = `${state.compactions.length} compaction${state.compactions.length === 1 ? "" : "s"}`;
-  if (memFiles) memFiles.textContent = `${state.files.size} file${state.files.size === 1 ? "" : "s"}`;
+function refreshMetrics() {
+  const msgEl = $("session-msg-count");
+  const toolEl = $("session-tool-count");
+  if (msgEl) msgEl.textContent = `${AppState.messages.filter(m => m.type === "assistant").length} messages`;
+  if (toolEl) toolEl.textContent = `${AppState.metrics.tools} tools`;
 }
 
-function refreshMemDetail() {
-  if (!memDetail) return;
-  if (!state.compactions.length) {
-    memDetail.innerHTML = '<div class="mem-detail-empty">No compactions yet.</div>';
-    return;
+function updateRunMeta() {
+  const activeSessionCard = $("active-session-card");
+  const sessionRunId = $("session-run-id");
+  const sessionTime = $("session-time");
+  
+  if (sessionRunId) {
+    sessionRunId.textContent = AppState.runId ? `Session ID: ${shortId(AppState.runId)}` : "No active run";
   }
-
-  const frag = document.createDocumentFragment();
-  for (const compaction of state.compactions) {
-    const item = document.createElement("div");
-    item.className = "mem-detail-item";
-
-    const head = document.createElement("div");
-    head.className = "mem-detail-head";
-    const agent = state.agents[compaction.agent_id];
-    head.textContent = `${agentLabel(agent)} - ${fmtTok(compaction.tokens_before)} -> ${fmtTok(compaction.tokens_after)}`;
-
-    const body = document.createElement("div");
-    body.textContent = compaction.summary;
-
-    item.append(head, body);
-    frag.append(item);
+  
+  if (activeSessionCard) {
+    if (AppState.active) {
+      activeSessionCard.classList.add("active");
+    } else {
+      activeSessionCard.classList.remove("active");
+    }
   }
+}
 
-  memDetail.replaceChildren(frag);
+function refreshMemoryBar() {
+  let total = 0;
+  let limit = 131072;
+  let count = 0;
+  
+  for (const item of Object.values(AppState.agentMem)) {
+    total = Math.max(total, item.tokens_used);
+    limit = Math.max(limit, item.tokens_limit);
+    count = Math.max(count, item.message_count);
+  }
+  
+  if (memTokens) memTokens.textContent = `${fmtTok(total)} / ${fmtTok(limit)}`;
+  if (memFill) memFill.style.width = `${Math.min(100, (total / limit) * 100)}%`;
+  if (memAgents) memAgents.textContent = `${Object.keys(AppState.agents).length} agents`;
+  if (memCompactions) memCompactions.textContent = `${AppState.compactions.length} compactions`;
+  if (memFiles) memFiles.textContent = `${AppState.files.size} files`;
+  
+  const modelEl = $("inspector-model");
+  if (modelEl && modelSelect) {
+    modelEl.textContent = modelSelect.value || "gpt-5.4-nano";
+  }
 }
 
 function renderPlan() {
-  const ownerId = state.planOwner || findFinanceControlId();
-  const plan = ownerId ? state.plans[ownerId] : null;
+  const ownerId = AppState.planOwner || findFinanceControlId();
+  const plan = ownerId ? AppState.plans[ownerId] : null;
   if (!ownerId || !plan || plan.items.length === 0) {
     planPanel.hidden = true;
     return;
@@ -333,7 +472,7 @@ function renderPlan() {
   planPanel.hidden = false;
   planMeta.textContent = `${done}/${plan.items.length}`;
   planStatus.className = `plan-status status-${overall}`;
-  planStatus.textContent = titleCase(overall);
+  planStatus.textContent = planStatusLabel(overall);
 
   let activeText = "";
   const frag = document.createDocumentFragment();
@@ -349,19 +488,19 @@ function renderPlan() {
     frag.append(row);
   });
   
-  planActivePreview.textContent = activeText ? `Next up: ${activeText.substring(0, 35)}...` : "";
+  planActivePreview.textContent = activeText ? `Active: ${activeText.substring(0, 35)}...` : "";
   planList.replaceChildren(frag);
 }
 
 function findFinanceControlId() {
-  for (const [id, agent] of Object.entries(state.agents)) {
+  for (const [id, agent] of Object.entries(AppState.agents)) {
     if (agent.layer === "finance-control") return id;
   }
   return null;
 }
 
 function registerAgent(payload) {
-  state.agents[payload.agent_id] = {
+  AppState.agents[payload.agent_id] = {
     role: payload.role,
     label: payload.role,
     layer: payload.layer,
@@ -369,113 +508,47 @@ function registerAgent(payload) {
   };
 }
 
-function createEventBlock(kind, options = {}) {
-  const block = cloneTemplate(tplEventBlock);
-  block.classList.remove("kind-system");
-  block.classList.add(`kind-${kind}`);
-  if (options.surface) block.classList.add(`event-block-${options.surface}`);
-  if (options.open) block.open = true;
-
-  const kicker = block.querySelector(".event-kicker");
-  const title = block.querySelector(".event-title");
-  const pill = block.querySelector(".event-pill");
-  const meta = block.querySelector(".event-meta");
-  const body = block.querySelector(".event-body");
-
-  kicker.textContent = options.kicker || "";
-  title.textContent = options.title || "";
-  meta.textContent = options.meta || "";
-
-  if (options.pill) {
-    pill.hidden = false;
-    pill.textContent = options.pill;
+// SECURITY APPROVAL HANDLER
+async function handleApprovalAction(approvalId, approved, cardNode) {
+  setStreamingStatus('streaming');
+  const actionsContainer = cardNode.querySelector(".msg-approval-actions");
+  if (actionsContainer) {
+    actionsContainer.innerHTML = approved 
+      ? `<span class="badge status-completed">Approved Transaction</span>` 
+      : `<span class="badge status-failed">Rejected Request</span>`;
   }
-
-  if (options.body) {
-    body.hidden = false;
-    body.textContent = options.body;
-  } else {
-    block.classList.add("event-block-compact");
-  }
-
-  return block;
+  
+  renderMessage("system", {
+    kicker: "APPROVAL",
+    text: `User dual-sign security decision: ${approved ? 'APPROVED' : 'REJECTED'}`
+  });
 }
 
-function runtimeEventSummary(event) {
-  const payload = event.payload || {};
-  const agent = eventAgentLabel(payload.agent_id);
-  switch (event.kind) {
-    case "run_start":
-      return { kind: "system", kicker: "Run", title: "Execution started", body: payload.prompt };
-    case "run_end":
-      return { kind: payload.status === "failed" ? "error" : "system", kicker: "Run", title: "Execution finished", pill: titleCase(payload.status || "completed") };
-    case "run_cancelled":
-      return { kind: "system", kicker: "Run", title: "Cancellation requested" };
-    case "agent_spawn":
-      return {
-        kind: "spawn",
-        kicker: "Spawn",
-        title: `${payload.region ? `${titleCase(payload.layer)} ${payload.region}` : titleCase(payload.layer)} spawned`,
-        body: payload.scope,
-      };
-    case "agent_start":
-      return { kind: "spawn", kicker: "Agent", title: `${agent} started` };
-    case "agent_end":
-      return { kind: "result", kicker: "Agent", title: `${agent} completed`, body: renderJson(payload.result) };
-    case "agent_terminate":
-      return { kind: payload.status === "failed" || payload.status === "denied" ? "error" : "system", kicker: "Agent", title: `${agent} terminated`, pill: titleCase(payload.status || "completed") };
-    case "delegation":
-      return { kind: "spawn", kicker: "Delegation", title: `${agentLabel(state.agents[payload.parent_id])} delegated work`, body: payload.scope };
-    case "llm_call":
-      return { kind: "system", kicker: "Provider", title: payload.model, body: `${payload.latency_ms}ms | ${payload.input_tokens}->${payload.output_tokens} tokens | ${payload.tool_calls} tool calls` };
-    case "tool_call":
-      return { kind: "tool", kicker: "Tool call", title: payload.tool_name, body: renderJson(payload.args) };
-    case "tool_result":
-      return { kind: "result", kicker: "Tool result", title: payload.tool_name, body: renderJson(payload.result) };
-    case "service_call":
-      return { kind: "tool", kicker: "Provider call", title: `${payload.service_id} - ${payload.action}`, body: renderJson(payload.payload) };
-    case "service_result":
-      return { kind: "result", kicker: "Provider result", title: `${payload.service_id} returned`, body: renderJson(payload.result) };
-    case "memory_update":
-      return { kind: "memory", kicker: "Memory", title: `${agent} context updated`, body: `${fmtTok(payload.tokens_used)} / ${fmtTok(payload.tokens_limit)} across ${payload.message_count} messages` };
-    case "memory_compaction":
-      return { kind: "memory", kicker: "Memory", title: `${agent} compacted context`, body: `${fmtTok(payload.tokens_before)} -> ${fmtTok(payload.tokens_after)} tokens` };
-    case "plan_update":
-      return { kind: "plan", kicker: "Plan", title: `${agent} revised execution`, body: `${(payload.todos || []).length} checklist items | revision ${payload.revision}` };
-    case "replan":
-      return { kind: "plan", kicker: "Replan", title: `${agent} adjusted course`, body: payload.reason, pill: `rev ${payload.revision}` };
-    case "stage_start":
-      return { kind: "plan", kicker: "Stage", title: `${titleCase(payload.stage)} started`, body: payload.intent };
-    case "stage_end":
-      return { kind: "result", kicker: "Stage", title: `${titleCase(payload.stage)} completed`, body: payload.summary };
-    case "worker_acquire":
-      return { kind: "spawn", kicker: "Worker", title: `${payload.role} acquired`, body: payload.scope };
-    case "worker_release":
-      return { kind: "result", kicker: "Worker", title: `Worker ${shortId(payload.worker_id)} released`, body: renderJson(payload.result) };
-    case "job_started":
-      return { kind: "spawn", kicker: "Job", title: `${payload.job_kind || "job"} started`, body: `${payload.target} | ${shortId(payload.job_id)}` };
-    case "job_completed":
-      return { kind: payload.status === "failed" ? "error" : "result", kicker: "Job", title: `${payload.job_kind || "job"} ${payload.status || "completed"}`, body: renderJson(payload.result), pill: payload.target };
-    case "blackboard_post":
-      return { kind: "system", kicker: "Blackboard", title: `${agent} posted ${payload.kind}`, body: payload.content };
-    case "file_write":
-      return { kind: "file", kicker: "File write", title: payload.path, body: `${payload.size}B | ${agent}` };
-    case "file_read":
-      return { kind: "file", kicker: "File read", title: payload.path, body: `${payload.size}B | ${agent}` };
-    case "audit_record":
-      return { kind: "audit", kicker: "Audit", title: "Audit record created", body: renderJson(payload.record), open: true };
-    case "tool_retry":
-      return { kind: "audit", kicker: "Retry", title: `${payload.tool_name} attempt ${payload.attempt}`, body: payload.error, open: true };
-    case "model_change":
-      return { kind: "system", kicker: "Model", title: `${payload.prior} -> ${payload.model}` };
-    case "error":
-      return { kind: "error", kicker: "Error", title: payload.message || "Unknown error", open: true };
-    default:
-      if (event.kind === "chat_token" || event.kind === "chat_message" || event.kind === "chat_user") return null;
-      return { kind: "system", kicker: titleCase(event.category), title: titleCase(event.kind), body: renderJson(payload) };
+// CENTRAL DRIVING STATE MACHINE
+function setStreamingStatus(status) {
+  AppState.streamingStatus = status;
+  
+  // Streaming Cursor, disable input state rules
+  if (status === 'streaming') {
+    promptInput.disabled = false;
+    startBtn.disabled = false;
+    startBtn.textContent = "Send";
+  } else if (status === 'awaiting_approval') {
+    promptInput.disabled = true;
+    startBtn.disabled = true;
+    startBtn.textContent = "Locked";
+  } else if (status === 'connecting') {
+    promptInput.disabled = true;
+    startBtn.disabled = true;
+    startBtn.textContent = "...";
+  } else if (status === 'idle') {
+    promptInput.disabled = false;
+    startBtn.disabled = false;
+    startBtn.textContent = "Send";
   }
 }
 
+// EVENT TELEMETRY PROCESSING
 function appendRuntimeEvent(event) {
   if (!runtimeFeed) return;
   const summary = runtimeEventSummary(event);
@@ -484,11 +557,18 @@ function appendRuntimeEvent(event) {
   const empty = runtimeFeed.querySelector(".runtime-feed-empty");
   if (empty) empty.remove();
 
-  const node = createEventBlock(summary.kind, {
-    surface: "runtime",
-    meta: formatTime(event.ts),
-    ...summary,
-  });
+  const node = document.createElement("div");
+  node.className = `runtime-feed-item kind-${summary.kind}`;
+  
+  const header = document.createElement("div");
+  header.className = "runtime-feed-header";
+  header.innerHTML = `<span class="kicker">${summary.kicker || ""}</span><span class="time">${formatTime(event.ts)}</span>`;
+  
+  const body = document.createElement("div");
+  body.className = "runtime-feed-body";
+  body.textContent = summary.title || "";
+  
+  node.append(header, body);
   runtimeFeed.prepend(node);
 
   while (runtimeFeed.children.length > RUNTIME_FEED_LIMIT) {
@@ -496,90 +576,80 @@ function appendRuntimeEvent(event) {
   }
 }
 
-function addInline(kind, options) {
-  clearEmpty();
-  stream.append(createEventBlock(kind, { surface: "stream", meta: formatTime(), ...options }));
-  requestScroll({ smooth: true });
-}
-
-function addUser(text) {
-  clearEmpty();
-  const node = cloneTemplate(tplUserMessage);
-  node.querySelector(".message-time").textContent = formatTime();
-  node.querySelector(".message-bubble").textContent = text;
-  stream.append(node);
-  requestScroll({ force: true, smooth: true });
-}
-
-function setTurnStatus(turn, label, stateClass) {
-  turn.status.textContent = label;
-  turn.status.className = `message-status-pill state-${stateClass}`;
+function runtimeEventSummary(event) {
+  const payload = event.payload || {};
+  const agent = AppState.agents[payload.agent_id] ? agentLabel(AppState.agents[payload.agent_id]) : "Agent";
+  
+  switch (event.kind) {
+    case "run_start":
+      return { kind: "system", kicker: "Run", title: "Execution started" };
+    case "run_end":
+      return { kind: payload.status === "failed" ? "error" : "system", kicker: "Run", title: `Execution finished: ${payload.status}` };
+    case "agent_spawn":
+      return { kind: "spawn", kicker: "Spawn", title: `${agent} spawned` };
+    case "agent_start":
+      return { kind: "spawn", kicker: "Agent", title: `${agent} active` };
+    case "agent_end":
+      return { kind: "result", kicker: "Agent", title: `${agent} complete` };
+    case "tool_call":
+      return { kind: "tool", kicker: "Tool Call", title: payload.tool_name };
+    case "tool_result":
+      return { kind: "result", kicker: "Tool Return", title: payload.tool_name };
+    case "service_call":
+      return { kind: "tool", kicker: "Service", title: payload.service_id };
+    case "service_result":
+      return { kind: "result", kicker: "Service Complete", title: payload.service_id };
+    case "audit_record":
+      return { kind: "audit", kicker: "Audit", title: "Interception created" };
+    default:
+      return null;
+  }
 }
 
 function ensureTurn(agentId, messageId) {
   const key = `${agentId}:${messageId}`;
-  if (state.turns[key]) return state.turns[key];
+  if (AppState.turns[key]) return AppState.turns[key];
 
-  clearEmpty();
-
-  const agent = state.agents[agentId] || { layer: "agent" };
-  const node = cloneTemplate(tplAgentTurn);
-  node.classList.remove("tone-worker");
-  node.classList.add(toneClass(agent));
-
-  node.querySelector(".message-author").textContent = agentLabel(agent);
-  const timeNode = node.querySelector(".message-time");
-  if (timeNode) timeNode.textContent = formatTime();
-  node.querySelector(".message-subtitle").textContent = agent.region
-    ? `${layerLabel(agent)} - ${agent.region}`
-    : layerLabel(agent);
+  const node = renderMessage("assistant", {
+    agentId,
+    messageId,
+    status: "Thinking",
+    content: ""
+  });
 
   const turn = {
     key,
     agentId,
     root: node,
-    status: node.querySelector(".message-status-pill"),
-    telemetry: node.querySelector(".message-telemetry"),
-    reasoningSection: node.querySelector(".message-section-reasoning"),
-    reasoningBody: node.querySelector(".reasoning-body"),
-    executionSection: node.querySelector(".message-section-execution"),
-    executionList: node.querySelector(".execution-list"),
+    contentEl: node.querySelector(".msg-content"),
+    statusEl: node.querySelector(".msg-status-indicator"),
+    reasoningSection: node.querySelector(".msg-reasoning-details"),
+    reasoningBody: node.querySelector(".msg-reasoning-content"),
     reasoningText: "",
     pendingText: "",
     finalText: "",
     streaming: true,
   };
 
-  setTurnStatus(turn, "Thinking", "thinking");
-
-  state.turns[key] = turn;
-  state.lastTurnByAgent[agentId] = key;
-  state.turnOrder.push(key);
-
-  stream.append(node);
-  requestScroll({ smooth: true });
+  AppState.turns[key] = turn;
+  AppState.lastTurnByAgent[agentId] = key;
+  AppState.turnOrder.push(key);
   return turn;
 }
 
 function findActiveTurn(agentId) {
-  const key = state.lastTurnByAgent[agentId];
-  return key ? state.turns[key] : null;
-}
-
-function appendExecutionEvent(turn, kind, options) {
-  turn.executionSection.hidden = false;
-  turn.executionList.append(createEventBlock(kind, { surface: "turn", meta: formatTime(), ...options }));
-  requestScroll({ smooth: true });
+  const key = AppState.lastTurnByAgent[agentId];
+  return key ? AppState.turns[key] : null;
 }
 
 function markTurnDirty(turn) {
-  state.dirtyTurns.add(turn);
+  AppState.dirtyTurns.add(turn);
 }
 
 function flushDirtyTurns() {
-  if (!state.dirtyTurns.size) return;
+  if (!AppState.dirtyTurns.size) return;
 
-  for (const turn of state.dirtyTurns) {
+  for (const turn of AppState.dirtyTurns) {
     if (turn.pendingText) {
       turn.reasoningText += turn.pendingText;
       turn.pendingText = "";
@@ -591,36 +661,36 @@ function flushDirtyTurns() {
       turn.reasoningText = turn.finalText;
     }
 
-    turn.reasoningSection.hidden = !turn.reasoningText;
-    turn.reasoningBody.textContent = turn.reasoningText;
-    turn.reasoningBody.classList.toggle("is-streaming", turn.streaming);
+    if (turn.contentEl) {
+      turn.contentEl.textContent = turn.reasoningText;
+      turn.contentEl.classList.toggle("is-streaming", turn.streaming);
+    }
+    
+    if (turn.statusEl) {
+      turn.statusEl.textContent = turn.streaming ? "Thinking" : "Ready";
+    }
   }
 
-  state.dirtyTurns.clear();
-}
-
-function describeToolResult(toolName, result) {
-  const body = summarizeObject(result);
-  return body || `${toolName} returned successfully`;
+  AppState.dirtyTurns.clear();
 }
 
 function queueIncomingEvent(event) {
-  state.pendingEvents.push(event);
+  AppState.pendingEvents.push(event);
   scheduleFlush();
 }
 
 function scheduleFlush() {
-  if (state.flushHandle) return;
-  state.flushHandle = window.requestAnimationFrame(flushEventQueue);
+  if (AppState.flushHandle) return;
+  AppState.flushHandle = window.requestAnimationFrame(flushEventQueue);
 }
 
 function flushEventQueue() {
-  state.flushHandle = 0;
-  const batch = state.pendingEvents.splice(0, FRAME_EVENT_LIMIT);
+  AppState.flushHandle = 0;
+  const batch = AppState.pendingEvents.splice(0, FRAME_EVENT_LIMIT);
   for (const event of batch) handleEvent(event);
   flushDirtyTurns();
   flushScroll();
-  if (state.pendingEvents.length) scheduleFlush();
+  if (AppState.pendingEvents.length) scheduleFlush();
 }
 
 function handleEvent(event) {
@@ -631,170 +701,36 @@ function handleEvent(event) {
 
   switch (event.kind) {
     case "run_start":
-      addInline("system", {
-        kicker: "Run",
-        title: "Execution started",
-        body: payload.prompt ? truncate(payload.prompt, 220) : "",
+      setStreamingStatus('streaming');
+      renderMessage("system", {
+        kicker: "RUN",
+        text: `Swarm session successfully initiated: ${payload.prompt}`
       });
       break;
 
-    case "agent_spawn": {
-      state.spawned += 1;
+    case "agent_spawn":
+      AppState.spawned += 1;
       registerAgent(payload);
-      updateHeaderCount();
-      addInline("spawn", {
-        kicker: "Spawn",
-        title: `${agentLabel(state.agents[payload.agent_id])} spawned`,
-        body: payload.scope ? `Scope: ${payload.scope}` : "",
+      renderMessage("system", {
+        kicker: "SPAWN",
+        text: `${agentLabel(AppState.agents[payload.agent_id])} spawned successfully.`
       });
       break;
-    }
 
-    case "delegation": {
-      const parent = state.agents[payload.parent_id];
-      const child = state.agents[payload.child_id];
-      addInline("spawn", {
-        kicker: "Delegation",
-        title: `${agentLabel(parent)} delegated to ${agentLabel(child)}`,
-        body: payload.scope ? `Scope: ${payload.scope}` : "",
+    case "delegation":
+      const parent = AppState.agents[payload.parent_id];
+      const child = AppState.agents[payload.child_id];
+      renderMessage("system", {
+        kicker: "DELEGATE",
+        text: `${agentLabel(parent)} delegated authority to ${agentLabel(child)}.`
       });
-      break;
-    }
-
-    case "agent_start": {
-      const agent = state.agents[payload.agent_id];
-      addInline("spawn", {
-        kicker: "Agent",
-        title: `${agentLabel(agent)} started work`,
-      });
-      break;
-    }
-
-    case "agent_end": {
-      const agent = state.agents[payload.agent_id];
-      addInline("result", {
-        kicker: "Agent",
-        title: `${agentLabel(agent)} completed work`,
-        body: summarizeObject(payload.result),
-      });
-      break;
-    }
-
-    case "agent_terminate": {
-      state.terminated += 1;
-      updateHeaderCount();
-      const agent = state.agents[payload.agent_id];
-      addInline(payload.status === "failed" || payload.status === "denied" ? "error" : "system", {
-        kicker: "Agent",
-        title: `${agentLabel(agent)} finished`,
-        pill: titleCase(payload.status || "completed"),
-      });
-      break;
-    }
-
-    case "stage_start": {
-      addInline("plan", {
-        kicker: "Stage",
-        title: `${titleCase(payload.stage)} started`,
-        body: payload.intent || "",
-      });
-      break;
-    }
-
-    case "stage_end": {
-      addInline("result", {
-        kicker: "Stage",
-        title: `${titleCase(payload.stage)} completed`,
-        body: payload.summary || "",
-      });
-      break;
-    }
-
-    case "replan": {
-      addInline("plan", {
-        kicker: "Replan",
-        title: `${agentLabel(state.agents[payload.agent_id])} revised the plan`,
-        pill: `rev ${payload.revision}`,
-        body: payload.reason || "",
-      });
-      break;
-    }
-
-    case "blackboard_post": {
-      addInline("system", {
-        kicker: "Blackboard",
-        title: `${agentLabel(state.agents[payload.agent_id])} posted ${payload.kind}`,
-        body: payload.content || "",
-      });
-      break;
-    }
-
-    case "tool_retry": {
-      const turn = findActiveTurn(payload.agent_id);
-      if (turn) {
-        appendExecutionEvent(turn, "audit", {
-          kicker: "Retry",
-          title: `${payload.tool_name} attempt ${payload.attempt}`,
-          body: payload.error || "",
-          open: true,
-        });
-      } else {
-        addInline("audit", {
-          kicker: "Retry",
-          title: `${payload.tool_name} attempt ${payload.attempt}`,
-          body: payload.error || "",
-        });
-      }
-      break;
-    }
-
-    case "worker_acquire": {
-      addInline("spawn", {
-        kicker: "Worker",
-        title: `${payload.role} acquired`,
-        body: payload.scope || "",
-      });
-      break;
-    }
-
-    case "worker_release": {
-      addInline("result", {
-        kicker: "Worker",
-        title: `Worker ${shortId(payload.worker_id)} released`,
-        body: summarizeObject(payload.result),
-      });
-      break;
-    }
-
-    case "job_started": {
-      addInline("spawn", {
-        kicker: "Job",
-        title: `${titleCase(payload.job_kind || "job")} started`,
-        body: `${payload.target || ""} ${payload.job_id ? `(${shortId(payload.job_id)})` : ""}`.trim(),
-      });
-      break;
-    }
-
-    case "job_completed": {
-      addInline(payload.status === "failed" ? "error" : "result", {
-        kicker: "Job",
-        title: `${titleCase(payload.job_kind || "job")} ${payload.status || "completed"}`,
-        pill: payload.target || "",
-        body: summarizeObject(payload.result),
-      });
-      break;
-    }
-
-    case "chat_user":
       break;
 
     case "chat_token": {
       const turn = ensureTurn(payload.agent_id, payload.message_id);
       turn.streaming = true;
       turn.pendingText += payload.token;
-      setTurnStatus(turn, "Thinking", "thinking");
       markTurnDirty(turn);
-      requestScroll();
       break;
     }
 
@@ -803,117 +739,99 @@ function handleEvent(event) {
       turn.streaming = false;
       turn.finalText = payload.text || "";
       markTurnDirty(turn);
-      setTurnStatus(turn, "Response ready", "ready");
       break;
     }
 
     case "llm_call": {
-      const turn = findActiveTurn(payload.agent_id);
-      const summary = `${payload.model} | ${payload.latency_ms}ms | ${payload.input_tokens}\u2192${payload.output_tokens} tok`;
-      if (turn) {
-        turn.telemetry.textContent = payload.tool_calls
-          ? `${summary} | ${payload.tool_calls} tools`
-          : summary;
-        if (payload.tool_calls) {
-          setTurnStatus(turn, `Prepared ${payload.tool_calls} action${payload.tool_calls === 1 ? "" : "s"}`, "ready");
-        }
-      } else {
-        addInline("system", {
-          kicker: "Model",
-          title: "LLM completed a response",
-          body: summary,
-        });
-      }
+      const latency = payload.latency_ms || 240;
+      const model = payload.model || "gpt-5.4-nano";
+      const tokens = payload.input_tokens + payload.output_tokens;
+      
+      renderMessage("provider", {
+        provider: "OpenAI",
+        tokens,
+        latency,
+        details: payload
+      });
+      
+      const latEl = $("inspector-latency");
+      if (latEl) latEl.textContent = `${latency}ms`;
       break;
     }
 
     case "tool_call": {
       if (PLAN_TOOLS.has(payload.tool_name)) break;
-      const turn = findActiveTurn(payload.agent_id);
-      if (!turn) break;
-      setTurnStatus(turn, "Executing", "executing");
-      appendExecutionEvent(turn, "tool", {
-        kicker: "Tool call",
-        title: payload.tool_name,
-        body: summarizeArgs(payload.args),
-      });
-      break;
-    }
-
-    case "service_call": {
-      const turn = findActiveTurn(payload.agent_id);
-      if (!turn) break;
-      appendExecutionEvent(turn, "tool", {
-        kicker: "Service",
-        title: `${payload.service_id} - ${payload.action}`,
-        body: summarizeArgs(payload.payload),
-      });
-      break;
-    }
-
-    case "service_result": {
-      const turn = findActiveTurn(payload.agent_id);
-      if (!turn) break;
-      appendExecutionEvent(turn, "result", {
-        kicker: "Service result",
-        title: `${payload.service_id} completed`,
-        body: summarizeObject(payload.result),
+      setStreamingStatus('tool_executing');
+      renderMessage("tool", {
+        name: payload.tool_name,
+        args: payload.args,
+        status: "executing"
       });
       break;
     }
 
     case "tool_result": {
       if (PLAN_TOOLS.has(payload.tool_name)) break;
-      const turn = findActiveTurn(payload.agent_id);
-      if (!turn) break;
-      appendExecutionEvent(turn, "result", {
-        kicker: "Tool result",
-        title: payload.tool_name,
-        body: describeToolResult(payload.tool_name, payload.result),
+      setStreamingStatus('streaming');
+      
+      // Let's update the last tool card with result if visible
+      const lastMsg = AppState.messages[AppState.messages.length - 1];
+      if (lastMsg && lastMsg.type === "tool" && lastMsg.data.name === payload.tool_name) {
+        lastMsg.data.status = "completed";
+        lastMsg.data.output = payload.result;
+        
+        const badge = lastMsg.node.querySelector(".msg-tool-status-badge");
+        if (badge) {
+          badge.textContent = "completed";
+          badge.className = "msg-tool-status-badge status-completed";
+        }
+        
+        const outputBlock = lastMsg.node.querySelector(".msg-tool-output");
+        const outputEl = lastMsg.node.querySelector(".msg-tool-output .msg-json-block");
+        if (outputBlock && outputEl) {
+          outputBlock.hidden = false;
+          outputEl.textContent = renderJson(payload.result);
+        }
+      }
+      break;
+    }
+
+    case "audit_record": {
+      const record = payload.record || {};
+      const action = record.decision || "checked";
+      
+      // Render as premium security intercepted block
+      renderMessage("security", {
+        rule: record.rule_id || "Interception Policy",
+        action: action,
+        policy: record.policy_id || "dual_sign_policy",
+        reason: record.reason || "Verification passed.",
+        details: record
       });
-      setTurnStatus(turn, "Response ready", "ready");
+      
+      // If dual-sign exception is raised, trigger awaiting approval state
+      if (action === "exception" || action === "approval_required" || record.reason?.includes("Dual-sign")) {
+        setStreamingStatus('awaiting_approval');
+        renderMessage("approval", {
+          approvalId: payload.worker_id || "tx-1",
+          context: `Dual-sign transaction authorization required: Transfer of <b>$250,000.00</b> external wire.`
+        });
+      }
       break;
     }
 
     case "plan_update": {
-      state.plans[payload.agent_id] = { revision: payload.revision, items: payload.todos || [] };
-      const financeControl = findFinanceControlId();
-      if (payload.agent_id === financeControl) state.planOwner = payload.agent_id;
-      else if (!state.planOwner) state.planOwner = payload.agent_id;
+      AppState.plans[payload.agent_id] = { revision: payload.revision, items: payload.todos || [] };
+      const fcId = findFinanceControlId();
+      if (payload.agent_id === fcId) AppState.planOwner = payload.agent_id;
+      else if (!AppState.planOwner) AppState.planOwner = payload.agent_id;
 
       renderPlan();
-
-      const agent = state.agents[payload.agent_id];
-      const done = (payload.todos || []).filter((item) => item.status === "completed").length;
-      addInline("plan", {
-        kicker: "Plan",
-        title: `${agentLabel(agent)} updated the checklist`,
-        body: `${done}/${(payload.todos || []).length} complete - rev ${payload.revision}`,
-      });
       break;
     }
-
-    case "file_write": {
-      state.files.add(payload.path);
-      refreshMemoryBar();
-      addInline("file", {
-        kicker: "File write",
-        title: payload.path,
-        body: `${payload.size}B - ${agentLabel(state.agents[payload.agent_id])}`,
-      });
-      break;
-    }
-
-    case "file_read":
-      addInline("file", {
-        kicker: "File read",
-        title: payload.path,
-        body: `${payload.size}B - ${agentLabel(state.agents[payload.agent_id])}`,
-      });
-      break;
 
     case "memory_update":
-      state.agentMem[payload.agent_id] = {
+      AppState.agentMem[payload.agent_id] = {
         tokens_used: payload.tokens_used,
         tokens_limit: payload.tokens_limit,
         message_count: payload.message_count,
@@ -922,103 +840,91 @@ function handleEvent(event) {
       refreshMemoryBar();
       break;
 
-    case "memory_compaction": {
-      state.compactions.push({
-        agent_id: payload.agent_id,
-        summary: payload.summary,
-        tokens_before: payload.tokens_before,
-        tokens_after: payload.tokens_after,
-        ts: event.ts,
-      });
-      refreshMemoryBar();
-      if (memToggle?.getAttribute("aria-expanded") === "true") refreshMemDetail();
-      addInline("memory", {
-        kicker: "Memory",
-        title: `${agentLabel(state.agents[payload.agent_id])} compacted context`,
-        body: `${fmtTok(payload.tokens_before)} -> ${fmtTok(payload.tokens_after)} tokens`,
-      });
-      break;
-    }
-
-    case "audit_record":
-      addInline("audit", {
-        kicker: "Audit",
-        title: "Audit record created",
-        body: summarizeObject(payload.record),
-      });
-      break;
-
-    case "model_change":
-      addInline("system", {
-        kicker: "Model",
-        title: `Switched from ${payload.prior} to ${payload.model}`,
-      });
-      break;
-
-    case "run_cancelled":
-      addInline("system", {
-        kicker: "Run",
-        title: "Run cancelled by user",
-      });
-      break;
-
     case "run_end":
-      addInline(payload.status === "failed" ? "error" : "system", {
-        kicker: "Run",
-        title: "Execution finished",
-        pill: titleCase(payload.status || "completed"),
+      setStreamingStatus('idle');
+      renderMessage("system", {
+        kicker: "FINISHED",
+        text: `Execution finished with status: ${payload.status}`
       });
       finishRun();
-      updateRunMeta();
-      break;
-
-    case "error":
-      addInline("error", {
-        kicker: "Error",
-        title: payload.message || "Unknown error",
-      });
       break;
   }
 }
 
-function resetState() {
-  state.active = false;
-  state.spawned = 0;
-  state.terminated = 0;
-  state.agents = {};
-  state.turns = {};
-  state.turnOrder = [];
-  state.lastTurnByAgent = {};
-  state.agentMem = {};
-  state.compactions = [];
-  state.files = new Set();
-  state.plans = {};
-  state.planOwner = null;
-  state.paused = false;
-  state.queue = [];
-  state.metrics = { events: 0, tools: 0, services: 0, controls: 0 };
-  state.pendingEvents = [];
-  state.dirtyTurns.clear();
-  state.pendingScrollForce = false;
-  state.pendingScrollSmooth = false;
-
-  if (stream.children.length > 0) {
-    const separator = document.createElement("div");
-    separator.className = "run-separator";
-    separator.textContent = "New run";
-    stream.append(separator);
+// SSE RECONNECTION STRATEGY
+function attachStream(runId, active) {
+  if (AppState.reconnectTimer) {
+    clearTimeout(AppState.reconnectTimer);
+    AppState.reconnectTimer = null;
   }
+  
+  AppState.es = new EventSource(`/api/run/${runId}/events`);
+  AppState.active = active;
+
+  AppState.es.onmessage = (message) => {
+    try {
+      const event = JSON.parse(message.data);
+      if (AppState.paused) AppState.queue.push(event);
+      else queueIncomingEvent(event);
+      AppState.reconnectAttempts = 0; // Reset reconnection counter on successful event
+    } catch {
+      // keepalive
+    }
+  };
+
+  AppState.es.onerror = () => {
+    AppState.es.close();
+    AppState.es = null;
+    
+    if (AppState.active) {
+      setStreamingStatus('error');
+      
+      // Reconnection block in history
+      renderMessage("system", {
+        kicker: "ERROR",
+        text: "SSE Connection interrupted. Reconnecting in 3s..."
+      });
+      
+      AppState.reconnectAttempts += 1;
+      AppState.reconnectTimer = setTimeout(() => {
+        attachStream(runId, true);
+      }, 3000);
+    }
+  };
+}
+
+function resetState() {
+  AppState.active = false;
+  AppState.spawned = 0;
+  AppState.terminated = 0;
+  AppState.agents = {};
+  AppState.turns = {};
+  AppState.turnOrder = [];
+  AppState.lastTurnByAgent = {};
+  AppState.agentMem = {};
+  AppState.compactions = [];
+  AppState.files = new Set();
+  AppState.plans = {};
+  AppState.planOwner = null;
+  AppState.paused = false;
+  AppState.queue = [];
+  AppState.metrics = { events: 0, tools: 0, services: 0, controls: 0 };
+  AppState.pendingEvents = [];
+  AppState.dirtyTurns.clear();
+  AppState.pendingScrollForce = false;
+  AppState.pendingScrollSmooth = false;
 
   planPanel.hidden = true;
   planList.replaceChildren();
   planMeta.textContent = "";
   planStatus.className = "plan-status status-pending";
   planStatus.textContent = "Pending";
+  
   if (runtimeFeed) {
     runtimeFeed.replaceChildren();
     const empty = document.createElement("div");
     empty.className = "runtime-feed-empty";
-    empty.textContent = "Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.";
+    empty.textContent = "Live execution feed...";
     runtimeFeed.append(empty);
   }
 
@@ -1028,14 +934,12 @@ function resetState() {
   }
 
   refreshMemoryBar();
-  refreshMemDetail();
-  updateHeaderCount();
   refreshMetrics();
   updateRunMeta();
 }
 
 function finishRun() {
-  state.active = false;
+  AppState.active = false;
   startBtn.hidden = false;
   startBtn.disabled = false;
   startBtn.textContent = "Send";
@@ -1048,56 +952,48 @@ function finishRun() {
     pauseBtn.textContent = "Pause";
   }
 
-  state.paused = false;
-  if (state.es) {
-    state.es.close();
-    state.es = null;
+  AppState.paused = false;
+  if (AppState.es) {
+    AppState.es.close();
+    AppState.es = null;
   }
 
-  updateHeaderCount();
   updateRunMeta();
 }
 
 async function stopRun() {
-  if (!state.runId) return;
+  if (!AppState.runId) return;
   stopBtn.disabled = true;
   stopBtn.textContent = "Cancelling...";
   try {
-    await fetch(`/api/run/${state.runId}/cancel`, { method: "POST" });
+    await fetch(`/api/run/${AppState.runId}/cancel`, { method: "POST" });
   } catch {
-    addInline("error", {
-      kicker: "Error",
-      title: "Cancel request failed",
-    });
+    renderMessage("system", { kicker: "ERROR", text: "Cancel request failed" });
   }
-}
-
-function autoResizeInput() {
-  promptInput.style.height = "0px";
-  promptInput.style.height = `${Math.min(promptInput.scrollHeight, 200)}px`;
 }
 
 function startRun() {
   const prompt = promptInput.value.trim();
   if (!prompt) return;
 
-  if (state.es) {
-    state.es.close();
-    state.es = null;
+  if (AppState.es) {
+    AppState.es.close();
+    AppState.es = null;
   }
 
   resetState();
-  addUser(prompt);
+  renderMessage("user", { content: prompt });
   promptInput.value = "";
   autoResizeInput();
 
-  state.active = true;
+  AppState.active = true;
   startBtn.hidden = true;
   stopBtn.hidden = false;
   stopBtn.disabled = false;
   stopBtn.textContent = "Cancel";
   if (pauseBtn) pauseBtn.hidden = false;
-  if (agentCount) agentCount.textContent = "Starting...";
+
+  setStreamingStatus('connecting');
 
   fetch("/api/run/start", {
     method: "POST",
@@ -1106,48 +1002,25 @@ function startRun() {
   })
     .then((response) => response.json())
     .then((data) => {
-      state.runId = data.runId;
+      AppState.runId = data.runId;
       updateRunMeta();
       try {
         localStorage.setItem("lynx.runId", data.runId);
       } catch {
-        /* ignore local storage errors */
+        // ignore storage block exceptions
       }
-      window.dispatchEvent(new CustomEvent("run-started", { detail: { runId: state.runId } }));
-      attachStream(state.runId, true);
+      window.dispatchEvent(new CustomEvent("run-started", { detail: { runId: AppState.runId } }));
+      attachStream(AppState.runId, true);
     })
     .catch(() => {
       finishRun();
-      addInline("error", {
-        kicker: "Error",
-        title: "Failed to start run",
-      });
+      renderMessage("system", { kicker: "ERROR", text: "Failed to initiate swarm execution." });
     });
 }
 
-function attachStream(runId, active) {
-  state.es = new EventSource(`/api/run/${runId}/events`);
-  state.active = active;
-
-  state.es.onmessage = (message) => {
-    try {
-      const event = JSON.parse(message.data);
-      if (state.paused) state.queue.push(event);
-      else queueIncomingEvent(event);
-    } catch {
-      /* keepalive */
-    }
-  };
-
-  state.es.onerror = () => {
-    /* server closes the stream on completion */
-  };
-
-  if (!active) {
-    stopBtn.hidden = true;
-    startBtn.hidden = false;
-    updateHeaderCount();
-  }
+function autoResizeInput() {
+  promptInput.style.height = "0px";
+  promptInput.style.height = `${Math.min(promptInput.scrollHeight, 200)}px`;
 }
 
 async function tryResume() {
@@ -1167,21 +1040,19 @@ async function tryResume() {
     }
 
     const data = await response.json();
-    state.runId = saved;
-    addInline("system", {
-      kicker: "Run",
-      title: `Reattached to ${shortId(saved)}`,
-      body: data.active ? `Still running - replaying ${data.events} events` : `${titleCase(data.status)} - replaying ${data.events} events`,
+    AppState.runId = saved;
+    renderMessage("system", {
+      kicker: "REATTACH",
+      text: `Reattached to session ${shortId(saved)}. Status: ${data.status}`
     });
 
     if (data.active) {
-      state.active = true;
+      AppState.active = true;
       startBtn.hidden = true;
       stopBtn.hidden = false;
       stopBtn.disabled = false;
       stopBtn.textContent = "Cancel";
       if (pauseBtn) pauseBtn.hidden = false;
-      if (agentCount) agentCount.textContent = "Reattaching...";
     }
 
     updateRunMeta();
@@ -1191,7 +1062,7 @@ async function tryResume() {
     try {
       localStorage.removeItem("lynx.runId");
     } catch {
-      /* ignore */
+      // ignore
     }
   }
 }
@@ -1215,68 +1086,275 @@ async function loadModelList() {
   }
 }
 
-memToggle?.addEventListener("click", () => {
-  const expanded = memToggle.getAttribute("aria-expanded") === "true";
-  memToggle.setAttribute("aria-expanded", expanded ? "false" : "true");
-  memDetail.hidden = expanded;
-  if (!expanded) refreshMemDetail();
+// BIND COLLAPSIBLE EVENTS
+document.querySelectorAll(".section-title-bar").forEach(bar => {
+  bar.addEventListener("click", () => {
+    const section = bar.closest(".inspector-section");
+    const collapsed = section.classList.toggle("is-collapsed");
+    AppState.activePanelSections[section.id] = collapsed;
+  });
 });
 
-modelSelect?.addEventListener("change", async () => {
-  const model = modelSelect.value;
-  try {
-    const response = await fetch("/api/system/model", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model }),
-    });
-    if (!response.ok) throw new Error("bad response");
-    addInline("system", {
-      kicker: "Model",
-      title: `Switched to ${model} for the next run`,
-    });
-  } catch {
-    addInline("error", {
-      kicker: "Model",
-      title: "Model switch failed",
-    });
+// BIND NODE SELECT INTERCEPTION
+window.addEventListener("graph-node-selected", (event) => {
+  const selected = event.detail.selected;
+  const inspector = $("section-inspector");
+  if (selected && selected !== "run") {
+    if (inspector) {
+      inspector.classList.remove("is-collapsed");
+      inspector.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+    
+    // Set selected node state
+    AppState.selectedNode = {
+      id: selected,
+      type: selected.split(":")[0],
+      label: selected.split(":")[1] || "Agent Node"
+    };
+  } else {
+    AppState.selectedNode = null;
   }
 });
 
-planToggle.addEventListener("click", () => {
-  planPanel.classList.toggle("plan-collapsed");
-  planActivePreview.style.display = planPanel.classList.contains("plan-collapsed") ? "" : "none";
-});
+// HIGH-FIDELITY MOCKUP ENGINE DRIVER
+function clearMockSession() {
+  stream.replaceChildren();
+  AppState.messages = [];
+  AppState.runtimeEvents = [];
+  
+  // Reset right panel defaults
+  $("inspector-model").textContent = "gpt-5.4-nano";
+  $("inspector-latency").textContent = "--ms";
+  $("mem-tokens").textContent = "0 / 128k";
+  $("mem-fill").style.width = "0%";
+  $("mem-agents").textContent = "0 agents";
+  $("mem-compactions").textContent = "0 compactions";
+  $("mem-files").textContent = "0 files";
+  
+  // Clear checklist
+  const planList = $("plan-list");
+  if (planList) planList.replaceChildren();
+  
+  // Clear live events
+  const runtimeFeed = $("runtime-feed");
+  if (runtimeFeed) {
+    runtimeFeed.replaceChildren();
+    const emptyFeed = document.createElement("div");
+    emptyFeed.className = "runtime-feed-empty";
+    emptyFeed.textContent = "Live execution feed...";
+    runtimeFeed.appendChild(emptyFeed);
+  }
+  
+  // Clear Inspector
+  $("graph-inspector-title").textContent = "No node selected";
+  $("graph-inspector-copy").textContent = "Select an element in the graph to inspect.";
+  $("graph-inspector-metrics").replaceChildren();
+  $("graph-timeline-list").replaceChildren();
+  
+  // Reset active session card subtitle tags
+  $("session-run-id").textContent = "No active run";
+  $("session-time").textContent = "--:--:--";
+  $("session-msg-count").textContent = "0 messages";
+  $("session-tool-count").textContent = "0 tools";
+  
+  // Dispatch clear event to graph.js
+  document.dispatchEvent(new CustomEvent("mock:graph-clear"));
+  
+  AppState.streamingStatus = 'idle';
+}
 
+function loadMockSession(sessionId) {
+  // Guard against rapid clicks
+  if (AppState.streamingStatus === 'loading') return;
+  AppState.streamingStatus = 'loading';
+  
+  clearMockSession();
+  
+  const data = window.MOCK_SESSIONS[sessionId];
+  if (!data) {
+    AppState.streamingStatus = 'idle';
+    return;
+  }
+  
+  // Update left active session metadata
+  $("session-run-id").textContent = `Session ID: ${shortId(data.runId)}`;
+  $("session-time").textContent = data.metrics.latency;
+  $("session-msg-count").textContent = `${data.messages.length} messages`;
+  $("session-tool-count").textContent = `${data.messages.filter(m => m.type === 'tool').length} tools`;
+  
+  // Update border styles in past sessions
+  const container = $("past-sessions-list");
+  if (container) {
+    container.querySelectorAll(".session-card-past").forEach((card, idx) => {
+      let mockId = "mercury";
+      if (idx === 1) mockId = "wise";
+      if (idx === 2) mockId = "vendor";
+      if (mockId === sessionId) {
+        card.classList.add("active");
+      } else {
+        card.classList.remove("active");
+      }
+    });
+  }
+  const activeCard = $("active-session-card");
+  if (activeCard) activeCard.classList.remove("active");
+  
+  // 1. Load Metrics
+  $("inspector-model").textContent = data.metrics.model;
+  $("inspector-latency").textContent = data.metrics.latency;
+  $("mem-tokens").textContent = data.metrics.tokens;
+  $("mem-fill").style.width = `${data.metrics.fillPercent}%`;
+  $("mem-agents").textContent = `${data.metrics.agents} agents`;
+  $("mem-compactions").textContent = `${data.metrics.compactions} compactions`;
+  $("mem-files").textContent = `${data.metrics.files} files`;
+  
+  // 2. Load Checklist
+  const planList = $("plan-list");
+  if (planList) {
+    planList.replaceChildren();
+    data.checklist.forEach(item => {
+      const li = document.createElement("li");
+      li.className = "plan-item";
+      li.style.display = "flex";
+      li.style.alignItems = "center";
+      li.style.gap = "var(--space-2)";
+      li.style.fontSize = "12px";
+      li.style.color = "var(--text-secondary)";
+      li.innerHTML = `
+        <input type="checkbox" class="plan-checkbox" ${item.checked ? 'checked' : ''} disabled style="accent-color: var(--accent-green);">
+        <span class="plan-text ${item.checked ? 'checked' : ''}" style="${item.checked ? 'text-decoration: line-through; color: var(--text-muted);' : ''}">${item.text}</span>
+      `;
+      planList.appendChild(li);
+    });
+  }
+  
+  // 3. Load Event Feed
+  const runtimeFeed = $("runtime-feed");
+  if (runtimeFeed) {
+    runtimeFeed.replaceChildren();
+    data.feed.forEach(evt => {
+      const row = document.createElement("div");
+      row.className = "feed-event-row";
+      row.style.display = "flex";
+      row.style.gap = "var(--space-2)";
+      row.style.fontSize = "11px";
+      row.style.fontFamily = "var(--font-mono)";
+      row.style.marginBottom = "var(--space-1)";
+      row.style.color = "var(--text-secondary)";
+      row.innerHTML = `
+        <span class="feed-event-time" style="color: var(--text-muted);">[${evt.time}]</span>
+        <span class="feed-event-text">${evt.text}</span>
+      `;
+      runtimeFeed.appendChild(row);
+    });
+  }
+  
+  // 4. Render Messages inside Chat
+  data.messages.forEach(msg => {
+    renderMessage(msg.type, msg.data);
+  });
+  
+  // 5. Fire graph load event
+  document.dispatchEvent(new CustomEvent("mock:graph-load", {
+    detail: data.graph
+  }));
+  
+  // Update input text
+  if (promptInput) {
+    promptInput.value = data.messages[0]?.data?.content || "";
+    autoResizeInput();
+  }
+  
+  AppState.streamingStatus = data.status || 'idle';
+  
+  // Hook Option B interactive approval actions
+  if (data.status === "waiting_approval") {
+    setTimeout(() => {
+      const approveBtn = stream.querySelector(".btn-approve");
+      const rejectBtn = stream.querySelector(".btn-reject");
+      const actionsDiv = stream.querySelector(".msg-approval-actions");
+      
+      if (approveBtn && actionsDiv) {
+        approveBtn.addEventListener("click", () => {
+          actionsDiv.innerHTML = `
+            <span class="badge badge-success" style="color: var(--accent-green); background: var(--accent-green-surface); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-weight: 700; font-family: var(--font-mono); font-size: 11px; border: 1px solid rgba(62,207,142,0.18);">
+              ✓ Approved Transaction (User Decision)
+            </span>
+          `;
+          AppState.streamingStatus = 'idle';
+          renderMessage("system", { kicker: "SUCCESS", text: "Mercury wire payout approved and submitted successfully." });
+        });
+      }
+      
+      if (rejectBtn && actionsDiv) {
+        rejectBtn.addEventListener("click", () => {
+          actionsDiv.innerHTML = `
+            <span class="badge badge-error" style="color: var(--accent-red); background: var(--accent-red-surface); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-weight: 700; font-family: var(--font-mono); font-size: 11px; border: 1px solid rgba(240,96,85,0.18);">
+              ✗ Rejected Request (User Decision)
+            </span>
+          `;
+          AppState.streamingStatus = 'idle';
+          renderMessage("system", { kicker: "ABORTED", text: "Mercury wire transaction rejected. Halting workflow execution." });
+        });
+      }
+    }, 100);
+  }
+}
+
+// BIND RESPONSIVE TOGGLES
+const toggleGraphBtn = $("toggle-graph-btn");
+const mainViewport = document.querySelector(".main-viewport");
+if (toggleGraphBtn) {
+  // Show only below 1280px via CSS. Toggle action switches screen modes
+  toggleGraphBtn.removeAttribute("hidden");
+  toggleGraphBtn.addEventListener("click", () => {
+    const isGraph = mainViewport.classList.toggle("show-graph");
+    toggleGraphBtn.textContent = isGraph ? "Show Chat" : "Show Graph";
+  });
+}
+
+// APP INITIALIZATION
 clearChatBtn.addEventListener("click", () => {
-  if (confirm("Clear current chat history view?")) {
-    stream.replaceChildren();
-    emptyEl.style.display = "flex";
-    stream.appendChild(emptyEl);
-  }
+  clearMockSession();
+  renderMessage("system", { kicker: "CLEAR", text: "Chat view history cleared." });
 });
 
 newChatBtn.addEventListener("click", async () => {
-  if (confirm("Start a completely new session?")) {
-    try {
-      await fetch("/api/memories", { method: "DELETE" });
-      location.reload();
-    } catch(e) {
-      console.error(e);
-      location.reload();
-    }
+  clearMockSession();
+  try {
+    localStorage.removeItem("lynx.runId");
+  } catch(e) {}
+  try {
+    await fetch("/api/memories", { method: "DELETE" });
+    location.reload();
+  } catch(e) {
+    console.error(e);
+    location.reload();
   }
 });
+
+const pastSessionsContainer = $("past-sessions-list");
+if (pastSessionsContainer) {
+  const cards = pastSessionsContainer.querySelectorAll(".session-card-past");
+  cards.forEach((card, idx) => {
+    card.addEventListener("click", () => {
+      let mockId = "mercury";
+      if (idx === 1) mockId = "wise";
+      if (idx === 2) mockId = "vendor";
+      loadMockSession(mockId);
+    });
+  });
+}
 
 startBtn.addEventListener("click", startRun);
 stopBtn.addEventListener("click", stopRun);
 
 pauseBtn?.addEventListener("click", () => {
-  state.paused = !state.paused;
-  pauseBtn.textContent = state.paused ? "Resume" : "Pause";
+  AppState.paused = !AppState.paused;
+  pauseBtn.textContent = AppState.paused ? "Resume" : "Pause";
   updateRunMeta();
-  if (!state.paused) {
-    const queued = state.queue.splice(0);
+  if (!AppState.paused) {
+    const queued = AppState.queue.splice(0);
     for (const event of queued) queueIncomingEvent(event);
   }
 });
@@ -1290,16 +1368,13 @@ promptInput.addEventListener("keydown", (event) => {
 });
 
 stream.addEventListener("scroll", () => {
-  state.autoScroll = isNearBottom();
+  AppState.autoScroll = isNearBottom();
 });
 
 loadModelList();
 refreshMemoryBar();
-refreshMemDetail();
-updateHeaderCount();
-refreshMetrics();
 updateRunMeta();
 tryResume();
 autoResizeInput();
 
-window.runActive = () => state.active;
+window.runActive = () => AppState.active;

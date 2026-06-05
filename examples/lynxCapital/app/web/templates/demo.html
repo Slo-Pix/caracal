@@ -2,179 +2,207 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Demo workspace template for chat, runtime visibility, and orchestration graph panels.
-#}
-{#
-Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
-Caracal, a product of Garudex Labs
-
 Demo page template for the Lynx Capital runtime workspace.
 #}
 {% extends "layout.html" %}
 {% block title %}{{ company }} - Demo{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/demo.css?v=11">
+<link rel="stylesheet" href="/static/demo.css?v=12">
 
-<div class="demo-shell">
-  <div class="demo-body">
-    <section class="chat-panel" aria-label="Conversational runtime workspace">
-      <header class="panel-header chat-header">
-        <div class="panel-header-copy">
-          <span class="panel-eyebrow">Service runtime</span>
-          <h1 class="panel-title">{{ shortName }} agent workspace</h1>
-          <p class="panel-copy">Conversation, execution traces, context pressure, and control events stay visible as work runs.</p>
+<div class="app-shell">
+  <aside class="left-sidebar" aria-label="Runtime sessions">
+    <div class="sidebar-brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-text">{{ shortName }}</span>
+    </div>
+
+    <section class="sidebar-section">
+      <h2 class="section-header">Active session</h2>
+      <div id="active-session-card" class="session-card active">
+        <div class="session-status">
+          <span class="pulse-dot" aria-hidden="true"></span>
+          <span id="session-run-id" class="session-title">No active run</span>
         </div>
-        <div class="panel-meta-block">
-          <div class="chat-controls">
-            <button id="clear-chat-btn" class="btn btn-ghost btn-compact" title="Clear current visible history">Clear view</button>
-            <button id="new-chat-btn" class="btn btn-ghost btn-compact" title="Start a new chat session">New chat</button>
-          </div>
-          <div class="run-status-card">
-            <span class="panel-meta-label">Run state</span>
-            <span id="agent-count" class="agent-count">Idle</span>
-            <span id="run-id" class="run-id">No active run</span>
-          </div>
+        <div class="session-meta">
+          <span id="session-msg-count">0 messages</span>
+          <span id="session-tool-count">0 tools</span>
+          <span id="session-time">--:--:--</span>
         </div>
-      </header>
-
-      <div class="workspace-grid">
-        <section class="conversation-column" aria-label="Conversation stream">
-          <div class="conversation-toolbar" aria-label="Runtime counters">
-            <div class="metric-card">
-              <span class="metric-label">Events</span>
-              <strong id="event-count">0</strong>
-            </div>
-            <div class="metric-card">
-              <span class="metric-label">Tools</span>
-              <strong id="tool-count">0</strong>
-            </div>
-            <div class="metric-card">
-              <span class="metric-label">Services</span>
-              <strong id="service-count">0</strong>
-            </div>
-            <div class="metric-card">
-              <span class="metric-label">Controls</span>
-              <strong id="security-count">0</strong>
-            </div>
-          </div>
-
-          <div class="chat-stream-shell">
-            <div class="chat-stream" id="chat-stream">
-              <div class="chat-empty" id="chat-empty">
-                <span class="chat-empty-title">No activity yet</span>
-                <span class="chat-empty-copy">Start a run to see the live conversation, execution trail, and system events.</span>
-              </div>
-            </div>
-          </div>
-
-          {% include "components/demo/input_component.html" %}
-        </section>
-
-        <aside class="runtime-rail" aria-label="Runtime visibility">
-          <section class="runtime-card runtime-card-context">
-            <div class="runtime-card-head">
-              <div>
-                <span class="runtime-eyebrow">Context</span>
-                <h2>Memory pressure</h2>
-              </div>
-              <span id="mem-tokens" class="mem-tokens">0 / 128k</span>
-            </div>
-            <div id="memory-bar" class="memory-bar" aria-label="Context usage">
-              <div class="mem-track" aria-hidden="true">
-                <div id="mem-fill" class="mem-fill"></div>
-              </div>
-              <div class="mem-row mem-row-compact">
-                <span id="mem-agents" class="mem-chip">0 agents</span>
-                <span id="mem-compactions" class="mem-chip">0 compactions</span>
-                <span id="mem-files" class="mem-chip">0 files</span>
-                <button type="button" id="mem-toggle" class="mem-toggle" aria-expanded="false">Summaries</button>
-              </div>
-              <div id="mem-detail" class="mem-detail" hidden></div>
-            </div>
-          </section>
-
-          {% include "components/demo/plan_block.html" %}
-
-          <section class="runtime-card runtime-card-feed" aria-label="Live runtime activity">
-            <div class="runtime-card-head">
-              <div>
-                <span class="runtime-eyebrow">Trace</span>
-                <h2>Runtime activity</h2>
-              </div>
-              <span id="runtime-state" class="runtime-state">Idle</span>
-            </div>
-            <div id="runtime-feed" class="runtime-feed">
-              <div class="runtime-feed-empty">Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.</div>
-            </div>
-          </section>
-        </aside>
       </div>
     </section>
 
-    <section class="graph-panel">
-      <header class="panel-header">
-        <div class="panel-header-copy">
-          <h2 class="panel-title">Orchestration graph</h2>
-          <p class="panel-copy">Live observability across runtime control, agent execution, provider calls, approvals, and runtime telemetry.</p>
+    <section class="sidebar-section">
+      <h2 class="section-header">Runtime counters</h2>
+      <div class="past-sessions-list">
+        <div class="session-card-past">
+          <span class="session-title">Events</span>
+          <span id="event-count" class="session-time-past">0</span>
         </div>
-        <span id="graph-status" class="graph-status">idle</span>
-      </header>
-      <div class="graph-workspace">
-        <aside class="graph-rail" aria-label="Execution stages">
-          <div class="graph-rail-head">
-            <span class="graph-rail-eyebrow">Stages</span>
-            <span id="graph-stage-summary" class="graph-rail-summary">Waiting for a run</span>
-          </div>
-          <div id="graph-stage-rail" class="graph-stage-rail"></div>
-        </aside>
-
-        <div class="graph-main">
-          <div class="graph-toolbar" aria-label="Graph controls">
-            <div class="graph-toolbar-group">
-              <button type="button" id="graph-zoom-out" class="graph-tool-btn" aria-label="Zoom out">-</button>
-              <button type="button" id="graph-zoom-reset" class="graph-tool-btn">100%</button>
-              <button type="button" id="graph-zoom-in" class="graph-tool-btn" aria-label="Zoom in">+</button>
-              <button type="button" id="graph-fit" class="graph-tool-btn">Fit</button>
-            </div>
-            <span class="graph-toolbar-hint">Drag to pan - scroll to zoom - select any node or flow</span>
-          </div>
-
-          <div id="graph-canvas" class="graph-canvas" tabindex="0" aria-label="Zoomable orchestration graph">
-            <div class="graph-empty" id="graph-empty">
-              <span class="graph-empty-title">Topology waiting for execution</span>
-              <span>Start a run to watch the runtime coordinate agents, dispatch service calls, and stream runtime state.</span>
-            </div>
-            <svg id="graph-svg" style="display:none" role="img" aria-label="Live orchestration topology"></svg>
-          </div>
+        <div class="session-card-past">
+          <span class="session-title">Tools</span>
+          <span id="tool-count" class="session-time-past">0</span>
         </div>
-
-        <aside class="graph-side" aria-label="Runtime details">
-          <section class="graph-inspector" aria-live="polite">
-            <div class="graph-side-head">
-              <span class="graph-side-eyebrow">Inspector</span>
-              <span id="graph-inspector-type" class="graph-side-chip">Overview</span>
-            </div>
-            <h3 id="graph-inspector-title" class="graph-inspector-title">No node selected</h3>
-            <p id="graph-inspector-copy" class="graph-inspector-copy">Select a stage, agent, service, or connection to inspect runtime state.</p>
-            <dl id="graph-inspector-metrics" class="graph-metric-list"></dl>
-          </section>
-
-          <section class="graph-timeline" aria-label="Execution timeline">
-            <div class="graph-side-head">
-              <span class="graph-side-eyebrow">Execution timeline</span>
-              <span id="graph-timeline-count" class="graph-side-chip">0 events</span>
-            </div>
-            <ol id="graph-timeline-list" class="graph-timeline-list"></ol>
-          </section>
-        </aside>
+        <div class="session-card-past">
+          <span class="session-title">Services</span>
+          <span id="service-count" class="session-time-past">0</span>
+        </div>
+        <div class="session-card-past">
+          <span class="session-title">Controls</span>
+          <span id="security-count" class="session-time-past">0</span>
+        </div>
       </div>
     </section>
-  </div>
 
-  {% include "components/demo/message_component.html" %}
-  {% include "components/demo/event_block.html" %}
+    <div class="sidebar-footer">
+      <span class="runtime-status-badge">
+        <span class="status-indicator-dot online" aria-hidden="true"></span>
+        <span id="runtime-state" class="status-label">Idle</span>
+      </span>
+    </div>
+  </aside>
+
+  <section class="main-viewport" aria-label="Conversation and orchestration workspace">
+    <header class="viewport-header">
+      <div class="viewport-header-left">
+        <h1 class="viewport-title">{{ shortName }} agent workspace</h1>
+        <span class="viewport-subtitle">Conversation, execution traces, and live topology.</span>
+      </div>
+      <div class="viewport-actions">
+        <button id="clear-chat-btn" class="btn" title="Clear current visible history">Clear view</button>
+        <button id="new-chat-btn" class="btn" title="Start a new chat session">New chat</button>
+        <button type="button" class="btn responsive-toggle-btn">Graph</button>
+      </div>
+    </header>
+
+    <div class="viewport-split-container">
+      <section class="chat-column" aria-label="Conversation stream">
+        <div class="chat-stream-shell">
+          <div class="chat-stream" id="chat-stream">
+            <div class="chat-empty" id="chat-empty">
+              <span class="chat-empty-title">No activity yet</span>
+              <span class="chat-empty-copy">Start a run to see the live conversation, execution trail, and system events.</span>
+            </div>
+          </div>
+        </div>
+
+        {% include "components/demo/input_component.html" %}
+      </section>
+
+      <section class="graph-column" aria-label="Orchestration graph">
+        <header class="viewport-header">
+          <div class="viewport-header-left">
+            <h2 class="viewport-title">Orchestration graph</h2>
+            <span class="viewport-subtitle">Agents, providers, approvals, and telemetry.</span>
+          </div>
+          <span id="graph-status" class="runtime-status-badge">idle</span>
+        </header>
+
+        <div class="graph-workspace">
+          <aside class="graph-rail" aria-label="Execution stages">
+            <div class="graph-rail-head">
+              <span class="graph-rail-eyebrow">Stages</span>
+              <span id="graph-stage-summary" class="graph-rail-summary">Waiting for a run</span>
+            </div>
+            <div id="graph-stage-rail" class="graph-stage-rail"></div>
+          </aside>
+
+          <div class="graph-main">
+            <div class="graph-toolbar" aria-label="Graph controls">
+              <div class="graph-toolbar-group">
+                <button type="button" id="graph-zoom-out" class="graph-tool-btn" aria-label="Zoom out">-</button>
+                <button type="button" id="graph-zoom-reset" class="graph-tool-btn">100%</button>
+                <button type="button" id="graph-zoom-in" class="graph-tool-btn" aria-label="Zoom in">+</button>
+                <button type="button" id="graph-fit" class="graph-tool-btn">Fit</button>
+              </div>
+              <span class="graph-toolbar-hint">Drag to pan - scroll to zoom</span>
+            </div>
+
+            <div id="graph-canvas" class="graph-canvas" tabindex="0" aria-label="Zoomable orchestration graph">
+              <div class="graph-empty" id="graph-empty">
+                <span class="graph-empty-title">Topology waiting for execution</span>
+                <span>Start a run to watch the runtime coordinate agents and provider calls.</span>
+              </div>
+              <svg id="graph-svg" style="display:none" role="img" aria-label="Live orchestration topology"></svg>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <aside class="right-panel" aria-label="Runtime details">
+    <section class="inspector-section">
+      <div class="section-title-bar">
+        <h3>Memory pressure</h3>
+        <button class="section-toggle-btn" type="button" aria-label="Toggle memory details"></button>
+      </div>
+      <div class="section-content memory-pressure-block" id="memory-bar" aria-label="Context usage">
+        <div class="memory-header">
+          <span>Context</span>
+          <span id="mem-tokens">0 / 128k</span>
+        </div>
+        <div class="mem-track" aria-hidden="true">
+          <div id="mem-fill" class="mem-fill"></div>
+        </div>
+        <div class="mem-chips-row">
+          <span id="mem-agents" class="mem-chip">0 agents</span>
+          <span id="mem-compactions" class="mem-chip">0 compactions</span>
+          <span id="mem-files" class="mem-chip">0 files</span>
+        </div>
+        <button type="button" id="mem-toggle" class="btn" aria-expanded="false">Summaries</button>
+        <div id="mem-detail" class="mem-detail" hidden></div>
+      </div>
+    </section>
+
+    <section class="inspector-section">
+      <div class="section-title-bar">
+        <h3>Execution plan</h3>
+        <button class="section-toggle-btn" type="button" aria-label="Toggle plan details"></button>
+      </div>
+      <div class="section-content">
+        {% include "components/demo/plan_block.html" %}
+      </div>
+    </section>
+
+    <section class="inspector-section">
+      <div class="section-title-bar">
+        <h3>Runtime activity</h3>
+        <button class="section-toggle-btn" type="button" aria-label="Toggle activity details"></button>
+      </div>
+      <div class="section-content">
+        <div id="runtime-feed" class="runtime-feed">
+          <div class="runtime-feed-empty">Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="inspector-section">
+      <div class="section-title-bar">
+        <h3>Inspector</h3>
+        <span id="graph-inspector-type" class="provider-model-badge">Overview</span>
+      </div>
+      <div class="section-content graph-inspector" aria-live="polite">
+        <h3 id="graph-inspector-title">No node selected</h3>
+        <p id="graph-inspector-copy">Select an element in the graph to inspect.</p>
+        <dl id="graph-inspector-metrics" class="graph-metric-list"></dl>
+      </div>
+    </section>
+
+    <section class="inspector-section">
+      <div class="section-title-bar">
+        <h3>Execution timeline</h3>
+        <span id="graph-timeline-count" class="latency-badge">0 events</span>
+      </div>
+      <div class="section-content">
+        <ol id="graph-timeline-list" class="graph-timeline-list"></ol>
+      </div>
+    </section>
+  </aside>
 </div>
 
-<script src="/static/chat.js?v=11" type="module"></script>
-<script src="/static/graph.js?v=11" type="module"></script>
+{% include "components/demo/message_component.html" %}
+{% include "components/demo/event_block.html" %}
+
+<script src="/static/chat.js?v=12" type="module"></script>
+<script src="/static/graph.js?v=12" type="module"></script>
 {% endblock %}
