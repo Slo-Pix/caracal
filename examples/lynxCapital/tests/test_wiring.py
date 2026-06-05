@@ -119,3 +119,28 @@ def test_payment_dispute_listing_reaches_meridian(providerlab):
     res = tool_fns.list_payment_disputes("r", "a")
     assert _provider_of(res) == "meridian-pay"
     assert "items" in res["data"]
+
+
+# --------------------------------------------------------------------------- #
+# FX conversion and end-to-end settlement reach Cordoba FX
+# --------------------------------------------------------------------------- #
+def test_fx_rate_and_convert_reach_cordoba(providerlab):
+    rate = tool_fns.get_fx_rate("r", "a", "USD", "EUR")
+    assert _provider_of(rate) == "cordoba-fx" and rate["operation"] == "get_quote"
+    assert rate["data"]["currency_pair"] == "EURUSD"
+    conv = tool_fns.convert_currency("r", "a", "USD", "EUR", 10000.0)
+    assert _provider_of(conv) == "cordoba-fx" and conv["operation"] == "create_conversion"
+    assert conv["data"]["status"] == "awaiting_funds"
+
+
+def test_settle_vendor_fx_payment_chains_conversion_beneficiary_payment(providerlab):
+    res = tool_fns.settle_vendor_fx_payment(
+        "r", "a", "Granite Industries", 7500.0, "EUR", sell_currency="USD",
+        bank_country="DE", iban="DE89370400440532013000", reference="INV-7500")
+    assert _provider_of(res) == "cordoba-fx" and res["operation"] == "create_payment"
+    payment = res["data"]
+    assert payment["status"] == "ready_to_send"
+    assert payment["conversion_id"] and payment["currency"] == "EUR"
+    settled = tool_fns.get_fx_settlement_status("r", "a", payment["id"])
+    assert settled["data"]["status"] in ("submitted", "completed")
+

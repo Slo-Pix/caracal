@@ -93,6 +93,45 @@ def sap_get_vendor_record(run_id: str, agent_id: str, vendor_id: str) -> dict[st
                 {"vendorId": vendor_id})
 
 
+# -- enterprise ERP back-office tools (ironbark-erp) --
+
+def netsuite_create_purchase_order(run_id: str, agent_id: str, vendor_id: str, item: str,
+                                   quantity: int, rate: float, department: str = "Operations") -> dict[str, object]:
+    return _run(run_id, agent_id, "netsuite_create_purchase_order", "ironbark-erp", "create_purchase_order",
+                {"vendorId": vendor_id, "department": department,
+                 "lines": [{"item": item, "quantity": quantity, "rate": rate, "account": "6300"}]})
+
+
+def netsuite_record_vendor_bill(run_id: str, agent_id: str, vendor_id: str, amount: float,
+                                currency: str, reference: str,
+                                purchase_order_id: str | None = None) -> dict[str, object]:
+    payload = {"vendorId": vendor_id, "amount": amount, "currency": currency,
+               "referenceNumber": reference}
+    if purchase_order_id:
+        payload["purchaseOrderId"] = purchase_order_id
+    return _run(run_id, agent_id, "netsuite_record_vendor_bill", "ironbark-erp", "create_bill", payload)
+
+
+def netsuite_list_open_bills(run_id: str, agent_id: str, vendor_id: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {"status": "open"}
+    if vendor_id:
+        payload["vendorId"] = vendor_id
+    return _run(run_id, agent_id, "netsuite_list_open_bills", "ironbark-erp", "list_bills", payload)
+
+
+def netsuite_post_journal_entry(run_id: str, agent_id: str, debit_account: str, credit_account: str,
+                                amount: float, currency: str, period: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "netsuite_post_journal_entry", "ironbark-erp", "post_journal_entry",
+                {"postingPeriod": period, "currency": currency,
+                 "lines": [{"account": debit_account, "debit": amount},
+                           {"account": credit_account, "credit": amount}]})
+
+
+def netsuite_get_ap_account(run_id: str, agent_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "netsuite_get_ap_account", "ironbark-erp", "get_account",
+                {"accountId": "2000"})
+
+
 def quickbooks_match_bill(run_id: str, agent_id: str, vendor_id: str, invoice_id: str, amount: float, currency: str) -> dict[str, object]:
     """Record a vendor bill in QuickBooks then match it to its purchase reference."""
     created = _run(run_id, agent_id, "quickbooks_match_bill", "tallyhall-books", "create_bill",
@@ -482,6 +521,11 @@ TOOLS: dict[str, Callable] = {
     "netsuite_get_vendor_record": netsuite_get_vendor_record,
     "sap_match_invoice": sap_match_invoice,
     "sap_get_vendor_record": sap_get_vendor_record,
+    "netsuite_create_purchase_order": netsuite_create_purchase_order,
+    "netsuite_record_vendor_bill": netsuite_record_vendor_bill,
+    "netsuite_list_open_bills": netsuite_list_open_bills,
+    "netsuite_post_journal_entry": netsuite_post_journal_entry,
+    "netsuite_get_ap_account": netsuite_get_ap_account,
     "quickbooks_match_bill": quickbooks_match_bill,
     "quickbooks_get_vendor": quickbooks_get_vendor,
     "check_vendor": check_vendor,
