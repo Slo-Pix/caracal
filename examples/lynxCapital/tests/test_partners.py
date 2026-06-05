@@ -126,7 +126,7 @@ def test_oauth_ac_pkce_list_accounts(providerlab):
 
 
 def test_oauth_ac_pkce_initiate_payment(providerlab):
-    acct = partners.call("halcyon-bank", "list_accounts", {})["data"]["items"][0]["id"]
+    acct = partners.call("halcyon-bank", "list_accounts", {})["data"]["items"][0]["accountId"]
     res = partners.call("halcyon-bank", "initiate_payment",
                         {"fromAccount": acct, "amount": 10, "creditor": "ACME"})
     assert res["status"] == 200

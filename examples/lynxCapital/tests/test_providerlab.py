@@ -186,8 +186,113 @@ def test_oauth_authorization_code_refresh():
 
 
 # --------------------------------------------------------------------------- #
-# caracal_mandate (verifier SDK semantics)
+# Halcyon Bank — realistic open-banking authorization and domain scenarios
 # --------------------------------------------------------------------------- #
+def _halcyon_token(c: TestClient, s: dict, scope: str) -> str:
+    verifier = "verifier-abc123verifier-abc123verifier-xyz"
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    code = _authorize_code(c, s, scope, challenge)
+    return c.post("/oauth/token", data={
+        "grant_type": "authorization_code", "code": code, "client_id": s["clientId"],
+        "client_secret": s["clientSecret"], "code_verifier": verifier,
+        "redirect_uri": "http://127.0.0.1:8000/callback",
+    }).json()["access_token"]
+
+
+def test_halcyon_discovery_metadata_is_complete():
+    meta = client("halcyon-bank").get("/.well-known/oauth-authorization-server").json()
+    assert meta["response_types_supported"] == ["code"]
+    assert meta["code_challenge_methods_supported"] == ["S256"]
+    assert meta["token_endpoint"].endswith("/oauth/token")
+    assert meta["revocation_endpoint"].endswith("/oauth/revoke")
+    assert meta["introspection_endpoint"].endswith("/oauth/introspect")
+    assert "client_secret_basic" in meta["token_endpoint_auth_methods_supported"]
+
+
+def test_halcyon_pkce_required_and_redirect_validated():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    missing = c.post("/oauth/authorize", data={
+        "client_id": s["clientId"], "redirect_uri": "http://127.0.0.1:8000/callback",
+        "scope": "accounts.read", "state": "x"}, follow_redirects=False)
+    assert missing.status_code == 400 and missing.json()["error"] == "invalid_request"
+    bad_redirect = c.post("/oauth/authorize", data={
+        "client_id": s["clientId"], "redirect_uri": "http://attacker.example/cb",
+        "scope": "accounts.read", "state": "x", "code_challenge": "abc"}, follow_redirects=False)
+    assert bad_redirect.status_code == 400 and bad_redirect.json()["error"] == "invalid_redirect_uri"
+
+
+def test_halcyon_introspection_and_revocation():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    token = _halcyon_token(c, s, "accounts.read payments.write")
+    auth = {"client_id": s["clientId"], "client_secret": s["clientSecret"]}
+    active = c.post("/oauth/introspect", data={"token": token, **auth}).json()
+    assert active["active"] is True and active["client_id"] == s["clientId"]
+    assert c.post("/oauth/revoke", data={"token": token, **auth}).status_code == 200
+    assert c.post("/oauth/introspect", data={"token": token, **auth}).json()["active"] is False
+    assert c.post("/api/list_accounts", json={}, headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+def test_halcyon_account_and_transaction_schema():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    h = {"Authorization": f"Bearer {_halcyon_token(c, s, 'accounts.read')}"}
+    account = c.post("/api/list_accounts", json={}, headers=h).json()["data"]["items"][0]
+    for field in ("accountId", "accountType", "accountSubType", "status", "currency",
+                  "identification", "servicer", "balances"):
+        assert field in account, field
+    assert {"available", "booked", "currency"} <= set(account["balances"])
+    txn = c.post("/api/list_transactions", json={"accountId": account["accountId"]},
+                 headers=h).json()["data"]["items"][0]
+    assert txn["creditDebitIndicator"] in ("Credit", "Debit")
+    assert txn["status"] in ("Booked", "Pending")
+    for field in ("bookingDateTime", "valueDateTime", "merchantCategoryCode", "bankTransactionCode"):
+        assert field in txn, field
+
+
+def test_halcyon_payment_lifecycle_and_idempotency():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    h = {"Authorization": f"Bearer {_halcyon_token(c, s, 'accounts.read payments.write')}"}
+    account = c.post("/api/list_accounts", json={"status": "Enabled"}, headers=h).json()["data"]["items"][0]
+    body = {"fromAccount": account["accountId"], "amount": 125.50, "creditor": "Northwind Holdings",
+            "rail": "ACH", "reference": "INV-7781", "idempotencyKey": "idem-1"}
+    first = c.post("/api/initiate_payment", json=body, headers=h).json()["data"]
+    assert first["status"] == "AcceptedSettlementInProgress"
+    assert first["instructedAmount"] == {"amount": 125.5, "currency": account["currency"]}
+    replay = c.post("/api/initiate_payment", json=body, headers=h).json()["data"]
+    assert replay["paymentId"] == first["paymentId"]
+    settled = c.post("/api/get_payment", json={"paymentId": first["paymentId"]}, headers=h).json()["data"]
+    assert settled["status"] == "AcceptedSettlementCompleted"
+
+
+def test_halcyon_payment_edge_cases():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    h = {"Authorization": f"Bearer {_halcyon_token(c, s, 'accounts.read payments.write')}"}
+    account = c.post("/api/list_accounts", json={"status": "Enabled"}, headers=h).json()["data"]["items"][0]
+    aid, currency = account["accountId"], account["currency"]
+    missing = c.post("/api/initiate_payment", json={"fromAccount": "ACC-9999", "amount": 10, "creditor": "x"}, headers=h)
+    assert missing.status_code == 404 and missing.json()["error"] == "account_not_found"
+    negative = c.post("/api/initiate_payment", json={"fromAccount": aid, "amount": -5, "creditor": "x"}, headers=h)
+    assert negative.status_code == 422 and negative.json()["error"] == "invalid_amount"
+    wrong_ccy = "EUR" if currency != "EUR" else "USD"
+    mismatch = c.post("/api/initiate_payment",
+                      json={"fromAccount": aid, "amount": 10, "creditor": "x", "currency": wrong_ccy}, headers=h)
+    assert mismatch.status_code == 422 and mismatch.json()["error"] == "currency_mismatch"
+    overdraw = c.post("/api/initiate_payment",
+                      json={"fromAccount": aid, "amount": 10**12, "creditor": "x"}, headers=h)
+    assert overdraw.status_code == 402 and overdraw.json()["error"] == "insufficient_funds"
+
+
+def test_halcyon_statement_resource():
+    c, s = client("halcyon-bank"), seed("halcyon-bank")
+    h = {"Authorization": f"Bearer {_halcyon_token(c, s, 'accounts.read')}"}
+    aid = c.post("/api/list_accounts", json={}, headers=h).json()["data"]["items"][0]["accountId"]
+    data = c.post("/api/get_statement", json={"accountId": aid}, headers=h).json()["data"]
+    latest = data["latest"]
+    for field in ("statementId", "openingBalance", "closingBalance", "totalCredits", "totalDebits"):
+        assert field in latest, field
+    one = c.post("/api/get_statement", json={"accountId": aid, "statementId": latest["statementId"]},
+                 headers=h).json()["data"]
+    assert one["statementId"] == latest["statementId"]
+    assert c.post("/api/get_statement", json={"accountId": "ACC-9999"}, headers=h).status_code == 404
 def _mint(provider_id: str, **overrides) -> str:
     store = credentials.load(provider_id)
     provider = catalog.get(provider_id)

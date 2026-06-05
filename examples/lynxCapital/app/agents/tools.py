@@ -134,7 +134,21 @@ def validate_tax_id(run_id: str, agent_id: str, vendor_id: str) -> dict[str, obj
 # -- route-optimization tools --
 
 def get_account_balance(run_id: str, agent_id: str, vendor_id: str) -> dict[str, object]:
-    return _run(run_id, agent_id, "get_account_balance", "meridian-pay", "get_balance", {})
+    """Read available cash from the bank of record (Halcyon Bank), summarizing
+    enabled operating accounts so routing can size payments against real balances."""
+    accounts = _run(run_id, agent_id, "get_account_balance", "halcyon-bank", "list_accounts",
+                    {"status": "Enabled"})
+    data = accounts.get("data") if isinstance(accounts, dict) else None
+    items = data.get("items") if isinstance(data, dict) else None
+    if isinstance(items, list):
+        balances = [
+            {"accountId": a["accountId"], "currency": a["currency"],
+             "available": a["balances"]["available"]}
+            for a in items if isinstance(a, dict) and "balances" in a
+        ]
+        accounts["data"] = {"accounts": balances,
+                            "totalAvailable": round(sum(b["available"] for b in balances), 2)}
+    return accounts
 
 
 def get_quote(run_id: str, agent_id: str, from_currency: str, to_currency: str, amount: float) -> dict[str, object]:
@@ -177,13 +191,20 @@ def submit_payout(run_id: str, agent_id: str, vendor_id: str, amount: float, cur
 
 
 def create_outbound_payment(run_id: str, agent_id: str, vendor_id: str, amount: float, currency: str, rail: str, reference: str) -> dict[str, object]:
-    """Open-banking rail: draw from the operating account and pay the creditor."""
-    accounts = _run(run_id, agent_id, "create_outbound_payment", "halcyon-bank", "list_accounts", {})
+    """Open-banking rail: draw from a currency-matched enabled account and pay the creditor."""
+    accounts = _run(run_id, agent_id, "create_outbound_payment", "halcyon-bank", "list_accounts",
+                    {"status": "Enabled"})
     data = accounts.get("data") if isinstance(accounts, dict) else None
     items = data.get("items") if isinstance(data, dict) else None
-    from_account = items[0]["id"] if items else vendor_id
+    from_account = vendor_id
+    if isinstance(items, list) and items:
+        matched = next((a for a in items if a.get("currency") == currency
+                        and a.get("accountSubType") == "CurrentAccount"), None)
+        from_account = (matched or items[0])["accountId"]
     return _run(run_id, agent_id, "create_outbound_payment", "halcyon-bank", "initiate_payment",
-                {"fromAccount": from_account, "amount": amount, "creditor": reference or vendor_id})
+                {"fromAccount": from_account, "amount": amount, "currency": currency,
+                 "rail": (rail or "").upper(), "creditor": vendor_id,
+                 "reference": reference or vendor_id})
 
 
 # -- audit tools --
