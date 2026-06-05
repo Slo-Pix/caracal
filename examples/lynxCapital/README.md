@@ -1,11 +1,6 @@
 # Lynx Capital
 
-Autonomous financial execution reference lab. A FastAPI + LangGraph swarm that
-processes a global SaaS payout cycle (~4,200 invoices, 5 regions) end-to-end
-with a live agent topology view and SSE log stream.
-
-The app calls a local network of provider mocks directly. The provider mocks
-live under `_mock/` and cover every external integration the swarm needs.
+Autonomous financial execution reference lab. A FastAPI + LangGraph swarm that processes a global SaaS payout cycle (~4,200 invoices, 5 regions) end-to-end with a live agent topology view and SSE log stream.
 
 ## Requirements
 
@@ -19,26 +14,23 @@ live under `_mock/` and cover every external integration the swarm needs.
 
 ```bash
 cd caracal/examples/lynxCapital
-python -m venv .venv && source .venv/bin/activate
-
-pip install -e .
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
 ```
 
 ### 2: Configure environment
 
 ```bash
-cp .env.example .env
+cp -n .env.example .env
 ```
 
-Open `.env` and set `OPENAI_API_KEY=sk-...`. Provider URLs and credentials are
-normal integration settings and ship with working local defaults.
+Open `.env` and set `OPENAI_API_KEY=sk-...`.
 
 ### 3: Start the local provider network
 
-The local provider network lives under `_mock/` and supplies a realistic
-ecosystem of twenty external-style providers across REST, SSE, gRPC, MCP, and
-SDK-shim surfaces. Each provider runs on its own localhost port (`9400`–`9419`)
-with a small control UI and behaves like a real third-party vendor.
+Each provider runs on its own localhost port (`9400`–`9419`) with a small control UI and behaves like a real third-party vendor.
 
 ```bash
 docker compose -f _mock/docker-compose.yml up -d --build --wait
@@ -57,45 +49,15 @@ Pick one path:
 ```bash
 # Local Python (development)
 python -m uvicorn app.main:app --reload --port 8000
-
-# Container (production-like: joins the provider network)
-docker compose up -d --build
 ```
 
 Open **http://localhost:8000**.
 
-## Run flow
-
-1. Open `http://localhost:8000/setup` and validate the environment and provider
-   network.
-2. Open `/demo` and submit a prompt. The browser uses the Lynx control API:
-   `POST /api/run/start`, `GET /api/run/{runId}/events`,
-   `GET /api/run/{runId}/status`, `POST /api/run/{runId}/cancel`, and
-   `GET /api/run/{runId}/lineage`.
-
-## Routes
-
-| Path | Description |
-|---|---|
-| `/` | Landing: scenario summary |
-| `/setup` | Validates `OPENAI_API_KEY` and provider connectivity |
-| `/demo` | Chat interface + live agent topology graph |
-| `/logs` | Color-coded runtime activity stream |
-| `/prompts` | Example prompts grouped by execution pattern |
-
-## Reference prompts
-
-The `/prompts` page lists ready-to-run prompts. A few to start with:
-
-- *"Run the full global payout cycle for this month."*
-- *"Process all US region vendor invoices and submit to QuickBooks."*
-- *"Run treasury close for Q2 and file compliance reports for DE and SG."*
-- *"Audit all open receivables and flag overdue accounts."*
-
 ## Tests
 
 ```bash
-pytest tests/
+python -m pytest tests/test_caracal_integration.py -q
+python -m pytest -q
 ```
 
 ## Tear down
@@ -104,25 +66,7 @@ pytest tests/
 docker compose -f _mock/docker-compose.yml down
 ```
 
-## Layout
-
-```
-app/             FastAPI app (api, web, agents, orchestration, services, events, core)
-config/          company.yaml (copy, regions, providers, swarm caps, theme)
-_mock/           Local provider ecosystem (twenty external-style providers; not published)
-tests/           Topology, lifecycle, providerlab, and partner integration tests
-instructions.md  Build rules
-```
-
 ## Provider ecosystem
-
-`_mock/providerlab/` serves twenty realistic external-style providers, each on
-its own `localhost` port (`9400`–`9419`) with a small control UI. Wire field
-names use third-party industry shapes (`clientId`, `apiKey`, `accessToken`) so
-each provider behaves like a real outside service rather than a Caracal fixture.
-The providers are realistic first: every one exposes meaningful resources,
-workflows, and failure behavior, and the auth categories Caracal must support
-emerge naturally from that design.
 
 | Provider | Domain | Auth | Protocol | Port |
 |---|---|---|---|---|
@@ -146,53 +90,4 @@ emerge naturally from that design.
 | Relay Automation | Workflow/job automation | MCP (mandate, delegation) | MCP JSON-RPC | 9417 |
 | Pulse Market Data | Real-time FX/reference | API key (header) | SSE + REST | 9418 |
 | Junction Procurement | Procure-to-pay | OAuth 2.0 client credentials | REST | 9419 |
-
-Every Caracal auth category (`api_key`, `bearer_token`,
-`oauth2_client_credentials`, `oauth2_authorization_code`, `caracal_mandate`,
-`none`, `mcp`, `sdk`) and every protocol (REST, gRPC, MCP, SSE, SDK-shim,
-webhooks) is represented. Providers that overlap in capability differ
-significantly in implementation — Ironbark vs. Tallyhall accounting, Cordoba vs.
-Pulse FX, Aegis vs. Verafin compliance, Sabre vs. Quetzal SDKs — so integration
-code is exercised against the full range of real behavior, including idempotent
-replay, async jobs, scope step-up, rate limits, transient outages, pagination,
-and `402`/`403`/`404`/`409` paths.
-
-Each provider runs a stateful domain module under
-`_mock/providerlab/providers/<id>.py` with seeded, evolving datasets. It exposes
-a Dashboard, Resource Explorer, Credentials, Clients, and API clients UI, its
-`/api/{operation}` domain surface, OAuth/MCP/SSE surfaces where relevant, and
-`/healthz`.
-
-Run the whole ecosystem in one process, a single provider, or the container:
-
-```bash
-python -m _mock.providerlab.run                                       # all 20, localhost
-PROVIDERLAB_PROVIDER=cordoba-fx python -m _mock.providerlab.server     # one provider
-docker compose -f _mock/docker-compose.yml up -d --build              # container
-```
-
-Credentials are seeded on first start and persist under
-`_mock/providerlab/_store/` (git-ignored); a consolidated `_store/_seed_index.json`
-lists every provider's seed for verification flows. Set `PROVIDERLAB_FAST=1` to
-disable injected latency and transient faults.
-
-The application consumes these providers through `app/services/partners.py`,
-which authenticates per category (api key, bearer, OAuth client-credentials,
-OAuth authorization-code with PKCE/refresh, internal, and bearer-guarded MCP)
-and exposes a single `call(provider_id, operation, payload)` surface. Agents
-reach it through the partner-backed tools in `app/agents/tools.py`, so the swarm
-drives real external providers end-to-end. Base URLs and credentials come from
-`LYNX_PARTNER_*` env; print ready-to-source exports with
-`python -m _mock.providerlab.seedenv`. The `caracal_mandate` providers (Aegis,
-Verafin) and the mandate-guarded MCP server (Relay) are intentionally gated
-(`PartnerPendingCaracal`) until the Caracal SDK integration phase.
-
-## Caracal integration
-
-This reference lab is currently provider-direct: it calls upstream providers
-with their own credentials and no Caracal runtime in the path. The planned,
-thin Caracal SDK integration is documented separately in
-[`docs/INTEGRATION_PLAN.md`](./docs/INTEGRATION_PLAN.md). The provider ecosystem
-under `_mock/providerlab/` mirrors every Caracal provider auth category so that
-integration can be validated end-to-end.
 

@@ -7,7 +7,7 @@ Web HTML routes: landing, setup, demo, and logs pages.
 from __future__ import annotations
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from pathlib import Path
 
@@ -45,6 +45,11 @@ def _ctx(request: Request) -> dict:
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
     return templates.TemplateResponse(request, "landing.html", _ctx(request))
+
+
+@router.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @router.get("/setup", response_class=HTMLResponse)
