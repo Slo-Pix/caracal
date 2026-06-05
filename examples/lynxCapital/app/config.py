@@ -44,6 +44,13 @@ class ProviderEntry(BaseModel):
     category: str
 
 
+class PartnerProviderEntry(BaseModel):
+    id: str
+    name: str
+    category: str
+    authType: str
+
+
 class AgentLayerEntry(BaseModel):
     id: str
     label: str
@@ -91,6 +98,7 @@ class AppConfig(BaseModel):
     llm: LlmConfig
     regions: list[RegionEntry]
     providers: list[ProviderEntry]
+    partnerProviders: list[PartnerProviderEntry] = []
     agentLayers: list[AgentLayerEntry]
     workflows: list[WorkflowEntry]
     scenario: ScenarioConfig

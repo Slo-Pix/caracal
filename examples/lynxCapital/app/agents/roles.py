@@ -76,6 +76,12 @@ ROLES: dict[str, RoleDef] = {
         allowed_tools=("check_vendor", "get_vendor_profile"),
         emits=("agent_start", "agent_end", "agent_terminate", "tool_call", "tool_result", "service_call", "service_result"),
     ),
+    "partner-integration": RoleDef(
+        name="partner-integration",
+        scope_template="partner:{provider_id}",
+        allowed_tools=("partner_operation",),
+        emits=("agent_start", "agent_end", "agent_terminate", "tool_call", "tool_result", "service_call", "service_result"),
+    ),
 }
 
 

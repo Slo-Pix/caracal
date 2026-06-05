@@ -10,6 +10,8 @@ from typing import Callable
 
 from app.events import types as ev
 from app.events.bus import bus
+from app.services.partners import PartnerPendingCaracal
+from app.services.partners import call as _partner
 from app.services.registry import call as _svc
 
 
@@ -270,6 +272,29 @@ def get_ar_aging(run_id: str, agent_id: str, region: str) -> dict[str, object]:
                    {"region": region})
 
 
+# -- external partner integration tool --
+
+def partner_operation(
+    run_id: str,
+    agent_id: str,
+    provider_id: str,
+    operation: str,
+    payload: dict[str, object] | None = None,
+) -> dict[str, object]:
+    args = {"provider_id": provider_id, "operation": operation, "payload": payload or {}}
+    bus.publish(ev.tool_call(run_id, agent_id, "partner_operation", args))
+    bus.publish(ev.service_call(run_id, agent_id, provider_id, operation, args["payload"]))
+    try:
+        result = _partner(provider_id, operation, payload or {})
+    except PartnerPendingCaracal:
+        result = {"provider": provider_id, "operation": operation,
+                  "status": "pending_caracal_integration",
+                  "message": "provider activates in the Caracal SDK integration phase"}
+    bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
+    bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", result))
+    return result
+
+
 # Registry mapping tool name -> function for dispatch by the orchestration layer.
 TOOLS: dict[str, Callable] = {
     "extract_invoice": extract_invoice,
@@ -311,4 +336,5 @@ TOOLS: dict[str, Callable] = {
     "send_dunning_notice": send_dunning_notice,
     "apply_customer_payment": apply_customer_payment,
     "get_ar_aging": get_ar_aging,
+    "partner_operation": partner_operation,
 }
