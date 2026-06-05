@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import threading
+from json import dumps as json_dumps
 from urllib.parse import parse_qsl
 
 from fastapi import FastAPI, Request
@@ -77,6 +78,10 @@ def build_app(provider: catalog.Provider) -> FastAPI:
     async def page_clients():
         return HTMLResponse(ui.clients_page(provider))
 
+    @app.get("/__lab/resources", response_class=HTMLResponse)
+    async def page_resources():
+        return HTMLResponse(ui.resource_explorer_page(provider, state))
+
     @app.get("/__lab/api-clients", response_class=HTMLResponse)
     async def page_api_clients():
         return HTMLResponse(ui.api_clients_page(provider, activity.list()))
@@ -140,6 +145,10 @@ def build_app(provider: catalog.Provider) -> FastAPI:
                            message.get("method", "mcp"), 200)
             return JSONResponse(response)
 
+    # ---------- streaming surface (SSE) ----------
+    if provider.protocol == "sse":
+        _install_sse(app, provider, state)
+
     # ---------- domain operations ----------
     @app.api_route("/api/{operation}", methods=["GET", "POST"])
     async def domain_operation(operation: str, request: Request):
@@ -168,6 +177,33 @@ def build_app(provider: catalog.Provider) -> FastAPI:
         return JSONResponse({"provider": provider.id, "operation": operation, "data": data})
 
     return app
+
+
+def _install_sse(app: FastAPI, provider: catalog.Provider, state) -> None:
+    """Expose a Server-Sent Events stream for real-time providers like market data."""
+    import asyncio
+
+    from sse_starlette.sse import EventSourceResponse
+
+    @app.get("/stream")
+    async def stream(request: Request):
+        try:
+            principal = auth.authenticate(provider, request)
+        except auth.AuthError as exc:
+            return _auth_error_response(exc, provider)
+        symbol = request.query_params.get("symbol", "USD/EUR")
+        count = int(request.query_params.get("ticks", 20))
+
+        async def publisher():
+            window = domain.dispatch(provider, state, "stream_rates",
+                                     {"symbol": symbol, "ticks": count}, principal)
+            for tick in window["ticks"]:
+                if await request.is_disconnected():
+                    break
+                yield {"event": "tick", "data": json_dumps(tick)}
+                await asyncio.sleep(0.05)
+
+        return EventSourceResponse(publisher())
 
 
 def _install_oauth(app: FastAPI, provider: catalog.Provider) -> None:

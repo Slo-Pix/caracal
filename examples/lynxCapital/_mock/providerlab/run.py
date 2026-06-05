@@ -6,6 +6,7 @@ Local launcher that serves every lab provider on its own localhost port in one p
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 
@@ -14,7 +15,7 @@ import uvicorn
 from _mock.providerlab import catalog
 from _mock.providerlab.app import build_app
 
-HOST = "127.0.0.1"
+HOST = os.environ.get("PROVIDERLAB_HOST", "127.0.0.1")
 
 
 def _serve(provider: catalog.Provider) -> None:
