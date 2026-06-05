@@ -668,6 +668,17 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"from": from_region, "to": to_region})
 
     @tool
+    def list_ledger_accounts(account_type: str = "") -> str:
+        """List the Slate Ledger chart of accounts, optionally filtered by type
+        (asset, liability, equity, income, expense). Use this to discover the
+        account numbers to post against before a close journal."""
+        w = _worker("close", f"accounts:{account_type or 'all'}")
+        try:
+            return json.dumps(tool_fns.list_ledger_accounts(run_id, w.id, account_type))
+        finally:
+            _finish(w, {"type": account_type})
+
+    @tool
     async def post_journal_entry(account_id: str, amount: float, currency: str, period: str) -> str:
         """Post a journal entry to the GL for a given period."""
         denied = await _require_approval(run_id, parent.id, "post_journal_entry",
@@ -684,7 +695,9 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
 
     @tool
     def reconcile_account(account_id: str) -> str:
-        """Reconcile a GL account against bank/sub-ledger balance."""
+        """Reconcile a GL account against its bank/sub-ledger statement. Opens an
+        asynchronous reconciliation job and returns the settled result with any
+        outstanding items and exceptions."""
         w = _worker("close", f"recon:{account_id}")
         try:
             return json.dumps(tool_fns.reconcile_account(run_id, w.id, account_id))
@@ -693,7 +706,7 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
 
     @tool
     def compute_accrual(category: str, period: str) -> str:
-        """Compute an accrual for a category in a period."""
+        """Create a recurring accrual schedule for a category in a period."""
         w = _worker("close", f"accrual:{category}")
         try:
             return json.dumps(tool_fns.compute_accrual(run_id, w.id, category, period))
@@ -701,8 +714,19 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"category": category})
 
     @tool
+    def get_trial_balance(period: str) -> str:
+        """Pull the trial balance for a period and confirm debits equal credits
+        before attempting to close it."""
+        w = _worker("close", f"tb:{period}")
+        try:
+            return json.dumps(tool_fns.get_trial_balance(run_id, w.id, period))
+        finally:
+            _finish(w, {"period": period})
+
+    @tool
     def close_period(period: str) -> str:
-        """Close an accounting period (e.g. '2026-04')."""
+        """Close an accounting period (e.g. '2026-04'). The ledger gates the
+        close on a balanced trial balance and completed reconciliations."""
         w = _worker("close", f"close:{period}")
         try:
             return json.dumps(tool_fns.close_period(run_id, w.id, period))
@@ -866,7 +890,8 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
     return [
         kyb_screen_vendor, register_vendor, refresh_vendor_compliance, get_contract_terms_for_vendor,
         get_cash_position, forecast_liquidity, place_fx_hedge, transfer_funds,
-        post_journal_entry, reconcile_account, compute_accrual, close_period,
+        post_journal_entry, list_ledger_accounts, reconcile_account, compute_accrual,
+        get_trial_balance, close_period,
         aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing, attest_control,
         issue_customer_invoice, send_dunning_notice, apply_customer_payment, get_ar_aging,
         get_department_budget, raise_requisition, approve_requisition, raise_purchase_order,
