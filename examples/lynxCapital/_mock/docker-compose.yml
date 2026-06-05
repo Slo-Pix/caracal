@@ -16,8 +16,12 @@ services:
     environment:
       PROVIDERLAB_HOST: "0.0.0.0"
       PROVIDERLAB_FAST: "${PROVIDERLAB_FAST:-0}"
+    # Internal providers (lumen-identity 9409, core-billing 9416) are reachable
+    # only over the providers network, never published to the Docker host.
     ports:
-      - "9400-9419:9400-9419"
+      - "9400-9408:9400-9408"
+      - "9410-9415:9410-9415"
+      - "9417-9419:9417-9419"
     networks:
       providers:
         aliases:

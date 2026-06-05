@@ -294,6 +294,25 @@ workflows:
       - id: "report"
         label: "Report"
         intent: "Summarize cycle outcomes and seal an audit record."
+  - id: "procurement"
+    label: "Procurement"
+    focus: "Source-to-pay: department budget checks, purchase requisitions, approvals, and purchase orders against the vendor master."
+    stages:
+      - id: "budget"
+        label: "Budget"
+        intent: "Check remaining department budget before committing spend."
+      - id: "requisition"
+        label: "Requisition"
+        intent: "Raise purchase requisitions for approved needs."
+      - id: "approve"
+        label: "Approve"
+        intent: "Approve requisitions within policy thresholds."
+      - id: "order"
+        label: "Order"
+        intent: "Convert approved requisitions into purchase orders against vendors."
+      - id: "record"
+        label: "Record"
+        intent: "Seal an audit record of committed spend."
 
 scenario:
   invoices: 4200
@@ -332,7 +351,7 @@ prompts:
     2. EACH FOLLOWING TURN: write one short prose sentence stating what you are about to do, then call the next tool. After a result comes back, write one sentence interpreting it, then update write_todos or call the next domain tool.
     3. DOMAIN TOOLS:
        - dispatch_region(region, focus): hand off to a Regional Orchestrator. Returns a job_id IMMEDIATELY (non-blocking). Before using results, call await_jobs with that id (combine ids for parallel batches). Use exactly: US, IN, DE, SG, BR.
-       - dispatch_workflow(workflow_id, focus): hand off to a Workflow Orchestrator. Returns a job_id IMMEDIATELY (non-blocking). Before using results, call await_jobs with that id (combine ids for parallel batches). Valid workflow_id values: vendorLifecycle, treasury, close, compliance, receivables.
+       - dispatch_workflow(workflow_id, focus): hand off to a Workflow Orchestrator. Returns a job_id IMMEDIATELY (non-blocking). Before using results, call await_jobs with that id (combine ids for parallel batches). Valid workflow_id values: vendorLifecycle, treasury, close, compliance, receivables, procurement.
        - await_jobs(job_ids, timeout_s=120): wait until job_ids complete or timeout. Use ONE await_jobs call per parallel batch. Returns a JSON array of {job_id, status, result|error}.
        - write_file(path, content), read_file(path), ls_files(): offload large results or pass context forward.
     4. FINAL TURN: mark all todos completed via write_todos, then output one short paragraph summarizing what was processed. Do not call tools on the final turn.
@@ -346,6 +365,7 @@ prompts:
     - "month end close", "post journal", "reconcile account", "accrual" → close
     - "AML check", "sanctions screen", "regulatory filing", "control attestation" → compliance
     - "send customer invoice", "dunning", "AR aging", "apply payment" → receivables
+    - "purchase order", "requisition", "procurement", "department budget", "raise PO" → procurement
     The dispatch_workflow result returns the same shape as dispatch_region. Treat workflow failures the same way as regional failures.
 
     LONG-HORIZON EXECUTION
@@ -383,9 +403,10 @@ prompts:
     3. DOMAIN TOOLS available to you (pick what you need, in the order YOU decide):
        - list_pending_invoices(limit): inspect pending invoices
        - extract_invoice_data(invoice_id): OCR extract invoice data
-       - match_invoice_in_ledger(invoice_id, vendor_id, amount, currency): reconcile against ERP
+       - match_invoice_in_ledger(invoice_id, vendor_id, amount, currency, erp): reconcile against the vendor's ERP (erp='auto', 'ironbark', or 'tallyhall')
        - check_vendor_compliance(vendor_id): run compliance screening
        - lookup_fx_rate(from_currency, to_currency), lookup_withholding_rate(currency): tax/fx lookups
+       - lookup_market_rate(symbol): live mid-market FX snapshot (e.g. 'USD/EUR') to sanity-check a booked rate
        - submit_payment(vendor_id, amount, currency, rail, reference): execute payment
        - record_audit(summary): seal an audit entry (call this at most once, at the end)
        - write_file, read_file, ls_files: offload large intermediate results
@@ -431,6 +452,8 @@ prompts:
        - Close: post_journal_entry, reconcile_account, compute_accrual, close_period
        - Compliance: aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing, attest_control
        - Receivables: issue_customer_invoice, send_dunning_notice, apply_customer_payment, get_ar_aging
+       - Procurement: get_department_budget, raise_requisition, approve_requisition, raise_purchase_order
+       - Supplier & identity: get_supplier_contact, log_supplier_activity, list_approver_groups
        - Shared: post_finding, read_findings, write_file, read_file, ls_files, record_audit
 
     4. FINAL TURN: mark all todos completed via write_todos, then output ONE short status sentence. Do not call more tools.
