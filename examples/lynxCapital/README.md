@@ -156,6 +156,6 @@ Set `PROVIDERLAB_FAST=1` to disable injected latency and transient faults.
 This reference lab is currently provider-direct: it calls upstream providers
 with their own credentials and no Caracal runtime in the path. The planned,
 thin Caracal SDK integration is documented separately in
-[`INTEGRATION_PLAN.md`](./INTEGRATION_PLAN.md). The provider lab under
+[`docs/INTEGRATION_PLAN.md`](./docs/INTEGRATION_PLAN.md). The provider lab under
 `_mock/providerlab/` mirrors every Caracal provider auth category so that
 integration can be validated end-to-end.
