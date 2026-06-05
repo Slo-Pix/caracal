@@ -29,19 +29,21 @@ if ($env:CARACAL_REQUIRE_PROVENANCE -eq '1') {
     $RequireProvenance = $true
 }
 
-if ([string]::IsNullOrEmpty($Color)) { $Color = 'auto' }
+if ([string]::IsNullOrEmpty($Color)) { $Color = 'default' }
 $UseColor = switch ($Color.ToLowerInvariant()) {
     'always' { $true; break }
     'never' { $false; break }
+    'default' { [string]::IsNullOrEmpty($env:NO_COLOR) -and $env:CI -ne 'true'; break }
     'auto' { -not [Console]::IsOutputRedirected -and [string]::IsNullOrEmpty($env:NO_COLOR); break }
-    default { throw "unsupported color mode: $Color (use auto, always, or never)" }
+    default { throw "unsupported color mode: $Color (use default, auto, always, or never)" }
 }
-if ([string]::IsNullOrEmpty($Progress)) { $Progress = 'auto' }
+if ([string]::IsNullOrEmpty($Progress)) { $Progress = 'default' }
 $UseProgress = switch ($Progress.ToLowerInvariant()) {
     'always' { $true; break }
     'never' { $false; break }
+    'default' { $env:CI -ne 'true'; break }
     'auto' { -not [Console]::IsErrorRedirected -and $env:CI -ne 'true'; break }
-    default { throw "unsupported progress mode: $Progress (use auto, always, or never)" }
+    default { throw "unsupported progress mode: $Progress (use default, auto, always, or never)" }
 }
 $ProgressPreference = if ($UseProgress) { 'Continue' } else { 'SilentlyContinue' }
 

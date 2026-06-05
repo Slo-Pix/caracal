@@ -11,8 +11,8 @@ INSTALL_DIR="${CARACAL_INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${CARACAL_VERSION:-latest}"
 VERIFY_PROVENANCE="${CARACAL_VERIFY_PROVENANCE:-1}"
 REQUIRE_PROVENANCE="${CARACAL_REQUIRE_PROVENANCE:-0}"
-COLOR_MODE="${CARACAL_INSTALL_COLOR:-auto}"
-PROGRESS_MODE="${CARACAL_INSTALL_PROGRESS:-auto}"
+COLOR_MODE="${CARACAL_INSTALL_COLOR:-default}"
+PROGRESS_MODE="${CARACAL_INSTALL_PROGRESS:-default}"
 
 colorReset=""
 colorBold=""
@@ -27,12 +27,17 @@ configureColor() {
     case "${COLOR_MODE}" in
         always|1|true|yes) useColor=1 ;;
         never|0|false|no) useColor=0 ;;
-        auto|"")
+        default|"")
+            if [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ] && [ "${CI:-}" != "true" ]; then
+                useColor=1
+            fi
+            ;;
+        auto)
             if { [ -t 1 ] || [ -t 2 ]; } && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != "dumb" ]; then
                 useColor=1
             fi
             ;;
-        *) err "unsupported color mode: ${COLOR_MODE} (use auto, always, or never)" ;;
+        *) err "unsupported color mode: ${COLOR_MODE} (use default, auto, always, or never)" ;;
     esac
     if [ "${useColor}" = "1" ]; then
         colorReset="$(printf '\033[0m')"
@@ -59,12 +64,17 @@ configureProgress() {
     case "${PROGRESS_MODE}" in
         always|1|true|yes) useProgress=1 ;;
         never|0|false|no) useProgress=0 ;;
-        auto|"")
+        default|"")
+            if [ "${TERM:-}" != "dumb" ] && [ "${CI:-}" != "true" ]; then
+                useProgress=1
+            fi
+            ;;
+        auto)
             if [ -t 2 ] && [ "${TERM:-}" != "dumb" ] && [ "${CI:-}" != "true" ]; then
                 useProgress=1
             fi
             ;;
-        *) err "unsupported progress mode: ${PROGRESS_MODE} (use auto, always, or never)" ;;
+        *) err "unsupported progress mode: ${PROGRESS_MODE} (use default, auto, always, or never)" ;;
     esac
 }
 
@@ -98,7 +108,7 @@ usage() {
 caracal-install: download the Caracal Console binaries from GitHub Releases.
 
 Usage:
-  install-console.sh [--version vYYYY.MM.DD[.N][-rc.N]] [--install-dir PATH] [--verify-provenance] [--no-verify-provenance] [--require-provenance] [--color auto|always|never] [--progress auto|always|never]
+  install-console.sh [--version vYYYY.MM.DD[.N][-rc.N]] [--install-dir PATH] [--verify-provenance] [--no-verify-provenance] [--require-provenance]
 
 Installs the thin 'caracal' runtime CLI and the 'caracal-console' Console binary.
 
@@ -106,19 +116,17 @@ Provenance attestation is verified by default when the GitHub CLI ('gh') is
 available; pass --no-verify-provenance to skip it or --require-provenance to
 fail the install when it cannot be verified.
 
-Color is enabled automatically on terminals. Use --color always to force color
-or NO_COLOR=1 / --color never to force plain text.
-
-Download progress is enabled automatically on terminals. Use --progress never
-to disable it.
+Color and download progress are enabled by default for local installs. Set
+NO_COLOR=1, CARACAL_INSTALL_COLOR=never, or CARACAL_INSTALL_PROGRESS=never for
+plain output.
 
 Environment overrides:
   CARACAL_VERSION       same as --version
   CARACAL_INSTALL_DIR   same as --install-dir
   CARACAL_VERIFY_PROVENANCE   same as --verify-provenance (set 0 to disable)
   CARACAL_REQUIRE_PROVENANCE  same as --require-provenance
-  CARACAL_INSTALL_COLOR same as --color
-  CARACAL_INSTALL_PROGRESS same as --progress
+  CARACAL_INSTALL_COLOR default, auto, always, or never
+  CARACAL_INSTALL_PROGRESS default, auto, always, or never
 EOF
 }
 
@@ -131,8 +139,6 @@ while [ $# -gt 0 ]; do
         --verify-provenance) VERIFY_PROVENANCE=1 ;;
         --no-verify-provenance) VERIFY_PROVENANCE=0; REQUIRE_PROVENANCE=0 ;;
         --require-provenance) VERIFY_PROVENANCE=1; REQUIRE_PROVENANCE=1 ;;
-        --color) [ $# -ge 2 ] || err "--color requires a value"; COLOR_MODE="$2"; shift ;;
-        --progress) [ $# -ge 2 ] || err "--progress requires a value"; PROGRESS_MODE="$2"; shift ;;
         --help|-h) usage; exit 0 ;;
         *) err "unknown argument: $1 (use --help for usage)" ;;
     esac
