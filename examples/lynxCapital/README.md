@@ -117,6 +117,40 @@ tests/           Topology, lifecycle, and provider transport tests
 instructions.md  Build rules
 ```
 
+## Provider mock lab
+
+`_mock/providerlab/` serves two mock external providers for every Caracal
+provider auth category, each on its own `localhost` port (`9400`–`9415`) with a
+small control UI. Wire field names use third-party industry shapes
+(`clientId`, `apiKey`, `accessToken`) so each provider behaves like a real
+outside service.
+
+| Category | Providers | Ports | Boundary behavior |
+|---|---|---|---|
+| `api_key` | Aurum Pay, Quill OCR | 9400, 9401 | key in header vs. query |
+| `bearer_token` | Nimbus Ledger, Vela Mail | 9402, 9403 | standard vs. custom header/scheme |
+| `oauth2_client_credentials` | Helios FX, Orbit ERP | 9404, 9405 | `client_secret_basic` vs. `client_secret_post` + audience |
+| `oauth2_authorization_code` | Corvus Bank, Lumen CRM | 9406, 9407 | PKCE vs. offline refresh |
+| `caracal_mandate` | Atlas Treasury, Sentinel Compliance | 9408, 9409 | verifier-SDK semantics; delegation-required |
+| `none` (internal) | Core Billing, Core Identity | 9410, 9411 | behind the boundary, no upstream credential |
+| `mcp` | Forge Tools, Relay | 9412, 9413 | bearer-guarded vs. mandate-guarded JSON-RPC |
+| `sdk` | Zephyr Pay, Terra Tax | 9414, 9415 | HTTP provider behind a pip SDK shim |
+
+Run the whole lab in one process, a single provider, or one container each:
+
+```bash
+python -m _mock.providerlab.run                                   # all 16, localhost
+PROVIDERLAB_PROVIDER=helios-fx python -m _mock.providerlab.server  # one provider
+docker compose -f _mock/providerlab/docker-compose.yml up --build  # one container each
+```
+
+Each provider exposes `/` (overview), `/__lab/credentials`, `/__lab/clients`,
+`/__lab/api-clients`, its `/api/{operation}` domain surface, OAuth/MCP surfaces
+where relevant, and `/healthz`. Credentials are seeded on first start and
+persist under `_mock/providerlab/_store/` (git-ignored); a consolidated
+`_store/_seed_index.json` lists every provider's seed for verification flows.
+Set `PROVIDERLAB_FAST=1` to disable injected latency and transient faults.
+
 ## Caracal integration
 
 This reference lab is currently provider-direct: it calls upstream providers

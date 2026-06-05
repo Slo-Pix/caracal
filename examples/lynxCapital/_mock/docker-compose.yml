@@ -35,21 +35,6 @@ services:
           - tax-rules.mock
           - compliance-nexus.mock
           - fx-rates.mock
-      caracalData:
-        aliases:
-          - mercury-bank.mock
-          - wise-payouts.mock
-          - stripe-treasury.mock
-          - quickbooks.mock
-          - netsuite.mock
-          - sap-erp.mock
-          - ocr-vision.mock
-          - close-engine.mock
-          - regulatory-filings.mock
-          - customer-billing.mock
-          - tax-rules.mock
-          - compliance-nexus.mock
-          - fx-rates.mock
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://127.0.0.1:8800/healthz').read()"]
       interval: 5s
@@ -119,6 +104,3 @@ networks:
   providers:
     driver: bridge
     name: lynxcapital_providers
-  caracalData:
-    external: true
-    name: caracalData
