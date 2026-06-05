@@ -10,7 +10,6 @@ import asyncio
 import os
 import socket
 import sys
-import tempfile
 import threading
 import time
 from pathlib import Path
@@ -29,22 +28,6 @@ for _pkg in (_LYNX_ROOT / "_mock" / "sdk").glob("*/"):
     sys.path.insert(0, str(_pkg))
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
-
-_caracal_toml = Path(tempfile.mkdtemp(prefix="caracal-lynx-tests-")) / "caracal.toml"
-_caracal_toml.write_text(
-    'zone_id = "test-zone"\n'
-    'application_id = "test-app"\n'
-    'app_client_secret = "test-secret"\n'
-    'sts_url = "http://127.0.0.1:0"\n'
-    'coordinator_url = "http://127.0.0.1:0"\n'
-    'gateway_url = "http://127.0.0.1:0"\n'
-    '[[credentials]]\n'
-    'env = "LYNX_MERCURY_BANK_TOKEN"\n'
-    'resource = "lynx/mercury-bank"\n'
-    'upstream_prefix = "http://127.0.0.1:8800"\n',
-    encoding="utf-8",
-)
-os.environ["CARACAL_CONFIG"] = str(_caracal_toml)
 
 
 def _free_port() -> int:

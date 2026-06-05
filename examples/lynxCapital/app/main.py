@@ -13,11 +13,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app import caracal as caracal_module
 from app.config import load_config
 
 load_dotenv(Path(__file__).parent.parent / ".env")
-caracal = caracal_module.init(required=False)
 
 
 @asynccontextmanager
@@ -29,12 +27,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_streams()
-        await caracal_module.close()
 
 
 app = FastAPI(title="Lynx Capital", lifespan=lifespan)
-if caracal is not None:
-    app.add_middleware(caracal.middleware())
 
 _static = Path(__file__).parent / "web" / "static"
 if _static.exists():

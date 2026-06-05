@@ -10,14 +10,12 @@ import asyncio
 import json
 import logging
 import time
-from contextlib import AsyncExitStack
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from app import caracal as caracal_module
 from app.agents import tools as tool_fns
 from app.agents.runner import AgentHandle, create_runner
 from app.config import get_config
@@ -451,61 +449,55 @@ async def _run_regional_orchestrator(run_id, runner, parent, memory_store, plans
     if region_meta is None:
         raise ValueError(f"Unknown region {region!r}")
 
-    async with AsyncExitStack() as caracal_stack:
-        await caracal_module.enter(
-            caracal_stack, "regional-orchestrator",
-            run_id=run_id, region=region, scope=f"region:{region}",
-            ttl_seconds=900,
+
+    ro = runner.spawn(
+        role="regional-orchestrator", scope=f"region:{region}",
+        parent=parent, layer="regional-orchestrator", region=region,
+    )
+    ro.start()
+
+    pool = WorkerPool(run_id, runner, ro)
+    stage_state = {"current": None}
+    try:
+        tools = [
+            *_build_agent_builtins(run_id, ro.id, plans, files, board, region=region,
+                                    stage_state=stage_state, worker_pool=pool),
+            *_build_regional_domain_tools(run_id, runner, ro, region),
+        ]
+        tool_map = {t.name: t for t in tools}
+
+        llm = _make_llm(model_name, cfg.llm.temperature)
+        llm_with_tools = llm.bind_tools(tools)
+        summarizer = _make_llm(summarizer_model, 0.0)
+
+        system_prompt = cfg.prompts.regionalOrchestrator.format(
+            region=region, region_name=region_meta.name,
+            currency=region_meta.currency,
+            focus=focus or "process the pending batch end-to-end",
         )
-
-        ro = runner.spawn(
-            role="regional-orchestrator", scope=f"region:{region}",
-            parent=parent, layer="regional-orchestrator", region=region,
+        mem = memory_store.open(
+            agent_id=ro.id,
+            system=SystemMessage(content=system_prompt),
+            seed_summary=parent_summary,
         )
-        ro.start()
+        mem.append(HumanMessage(content=(
+            f"Begin now. Your first turn MUST be a write_todos call "
+            f"listing your specific planned steps for focus={focus!r}."
+        )))
+        _emit_memory_snapshot(run_id, mem)
 
-        pool = WorkerPool(run_id, runner, ro)
-        stage_state = {"current": None}
-        try:
-            tools = [
-                *_build_agent_builtins(run_id, ro.id, plans, files, board, region=region,
-                                        stage_state=stage_state, worker_pool=pool),
-                *_build_regional_domain_tools(run_id, runner, ro, region),
-            ]
-            tool_map = {t.name: t for t in tools}
+        tool_calls = await _drive_stages(
+            run_id=run_id, agent=ro, model_name=model_name,
+            llm_with_tools=llm_with_tools, summarizer=summarizer,
+            mem=mem, tool_map=tool_map,
+        )
+    finally:
+        pool.drain("cancelled")
 
-            llm = _make_llm(model_name, cfg.llm.temperature)
-            llm_with_tools = llm.bind_tools(tools)
-            summarizer = _make_llm(summarizer_model, 0.0)
-
-            system_prompt = cfg.prompts.regionalOrchestrator.format(
-                region=region, region_name=region_meta.name,
-                currency=region_meta.currency,
-                focus=focus or "process the pending batch end-to-end",
-            )
-            mem = memory_store.open(
-                agent_id=ro.id,
-                system=SystemMessage(content=system_prompt),
-                seed_summary=parent_summary,
-            )
-            mem.append(HumanMessage(content=(
-                f"Begin now. Your first turn MUST be a write_todos call "
-                f"listing your specific planned steps for focus={focus!r}."
-            )))
-            _emit_memory_snapshot(run_id, mem)
-
-            tool_calls = await _drive_stages(
-                run_id=run_id, agent=ro, model_name=model_name,
-                llm_with_tools=llm_with_tools, summarizer=summarizer,
-                mem=mem, tool_map=tool_map,
-            )
-        finally:
-            pool.drain("cancelled")
-
-        result = {"region": region, "toolCalls": tool_calls}
-        ro.end(result)
-        ro.terminate("completed")
-        return result
+    result = {"region": region, "toolCalls": tool_calls}
+    ro.end(result)
+    ro.terminate("completed")
+    return result
 
 
 def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
@@ -734,59 +726,53 @@ async def _run_workflow_orchestrator(run_id, runner, parent, memory_store, plans
                                      model_name, summarizer_model):
     cfg = get_config()
 
-    async with AsyncExitStack() as caracal_stack:
-        await caracal_module.enter(
-            caracal_stack, "workflow-orchestrator",
-            run_id=run_id, scope=f"workflow:{workflow_id}",
-            ttl_seconds=900, extra={"workflow": workflow_id},
+
+    wo = runner.spawn(
+        role="workflow-orchestrator", scope=f"workflow:{workflow_id}",
+        parent=parent, layer="workflow-orchestrator", region=None,
+    )
+    wo.start()
+
+    pool = WorkerPool(run_id, runner, wo)
+    stage_state = {"current": None}
+    try:
+        tools = [
+            *_build_agent_builtins(run_id, wo.id, plans, files, board, region=None,
+                                    stage_state=stage_state, worker_pool=pool),
+            *_build_workflow_domain_tools(run_id, runner, wo, workflow_id),
+        ]
+        tool_map = {t.name: t for t in tools}
+
+        llm = _make_llm(model_name, cfg.llm.temperature)
+        llm_with_tools = llm.bind_tools(tools)
+        summarizer = _make_llm(summarizer_model, 0.0)
+
+        system_prompt = cfg.prompts.workflowOrchestrator.format(
+            label=label, focus=focus or "complete the operational task end-to-end",
         )
-
-        wo = runner.spawn(
-            role="workflow-orchestrator", scope=f"workflow:{workflow_id}",
-            parent=parent, layer="workflow-orchestrator", region=None,
+        mem = memory_store.open(
+            agent_id=wo.id,
+            system=SystemMessage(content=system_prompt),
+            seed_summary=parent_summary,
         )
-        wo.start()
+        mem.append(HumanMessage(content=(
+            f"Begin now. Your first turn MUST be a write_todos call "
+            f"listing your specific planned steps for focus={focus!r}."
+        )))
+        _emit_memory_snapshot(run_id, mem)
 
-        pool = WorkerPool(run_id, runner, wo)
-        stage_state = {"current": None}
-        try:
-            tools = [
-                *_build_agent_builtins(run_id, wo.id, plans, files, board, region=None,
-                                        stage_state=stage_state, worker_pool=pool),
-                *_build_workflow_domain_tools(run_id, runner, wo, workflow_id),
-            ]
-            tool_map = {t.name: t for t in tools}
+        tool_calls = await _drive_stages(
+            run_id=run_id, agent=wo, model_name=model_name,
+            llm_with_tools=llm_with_tools, summarizer=summarizer,
+            mem=mem, tool_map=tool_map,
+        )
+    finally:
+        pool.drain("cancelled")
 
-            llm = _make_llm(model_name, cfg.llm.temperature)
-            llm_with_tools = llm.bind_tools(tools)
-            summarizer = _make_llm(summarizer_model, 0.0)
-
-            system_prompt = cfg.prompts.workflowOrchestrator.format(
-                label=label, focus=focus or "complete the operational task end-to-end",
-            )
-            mem = memory_store.open(
-                agent_id=wo.id,
-                system=SystemMessage(content=system_prompt),
-                seed_summary=parent_summary,
-            )
-            mem.append(HumanMessage(content=(
-                f"Begin now. Your first turn MUST be a write_todos call "
-                f"listing your specific planned steps for focus={focus!r}."
-            )))
-            _emit_memory_snapshot(run_id, mem)
-
-            tool_calls = await _drive_stages(
-                run_id=run_id, agent=wo, model_name=model_name,
-                llm_with_tools=llm_with_tools, summarizer=summarizer,
-                mem=mem, tool_map=tool_map,
-            )
-        finally:
-            pool.drain("cancelled")
-
-        result = {"workflow_id": workflow_id, "toolCalls": tool_calls}
-        wo.end(result)
-        wo.terminate("completed")
-        return result
+    result = {"workflow_id": workflow_id, "toolCalls": tool_calls}
+    wo.end(result)
+    wo.terminate("completed")
+    return result
 
 
 def _build_fc_domain_tools(run_id, runner, fc, memory_store, plans, files, board, model_name,
@@ -878,101 +864,96 @@ async def run_swarm(run_id: str, prompt: str) -> None:
     bus.publish(ev.chat_user(run_id, prompt))
     log.info("run_swarm start run_id=%s model=%s prompt=%r", run_id, model_name, prompt[:120])
 
-    async with AsyncExitStack() as caracal_stack:
-        await caracal_module.enter(
-            caracal_stack, "finance-control",
-            run_id=run_id, scope="global",
+
+    runner = create_runner(run_id)
+    memory_store = RunMemoryStore(run_id, model_name)
+    plans = RunPlanStore(run_id)
+    files = RunFileStore(run_id=run_id)
+    board = RunBlackboard(run_id)
+    jobs = JobRegistry(run_id)
+
+    fc = runner.spawn(
+        role="finance-control", scope="global", parent=None,
+        layer="finance-control", region=None,
+    )
+    fc.start()
+
+    pool = WorkerPool(run_id, runner, fc)
+    stage_state = {"current": None}
+    dispatched_regions: list[str] = []
+    dispatched_workflows: list[str] = []
+    tools = [
+        *_build_agent_builtins(run_id, fc.id, plans, files, board,
+                                stage_state=stage_state, worker_pool=pool),
+        *_build_fc_domain_tools(run_id, runner, fc, memory_store, plans, files, board, model_name,
+                                 summarizer_model, dispatched_regions, dispatched_workflows, jobs),
+    ]
+    tool_map = {t.name: t for t in tools}
+    llm = _make_llm(model_name, cfg.llm.temperature)
+    llm_with_tools = llm.bind_tools(tools)
+    summarizer = _make_llm(summarizer_model, 0.0)
+
+    session_memory.add_user(prompt, run_id)
+    ctx = session_memory.context_block()
+
+    mem = memory_store.open(fc.id, SystemMessage(content=cfg.prompts.financeControl))
+    if ctx:
+        mem.append(SystemMessage(content=f"[Session context: prior runs and conversation]\n{ctx}"))
+    mem.append(HumanMessage(content=prompt))
+    _emit_memory_snapshot(run_id, mem)
+
+    run_errors: list[str] = []
+    run_status = "completed"
+    try:
+        await _drive_stages(
+            run_id=run_id, agent=fc, model_name=model_name,
+            llm_with_tools=llm_with_tools, summarizer=summarizer,
+            mem=mem, tool_map=tool_map,
         )
-
-        runner = create_runner(run_id)
-        memory_store = RunMemoryStore(run_id, model_name)
-        plans = RunPlanStore(run_id)
-        files = RunFileStore(run_id=run_id)
-        board = RunBlackboard(run_id)
-        jobs = JobRegistry(run_id)
-
-        fc = runner.spawn(
-            role="finance-control", scope="global", parent=None,
-            layer="finance-control", region=None,
+        drained = await jobs.drain(timeout_s=180.0)
+        for r in drained:
+            if r["status"] in ("completed", "failed"):
+                payload = r.get("result") if r["status"] == "completed" else {"error": r.get("error")}
+                bus.publish(ev.job_completed(
+                    run_id, fc.id, r["job_id"], r["status"], payload or {},
+                    kind=r.get("kind", ""), target=r.get("target", ""),
+                ))
+        pool.drain("completed")
+        fc.end({"status": "completed"})
+        fc.terminate("completed")
+        bus.publish(ev.run_end(run_id, "completed"))
+        log.info("run_swarm end run_id=%s status=completed", run_id)
+    except RunCancelled:
+        run_status = "cancelled"
+        log.info("run_swarm cancelled run_id=%s", run_id)
+        bus.publish(ev.run_cancelled(run_id))
+        await jobs.drain(timeout_s=5.0)
+        pool.drain("cancelled")
+        if not fc._terminated:
+            fc.terminate("cancelled")
+        bus.publish(ev.run_end(run_id, "cancelled"))
+    except Exception as exc:
+        run_status = "failed"
+        run_errors.append(str(exc))
+        log.exception("run_swarm failed run_id=%s", run_id)
+        bus.publish(ev.error(run_id, str(exc), fc.id))
+        await jobs.drain(timeout_s=5.0)
+        pool.drain("failed")
+        if not fc._terminated:
+            fc.terminate("failed")
+        bus.publish(ev.run_end(run_id, "failed"))
+    finally:
+        cancellation.clear(run_id)
+        last_ai = next(
+            (m for m in reversed(mem.messages) if isinstance(m, AIMessage) and m.content),
+            None,
         )
-        fc.start()
-
-        pool = WorkerPool(run_id, runner, fc)
-        stage_state = {"current": None}
-        dispatched_regions: list[str] = []
-        dispatched_workflows: list[str] = []
-        tools = [
-            *_build_agent_builtins(run_id, fc.id, plans, files, board,
-                                    stage_state=stage_state, worker_pool=pool),
-            *_build_fc_domain_tools(run_id, runner, fc, memory_store, plans, files, board, model_name,
-                                     summarizer_model, dispatched_regions, dispatched_workflows, jobs),
-        ]
-        tool_map = {t.name: t for t in tools}
-        llm = _make_llm(model_name, cfg.llm.temperature)
-        llm_with_tools = llm.bind_tools(tools)
-        summarizer = _make_llm(summarizer_model, 0.0)
-
-        session_memory.add_user(prompt, run_id)
-        ctx = session_memory.context_block()
-
-        mem = memory_store.open(fc.id, SystemMessage(content=cfg.prompts.financeControl))
-        if ctx:
-            mem.append(SystemMessage(content=f"[Session context: prior runs and conversation]\n{ctx}"))
-        mem.append(HumanMessage(content=prompt))
-        _emit_memory_snapshot(run_id, mem)
-
-        run_errors: list[str] = []
-        run_status = "completed"
-        try:
-            await _drive_stages(
-                run_id=run_id, agent=fc, model_name=model_name,
-                llm_with_tools=llm_with_tools, summarizer=summarizer,
-                mem=mem, tool_map=tool_map,
-            )
-            drained = await jobs.drain(timeout_s=180.0)
-            for r in drained:
-                if r["status"] in ("completed", "failed"):
-                    payload = r.get("result") if r["status"] == "completed" else {"error": r.get("error")}
-                    bus.publish(ev.job_completed(
-                        run_id, fc.id, r["job_id"], r["status"], payload or {},
-                        kind=r.get("kind", ""), target=r.get("target", ""),
-                    ))
-            pool.drain("completed")
-            fc.end({"status": "completed"})
-            fc.terminate("completed")
-            bus.publish(ev.run_end(run_id, "completed"))
-            log.info("run_swarm end run_id=%s status=completed", run_id)
-        except RunCancelled:
-            run_status = "cancelled"
-            log.info("run_swarm cancelled run_id=%s", run_id)
-            bus.publish(ev.run_cancelled(run_id))
-            await jobs.drain(timeout_s=5.0)
-            pool.drain("cancelled")
-            if not fc._terminated:
-                fc.terminate("cancelled")
-            bus.publish(ev.run_end(run_id, "cancelled"))
-        except Exception as exc:
-            run_status = "failed"
-            run_errors.append(str(exc))
-            log.exception("run_swarm failed run_id=%s", run_id)
-            bus.publish(ev.error(run_id, str(exc), fc.id))
-            await jobs.drain(timeout_s=5.0)
-            pool.drain("failed")
-            if not fc._terminated:
-                fc.terminate("failed")
-            bus.publish(ev.run_end(run_id, "failed"))
-        finally:
-            cancellation.clear(run_id)
-            last_ai = next(
-                (m for m in reversed(mem.messages) if isinstance(m, AIMessage) and m.content),
-                None,
-            )
-            if last_ai:
-                session_memory.add_assistant(str(last_ai.content), run_id)
-            session_memory.record_run(RunRecord(
-                run_id=run_id,
-                prompt=prompt,
-                status=run_status,
-                regions=list(dispatched_regions),
-                errors=run_errors,
-            ))
+        if last_ai:
+            session_memory.add_assistant(str(last_ai.content), run_id)
+        session_memory.record_run(RunRecord(
+            run_id=run_id,
+            prompt=prompt,
+            status=run_status,
+            regions=list(dispatched_regions),
+            errors=run_errors,
+        ))
