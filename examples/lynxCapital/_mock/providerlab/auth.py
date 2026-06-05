@@ -62,6 +62,9 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
         token = store.valid_access_token(presented) if presented else None
         if token is None:
             raise AuthError(401, "invalid_token", "missing or expired access token")
+        if provider.audience and token.get("audience") != provider.audience:
+            raise AuthError(403, "invalid_audience",
+                            f"access token is not authorized for resource {provider.audience}")
         return {"principal": token["clientId"], "auth": "oauth", "scope": token["scope"]}
 
     if cat == "caracal_mandate" or (cat == "mcp" and provider.mcp_auth == "mandate"):

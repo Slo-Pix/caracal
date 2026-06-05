@@ -244,6 +244,9 @@ def _install_oauth(app: FastAPI, provider: catalog.Provider) -> None:
         }
         if provider.category == "oauth2_client_credentials":
             doc["grant_types_supported"] = ["client_credentials"]
+            if provider.audience:
+                doc["resource"] = provider.audience
+                doc["resource_indicators_supported"] = True
         else:
             doc["authorization_endpoint"] = f"{base}/oauth/authorize"
             doc["grant_types_supported"] = ["authorization_code", "refresh_token"]
@@ -301,7 +304,18 @@ def _install_oauth(app: FastAPI, provider: catalog.Provider) -> None:
             if client is None or client["clientSecret"] != client_secret:
                 return _oauth_error(401, "invalid_client")
             scope = form.get("scope", " ".join(provider.scopes))
-            issued = store.issue_token(client_id, scope)
+            granted = set(client.get("scopes") or provider.scopes)
+            if not set(scope.split()).issubset(granted):
+                return _oauth_error(400, "invalid_scope",
+                                    "requested scope exceeds the grant for this client")
+            audience = None
+            if provider.audience:
+                requested = form.get("resource") or form.get("audience") or provider.audience
+                if requested != provider.audience:
+                    return _oauth_error(400, "invalid_target",
+                                        f"unknown or unauthorized resource indicator {requested!r}")
+                audience = provider.audience
+            issued = store.issue_token(client_id, scope, audience=audience)
             return _token_response(issued)
 
         if grant == "authorization_code":
@@ -356,6 +370,7 @@ def _install_oauth(app: FastAPI, provider: catalog.Provider) -> None:
             "client_id": token["clientId"],
             "scope": token["scope"],
             "sub": token.get("subject"),
+            "aud": token.get("audience"),
             "token_type": "Bearer",
             "exp": token["expiresAt"],
             "iat": token["createdAt"],
