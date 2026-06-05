@@ -9,9 +9,9 @@ Phase-2 plan for wiring the Caracal SDK into the LynxCapital reference lab.
 
 This is the **plan only**. No application code is wired to the SDK yet. The
 LynxCapital app currently calls providers directly through
-`app/services/registry.py`. This document describes the thin, correct,
+`app/services/partners.py`. This document describes the thin, correct,
 end-to-end integration of the Caracal Python SDK (`caracalai-sdk==0.1.4rc1`)
-once the provider mock lab under `_mock/providerlab/` is validated.
+once the provider ecosystem under `_mock/providerlab/` is validated.
 
 ## 1. SDK surface used
 
@@ -58,14 +58,14 @@ surface for all of them.
 
 | Lab category | Lab providers | SDK integration shape |
 |---|---|---|
-| `caracal_mandate` | Atlas Treasury, Sentinel Compliance | Primary path: route through the gateway via `gateway_request()` / `fetch()`; the provider verifies the Caracal envelope. Sentinel requires a delegated mandate (`delegate()` before the call). |
-| `oauth2_client_credentials` | Helios FX, Orbit ERP | Non-Caracal upstream: the gateway holds the OAuth client credential; the app calls the gateway with a Caracal-scoped resource binding. App never sees the provider secret. |
-| `oauth2_authorization_code` | Corvus Bank, Lumen CRM | User-consented upstream: tokens (incl. refresh) are held behind the gateway as a provider connection; the app references the resource binding only. |
-| `api_key` | Aurum Pay, Quill OCR | Gateway-managed API key. App calls `gateway_request(resource_id)`; the gateway injects the upstream key. |
-| `bearer_token` | Nimbus Ledger, Vela Mail | Same as `api_key`, static bearer held at the gateway. |
-| `sdk` | Zephyr Pay, Terra Tax | First-party SDK clients are constructed with the gateway base URL and the SDK `transport()` httpx client so calls are enveloped. |
-| `mcp` | Forge Tools, Relay | MCP tool calls flow through the SDK transport; Relay (mandate-guarded) requires a delegated context, Forge (bearer) uses a gateway-held token. |
-| `none` (internal) | Core Billing, Core Identity | Behind the boundary; no upstream credential. Reached directly, still inside the active `CaracalContext` for audit propagation. |
+| `caracal_mandate` | Aegis Screening, Verafin Monitor | Primary path: route through the gateway via `gateway_request()` / `fetch()`; the provider verifies the Caracal envelope. Verafin requires a delegated mandate (`delegate()` before the call). |
+| `oauth2_client_credentials` | Cordoba FX, Ironbark ERP, Junction Procurement | Non-Caracal upstream: the gateway holds the OAuth client credential; the app calls the gateway with a Caracal-scoped resource binding. App never sees the provider secret. |
+| `oauth2_authorization_code` | Halcyon Bank, Tallyhall Books, Beacon CRM | User-consented upstream: tokens (incl. refresh) are held behind the gateway as a provider connection; the app references the resource binding only. |
+| `api_key` | Meridian Pay, Inkwell OCR, Keystone Treasury, Pulse Market | Gateway-managed API key. App calls `gateway_request(resource_id)`; the gateway injects the upstream key. |
+| `bearer_token` | Slate Ledger, Vela Notify | Same as `api_key`, static bearer held at the gateway. |
+| `sdk` | Sabre Tax, Quetzal Payouts | First-party SDK clients are constructed with the gateway base URL and the SDK `transport()` httpx client so calls are enveloped. |
+| `mcp` | Atlas Vendor Network, Relay Automation | MCP tool calls flow through the SDK transport; Relay (mandate-guarded) requires a delegated context, Atlas (bearer) uses a gateway-held token. |
+| `none` (internal) | Lumen Identity, Core Billing | Behind the boundary; no upstream credential. Reached directly, still inside the active `CaracalContext` for audit propagation. |
 
 The single rule: the application holds exactly one secret (its own
 `client_secret`); every provider credential lives at the gateway and is selected
@@ -81,11 +81,14 @@ Reintroduce the SDK at the same seams Phase 1 removed, no more:
   managers, and `close()`.
 - `app/main.py` — construct the client in the FastAPI lifespan, install
   `context_middleware()` on the app, and `await client.close()` on shutdown.
-- `app/services/registry.py` — resolve provider `base_url` to the gateway and
-  obtain HTTP clients from `caracal.transport()` instead of building raw
-  `httpx` clients with `AuthSpec` keys.
-- `app/services/transport/{rest,grpc_client,mcp,sse}.py` — attach Caracal
-  headers / enveloped transport at the call boundary.
+- `app/services/partners.py` — resolve each provider to its gateway
+  `ResourceBinding` and obtain HTTP clients from `caracal.transport()` instead of
+  building raw `httpx` clients and performing per-category auth in-process. The
+  single `call(provider_id, operation, payload)` surface stays; only its
+  transport and credential source change.
+- `app/agents/tools.py` — unchanged surface: tools keep calling the partner
+  layer, which now routes through the gateway. Mandate-backed tools stop catching
+  `PartnerPendingCaracal` once Aegis/Verafin/Relay are live.
 - `app/orchestration/swarm.py` — wrap each spawned regional/workflow agent in
   `async with caracal.spawn(...)` / `caracal.delegate(...)` so delegation depth,
   hops, and TTL are bounded by `DelegationConstraints`.
@@ -107,16 +110,16 @@ move out of the app and into gateway-held provider connections.
 
 ## 6. Rollout sequence
 
-1. Validate the provider lab (this repo state): `PROVIDERLAB_FAST=1 pytest
-   tests/test_providerlab.py` green; all 8 categories accept and reject
-   correctly.
+1. Validate the provider ecosystem (this repo state): `PROVIDERLAB_FAST=1 pytest
+   tests/test_providerlab.py tests/test_partners.py` green; all 8 categories and
+   all protocols accept and reject correctly.
 2. Stand up STS, Coordinator, and Gateway locally; register the LynxCapital
-   application and the 16 resource bindings; move provider credentials to the
+   application and the 20 resource bindings; move provider credentials to the
    gateway.
 3. Recreate `app/caracal.py` and wire `app/main.py` lifespan + middleware only.
    Confirm the app boots and `/setup` reports the control plane reachable.
-4. Switch `app/services/registry.py` to the gateway base URL + `transport()`
-   for one category at a time, starting with `api_key` (Aurum Pay), then
+4. Switch `app/services/partners.py` to the gateway base URL + `transport()`
+   for one category at a time, starting with `api_key` (Meridian Pay), then
    `bearer_token`, `oauth2_*`, `sdk`, `mcp`, and finally `caracal_mandate`.
 5. Wrap the swarm in `spawn` / `delegate`; assert every agent emits start/end
    lifecycle events and a bounded delegation chain via `describe_authority`.

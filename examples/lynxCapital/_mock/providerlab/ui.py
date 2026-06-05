@@ -28,8 +28,9 @@ def _esc(value) -> str:
 
 def layout(provider: catalog.Provider, active: str, body: str) -> str:
     nav = []
-    for key, label in (("home", "Overview"), ("credentials", "Credentials"),
-                       ("clients", "Clients"), ("api-clients", "API clients")):
+    for key, label in (("home", "Dashboard"), ("resources", "Resources"),
+                       ("credentials", "Credentials"), ("clients", "Clients"),
+                       ("api-clients", "API clients")):
         href = "/" if key == "home" else f"/__lab/{key}"
         cls = "active" if active == key else ""
         nav.append(f'<a class="{cls}" href="{href}">{label}</a>')
@@ -191,6 +192,37 @@ def credentials_page(provider: catalog.Provider) -> str:
                         'Access is enforced at the network boundary only.</p></div>')
 
     return layout(provider, "credentials", "".join(sections))
+
+
+def resource_explorer_page(provider: catalog.Provider, state) -> str:
+    """Render the provider's live domain data model: each resource table with a count and sample row."""
+    from _mock.providerlab.providers import base
+
+    with state.lock:
+        if not state.seeded:
+            seed = base.SEEDERS.get(provider.id)
+            if seed is not None:
+                seed(state)
+            state.seeded = True
+        tables = {name: dict(rows) for name, rows in state.tables.items()}
+
+    panels = []
+    for resource in provider.resources:
+        rows = tables.get(resource, {})
+        sample = next(iter(rows.values()), None)
+        fields = ", ".join(f"<code>{_esc(k)}</code>" for k in sample.keys()) if isinstance(sample, dict) else "—"
+        sample_json = _esc(sample) if sample is not None else "no rows yet"
+        panels.append(f"""
+<div class="panel">
+  <h2>{_esc(resource)} <span class="badge">{len(rows)} record(s)</span></h2>
+  <p class="muted">fields: {fields}</p>
+  <code>{sample_json}</code>
+</div>""")
+    if not panels:
+        panels.append('<div class="panel"><p class="muted">This provider exposes no stored resources.</p></div>')
+    intro = (f'<div class="panel"><p class="muted">Live data served by {_esc(provider.brand)} on this port. '
+             f'Records evolve as operations run against <code>/api/&lt;operation&gt;</code>.</p></div>')
+    return layout(provider, "resources", intro + "".join(panels))
 
 
 def clients_page(provider: catalog.Provider) -> str:
