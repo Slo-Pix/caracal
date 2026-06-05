@@ -58,5 +58,16 @@ async def validate_setup():
                   else f"Missing: {', '.join(missing_secrets)}",
     })
 
+    from app import caracal
+    if caracal.enabled():
+        for sid, label, default in (
+            ("CARACAL_STS_URL", "Caracal STS reachable", "http://localhost:8080"),
+            ("CARACAL_COORDINATOR_URL", "Caracal Coordinator reachable", "http://localhost:4000"),
+            ("CARACAL_GATEWAY_URL", "Caracal Gateway reachable", "http://localhost:8081"),
+        ):
+            base = os.environ.get(sid, default).rstrip("/")
+            ok, detail = await _ping(f"{base}/healthz")
+            steps.append({"id": sid.lower(), "label": label, "ok": ok, "detail": detail})
+
     overall = all(s["ok"] for s in steps)
     return JSONResponse({"ok": overall, "steps": steps})

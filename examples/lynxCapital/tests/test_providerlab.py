@@ -555,14 +555,18 @@ def test_no_mock_logic_leaks_outside_mock():
         assert "from _mock" not in text and "import _mock" not in text, f"_mock import in {path}"
 
 
-def test_caracal_sdk_fully_removed_from_app():
-    forbidden = re.compile(r"caracalai_sdk|caracal_module|from caracalai|import caracalai")
+def test_caracal_sdk_usage_confined_to_seam():
+    seam = LYNX_ROOT / "app" / "caracal.py"
+    forbidden = re.compile(r"from caracalai|import caracalai")
     for path in _app_python_files():
-        assert not forbidden.search(path.read_text(encoding="utf-8")), f"SDK residue in {path}"
+        if path == seam:
+            continue
+        assert not forbidden.search(path.read_text(encoding="utf-8")), (
+            f"Direct SDK import outside app/caracal.py in {path}"
+        )
 
 
-def test_no_caracal_sdk_in_dependencies():
-    for name in ("pyproject.toml", "requirements.lock", "uv.lock"):
-        path = LYNX_ROOT / name
-        if path.exists():
-            assert "caracalai" not in path.read_text(encoding="utf-8"), f"caracalai dep in {name}"
+def test_caracal_sdk_pinned_in_dependencies():
+    text = (LYNX_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "caracalai-sdk==0.1.4rc1" in text
+    assert "caracalai-identity==0.1.4rc1" in text

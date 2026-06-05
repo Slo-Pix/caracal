@@ -21,8 +21,72 @@ services:
       - "8000:8000"
     networks:
       - providers
+      - caracal
+
+  # --------------------------------------------------------------------------
+  # Caracal control plane (published release v2026.06.04-rc.1). Optional: only
+  # required when the CARACAL_* variables are set so the app routes through the
+  # gateway. Backing stores carry the zone/session and revocation state.
+  # --------------------------------------------------------------------------
+  caracal-postgres:
+    image: postgres:17-alpine
+    container_name: caracal-postgres
+    environment:
+      POSTGRES_USER: caracal
+      POSTGRES_PASSWORD: caracal
+      POSTGRES_DB: caracal
+    networks:
+      - caracal
+
+  caracal-redis:
+    image: redis:7-alpine
+    container_name: caracal-redis
+    networks:
+      - caracal
+
+  caracal-sts:
+    image: ghcr.io/garudex-labs/caracal-sts:v2026.06.04-rc.1
+    container_name: caracal-sts
+    depends_on:
+      - caracal-postgres
+      - caracal-redis
+    ports:
+      - "8080:8080"
+    networks:
+      - caracal
+
+  caracal-coordinator:
+    image: ghcr.io/garudex-labs/caracal-coordinator:v2026.06.04-rc.1
+    container_name: caracal-coordinator
+    depends_on:
+      - caracal-sts
+    ports:
+      - "4000:4000"
+    networks:
+      - caracal
+
+  caracal-gateway:
+    image: ghcr.io/garudex-labs/caracal-gateway:v2026.06.04-rc.1
+    container_name: caracal-gateway
+    depends_on:
+      - caracal-sts
+    ports:
+      - "8081:8081"
+    networks:
+      - caracal
+      - providers
+
+  caracal-audit:
+    image: ghcr.io/garudex-labs/caracal-audit:v2026.06.04-rc.1
+    container_name: caracal-audit
+    depends_on:
+      - caracal-postgres
+    networks:
+      - caracal
 
 networks:
   providers:
     external: true
     name: lynxcapital_providers
+  caracal:
+    driver: bridge

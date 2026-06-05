@@ -12,6 +12,7 @@ import logging
 import os
 import time
 import weakref
+from contextlib import AsyncExitStack
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -1017,6 +1018,14 @@ async def run_swarm(run_id: str, prompt: str) -> None:
     bus.publish(ev.chat_user(run_id, prompt))
     log.info("run_swarm start run_id=%s model=%s prompt=%r", run_id, model_name, prompt[:120])
 
+    from app import caracal
+    # Open a delegated agent context for the whole run so every upstream gateway
+    # call carries a scoped, non-root Caracal mandate; no-op when unconfigured.
+    caracal_scope = AsyncExitStack()
+    _run_spawn = caracal.spawn(metadata={"run_id": run_id})
+    if _run_spawn is not None:
+        # Enter the spawned context manager; binds the agent identity to this task.
+        await caracal_scope.enter_async_context(_run_spawn)
 
     runner = create_runner(run_id)
     memory_store = RunMemoryStore(run_id, model_name)
@@ -1097,6 +1106,8 @@ async def run_swarm(run_id: str, prompt: str) -> None:
         bus.publish(ev.run_end(run_id, "failed"))
     finally:
         cancellation.clear(run_id)
+        # Close the run's delegated Caracal context (releases the spawned agent).
+        await caracal_scope.aclose()
         last_ai = next(
             (m for m in reversed(mem.messages) if isinstance(m, AIMessage) and m.content),
             None,

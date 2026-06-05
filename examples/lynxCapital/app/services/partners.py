@@ -364,11 +364,46 @@ def catalog() -> dict[str, PartnerSpec]:
     return dict(_SPECS)
 
 
+def _caracal_external(s: PartnerSpec, operation: str, payload: dict) -> dict:
+    """Route an external provider through the Caracal upstream gateway. The gateway
+    holds the provider credential and injects it; the app sends only its envelope."""
+    from app import caracal
+
+    resp = caracal.gateway_call(s.id, operation, payload, timeout_s=s.timeout_s)
+    return _result(s.id, operation, resp)
+
+
+def _caracal_internal(s: PartnerSpec, operation: str, payload: dict) -> dict:
+    """Serve an internal provider after verifying the caller's delegated authority
+    with the Caracal verifier. Internal providers are never network-exposed, so the
+    trust boundary is enforced in-process here rather than at the gateway."""
+    from app import caracal
+
+    zone_id = os.environ.get("CARACAL_ZONE_ID", "")
+    try:
+        caracal.verify_internal(zone_id=zone_id, audience=s.id, required_scopes=list(s.scopes))
+    except caracal.VerifyErrors as exc:
+        raise PartnerError(s.id, f"internal authority rejected: {exc.__class__.__name__}") from exc
+    return _call_none(s, operation, payload)
+
+
 def call(provider_id: str, operation: str, payload: dict) -> dict:
-    """Authenticate to one external partner and run a single business operation."""
+    """Authenticate to one external partner and run a single business operation.
+
+    When Caracal is configured, external and mandate providers route through the
+    upstream gateway and internal providers are guarded by the verifier; otherwise
+    the call falls back to the direct local provider surface."""
     s = spec(provider_id)
     if operation not in s.operations:
         raise KeyError(f"unknown operation {operation!r} for partner {provider_id!r}")
+
+    from app import caracal
+
+    if caracal.enabled():
+        if s.auth == "none":
+            return _caracal_internal(s, operation, payload or {})
+        return _caracal_external(s, operation, payload or {})
+
     if s.auth == "mandate":
         raise PartnerPendingCaracal(provider_id)
     return _DISPATCH[s.auth](s, operation, payload or {})
