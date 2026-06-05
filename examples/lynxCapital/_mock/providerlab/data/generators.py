@@ -1316,5 +1316,792 @@ def cordoba_dataset(seed: str) -> dict[str, dict]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Slate Ledger — general-ledger and financial-close platform, flavored after
+# Sage Intacct, NetSuite, BlackLine, and FloQast. Accounts carry a normal
+# balance; journals are double-entry with an entry type and source; periods
+# follow a fiscal calendar with a soft/hard close; reconciliations match a
+# statement against the GL the way a close platform does.
+# --------------------------------------------------------------------------- #
+
+# Chart of accounts: (number, name, type, subtype, normalBalance).
+_SLATE_CHART = (
+    ("1000", "Cash - Operating USD", "asset", "bank", "debit"),
+    ("1010", "Cash - Operating EUR", "asset", "bank", "debit"),
+    ("1020", "Cash - Payroll", "asset", "bank", "debit"),
+    ("1100", "Accounts Receivable", "asset", "accounts_receivable", "debit"),
+    ("1200", "Prepaid Expenses", "asset", "other_current_asset", "debit"),
+    ("1210", "Prepaid Insurance", "asset", "other_current_asset", "debit"),
+    ("1500", "Fixed Assets", "asset", "fixed_asset", "debit"),
+    ("1510", "Accumulated Depreciation", "asset", "fixed_asset", "credit"),
+    ("2000", "Accounts Payable", "liability", "accounts_payable", "credit"),
+    ("2100", "Accrued Liabilities", "liability", "other_current_liability", "credit"),
+    ("2110", "Accrued Payroll", "liability", "other_current_liability", "credit"),
+    ("2200", "Sales Tax Payable", "liability", "other_current_liability", "credit"),
+    ("2300", "Deferred Revenue", "liability", "other_current_liability", "credit"),
+    ("3000", "Common Stock", "equity", "equity", "credit"),
+    ("3900", "Retained Earnings", "equity", "equity", "credit"),
+    ("4000", "Subscription Revenue", "income", "income", "credit"),
+    ("4100", "Services Revenue", "income", "income", "credit"),
+    ("5000", "Cost of Revenue", "expense", "cost_of_goods_sold", "debit"),
+    ("6000", "Salaries & Wages", "expense", "expense", "debit"),
+    ("6100", "Facilities & Rent", "expense", "expense", "debit"),
+    ("6200", "Software Subscriptions", "expense", "expense", "debit"),
+    ("6300", "Professional Fees", "expense", "expense", "debit"),
+    ("6400", "Depreciation Expense", "expense", "expense", "debit"),
+    ("6900", "Insurance Expense", "expense", "expense", "debit"),
+)
+
+# Recurring accrual templates a close team carries period to period.
+_SLATE_ACCRUAL_TEMPLATES = (
+    ("Cloud infrastructure", "6200", "2100"),
+    ("External audit fees", "6300", "2100"),
+    ("Annual insurance", "6900", "1210"),
+    ("Bonus accrual", "6000", "2110"),
+)
+
+# Standard close checklist, mirroring a FloQast/BlackLine task list.
+_SLATE_CLOSE_TASKS = (
+    "Post recurring accruals",
+    "Reconcile cash accounts",
+    "Reconcile accounts payable",
+    "Review trial balance",
+    "Sub-ledger cutoff",
+)
+
+
+def _slate_period_id(d: date) -> str:
+    return d.strftime("%Y-%m")
+
+
+def slate_dataset(seed: str) -> dict[str, dict]:
+    """Build a coherent general ledger: a chart of accounts with running
+    balances, posted double-entry journals across a fiscal calendar, monthly
+    periods with a close checklist, reconciliations with matched and
+    outstanding items, and recurring accrual schedules."""
+    accounts: dict[str, dict] = {}
+    for number, name, acct_type, subtype, normal in _SLATE_CHART:
+        accounts[number] = {
+            "accountId": number,
+            "accountNo": number,
+            "name": name,
+            "type": acct_type,
+            "subtype": subtype,
+            "normalBalance": normal,
+            "currency": "EUR" if number == "1010" else "USD",
+            "status": "active",
+            "isControlAccount": number in ("1100", "2000"),
+            "balance": 0.0,
+        }
+
+    expense_accounts = [n for n, _, t, _, _ in _SLATE_CHART if t == "expense"]
+    revenue_accounts = [n for n, _, t, _, _ in _SLATE_CHART if t == "income"]
+
+    periods: dict[str, dict] = {}
+    month_first_days = [date(2025, 11, 1), date(2025, 12, 1)] + [
+        date(2026, m, 1) for m in range(1, 13)
+    ]
+    for first in month_first_days:
+        pid = _slate_period_id(first)
+        closed = first.year == 2025
+        periods[pid] = {
+            "periodId": pid,
+            "name": first.strftime("%B %Y"),
+            "fiscalYear": first.year,
+            "startDate": first.isoformat(),
+            "status": "closed" if closed else "open",
+            "checklist": [
+                {"task": t, "status": "complete" if closed else "pending", "owner": "Finance"}
+                for t in _SLATE_CLOSE_TASKS
+            ],
+            "closedAt": _instant(_rng(seed, "close", pid), -40, -30) if closed else None,
+            "closedBy": "controller@slate-ledger.test" if closed else None,
+        }
+
+    entries: dict[str, dict] = {}
+    seq = 0
+
+    def _post(rng: random.Random, period_id: str, entry_type: str, source: str,
+              description: str, raw_lines: list[tuple[str, float, float]]) -> dict:
+        nonlocal seq
+        seq += 1
+        lines = []
+        total_debit = total_credit = 0.0
+        for ln, (acct, debit, credit) in enumerate(raw_lines, start=1):
+            debit = round(debit, 2)
+            credit = round(credit, 2)
+            total_debit += debit
+            total_credit += credit
+            lines.append({
+                "lineNo": ln, "accountNo": acct, "accountName": accounts[acct]["name"],
+                "debit": debit, "credit": credit,
+                "department": rng.choice(_DEPARTMENTS),
+                "memo": description,
+            })
+            normal = accounts[acct]["normalBalance"]
+            delta = (debit - credit) if normal == "debit" else (credit - debit)
+            accounts[acct]["balance"] = round(accounts[acct]["balance"] + delta, 2)
+        jid = f"JE-{period_id.replace('-', '')}-{seq:04d}"
+        entry = {
+            "journalId": jid,
+            "entryNo": f"GL{seq:06d}",
+            "type": entry_type,
+            "source": source,
+            "period": period_id,
+            "currency": "USD",
+            "description": description,
+            "reference": f"REF-{rng.randint(10000, 99999)}",
+            "lines": lines,
+            "totalDebit": round(total_debit, 2),
+            "totalCredit": round(total_credit, 2),
+            "status": "posted",
+            "reversalOf": None,
+            "reversedBy": None,
+            "postedBy": "gl-bot@slate-ledger.test",
+            "postedAt": _instant(rng, -120, -1),
+        }
+        entries[jid] = entry
+        return entry
+
+    posted_periods = [p for p in periods if periods[p]["status"] == "open"][:3] or list(periods)[:3]
+    for pid in posted_periods:
+        rng = _rng(seed, "journals", pid)
+        for _ in range(rng.randint(6, 9)):
+            amount = round(rng.uniform(2_500, 180_000), 2)
+            kind = rng.random()
+            if kind < 0.45:
+                expense = rng.choice(expense_accounts)
+                _post(rng, pid, "standard", "subledger", "Vendor expense recognition",
+                      [(expense, amount, 0.0), ("2000", 0.0, amount)])
+            elif kind < 0.75:
+                revenue = rng.choice(revenue_accounts)
+                _post(rng, pid, "standard", "subledger", "Customer billing",
+                      [("1100", amount, 0.0), (revenue, 0.0, amount)])
+            elif kind < 0.9:
+                expense = rng.choice(expense_accounts)
+                _post(rng, pid, "accrual", "recurring", "Month-end accrual",
+                      [(expense, amount, 0.0), ("2100", 0.0, amount)])
+            else:
+                _post(rng, pid, "adjustment", "manual", "Reclassification adjustment",
+                      [("6300", amount, 0.0), ("6200", 0.0, amount)])
+
+    reconciliations: dict[str, dict] = {}
+    recon_targets = (("1000", 0.0), ("1010", 0.0), ("1020", 142.50), ("2000", 0.0))
+    for idx, (acct, residual) in enumerate(recon_targets, start=1):
+        rng = _rng(seed, "recon", acct)
+        gl_balance = accounts[acct]["balance"]
+        statement_balance = round(gl_balance + residual, 2)
+        outstanding = []
+        if residual:
+            outstanding.append({
+                "itemId": f"OS-{idx:03d}", "type": "deposit_in_transit",
+                "amount": residual, "memo": "Late deposit not yet on statement",
+            })
+        rid = f"REC-2026-{idx:04d}"
+        reconciliations[rid] = {
+            "reconciliationId": rid,
+            "accountNo": acct,
+            "accountName": accounts[acct]["name"],
+            "period": posted_periods[0],
+            "glBalance": gl_balance,
+            "statementBalance": statement_balance,
+            "outstandingItems": outstanding,
+            "outstandingTotal": round(residual, 2),
+            "adjustedBalance": round(statement_balance - residual, 2),
+            "difference": round(statement_balance - residual - gl_balance, 2),
+            "status": "balanced" if not residual else "exception",
+            "preparedBy": "staff-accountant@slate-ledger.test",
+            "reconciledAt": _instant(rng, -20, -2),
+        }
+
+    accruals: dict[str, dict] = {}
+    for idx, (name, expense_acct, liability_acct) in enumerate(_SLATE_ACCRUAL_TEMPLATES, start=1):
+        rng = _rng(seed, "accrual", name)
+        total = round(rng.uniform(24_000, 180_000), 2)
+        periods_count = rng.choice((3, 6, 12))
+        aid = f"ACR-2026-{idx:04d}"
+        accruals[aid] = {
+            "accrualId": aid,
+            "description": name,
+            "expenseAccount": expense_acct,
+            "liabilityAccount": liability_acct,
+            "totalAmount": total,
+            "periods": periods_count,
+            "perPeriod": round(total / periods_count, 2),
+            "postedPeriods": rng.randint(0, periods_count - 1),
+            "currency": "USD",
+            "status": "active",
+            "createdAt": _instant(rng, -90, -40),
+        }
+
+    return {
+        "accounts": accounts,
+        "entries": entries,
+        "periods": periods,
+        "reconciliations": reconciliations,
+        "accruals": accruals,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Tallyhall Books — SMB accounting modeled on QuickBooks Online. Entities carry
+# QBO wire shapes: numeric string Id, SyncToken, MetaData, *Ref{value,name}
+# pointers, Line[] with DetailType, TotalAmt/Balance money, and a realmId company
+# file. Money is the home currency unless a transaction carries its own
+# CurrencyRef, mirroring QBO multicurrency company files.
+# --------------------------------------------------------------------------- #
+_QBO_REALM = "9341734250293847"
+_QBO_HOME_CCY = "USD"
+_QBO_CCY_NAME = {
+    "USD": "United States Dollar", "GBP": "British Pound Sterling", "EUR": "Euro",
+    "BRL": "Brazilian Real", "SGD": "Singapore Dollar", "JPY": "Japanese Yen",
+    "CAD": "Canadian Dollar",
+}
+_QBO_TERMS = {"NET15": ("Net 15", 15), "NET30": ("Net 30", 30),
+              "NET45": ("Net 45", 45), "NET60": ("Net 60", 60)}
+_QBO_CHART = (
+    ("1000", "Checking", "Bank", "Checking", "Asset"),
+    ("1010", "Savings", "Bank", "Savings", "Asset"),
+    ("1200", "Accounts Receivable (A/R)", "Accounts Receivable", "AccountsReceivable", "Asset"),
+    ("1300", "Undeposited Funds", "Other Current Asset", "UndepositedFunds", "Asset"),
+    ("1400", "Inventory Asset", "Other Current Asset", "Inventory", "Asset"),
+    ("1500", "Prepaid Expenses", "Other Current Asset", "PrepaidExpenses", "Asset"),
+    ("1700", "Furniture & Equipment", "Fixed Asset", "FurnitureAndFixtures", "Asset"),
+    ("2000", "Accounts Payable (A/P)", "Accounts Payable", "AccountsPayable", "Liability"),
+    ("2100", "Mastercard", "Credit Card", "CreditCard", "Liability"),
+    ("2200", "Sales Tax Payable", "Other Current Liability", "SalesTaxPayable", "Liability"),
+    ("3000", "Opening Balance Equity", "Equity", "OpeningBalanceEquity", "Equity"),
+    ("3900", "Retained Earnings", "Equity", "RetainedEarnings", "Equity"),
+    ("4000", "Sales of Product Income", "Income", "SalesOfProductIncome", "Revenue"),
+    ("4100", "Services", "Income", "ServiceFeeIncome", "Revenue"),
+    ("5000", "Cost of Goods Sold", "Cost of Goods Sold", "SuppliesMaterialsCogs", "Expense"),
+    ("6000", "Advertising & Marketing", "Expense", "AdvertisingPromotional", "Expense"),
+    ("6100", "Rent & Lease", "Expense", "RentOrLeaseOfBuildings", "Expense"),
+    ("6200", "Office Supplies & Software", "Expense", "OfficeGeneralAdministrativeExpenses", "Expense"),
+    ("6300", "Legal & Professional Fees", "Expense", "LegalProfessionalFees", "Expense"),
+    ("6400", "Utilities", "Expense", "Utilities", "Expense"),
+    ("6500", "Travel", "Expense", "Travel", "Expense"),
+)
+_QBO_EXPENSE_ACCTS = ("5000", "6000", "6100", "6200", "6300", "6400", "6500")
+_QBO_ITEMS = (
+    ("Bookkeeping", "Service", "4100", 75.0),
+    ("Advisory Hours", "Service", "4100", 180.0),
+    ("Payroll Run", "Service", "4100", 45.0),
+    ("Tax Filing", "Service", "4100", 350.0),
+    ("Software Seat", "Service", "4000", 28.0),
+    ("Onboarding Package", "Service", "4000", 1200.0),
+    ("Hardware Kit", "Inventory", "4000", 640.0),
+    ("Support Plan", "Service", "4000", 99.0),
+)
+_QBO_PAY_METHODS = ("Cash", "Check", "Credit Card")
+
+
+def _qbo_money(currency: str) -> str:
+    return "0" if currency == "JPY" else "2"
+
+
+def _qbo_round(amount: float, currency: str) -> float:
+    return float(round(amount)) if currency == "JPY" else round(amount, 2)
+
+
+def _ccy_ref(currency: str) -> dict:
+    return {"value": currency, "name": _QBO_CCY_NAME.get(currency, currency)}
+
+
+def _qbo_meta(rng: random.Random, lo: int, hi: int) -> dict:
+    created = _instant(rng, lo, hi)
+    return {"CreateTime": created, "LastUpdatedTime": created}
+
+
+def _qbo_addr(rng: random.Random, country: str, idx: int) -> dict:
+    return {
+        "Line1": f"{rng.randint(50, 9900)} {rng.choice(_ROOTS)} {rng.choice(('Ave', 'St', 'Blvd', 'Way'))}",
+        "City": _CITY_BY_COUNTRY.get(country, "Austin"),
+        "CountrySubDivisionCode": rng.choice(("TX", "CA", "NY", "WA", "IL")),
+        "PostalCode": f"{rng.randint(10_000, 99_999)}",
+        "Country": country,
+        "Id": str(idx),
+    }
+
+
+def _qbo_account(idx: int, row: tuple, rng: random.Random) -> dict:
+    number, name, acct_type, sub_type, classification = row
+    return {
+        "Id": str(idx),
+        "Name": name,
+        "AcctNum": number,
+        "FullyQualifiedName": name,
+        "Active": True,
+        "Classification": classification,
+        "AccountType": acct_type,
+        "AccountSubType": sub_type,
+        "CurrentBalance": 0.0,
+        "CurrentBalanceWithSubAccounts": 0.0,
+        "CurrencyRef": _ccy_ref(_QBO_HOME_CCY),
+        "SubAccount": False,
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -1460, -900),
+    }
+
+
+def _qbo_vendor(seed: str, i: int) -> dict:
+    rng = _rng(seed, "qbo_vendor", i)
+    name = _company(rng)
+    country, currency = rng.choice(_COUNTRIES)
+    term = rng.choice(_TERMS)
+    active = rng.random() > 0.1
+    return {
+        "Id": str(i),
+        "DisplayName": name,
+        "CompanyName": name,
+        "PrintOnCheckName": name,
+        "Active": active,
+        "V4IDPseudonym": f"00203{rng.randint(10**7, 10**8 - 1)}",
+        "Vendor1099": currency == "USD" and rng.random() > 0.6,
+        "Balance": 0.0,
+        "AcctNum": f"V-{1000 + i}",
+        "TaxIdentifier": f"{country}{rng.randint(10**8, 10**9 - 1)}",
+        "PrimaryEmailAddr": {"Address": f"ap@{_slug(name).split('-')[0]}.example"},
+        "PrimaryPhone": {"FreeFormNumber": f"+1 ({rng.randint(200, 989)}) {rng.randint(200, 999)}-{rng.randint(1000, 9999)}"},
+        "WebAddr": {"URI": f"https://{_slug(name).split('-')[0]}.example"},
+        "BillAddr": _qbo_addr(rng, country, i),
+        "TermRef": {"value": str(_TERMS.index(term) + 1), "name": _QBO_TERMS[term][0]},
+        "CurrencyRef": _ccy_ref(currency),
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -540, -60),
+    }
+
+
+def _qbo_customer(seed: str, i: int) -> dict:
+    rng = _rng(seed, "qbo_customer", i)
+    name = _company(rng)
+    country, currency = rng.choice(_COUNTRIES)
+    person = _person(rng)
+    given, family = person.split()
+    active = rng.random() > 0.08
+    return {
+        "Id": str(i),
+        "DisplayName": name,
+        "CompanyName": name,
+        "GivenName": given,
+        "FamilyName": family,
+        "FullyQualifiedName": name,
+        "Active": active,
+        "Taxable": currency == "USD",
+        "Balance": 0.0,
+        "BalanceWithJobs": 0.0,
+        "PrimaryEmailAddr": {"Address": f"{given.lower()}@{_slug(name).split('-')[0]}.example"},
+        "PrimaryPhone": {"FreeFormNumber": f"+1 ({rng.randint(200, 989)}) {rng.randint(200, 999)}-{rng.randint(1000, 9999)}"},
+        "BillAddr": _qbo_addr(rng, country, i),
+        "ShipAddr": _qbo_addr(rng, country, i + 500),
+        "PreferredDeliveryMethod": rng.choice(("Email", "Print", "None")),
+        "CurrencyRef": _ccy_ref(currency),
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -500, -30),
+    }
+
+
+def _qbo_item(idx: int, row: tuple, acct_by_num: dict, rng: random.Random) -> dict:
+    name, kind, income_num, price = row
+    income = acct_by_num[income_num]
+    item = {
+        "Id": str(idx),
+        "Name": name,
+        "FullyQualifiedName": name,
+        "Active": True,
+        "Type": kind,
+        "UnitPrice": price,
+        "Taxable": True,
+        "IncomeAccountRef": {"value": income["Id"], "name": income["Name"]},
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -700, -200),
+    }
+    if kind == "Inventory":
+        item["TrackQtyOnHand"] = True
+        item["QtyOnHand"] = rng.randint(5, 200)
+        item["AssetAccountRef"] = {"value": acct_by_num["1400"]["Id"], "name": acct_by_num["1400"]["Name"]}
+        item["ExpenseAccountRef"] = {"value": acct_by_num["5000"]["Id"], "name": acct_by_num["5000"]["Name"]}
+    return item
+
+
+def _qbo_bill(seed: str, idx: int, vendor: dict, acct_by_num: dict) -> dict:
+    rng = _rng(seed, "qbo_bill", idx)
+    currency = vendor["CurrencyRef"]["value"]
+    ap = acct_by_num["2000"]
+    term = next((t for t in _TERMS if _QBO_TERMS[t][0] == vendor["TermRef"]["name"]), "NET30")
+    issued = _EPOCH + timedelta(days=rng.randint(-150, -3))
+    due = issued + timedelta(days=_QBO_TERMS[term][1])
+    n_lines = rng.randint(1, 3)
+    lines, subtotal = [], 0.0
+    for ln in range(1, n_lines + 1):
+        acct = acct_by_num[rng.choice(_QBO_EXPENSE_ACCTS)]
+        amount = _qbo_round(rng.uniform(120, 14_000), currency)
+        subtotal += amount
+        lines.append({
+            "Id": str(ln),
+            "Description": f"{acct['Name']} — {vendor['DisplayName']}",
+            "Amount": amount,
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "AccountBasedExpenseLineDetail": {
+                "AccountRef": {"value": acct["Id"], "name": acct["Name"]},
+                "BillableStatus": "NotBillable",
+                "TaxCodeRef": {"value": "NON"},
+            },
+        })
+    total = _qbo_round(subtotal, currency)
+    paid = rng.random() > 0.55
+    bill = {
+        "Id": str(1000 + idx),
+        "DocNumber": f"{vendor['DisplayName'][:3].upper()}-{rng.randint(1000, 9999)}",
+        "VendorRef": {"value": vendor["Id"], "name": vendor["DisplayName"]},
+        "APAccountRef": {"value": ap["Id"], "name": ap["Name"]},
+        "SalesTermRef": {"value": str(_TERMS.index(term) + 1), "name": _QBO_TERMS[term][0]},
+        "TxnDate": issued.isoformat(),
+        "DueDate": due.isoformat(),
+        "CurrencyRef": _ccy_ref(currency),
+        "Line": lines,
+        "TotalAmt": total,
+        "Balance": 0.0 if paid else total,
+        "PrivateNote": "",
+        "LinkedTxn": [],
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -150, -3),
+    }
+    if currency != _QBO_HOME_CCY:
+        bill["ExchangeRate"] = round(rng.uniform(0.65, 1.45), 6)
+    return bill
+
+
+def _qbo_invoice(seed: str, idx: int, customer: dict, items: list[dict], acct_by_num: dict) -> dict:
+    rng = _rng(seed, "qbo_invoice", idx)
+    currency = customer["CurrencyRef"]["value"]
+    ar = acct_by_num["1200"]
+    issued = _EPOCH + timedelta(days=rng.randint(-120, -2))
+    due = issued + timedelta(days=rng.choice((15, 30, 30, 45)))
+    n_lines = rng.randint(1, 3)
+    lines, subtotal = [], 0.0
+    for ln in range(1, n_lines + 1):
+        item = rng.choice(items)
+        qty = rng.randint(1, 12)
+        rate = _qbo_round(item["UnitPrice"] * rng.uniform(0.9, 1.2), currency)
+        amount = _qbo_round(qty * rate, currency)
+        subtotal += amount
+        lines.append({
+            "Id": str(ln),
+            "LineNum": ln,
+            "Description": item["Name"],
+            "Amount": amount,
+            "DetailType": "SalesItemLineDetail",
+            "SalesItemLineDetail": {
+                "ItemRef": {"value": item["Id"], "name": item["Name"]},
+                "Qty": qty,
+                "UnitPrice": rate,
+                "TaxCodeRef": {"value": "TAX" if customer["Taxable"] else "NON"},
+            },
+        })
+    tax = _qbo_round(subtotal * (0.0825 if customer["Taxable"] else 0.0), currency)
+    total = _qbo_round(subtotal + tax, currency)
+    roll = rng.random()
+    paid = roll > 0.5
+    partial = not paid and roll > 0.3
+    balance = 0.0 if paid else (_qbo_round(total * 0.5, currency) if partial else total)
+    summary_line = {
+        "Amount": _qbo_round(subtotal, currency),
+        "DetailType": "SubTotalLineDetail",
+        "SubTotalLineDetail": {},
+    }
+    invoice = {
+        "Id": str(2000 + idx),
+        "DocNumber": f"INV-{1000 + idx}",
+        "CustomerRef": {"value": customer["Id"], "name": customer["DisplayName"]},
+        "ARAccountRef": {"value": ar["Id"], "name": ar["Name"]},
+        "TxnDate": issued.isoformat(),
+        "DueDate": due.isoformat(),
+        "CurrencyRef": _ccy_ref(currency),
+        "Line": lines + [summary_line],
+        "TxnTaxDetail": {"TotalTax": tax},
+        "TotalAmt": total,
+        "Balance": balance,
+        "HomeBalance": balance if currency == _QBO_HOME_CCY else _qbo_round(balance * 1.0, _QBO_HOME_CCY),
+        "EmailStatus": "EmailSent" if rng.random() > 0.3 else "NeedToSend",
+        "BillEmail": customer["PrimaryEmailAddr"],
+        "AllowOnlineCreditCardPayment": True,
+        "PrivateNote": "",
+        "LinkedTxn": [],
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -120, -2),
+    }
+    if currency != _QBO_HOME_CCY:
+        invoice["ExchangeRate"] = round(rng.uniform(0.65, 1.45), 6)
+    return invoice
+
+
+def _qbo_expense(seed: str, idx: int, vendor: dict, acct_by_num: dict) -> dict:
+    rng = _rng(seed, "qbo_expense", idx)
+    currency = vendor["CurrencyRef"]["value"]
+    pay_type = rng.choice(("Cash", "Check", "CreditCard"))
+    funding = acct_by_num["2100"] if pay_type == "CreditCard" else acct_by_num["1000"]
+    acct = acct_by_num[rng.choice(_QBO_EXPENSE_ACCTS)]
+    amount = _qbo_round(rng.uniform(30, 4_500), currency)
+    issued = _EPOCH + timedelta(days=rng.randint(-90, -1))
+    return {
+        "Id": str(3000 + idx),
+        "PaymentType": pay_type,
+        "DocNumber": f"EXP-{1000 + idx}",
+        "AccountRef": {"value": funding["Id"], "name": funding["Name"]},
+        "EntityRef": {"value": vendor["Id"], "name": vendor["DisplayName"], "type": "Vendor"},
+        "TxnDate": issued.isoformat(),
+        "CurrencyRef": _ccy_ref(currency),
+        "TotalAmt": amount,
+        "Credit": False,
+        "Line": [{
+            "Id": "1",
+            "Amount": amount,
+            "Description": f"{acct['Name']} — {vendor['DisplayName']}",
+            "DetailType": "AccountBasedExpenseLineDetail",
+            "AccountBasedExpenseLineDetail": {
+                "AccountRef": {"value": acct["Id"], "name": acct["Name"]},
+                "BillableStatus": "NotBillable",
+                "TaxCodeRef": {"value": "NON"},
+            },
+        }],
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -90, -1),
+    }
+
+
+def _qbo_journal(seed: str, idx: int, acct_by_num: dict) -> dict:
+    rng = _rng(seed, "qbo_journal", idx)
+    debit_acct = acct_by_num[rng.choice(_QBO_EXPENSE_ACCTS)]
+    credit_acct = acct_by_num[rng.choice(("1000", "2100", "2200"))]
+    amount = _qbo_round(rng.uniform(200, 9_000), _QBO_HOME_CCY)
+    issued = _EPOCH + timedelta(days=rng.randint(-100, -1))
+    return {
+        "Id": str(4000 + idx),
+        "DocNumber": f"JE-{1000 + idx}",
+        "TxnDate": issued.isoformat(),
+        "Adjustment": rng.random() > 0.8,
+        "CurrencyRef": _ccy_ref(_QBO_HOME_CCY),
+        "Line": [
+            {"Id": "0", "Description": "Accrual", "Amount": amount,
+             "DetailType": "JournalEntryLineDetail",
+             "JournalEntryLineDetail": {"PostingType": "Debit",
+                                        "AccountRef": {"value": debit_acct["Id"], "name": debit_acct["Name"]}}},
+            {"Id": "1", "Description": "Accrual", "Amount": amount,
+             "DetailType": "JournalEntryLineDetail",
+             "JournalEntryLineDetail": {"PostingType": "Credit",
+                                        "AccountRef": {"value": credit_acct["Id"], "name": credit_acct["Name"]}}},
+        ],
+        "TotalAmt": amount,
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "0",
+        "MetaData": _qbo_meta(rng, -100, -1),
+    }
+
+
+def quickbooks_company(seed: str) -> dict:
+    """The QBO CompanyInfo entity describing the connected company file."""
+    rng = _rng(seed, "qbo_company")
+    return {
+        "Id": "1",
+        "CompanyName": "LynxCapital Retail LLC",
+        "LegalName": "LynxCapital Retail, LLC",
+        "CompanyAddr": _qbo_addr(rng, "US", 1),
+        "CustomerCommunicationAddr": _qbo_addr(rng, "US", 1),
+        "LegalAddr": _qbo_addr(rng, "US", 1),
+        "Country": "US",
+        "Email": {"Address": "books@lynxcapital.example"},
+        "WebAddr": {"URI": "https://lynxcapital.example"},
+        "SupportedLanguages": "en",
+        "FiscalYearStartMonth": "January",
+        "CompanyStartDate": (_EPOCH - timedelta(days=1825)).isoformat(),
+        "MultiCurrencyEnabled": True,
+        "HomeCurrency": _ccy_ref(_QBO_HOME_CCY),
+        "realmId": _QBO_REALM,
+        "domain": "QBO",
+        "sparse": False,
+        "SyncToken": "4",
+        "MetaData": _qbo_meta(rng, -1825, -1800),
+    }
+
+
+def quickbooks_dataset(seed: str) -> dict[str, dict]:
+    """Build a coherent QuickBooks Online company file: chart of accounts, vendor
+    and customer lists, items, vendor bills and customer invoices (some open, some
+    paid), cash expenses, posted journal entries, and the payments that link them —
+    with the A/P, A/R, and bank control accounts rolled up the way QBO keeps them."""
+    accounts = {}
+    acct_by_num = {}
+    for idx, row in enumerate(_QBO_CHART, start=1):
+        rng = _rng(seed, "qbo_account", idx)
+        acct = _qbo_account(idx, row, rng)
+        accounts[acct["Id"]] = acct
+        acct_by_num[acct["AcctNum"]] = acct
+
+    vendors = {v["Id"]: v for v in (_qbo_vendor(seed, i) for i in range(1, 61))}
+    customers = {c["Id"]: c for c in (_qbo_customer(seed, i) for i in range(1, 41))}
+    items = [_qbo_item(i, row, acct_by_num, _rng(seed, "qbo_item", i))
+             for i, row in enumerate(_QBO_ITEMS, start=1)]
+    item_index = {it["Id"]: it for it in items}
+
+    active_vendors = [v for v in vendors.values() if v["Active"]]
+    active_customers = [c for c in customers.values() if c["Active"]]
+
+    bills = {}
+    for idx in range(1, 51):
+        vendor = active_vendors[_rng(seed, "qbo_bill_pick", idx).randrange(len(active_vendors))]
+        bill = _qbo_bill(seed, idx, vendor, acct_by_num)
+        bills[bill["Id"]] = bill
+
+    invoices = {}
+    for idx in range(1, 51):
+        customer = active_customers[_rng(seed, "qbo_inv_pick", idx).randrange(len(active_customers))]
+        invoice = _qbo_invoice(seed, idx, customer, items, acct_by_num)
+        invoices[invoice["Id"]] = invoice
+
+    expenses = {}
+    for idx in range(1, 31):
+        vendor = active_vendors[_rng(seed, "qbo_exp_pick", idx).randrange(len(active_vendors))]
+        expense = _qbo_expense(seed, idx, vendor, acct_by_num)
+        expenses[expense["Id"]] = expense
+
+    journal_entries = {je["Id"]: je for je in (_qbo_journal(seed, i, acct_by_num)
+                                               for i in range(1, 21))}
+
+    payments, bill_payments = _qbo_seed_payments(seed, bills, invoices, vendors,
+                                                 customers, acct_by_num)
+
+    _qbo_roll_balances(accounts, acct_by_num, vendors, customers, bills, invoices, expenses)
+
+    return {
+        "company": {"1": quickbooks_company(seed)},
+        "accounts": accounts,
+        "vendors": vendors,
+        "customers": customers,
+        "items": item_index,
+        "bills": bills,
+        "invoices": invoices,
+        "expenses": expenses,
+        "journal_entries": journal_entries,
+        "payments": payments,
+        "bill_payments": bill_payments,
+    }
+
+
+def _qbo_seed_payments(seed, bills, invoices, vendors, customers, acct_by_num):
+    """Create the BillPayment and customer Payment records that settle the seeded
+    paid bills and invoices, and wire their LinkedTxn pointers both ways."""
+    payments, bill_payments = {}, {}
+    bank = acct_by_num["1000"]
+    undeposited = acct_by_num["1300"]
+    pid = bpid = 0
+    for bill in bills.values():
+        if bill["Balance"] == 0.0:
+            bpid += 1
+            currency = bill["CurrencyRef"]["value"]
+            bp = {
+                "Id": str(6000 + bpid),
+                "VendorRef": bill["VendorRef"],
+                "PayType": "Check",
+                "TxnDate": bill["DueDate"],
+                "CurrencyRef": _ccy_ref(currency),
+                "TotalAmt": bill["TotalAmt"],
+                "CheckPayment": {"BankAccountRef": {"value": bank["Id"], "name": bank["Name"]}},
+                "Line": [{"Amount": bill["TotalAmt"],
+                          "LinkedTxn": [{"TxnId": bill["Id"], "TxnType": "Bill"}]}],
+                "domain": "QBO", "sparse": False, "SyncToken": "0",
+                "MetaData": {"CreateTime": bill["DueDate"] + "T17:00:00Z",
+                             "LastUpdatedTime": bill["DueDate"] + "T17:00:00Z"},
+            }
+            bill_payments[bp["Id"]] = bp
+            bill["LinkedTxn"] = [{"TxnId": bp["Id"], "TxnType": "BillPayment"}]
+    for inv in invoices.values():
+        applied = inv["TotalAmt"] - inv["Balance"]
+        if applied > 0:
+            pid += 1
+            currency = inv["CurrencyRef"]["value"]
+            pay = {
+                "Id": str(5000 + pid),
+                "CustomerRef": inv["CustomerRef"],
+                "TxnDate": inv["DueDate"],
+                "CurrencyRef": _ccy_ref(currency),
+                "TotalAmt": _qbo_round(applied, currency),
+                "UnappliedAmt": 0.0,
+                "DepositToAccountRef": {"value": undeposited["Id"], "name": undeposited["Name"]},
+                "Line": [{"Amount": _qbo_round(applied, currency),
+                          "LinkedTxn": [{"TxnId": inv["Id"], "TxnType": "Invoice"}]}],
+                "domain": "QBO", "sparse": False, "SyncToken": "0",
+                "MetaData": {"CreateTime": inv["DueDate"] + "T12:00:00Z",
+                             "LastUpdatedTime": inv["DueDate"] + "T12:00:00Z"},
+            }
+            payments[pay["Id"]] = pay
+            inv["LinkedTxn"] = [{"TxnId": pay["Id"], "TxnType": "Payment"}]
+    return payments, bill_payments
+
+
+def _qbo_roll_balances(accounts, acct_by_num, vendors, customers, bills, invoices, expenses):
+    """Roll open bills into vendor balances and the A/P control account, open
+    invoices into customer balances and A/R, and post seeded activity to the bank,
+    income, and expense accounts so the trial balance and reports reconcile."""
+    ap = acct_by_num["2000"]["Id"]
+    ar = acct_by_num["1200"]["Id"]
+    bank = acct_by_num["1000"]["Id"]
+    cc = acct_by_num["2100"]["Id"]
+
+    for bill in bills.values():
+        if bill["Balance"] > 0:
+            vendors[bill["VendorRef"]["value"]]["Balance"] = round(
+                vendors[bill["VendorRef"]["value"]]["Balance"] + bill["Balance"], 2)
+            accounts[ap]["CurrentBalance"] = round(accounts[ap]["CurrentBalance"] + bill["Balance"], 2)
+        for line in bill["Line"]:
+            detail = line.get("AccountBasedExpenseLineDetail")
+            if detail:
+                acct_id = detail["AccountRef"]["value"]
+                accounts[acct_id]["CurrentBalance"] = round(
+                    accounts[acct_id]["CurrentBalance"] + line["Amount"], 2)
+
+    for inv in invoices.values():
+        if inv["Balance"] > 0:
+            customers[inv["CustomerRef"]["value"]]["Balance"] = round(
+                customers[inv["CustomerRef"]["value"]]["Balance"] + inv["Balance"], 2)
+            customers[inv["CustomerRef"]["value"]]["BalanceWithJobs"] = customers[inv["CustomerRef"]["value"]]["Balance"]
+            accounts[ar]["CurrentBalance"] = round(accounts[ar]["CurrentBalance"] + inv["Balance"], 2)
+        income = acct_by_num["4000"]["Id"]
+        for line in inv["Line"]:
+            if line.get("DetailType") == "SalesItemLineDetail":
+                accounts[income]["CurrentBalance"] = round(
+                    accounts[income]["CurrentBalance"] + line["Amount"], 2)
+
+    for expense in expenses.values():
+        funding = expense["AccountRef"]["value"]
+        accounts[funding]["CurrentBalance"] = round(accounts[funding]["CurrentBalance"] - expense["TotalAmt"], 2)
+        for line in expense["Line"]:
+            detail = line.get("AccountBasedExpenseLineDetail")
+            if detail:
+                acct_id = detail["AccountRef"]["value"]
+                accounts[acct_id]["CurrentBalance"] = round(
+                    accounts[acct_id]["CurrentBalance"] + line["Amount"], 2)
+
+    accounts[bank]["CurrentBalance"] = round(accounts[bank]["CurrentBalance"] + 1_250_000.0, 2)
+    accounts[cc]["CurrentBalance"] = round(accounts[cc]["CurrentBalance"] + 38_500.0, 2)
+    for acct in accounts.values():
+        acct["CurrentBalanceWithSubAccounts"] = acct["CurrentBalance"]
+
+
 def index_by(records: list[dict], key: str = "id") -> dict[str, dict]:
     return {r[key]: r for r in records}

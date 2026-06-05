@@ -55,10 +55,10 @@ x-appResources: &appResources
 networks:
   caracalData:
     driver: bridge
-    name: caracalData
+    name: caracalDevData
     internal: false
     driver_opts:
-      com.docker.network.bridge.name: brCaracalData
+      com.docker.network.bridge.name: brCaracalDev
 
 secrets:
   postgresPassword:
