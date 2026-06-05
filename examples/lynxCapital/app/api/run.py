@@ -12,7 +12,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from app import caracal as caracal_module
 from app.core.cancellation import cancellation
 from app.events.bus import bus
 from app.events.sse import run_stream
@@ -31,11 +30,6 @@ class StartResponse(BaseModel):
 
 @router.post("/start")
 async def start(body: StartRequest, background: BackgroundTasks) -> StartResponse:
-    if not caracal_module.ready():
-        raise HTTPException(
-            status_code=503,
-            detail="Caracal is not configured. Open /setup and create caracal.toml from the Console values first.",
-        )
     run_id = str(uuid4())
     background.add_task(run_swarm, run_id, body.prompt)
     return StartResponse(runId=run_id)

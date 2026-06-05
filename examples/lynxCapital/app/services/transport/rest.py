@@ -13,7 +13,6 @@ from dataclasses import dataclass
 
 import httpx
 
-from app import caracal as caracal_module
 from app.services.resilience import (
     CircuitOpenError, RetryPolicy, breaker, idempotency_key, with_retry,
 )
@@ -76,13 +75,11 @@ class RestClient:
         self._auth = auth
         self._policy = policy
         self._breaker = breaker(provider)
-        caracal = caracal_module.get()
-        client_kwargs = dict(
+        self._http = httpx.Client(
             base_url=base_url,
             timeout=timeout_s,
             headers={"User-Agent": f"lynxcapital/{provider}"},
         )
-        self._http = caracal.sync_transport(**client_kwargs) if caracal else httpx.Client(**client_kwargs)
 
     def close(self) -> None:
         self._http.close()
@@ -91,7 +88,6 @@ class RestClient:
             headers: dict[str, str], attempt: int) -> httpx.Response:
         h = dict(headers)
         h["X-Attempt"] = str(attempt)
-        h["X-Caracal-Resource"] = f"lynx/{self.provider}"
         self._auth.apply(h)
         return self._http.request(method, path, json=json, headers=h)
 
