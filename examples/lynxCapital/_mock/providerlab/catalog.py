@@ -145,10 +145,11 @@ CATALOG: tuple[Provider, ...] = (
     ),
     Provider(
         id="inkwell-ocr", brand="Inkwell OCR", category="api_key",
-        protocol="rest", port=9406, industry="Document AI",
-        tagline="Invoice capture and field extraction",
-        resources=("documents", "extractions"),
-        operations=("submit_document", "get_extraction", "list_documents"),
+        protocol="rest", port=9406, industry="Document AI / OCR",
+        tagline="Intelligent document capture: classification, field extraction, line items, and confidence scoring",
+        resources=("documents", "extractions", "models"),
+        operations=("submit_document", "get_document", "get_extraction",
+                    "list_documents", "list_models", "delete_document"),
         llm_capable=True, apikey_location="query", apikey_field="api_key",
     ),
     Provider(

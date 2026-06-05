@@ -112,7 +112,8 @@ _SPECS: dict[str, PartnerSpec] = {
         auth_header="Authorization", auth_scheme="Bearer"),
     "inkwell-ocr": PartnerSpec(
         "inkwell-ocr", "api_key", 9406,
-        ("submit_document", "get_extraction", "list_documents"),
+        ("submit_document", "get_document", "get_extraction",
+         "list_documents", "list_models", "delete_document"),
         apikey_location="query", apikey_field="api_key"),
     "aegis-screening": PartnerSpec(
         "aegis-screening", "mandate", 9407,
