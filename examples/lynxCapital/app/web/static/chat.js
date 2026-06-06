@@ -423,7 +423,7 @@ function updateRunMeta() {
   const sessionTime = $("session-time");
   
   if (sessionRunId) {
-    sessionRunId.textContent = AppState.runId ? `Session ID: ${shortId(AppState.runId)}` : "No active run";
+    sessionRunId.textContent = AppState.runId ? `Session ID: ${shortId(AppState.runId)}` : "No task running";
   }
   
   if (activeSessionCard) {
@@ -449,7 +449,7 @@ function refreshMemoryBar() {
   if (memTokens) memTokens.textContent = `${fmtTok(total)} / ${fmtTok(limit)}`;
   if (memFill) memFill.style.width = `${Math.min(100, (total / limit) * 100)}%`;
   if (memAgents) memAgents.textContent = `${Object.keys(AppState.agents).length} agents`;
-  if (memCompactions) memCompactions.textContent = `${AppState.compactions.length} compactions`;
+  if (memCompactions) memCompactions.textContent = `${AppState.compactions.length} summaries`;
   if (memFiles) memFiles.textContent = `${AppState.files.size} files`;
   
   const modelEl = $("inspector-model");
@@ -1128,7 +1128,7 @@ function clearMockSession() {
   $("mem-tokens").textContent = "0 / 128k";
   $("mem-fill").style.width = "0%";
   $("mem-agents").textContent = "0 agents";
-  $("mem-compactions").textContent = "0 compactions";
+  $("mem-compactions").textContent = "0 summaries";
   $("mem-files").textContent = "0 files";
   
   // Clear checklist
@@ -1146,13 +1146,13 @@ function clearMockSession() {
   }
   
   // Clear Inspector
-  $("graph-inspector-title").textContent = "No node selected";
-  $("graph-inspector-copy").textContent = "Select an element in the graph to inspect.";
+  $("graph-inspector-title").textContent = "Nothing selected";
+  $("graph-inspector-copy").textContent = "Select an item on the workflow map to see what it does.";
   $("graph-inspector-metrics").replaceChildren();
   $("graph-timeline-list").replaceChildren();
   
   // Reset active session card subtitle tags
-  $("session-run-id").textContent = "No active run";
+  $("session-run-id").textContent = "No task running";
   $("session-time").textContent = "--:--:--";
   $("session-msg-count").textContent = "0 messages";
   $("session-tool-count").textContent = "0 tools";
@@ -1205,7 +1205,7 @@ function loadMockSession(sessionId) {
   $("mem-tokens").textContent = data.metrics.tokens;
   $("mem-fill").style.width = `${data.metrics.fillPercent}%`;
   $("mem-agents").textContent = `${data.metrics.agents} agents`;
-  $("mem-compactions").textContent = `${data.metrics.compactions} compactions`;
+  $("mem-compactions").textContent = `${data.metrics.compactions} summaries`;
   $("mem-files").textContent = `${data.metrics.files} files`;
   
   // 2. Load Checklist

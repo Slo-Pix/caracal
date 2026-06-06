@@ -1097,7 +1097,7 @@ function renderInspector() {
     const metrics = serviceMetrics(service.id);
     inspectorType.textContent = "Service";
     inspectorTitle.textContent = titleCase(service.id);
-    inspectorCopy.textContent = "External dependency reached through the service runtime boundary.";
+    inspectorCopy.textContent = "An outside service the agents call to complete the task.";
     addMetric("Group", serviceGroup(service.id));
     addMetric("Status", statusLabel(metrics.lastState));
     addMetric("Calls", String(metrics.total));
@@ -1113,7 +1113,7 @@ function renderInspector() {
     const agent = nodes[flow.agentId];
     inspectorType.textContent = "Flow";
     inspectorTitle.textContent = shortAction(flow.action);
-    inspectorCopy.textContent = "Service communication routed through the service runtime's resilience, telemetry, and audit controls.";
+    inspectorCopy.textContent = "A call between an agent and a service, routed through security and audit controls.";
     addMetric("Status", statusLabel(flowState(flow)));
     addMetric("Agent", agent ? titleCase(agent.role) : shortId(flow.agentId));
     addMetric("Service", titleCase(flow.serviceId));
@@ -1143,10 +1143,10 @@ function renderInspector() {
 
   selected = "run";
   inspectorType.textContent = "Overview";
-  inspectorTitle.textContent = runId ? `Run ${shortId(runId)}` : "No run selected";
+  inspectorTitle.textContent = runId ? `Run ${shortId(runId)}` : "No task selected";
   inspectorCopy.textContent = runId
-    ? "Live topology showing runtime control, agent coordination, provider communication, and execution telemetry."
-    : "Select a stage, agent, service, or connection to inspect runtime state.";
+    ? "A live view of the agents, services, and approvals working on this task."
+    : "Select a step, agent, service, or connection to see details.";
   addMetric("Phase", statusLabel(runPhase));
   addMetric("Agents", String(Object.keys(nodes).length));
   addMetric("Services", String(Object.keys(services).length));

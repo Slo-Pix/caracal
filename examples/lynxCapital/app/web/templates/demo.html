@@ -7,7 +7,7 @@ Demo page template for the Lynx Capital runtime workspace.
 {% extends "layout.html" %}
 {% block title %}{{ company }} - Demo{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/demo.css?v=12">
+<link rel="stylesheet" href="/static/demo.css?v=13">
 
 <div class="app-shell">
   <aside class="left-sidebar" aria-label="Runtime sessions">
@@ -17,11 +17,11 @@ Demo page template for the Lynx Capital runtime workspace.
     </div>
 
     <section class="sidebar-section">
-      <h2 class="section-header">Active session</h2>
+      <h2 class="section-header">Current task</h2>
       <div id="active-session-card" class="session-card active">
         <div class="session-status">
           <span class="pulse-dot" aria-hidden="true"></span>
-          <span id="session-run-id" class="session-title">No active run</span>
+          <span id="session-run-id" class="session-title">No task running</span>
         </div>
         <div class="session-meta">
           <span id="session-msg-count">0 messages</span>
@@ -32,22 +32,22 @@ Demo page template for the Lynx Capital runtime workspace.
     </section>
 
     <section class="sidebar-section">
-      <h2 class="section-header">Runtime counters</h2>
+      <h2 class="section-header">This session</h2>
       <div class="past-sessions-list">
         <div class="session-card-past">
-          <span class="session-title">Events</span>
+          <span class="session-title">Updates</span>
           <span id="event-count" class="session-time-past">0</span>
         </div>
         <div class="session-card-past">
-          <span class="session-title">Tools</span>
+          <span class="session-title">Actions taken</span>
           <span id="tool-count" class="session-time-past">0</span>
         </div>
         <div class="session-card-past">
-          <span class="session-title">Services</span>
+          <span class="session-title">Services called</span>
           <span id="service-count" class="session-time-past">0</span>
         </div>
         <div class="session-card-past">
-          <span class="session-title">Controls</span>
+          <span class="session-title">Approvals</span>
           <span id="security-count" class="session-time-past">0</span>
         </div>
       </div>
@@ -56,7 +56,7 @@ Demo page template for the Lynx Capital runtime workspace.
     <div class="sidebar-footer">
       <span class="runtime-status-badge">
         <span class="status-indicator-dot online" aria-hidden="true"></span>
-        <span id="runtime-state" class="status-label">Idle</span>
+        <span id="runtime-state" class="status-label">Ready</span>
       </span>
     </div>
   </aside>
@@ -64,8 +64,8 @@ Demo page template for the Lynx Capital runtime workspace.
   <section class="main-viewport" aria-label="Conversation and orchestration workspace">
     <header class="viewport-header">
       <div class="viewport-header-left">
-        <h1 class="viewport-title">{{ shortName }} agent workspace</h1>
-        <span class="viewport-subtitle">Conversation, execution traces, and live topology.</span>
+        <h1 class="viewport-title">{{ shortName }} workspace</h1>
+        <span class="viewport-subtitle">Ask for a finance task and follow the work as it happens.</span>
       </div>
       <div class="viewport-actions">
         <button id="clear-chat-btn" class="btn" title="Clear current visible history">Clear view</button>
@@ -79,8 +79,33 @@ Demo page template for the Lynx Capital runtime workspace.
         <div class="chat-stream-shell">
           <div class="chat-stream" id="chat-stream">
             <div class="chat-empty" id="chat-empty">
-              <span class="chat-empty-title">No activity yet</span>
-              <span class="chat-empty-copy">Start a run to see the live conversation, execution trail, and system events.</span>
+              <div class="welcome-head">
+                <span class="welcome-eyebrow">{{ shortName }} finance operations</span>
+                <h2 class="welcome-title">What would you like the team to handle?</h2>
+                <p class="welcome-copy">
+                  Describe a finance task in plain language. A team of agents plans the work,
+                  calls the right {{ providers|length }} connected services, asks for approval on
+                  sensitive steps, and keeps a full record you can review. Pick a common task below
+                  to get started, or type your own request.
+                </p>
+              </div>
+
+              <div class="welcome-tasks">
+                {% for wf in workflows %}
+                <button type="button" class="welcome-task" data-prompt="Run the {{ wf.label }} workflow. {{ wf.focus }}">
+                  <span class="welcome-task-name">{{ wf.label }}</span>
+                  <span class="welcome-task-copy">{{ wf.focus }}</span>
+                  <span class="welcome-task-steps">
+                    {% for st in wf.stages %}<span class="welcome-step">{{ st.label }}</span>{% endfor %}
+                  </span>
+                </button>
+                {% endfor %}
+              </div>
+
+              <p class="welcome-foot">
+                Every task runs against live demo services. Approvals, provider calls, and decisions
+                are shown step by step in the panels around this conversation.
+              </p>
             </div>
           </div>
         </div>
@@ -91,23 +116,23 @@ Demo page template for the Lynx Capital runtime workspace.
       <section class="graph-column" aria-label="Orchestration graph">
         <header class="viewport-header">
           <div class="viewport-header-left">
-            <h2 class="viewport-title">Orchestration graph</h2>
-            <span class="viewport-subtitle">Agents, providers, approvals, and telemetry.</span>
+            <h2 class="viewport-title">Workflow map</h2>
+            <span class="viewport-subtitle">See which agents and services each step uses.</span>
           </div>
           <span id="graph-status" class="runtime-status-badge">idle</span>
         </header>
 
         <div class="graph-workspace">
-          <aside class="graph-rail" aria-label="Execution stages">
+          <aside class="graph-rail" aria-label="Workflow steps">
             <div class="graph-rail-head">
-              <span class="graph-rail-eyebrow">Stages</span>
-              <span id="graph-stage-summary" class="graph-rail-summary">Waiting for a run</span>
+              <span class="graph-rail-eyebrow">Steps</span>
+              <span id="graph-stage-summary" class="graph-rail-summary">Waiting for a task</span>
             </div>
             <div id="graph-stage-rail" class="graph-stage-rail"></div>
           </aside>
 
           <div class="graph-main">
-            <div class="graph-toolbar" aria-label="Graph controls">
+            <div class="graph-toolbar" aria-label="Map controls">
               <div class="graph-toolbar-group">
                 <button type="button" id="graph-zoom-out" class="graph-tool-btn" aria-label="Zoom out">-</button>
                 <button type="button" id="graph-zoom-reset" class="graph-tool-btn">100%</button>
@@ -117,12 +142,12 @@ Demo page template for the Lynx Capital runtime workspace.
               <span class="graph-toolbar-hint">Drag to pan - scroll to zoom</span>
             </div>
 
-            <div id="graph-canvas" class="graph-canvas" tabindex="0" aria-label="Zoomable orchestration graph">
+            <div id="graph-canvas" class="graph-canvas" tabindex="0" aria-label="Workflow map">
               <div class="graph-empty" id="graph-empty">
-                <span class="graph-empty-title">Topology waiting for execution</span>
-                <span>Start a run to watch the runtime coordinate agents and provider calls.</span>
+                <span class="graph-empty-title">No task running yet</span>
+                <span>Start a task to watch agents coordinate and call the connected services.</span>
               </div>
-              <svg id="graph-svg" style="display:none" role="img" aria-label="Live orchestration topology"></svg>
+              <svg id="graph-svg" style="display:none" role="img" aria-label="Live workflow map"></svg>
             </div>
           </div>
         </div>
@@ -130,15 +155,15 @@ Demo page template for the Lynx Capital runtime workspace.
     </div>
   </section>
 
-  <aside class="right-panel" aria-label="Runtime details">
+  <aside class="right-panel" aria-label="Task details">
     <section class="inspector-section">
       <div class="section-title-bar">
-        <h3>Memory pressure</h3>
-        <button class="section-toggle-btn" type="button" aria-label="Toggle memory details"></button>
+        <h3>Agent workload</h3>
+        <button class="section-toggle-btn" type="button" aria-label="Toggle workload details"></button>
       </div>
-      <div class="section-content memory-pressure-block" id="memory-bar" aria-label="Context usage">
+      <div class="section-content memory-pressure-block" id="memory-bar" aria-label="How much the agents are holding in mind">
         <div class="memory-header">
-          <span>Context</span>
+          <span>Working memory</span>
           <span id="mem-tokens">0 / 128k</span>
         </div>
         <div class="mem-track" aria-hidden="true">
@@ -146,7 +171,7 @@ Demo page template for the Lynx Capital runtime workspace.
         </div>
         <div class="mem-chips-row">
           <span id="mem-agents" class="mem-chip">0 agents</span>
-          <span id="mem-compactions" class="mem-chip">0 compactions</span>
+          <span id="mem-compactions" class="mem-chip">0 summaries</span>
           <span id="mem-files" class="mem-chip">0 files</span>
         </div>
         <button type="button" id="mem-toggle" class="btn" aria-expanded="false">Summaries</button>
@@ -156,7 +181,7 @@ Demo page template for the Lynx Capital runtime workspace.
 
     <section class="inspector-section">
       <div class="section-title-bar">
-        <h3>Execution plan</h3>
+        <h3>Plan of work</h3>
         <button class="section-toggle-btn" type="button" aria-label="Toggle plan details"></button>
       </div>
       <div class="section-content">
@@ -166,31 +191,31 @@ Demo page template for the Lynx Capital runtime workspace.
 
     <section class="inspector-section">
       <div class="section-title-bar">
-        <h3>Runtime activity</h3>
+        <h3>Live activity</h3>
         <button class="section-toggle-btn" type="button" aria-label="Toggle activity details"></button>
       </div>
       <div class="section-content">
         <div id="runtime-feed" class="runtime-feed">
-          <div class="runtime-feed-empty">Lifecycle, tools, provider calls, files, memory, and audit decisions appear here.</div>
+          <div class="runtime-feed-empty">Each step the agents take - service calls, files, and approval decisions - appears here as it happens.</div>
         </div>
       </div>
     </section>
 
     <section class="inspector-section">
       <div class="section-title-bar">
-        <h3>Inspector</h3>
+        <h3>Details</h3>
         <span id="graph-inspector-type" class="provider-model-badge">Overview</span>
       </div>
       <div class="section-content graph-inspector" aria-live="polite">
-        <h3 id="graph-inspector-title">No node selected</h3>
-        <p id="graph-inspector-copy">Select an element in the graph to inspect.</p>
+        <h3 id="graph-inspector-title">Nothing selected</h3>
+        <p id="graph-inspector-copy">Select an item on the workflow map to see what it does.</p>
         <dl id="graph-inspector-metrics" class="graph-metric-list"></dl>
       </div>
     </section>
 
     <section class="inspector-section">
       <div class="section-title-bar">
-        <h3>Execution timeline</h3>
+        <h3>Activity history</h3>
         <span id="graph-timeline-count" class="latency-badge">0 events</span>
       </div>
       <div class="section-content">
@@ -203,6 +228,18 @@ Demo page template for the Lynx Capital runtime workspace.
 {% include "components/demo/message_component.html" %}
 {% include "components/demo/event_block.html" %}
 
-<script src="/static/chat.js?v=12" type="module"></script>
-<script src="/static/graph.js?v=12" type="module"></script>
+<script>
+  document.addEventListener("click", (event) => {
+    const task = event.target.closest(".welcome-task");
+    if (!task) return;
+    const input = document.getElementById("prompt-input");
+    if (!input) return;
+    input.value = task.dataset.prompt || "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.focus();
+  });
+</script>
+
+<script src="/static/chat.js?v=13" type="module"></script>
+<script src="/static/graph.js?v=13" type="module"></script>
 {% endblock %}
