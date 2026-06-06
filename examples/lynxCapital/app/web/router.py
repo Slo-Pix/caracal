@@ -2,7 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Web HTML routes: landing, setup, demo, and logs pages.
+Web HTML routes: landing, overview, setup, demo, and logs pages.
 """
 from __future__ import annotations
 
@@ -53,6 +53,127 @@ def _overview() -> dict:
     }
 
 
+def _workflow_label(workflow: dict) -> str:
+    if workflow["id"] == "vendorLifecycle":
+        return "Vendor Operations"
+    return workflow["label"]
+
+
+def _overview_pages() -> dict[str, dict]:
+    cfg = get_config()
+    overview = _overview()
+    workflows = [w.model_dump() for w in cfg.workflows]
+    protocol_names = ", ".join(item["name"].upper() for item in overview["protocols"])
+    category_names = ", ".join(sorted({p.category.replace("_", " ") for p in cfg.providers}))
+    operations = [
+        {"label": _workflow_label(workflow), "focus": workflow["focus"]}
+        for workflow in workflows
+    ]
+    return {
+        "about": {
+            "title": f"About {cfg.company}",
+            "route": "/overview/about",
+            "next": "/overview/architecture",
+            "previous": None,
+            "intro": (
+                f"{cfg.company} is a runnable reference lab for autonomous financial execution. "
+                "It models a global SaaS payout cycle with a FastAPI application, "
+                "LangGraph-based swarm, live topology view, and SSE activity stream."
+            ),
+            "body": [
+                f"The configured scenario is {cfg.scenario.description.strip()}",
+                (
+                    "Use this overview before setup to understand the workspace, "
+                    "the provider boundary, and the demo-only operating model."
+                ),
+            ],
+            "items": [
+                {"label": "Workspace purpose", "value": cfg.content.tagline},
+                {"label": "Primary scenario", "value": cfg.content.scenarioTitle},
+                {"label": "Covered operations", "value": ", ".join(item["label"] for item in operations)},
+            ],
+        },
+        "architecture": {
+            "title": "Architecture & Providers",
+            "route": "/overview/architecture",
+            "next": "/overview/notice",
+            "previous": "/overview/about",
+            "intro": (
+                "A request starts as business intent, moves through Finance Control "
+                "and workflow agents, then reaches local provider fixtures through "
+                "the same application boundary used by the demo runtime."
+            ),
+            "body": [
+                (
+                    "The provider network runs under _mock on localhost ports "
+                    f"9400-9419 and represents {overview['provider_count']} provider surfaces."
+                ),
+                (
+                    f"Provider protocols represented here: {protocol_names}. "
+                    f"Operational categories include {category_names}."
+                ),
+            ],
+            "items": [
+                {
+                    "label": "Application",
+                    "value": (
+                        "FastAPI on port 8000 with server-rendered pages and "
+                        "plain JavaScript enhancement."
+                    ),
+                },
+                {
+                    "label": "Workflow runtime",
+                    "value": (
+                        "LangGraph and LangChain-based orchestration with visible "
+                        "chat, graph, logs, prompts, and activity history."
+                    ),
+                },
+                {
+                    "label": "Provider boundary",
+                    "value": "Local REST, SSE, gRPC-style, MCP, and SDK fixtures under _mock.",
+                },
+            ],
+        },
+        "notice": {
+            "title": "Demo Environment Notice",
+            "route": "/overview/notice",
+            "next": None,
+            "previous": "/overview/architecture",
+            "intro": cfg.content.disclaimer.strip(),
+            "body": [
+                (
+                    "No real money moves, no production compliance decision is made, "
+                    "and generated outcomes require human review."
+                ),
+                (
+                    "Setup validates OPENAI_API_KEY, the local provider network, "
+                    "provider webhook secrets, and Caracal services when enabled."
+                ),
+            ],
+            "items": [
+                {
+                    "label": "Real",
+                    "value": (
+                        "Application routing, orchestration, provider calls, setup "
+                        "validation, events, logs, approvals, memory, and UI state."
+                    ),
+                },
+                {
+                    "label": "Simulated",
+                    "value": (
+                        "Provider accounts, generated credentials, invoices, payments, "
+                        "tax responses, screening results, market data, and audit records."
+                    ),
+                },
+                {
+                    "label": "Required acknowledgement",
+                    "value": "Confirm this is a demonstration environment before setup is unlocked.",
+                },
+            ],
+        },
+    }
+
+
 def _ctx(request: Request) -> dict:
     cfg = get_config()
     accepted = _accepted(request)
@@ -72,9 +193,41 @@ def _ctx(request: Request) -> dict:
     }
 
 
+def _overview_ctx(request: Request, key: str) -> dict:
+    pages = _overview_pages()
+    page = pages[key]
+    order = ["about", "architecture", "notice"]
+    ctx = _ctx(request)
+    ctx.update(
+        {
+            "overview_page": page,
+            "overview_pages": [pages[item] for item in order],
+            "overview_index": order.index(key) + 1,
+            "overview_total": len(order),
+            "requires_ack": key == "notice",
+        }
+    )
+    return ctx
+
+
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
     return templates.TemplateResponse(request, "landing.html", _ctx(request))
+
+
+@router.get("/overview/about", response_class=HTMLResponse)
+def overview_about(request: Request):
+    return templates.TemplateResponse(request, "overview.html", _overview_ctx(request, "about"))
+
+
+@router.get("/overview/architecture", response_class=HTMLResponse)
+def overview_architecture(request: Request):
+    return templates.TemplateResponse(request, "overview.html", _overview_ctx(request, "architecture"))
+
+
+@router.get("/overview/notice", response_class=HTMLResponse)
+def overview_notice(request: Request):
+    return templates.TemplateResponse(request, "overview.html", _overview_ctx(request, "notice"))
 
 
 @router.get("/favicon.ico")
@@ -85,13 +238,13 @@ def favicon() -> Response:
 @router.get("/setup", response_class=HTMLResponse)
 def setup(request: Request):
     if not _accepted(request):
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/overview/about", status_code=303)
     return templates.TemplateResponse(request, "setup.html", _ctx(request))
 
 
 def _require_ready(request: Request):
     if not _accepted(request):
-        return RedirectResponse(url="/", status_code=303)
+        return RedirectResponse(url="/overview/about", status_code=303)
     if not _setup_validated(request):
         return RedirectResponse(url="/setup", status_code=303)
     return None

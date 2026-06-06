@@ -762,19 +762,22 @@ def test_mcp_mandate_guarded():
 
 
 # --------------------------------------------------------------------------- #
-# sdk (api-key over HTTP, consumed by a pip SDK shim)
+# sdk (first-party SDK shim over HTTP: api-key or bearer secret per provider)
 # --------------------------------------------------------------------------- #
 def test_sdk_providers_authenticate():
-    payloads = {
+    cases = {
         "sabre-tax": ("calculate_tax", {"addresses": {"shipTo": {"country": "US", "region": "CA"}},
-                                        "lines": [{"number": "1", "amount": 100.0}]}),
-        "quetzal-payouts": ("get_quote", {"amount": 100.0, "sourceCurrency": "USD", "targetCurrency": "EUR"}),
+                                        "lines": [{"number": "1", "amount": 100.0}]},
+                      {"X-Api-Key": seed("sabre-tax")["apiKey"]},
+                      {"X-Api-Key": "bad"}),
+        "quetzal-payouts": ("get_quote", {"amount": 100.0, "sourceCurrency": "USD", "targetCurrency": "EUR"},
+                            {"Authorization": f"Bearer {seed('quetzal-payouts')['bearerToken']}"},
+                            {"Authorization": "Bearer bad"}),
     }
-    for pid, (op, body) in payloads.items():
+    for pid, (op, body, good, bad) in cases.items():
         c = client(pid)
-        key = seed(pid)["apiKey"]
-        assert c.post(f"/api/{op}", json=body, headers={"X-Api-Key": key}).status_code == 200
-        assert c.post(f"/api/{op}", json=body, headers={"X-Api-Key": "bad"}).status_code == 401
+        assert c.post(f"/api/{op}", json=body, headers=good).status_code == 200
+        assert c.post(f"/api/{op}", json=body, headers=bad).status_code == 401
 
 
 # --------------------------------------------------------------------------- #
@@ -1017,14 +1020,23 @@ def test_sdk_pair_distinct_cases():
     assert vat["isValid"] and vat["businessName"]
     nf = t.post("/api/resolve_jurisdiction", json={"address": {"country": "ZZ"}}, headers=tk)
     assert nf.status_code == 404
-    # Quetzal Payouts: unverified recipient cannot be paid out.
+    # Quetzal Payouts: unverified recipient is blocked; KYC verification unlocks the
+    # payout, which then advances through its delivery lifecycle on status reads.
     q = client("quetzal-payouts")
-    qk = {"X-Api-Key": seed("quetzal-payouts")["apiKey"]}
-    rec = q.post("/api/create_recipient", json={"name": "R", "currency": "USD", "method": "bank"},
+    qk = {"Authorization": f"Bearer {seed('quetzal-payouts')['bearerToken']}"}
+    rec = q.post("/api/create_recipient", json={"name": "R", "currency": "EUR", "method": "bank"},
                  headers=qk).json()["data"]
+    blocked = q.post("/api/create_payout",
+                     json={"recipientId": rec["id"], "amount": 100, "currency": "USD"}, headers=qk)
+    assert blocked.status_code == 403 and blocked.json()["error"] == "recipient_unverified"
+    verified = q.post("/api/verify_recipient", json={"recipientId": rec["id"]}, headers=qk).json()["data"]
+    assert verified["verified"] is True
     payout = q.post("/api/create_payout",
-                    json={"recipientId": rec["id"], "amount": 100, "currency": "USD"}, headers=qk)
-    assert payout.status_code in (200, 403)
+                    json={"recipientId": rec["id"], "amount": 100, "currency": "USD",
+                          "purpose": "supplier invoice"}, headers=qk).json()["data"]
+    assert payout["status"] == "processing" and payout["purposeCode"] == "SUPP"
+    tracked = q.post("/api/get_payout", json={"payoutId": payout["payoutId"]}, headers=qk).json()["data"]
+    assert tracked["status"] in ("in_transit", "paid")
 
 
 def test_mandate_pair_distinct_cases():

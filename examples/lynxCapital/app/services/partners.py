@@ -175,9 +175,12 @@ _SPECS: dict[str, PartnerSpec] = {
          "determine_withholding", "get_exemption_certificate", "list_tax_codes"),
         apikey_location="header", apikey_field="X-Api-Key"),
     "quetzal-payouts": PartnerSpec(
-        "quetzal-payouts", "api_key", 9414,
-        ("create_recipient", "get_quote", "create_payout", "create_batch", "get_batch"),
-        apikey_location="header", apikey_field="X-Api-Key"),
+        "quetzal-payouts", "bearer", 9414,
+        ("create_recipient", "get_recipient", "list_recipients", "verify_recipient",
+         "get_quote", "create_payout", "get_payout", "list_payouts", "cancel_payout",
+         "create_batch", "get_batch", "list_batches",
+         "list_settlements", "get_balance"),
+        auth_header="Authorization", auth_scheme="Bearer"),
     "vela-notify": PartnerSpec(
         "vela-notify", "bearer", 9415,
         ("send_message", "get_message", "list_templates"),
