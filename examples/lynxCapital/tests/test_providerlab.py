@@ -81,6 +81,108 @@ def test_api_key_query_accept_and_reject():
 
 
 # --------------------------------------------------------------------------- #
+# gRPC (Keystone Treasury) — metadata-token auth, service surface, treasury flows
+# --------------------------------------------------------------------------- #
+def _keystone():
+    c = client("keystone-treasury")
+    return c, {seed("keystone-treasury")["field"]: seed("keystone-treasury")["apiKey"]}
+
+
+def test_grpc_metadata_token_accept_and_reject():
+    c, md = _keystone()
+    assert seed("keystone-treasury")["field"] == "x-api-key"
+    assert c.post("/api/get_position", json={"currency": "USD"}, headers=md).status_code == 200
+    assert c.post("/api/get_position", json={"currency": "USD"},
+                  headers={"x-api-key": "bad"}).status_code == 401
+    assert c.post("/api/get_position", json={"currency": "USD"}).status_code == 401
+
+
+def test_grpc_service_descriptor_registered():
+    from _mock.providerlab.providers import base, keystone_treasury  # noqa: F401
+    descriptor = base.GRPC_SERVICES["keystone-treasury"]
+    assert descriptor["package"] == "keystone.treasury.v1"
+    rpc_ops = {rpc["operation"] for svc in descriptor["services"] for rpc in svc["rpcs"]}
+    assert set(catalog.get("keystone-treasury").operations) == rpc_ops
+    streaming = {rpc["operation"] for svc in descriptor["services"]
+                 for rpc in svc["rpcs"] if rpc.get("server_streaming")}
+    assert streaming == {"watch_positions"}
+
+
+def test_grpc_position_aggregates_accounts():
+    c, md = _keystone()
+    body = c.post("/api/get_position", json={"currency": "USD"}, headers=md).json()["data"]
+    assert body["currency"] == "USD" and body["accountCount"] >= 1
+    assert body["availableBalance"] <= body["ledgerBalance"]
+    assert body["reportingCurrency"] == "USD"
+    assert c.post("/api/get_position", json={"currency": "ZZZ"},
+                  headers=md).status_code == 422
+    assert c.post("/api/get_position", json={"currency": "CHF"},
+                  headers=md).status_code == 404
+
+
+def test_grpc_forecast_scenarios_and_validation():
+    c, md = _keystone()
+    ok = c.post("/api/forecast_liquidity",
+                json={"currency": "USD", "horizonDays": 30, "scenario": "stress"}, headers=md)
+    assert ok.status_code == 200 and ok.json()["data"]["scenario"] == "stress"
+    assert ok.json()["data"]["points"]
+    assert c.post("/api/forecast_liquidity",
+                  json={"currency": "USD", "horizonDays": 0}, headers=md).status_code == 422
+    assert c.post("/api/forecast_liquidity",
+                  json={"currency": "USD", "horizonDays": 30, "scenario": "wild"},
+                  headers=md).status_code == 422
+
+
+def test_grpc_hedge_lifecycle():
+    c, md = _keystone()
+    placed = c.post("/api/place_hedge",
+                    json={"pair": "EUR/USD", "notional": 1_000_000, "side": "buy",
+                          "instrument": "forward", "tenorDays": 90}, headers=md)
+    assert placed.status_code == 200
+    hedge = placed.json()["data"]
+    assert hedge["status"] == "booked" and hedge["notionalCurrency"] == "EUR"
+    hid = hedge["hedgeId"]
+    cancelled = c.post("/api/cancel_hedge", json={"hedgeId": hid}, headers=md).json()["data"]
+    assert cancelled["status"] == "cancelled"
+    assert c.post("/api/place_hedge",
+                  json={"pair": "EUR/USD", "notional": 1_000_000, "side": "hold"},
+                  headers=md).status_code == 422
+    assert c.post("/api/place_hedge",
+                  json={"pair": "USDUSD", "notional": 1, "side": "buy"},
+                  headers=md).status_code == 422
+    assert c.post("/api/get_hedge", json={"hedgeId": "missing"}, headers=md).status_code == 404
+
+
+def test_grpc_transfer_and_insufficient_liquidity():
+    c, md = _keystone()
+    ok = c.post("/api/transfer_funds",
+                json={"currency": "USD", "amount": 25_000, "destination": "DE"}, headers=md)
+    assert ok.status_code == 200
+    transfer = ok.json()["data"]
+    assert transfer["type"] == "intercompany" and transfer["status"] == "executed"
+    fetched = c.post("/api/get_transfer",
+                     json={"transferId": transfer["transferId"]}, headers=md)
+    assert fetched.status_code == 200
+    broke = c.post("/api/transfer_funds",
+                   json={"currency": "USD", "amount": 9_999_999_999, "destination": "DE"},
+                   headers=md)
+    assert broke.status_code == 402
+
+
+def test_grpc_exposure_and_streaming():
+    c, md = _keystone()
+    exposure = c.post("/api/get_exposure", json={"currency": "EUR"}, headers=md)
+    assert exposure.status_code == 200
+    data = exposure.json()["data"]
+    assert {"netExposure", "hedgedAmount", "unhedgedAmount", "hedgeRatio"} <= set(data)
+    stream = c.post("/api/watch_positions",
+                    json={"currency": "USD", "snapshots": 4}, headers=md)
+    assert stream.status_code == 200
+    payload = stream.json()["data"]
+    assert payload["streaming"] is True and len(payload["updates"]) == 4
+
+
+# --------------------------------------------------------------------------- #
 # bearer_token (standard and custom header/scheme)
 # --------------------------------------------------------------------------- #
 def test_bearer_standard_header():

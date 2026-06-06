@@ -448,7 +448,7 @@ prompts:
 
     3. DOMAIN TOOLS available to you (pick the ones relevant to your focus):
        - Vendor lifecycle: kyb_screen_vendor, register_vendor, refresh_vendor_compliance, get_contract_terms_for_vendor
-       - Treasury: get_cash_position, forecast_liquidity, place_fx_hedge, transfer_funds
+       - Treasury: get_cash_position, get_treasury_summary, forecast_liquidity, get_fx_exposure, place_fx_hedge, transfer_funds
        - Close: post_journal_entry, reconcile_account, compute_accrual, close_period
        - Compliance: aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing, attest_control
        - Receivables: issue_customer_invoice, send_dunning_notice, apply_customer_payment, get_ar_aging

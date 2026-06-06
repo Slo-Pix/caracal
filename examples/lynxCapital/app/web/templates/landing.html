@@ -9,16 +9,16 @@ Lynx Capital overview page with a guided onboarding wizard.
 {% block content %}
 <style>
   .overview {
-    --corner: 2px;
+    --corner: 4px;
     min-height: calc(100vh - 44px);
-    display: grid;
-    place-items: center;
-    padding: 32px 24px;
+    padding: clamp(28px, 5vw, 64px);
     background: var(--surface);
   }
-  .overview-card {
-    width: min(760px, 100%);
-    padding: 0;
+  .overview-shell {
+    width: min(1180px, 100%);
+    margin: 0 auto;
+    display: grid;
+    gap: 18px;
   }
   .eyebrow {
     color: var(--accent);
@@ -28,54 +28,264 @@ Lynx Capital overview page with a guided onboarding wizard.
     margin-bottom: 12px;
     text-transform: uppercase;
   }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.82fr);
+    gap: 18px;
+    align-items: stretch;
+  }
+  .hero-copy,
+  .overview-panel,
+  .value-card,
+  .coverage-section,
+  .notice-section {
+    background: #fff;
+    border: 1px solid #e1e7f0;
+    border-radius: var(--corner);
+  }
+  .hero-copy {
+    padding: clamp(28px, 4vw, 46px);
+    display: grid;
+    align-content: center;
+  }
   .overview h1 {
     color: var(--primary);
-    font-size: 34px;
+    font-size: clamp(34px, 5vw, 58px);
     line-height: 1.05;
-    margin-bottom: 12px;
+    letter-spacing: -0.035em;
+    max-width: 12ch;
+    margin-bottom: 18px;
   }
   .lede {
     color: #445066;
-    font-size: 15px;
-    line-height: 1.7;
-    max-width: 58ch;
-    margin-bottom: 22px;
+    font-size: clamp(15px, 1.55vw, 18px);
+    line-height: 1.62;
+    max-width: 62ch;
+    margin-bottom: 26px;
   }
-  .summary-points {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 10px;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
-  .summary-point {
-    border: 1px solid #e1e7f0;
+  .primary-cta,
+  .outline-cta {
     border-radius: var(--corner);
-    background: #f8fafc;
-    padding: 12px;
-  }
-  .summary-point strong {
-    display: block;
-    color: var(--text);
-    font-size: 12px;
-    margin-bottom: 4px;
-  }
-  .summary-point span {
-    color: #5a6478;
-    font-size: 11.5px;
-    line-height: 1.45;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 800;
+    min-height: 44px;
+    padding: 0 18px;
   }
   .primary-cta {
     background: var(--accent);
-    border: 0;
-    border-radius: var(--corner);
+    border: 1px solid var(--accent);
     color: #fff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 750;
-    padding: 12px 20px;
   }
-  .primary-cta:hover {
+  .primary-cta:hover,
+  .primary-cta:focus-visible {
     background: #174bb8;
+    border-color: #174bb8;
+  }
+  .outline-cta {
+    background: #fff;
+    border: 1px solid #b9c5d6;
+    color: var(--primary);
+  }
+  .outline-cta:hover,
+  .outline-cta:focus-visible {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .next-note {
+    color: #5a6478;
+    font-size: 12.5px;
+    line-height: 1.55;
+    max-width: 56ch;
+  }
+  .overview-panel {
+    display: grid;
+    align-content: start;
+    gap: 18px;
+    min-height: 100%;
+    padding: 22px;
+  }
+  .panel-kicker {
+    color: #5a6478;
+    font-size: 12px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    margin-bottom: 14px;
+    text-transform: uppercase;
+  }
+  .metric-list {
+    display: grid;
+    gap: 10px;
+  }
+  .metric-row {
+    border: 1px solid #e1e7f0;
+    border-radius: var(--corner);
+    background: #f8fafc;
+    display: grid;
+    grid-template-columns: 76px 1fr;
+    gap: 12px;
+    padding: 14px;
+    align-items: center;
+  }
+  .metric-value {
+    color: var(--primary);
+    font-family: 'Outfit', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .metric-row strong {
+    color: var(--text);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .metric-row span {
+    color: #5a6478;
+    display: block;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .panel-note {
+    border-top: 1px solid #e1e7f0;
+    color: #4b5567;
+    font-size: 12.5px;
+    line-height: 1.55;
+    padding-top: 16px;
+  }
+  .value-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .value-card {
+    padding: 18px;
+  }
+  .value-card strong {
+    color: var(--primary);
+    display: block;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  .value-card span {
+    color: #4b5567;
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .coverage-section {
+    display: grid;
+    grid-template-columns: minmax(240px, 0.72fr) minmax(0, 1.28fr);
+    gap: 22px;
+    padding: 24px;
+  }
+  .section-label {
+    color: #5a6478;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .coverage-section h2,
+  .notice-section h2 {
+    color: var(--primary);
+    font-size: clamp(22px, 2vw, 28px);
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin-bottom: 10px;
+  }
+  .section-copy {
+    color: #4b5567;
+    font-size: 13px;
+    line-height: 1.62;
+  }
+  .coverage-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .coverage-item {
+    background: #fff;
+    border: 1px solid #dbe4f0;
+    border-radius: var(--corner);
+    cursor: pointer;
+    min-height: 82px;
+    padding: 14px;
+    text-align: left;
+  }
+  .coverage-item:hover,
+  .coverage-item:focus-visible,
+  .coverage-item.active {
+    border-color: var(--accent);
+    background: #f8fbff;
+  }
+  .coverage-item strong {
+    color: var(--text);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+  .coverage-item span {
+    color: #647086;
+    display: block;
+    font-size: 11.5px;
+  }
+  .coverage-detail {
+    grid-column: 2;
+    border-left: 3px solid var(--accent);
+    background: #f8fafc;
+    padding: 14px 16px;
+  }
+  .coverage-detail strong {
+    color: var(--primary);
+    display: block;
+    font-size: 13px;
+    margin-bottom: 5px;
+  }
+  .coverage-detail span {
+    color: #4b5567;
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .notice-section {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 22px;
+    padding: 24px;
+    align-items: center;
+  }
+  .notice-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
+    gap: 8px;
+  }
+  .notice-step {
+    border: 1px solid #e1e7f0;
+    border-radius: var(--corner);
+    padding: 12px;
+    min-width: 0;
+  }
+  .notice-step span {
+    color: var(--accent);
+    display: block;
+    font-size: 11px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .notice-step strong {
+    color: var(--text);
+    display: block;
+    font-size: 12px;
   }
   .modal-backdrop {
     position: fixed;
@@ -83,21 +293,21 @@ Lynx Capital overview page with a guided onboarding wizard.
     background: #111827;
     display: none;
     place-items: center;
-    padding: 24px;
+    padding: 16px;
     z-index: 20;
   }
   .modal-backdrop.open {
     display: grid;
   }
   .wizard-card {
-    --corner: 2px;
-    width: min(960px, calc(100vw - 48px));
-    height: 680px;
+    --corner: 4px;
+    width: min(1020px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
     background: #fff;
     border: 1px solid #8fa2bd;
     border-radius: var(--corner);
     display: grid;
-    grid-template-rows: 84px 1fr 84px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
     overflow: hidden;
   }
   .wizard-head {
@@ -126,12 +336,10 @@ Lynx Capital overview page with a guided onboarding wizard.
     white-space: nowrap;
   }
   .wizard-body {
-    height: 512px;
     padding: 24px;
-    overflow: hidden;
+    overflow: auto;
   }
   .wizard-page {
-    height: 464px;
     display: none;
   }
   .wizard-page.active {
@@ -181,7 +389,8 @@ Lynx Capital overview page with a guided onboarding wizard.
   }
   .flow {
     display: grid;
-    grid-template-columns: 1fr 22px 1fr 22px 1fr 22px 1fr;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
     align-items: center;
     margin: 16px 0;
   }
@@ -205,9 +414,7 @@ Lynx Capital overview page with a guided onboarding wizard.
     line-height: 1.4;
   }
   .flow-arrow {
-    color: #8a9bae;
-    font-weight: 800;
-    text-align: center;
+    display: none;
   }
   .architecture-note {
     color: #4b5567;
@@ -294,44 +501,196 @@ Lynx Capital overview page with a guided onboarding wizard.
     border: 1px solid var(--primary);
     color: #fff;
   }
+  .primary-cta:focus-visible,
+  .outline-cta:focus-visible,
+  .coverage-item:focus-visible,
+  .ghost-btn:focus-visible,
+  .secondary-btn:focus-visible,
+  .next-btn:focus-visible {
+    outline: 2px solid #8fb0ef;
+    outline-offset: 2px;
+  }
   .next-btn:disabled,
   .secondary-btn:disabled {
     cursor: not-allowed;
     opacity: 0.38;
   }
+  @media (max-width: 980px) {
+    .hero-grid,
+    .coverage-section,
+    .notice-section {
+      grid-template-columns: 1fr;
+    }
+    .overview h1 {
+      max-width: 15ch;
+    }
+    .value-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .coverage-detail {
+      grid-column: auto;
+    }
+    .notice-steps {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
   @media (max-width: 760px) {
-    .overview-card { padding: 26px; }
-    .summary-points, .capability-grid, .notice-grid, .detail-list { grid-template-columns: 1fr; }
-    .wizard-card { height: 720px; }
-    .wizard-body { height: 552px; overflow-y: auto; }
-    .wizard-page { height: auto; min-height: 410px; }
-    .flow { grid-template-columns: 1fr; gap: 8px; }
-    .flow-arrow { transform: rotate(90deg); }
+    .overview {
+      padding: 18px;
+    }
+    .hero-copy,
+    .overview-panel,
+    .coverage-section,
+    .notice-section {
+      padding: 18px;
+    }
+    .value-grid,
+    .coverage-grid,
+    .capability-grid,
+    .notice-grid,
+    .detail-list,
+    .flow,
+    .notice-steps {
+      grid-template-columns: 1fr;
+    }
+    .metric-row {
+      grid-template-columns: 64px 1fr;
+    }
+    .hero-actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .primary-cta,
+    .outline-cta {
+      width: 100%;
+    }
+    .wizard-card {
+      width: calc(100vw - 20px);
+      max-height: calc(100vh - 20px);
+    }
+    .wizard-head,
+    .wizard-foot {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .wizard-actions {
+      width: 100%;
+    }
+    .wizard-actions button {
+      flex: 1;
+    }
   }
 </style>
 
 <section class="overview">
-  <div class="overview-card">
-    <div class="eyebrow">Lynx Capital demo workspace</div>
-    <h1>Finance operations, coordinated by agents.</h1>
-    <p class="lede">{{ company }} demonstrates how a modern finance team can review, route, and execute operational workflows across payments, treasury, compliance, procurement, and close activities.</p>
-    <div class="summary-points">
-      <div class="summary-point">
-        <strong>Enterprise finance flows</strong>
-        <span>Run realistic payout, receivables, compliance, treasury, close, and procurement tasks.</span>
+  <div class="overview-shell">
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <div class="eyebrow">{{ company }} demo workspace</div>
+        <h1>Finance operations, clearly routed.</h1>
+        <p class="lede">{{ company }} is a demo workspace for understanding, routing, and reviewing finance operations across realistic workflows before you configure the environment.</p>
+        <div class="hero-actions">
+          <button class="primary-cta" id="open-wizard" type="button">Continue Setup</button>
+          <button class="outline-cta" id="review-overview" type="button">View Overview</button>
+        </div>
+        <p class="next-note">Next: review a guided 3-page overview, confirm the demo scope, then continue into setup.</p>
       </div>
-      <div class="summary-point">
-        <strong>Connected providers</strong>
-        <span>See how provider-backed tools support real operational decisions.</span>
+
+      <aside class="overview-panel" aria-label="Demo scope summary">
+        <div>
+          <div class="panel-kicker">Demo scope</div>
+          <div class="metric-list">
+            <div class="metric-row">
+              <div class="metric-value">{{ overview.workflow_count }}</div>
+              <div>
+                <strong>Workflow families</strong>
+                <span>Structured finance operations with clear stages and outcomes.</span>
+              </div>
+            </div>
+            <div class="metric-row">
+              <div class="metric-value">{{ overview.provider_count }}</div>
+              <div>
+                <strong>Provider integrations</strong>
+                <span>Banking, ERP, risk, treasury, procurement, identity, and market data surfaces.</span>
+              </div>
+            </div>
+            <div class="metric-row">
+              <div class="metric-value">{{ overview.region_count }}</div>
+              <div>
+                <strong>Operating regions</strong>
+                <span>Regional routing for payout, compliance, and treasury coordination.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="panel-note">The first step is orientation, not configuration. Setup begins only after the overview confirms what is real, simulated, and expected.</p>
+      </aside>
+    </div>
+
+    <div class="value-grid" aria-label="Demo value">
+      <div class="value-card">
+        <strong>What it does</strong>
+        <span>Coordinates finance requests into plans, routes, provider calls, reviews, and visible outcomes.</span>
       </div>
-      <div class="summary-point">
-        <strong>Guided setup</strong>
-        <span>Review the demo expectations before configuring and starting a run.</span>
+      <div class="value-card">
+        <strong>Who it helps</strong>
+        <span>Finance operators, risk reviewers, platform teams, and leaders evaluating operational automation.</span>
+      </div>
+      <div class="value-card">
+        <strong>What it covers</strong>
+        <span>Realistic finance use cases across treasury, close, compliance, receivables, procurement, and vendors.</span>
+      </div>
+      <div class="value-card">
+        <strong>Why setup is guided</strong>
+        <span>The overview explains the demo boundary before local services, credentials, and providers are checked.</span>
       </div>
     </div>
-    <button class="primary-cta" id="open-wizard">
-      {% if accepted %}Continue Setup{% else %}Get Started{% endif %}
-    </button>
+
+    <section class="coverage-section" aria-labelledby="coverage-title">
+      <div>
+        <div class="section-label">Operational coverage</div>
+        <h2 id="coverage-title">A broad demo, organized by business work.</h2>
+        <p class="section-copy">Select a workflow area to see the kind of finance operation the demo is built to explain and route.</p>
+      </div>
+      <div>
+        <div class="coverage-grid">
+          {% for workflow in workflows %}
+          <button class="coverage-item{% if loop.first %} active{% endif %}" type="button" data-coverage-label="{{ workflow.label | e }}" data-coverage-detail="{{ workflow.focus | e }}">
+            <strong>{{ workflow.label }}</strong>
+            <span>{{ workflow.stages | length }} guided stages</span>
+          </button>
+          {% endfor %}
+        </div>
+        {% if workflows %}
+        <div class="coverage-detail" aria-live="polite">
+          <strong id="coverage-detail-title">{{ workflows[0].label }}</strong>
+          <span id="coverage-detail-copy">{{ workflows[0].focus }}</span>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="notice-section" aria-labelledby="notice-title">
+      <div>
+        <div class="section-label">Demo environment</div>
+        <h2 id="notice-title">Review before setup.</h2>
+        <p class="section-copy">{{ company }} is a product evaluation environment. The overview explains the workspace, architecture, and simulation boundary before setup continues.</p>
+      </div>
+      <div class="notice-steps" aria-label="Entry flow">
+        <div class="notice-step">
+          <span>1</span>
+          <strong>Landing page</strong>
+        </div>
+        <div class="notice-step">
+          <span>2</span>
+          <strong>3-page overview</strong>
+        </div>
+        <div class="notice-step">
+          <span>3</span>
+          <strong>Setup</strong>
+        </div>
+      </div>
+    </section>
   </div>
 </section>
 
@@ -339,16 +698,16 @@ Lynx Capital overview page with a guided onboarding wizard.
   <div class="wizard-card">
     <header class="wizard-head">
       <div>
-        <h2 id="wizard-title">Before you configure Lynx Capital</h2>
+        <h2 id="wizard-title">Before you configure {{ company }}</h2>
         <p id="wizard-subtitle">A short orientation for first-time users.</p>
       </div>
       <span class="step-indicator" id="step-indicator">Step 1 of 3</span>
     </header>
 
     <div class="wizard-body">
-      <section class="wizard-page active" data-title="About Lynx Capital" data-subtitle="What the product is for.">
-        <h3>About Lynx Capital</h3>
-        <p class="page-intro">Lynx Capital is a finance operations workspace for demonstrating how an enterprise assistant can coordinate structured business work across teams, regions, providers, and approval boundaries. The experience focuses on practical finance operations rather than a generic chatbot.</p>
+      <section class="wizard-page active" data-title="About {{ company }}" data-subtitle="What the product is for.">
+        <h3>About {{ company }}</h3>
+        <p class="page-intro">{{ company }} is a finance operations workspace for demonstrating how an enterprise assistant can coordinate structured business work across teams, regions, providers, and approval boundaries. The experience focuses on practical finance operations rather than a generic chatbot.</p>
         <div class="capability-grid">
           <div class="capability-card">
             <strong>Problems it addresses</strong>
@@ -385,7 +744,7 @@ Lynx Capital overview page with a guided onboarding wizard.
 
       <section class="wizard-page" data-title="Architecture & Providers" data-subtitle="How requests move through the system.">
         <h3>Architecture & Providers</h3>
-        <p class="page-intro">Lynx Capital separates the user experience, orchestration layer, provider access, and audit surface. A request is interpreted as business intent first, then routed to the right agents and providers with visible state at each step.</p>
+        <p class="page-intro">{{ company }} separates the user experience, orchestration layer, provider access, and audit surface. A request is interpreted as business intent first, then routed to the right agents and providers with visible state at each step.</p>
         <div class="flow" aria-label="High-level request flow">
           <div class="flow-box">
             <strong>User request</strong>
@@ -426,7 +785,7 @@ Lynx Capital overview page with a guided onboarding wizard.
 
       <section class="wizard-page" data-title="Demo Environment Notice" data-subtitle="What is real, simulated, and expected.">
         <h3>Demo Environment Notice</h3>
-        <p class="page-intro">This environment exists to demonstrate Lynx Capital workflows and Caracal integration capabilities without touching real financial systems. Treat it as a product evaluation environment, not a production finance system.</p>
+        <p class="page-intro">This environment exists to demonstrate {{ company }} workflows and Caracal integration capabilities without touching real financial systems. Treat it as a product evaluation environment, not a production finance system.</p>
         <div class="notice-grid">
           <div class="notice-card">
             <strong>Real</strong>
@@ -476,6 +835,7 @@ Lynx Capital overview page with a guided onboarding wizard.
 <script>
   const wizard = document.getElementById('wizard');
   const openWizard = document.getElementById('open-wizard');
+  const reviewOverview = document.getElementById('review-overview');
   const closeWizard = document.getElementById('close-wizard');
   const prevStep = document.getElementById('prev-step');
   const nextStep = document.getElementById('next-step');
@@ -485,6 +845,9 @@ Lynx Capital overview page with a guided onboarding wizard.
   const wizardSubtitle = document.getElementById('wizard-subtitle');
   const ack = document.getElementById('wizard-ack');
   const pages = Array.from(document.querySelectorAll('.wizard-page'));
+  const coverageItems = Array.from(document.querySelectorAll('.coverage-item'));
+  const coverageDetailTitle = document.getElementById('coverage-detail-title');
+  const coverageDetailCopy = document.getElementById('coverage-detail-copy');
   const accepted = {{ "true" if accepted else "false" }};
   let step = 0;
 
@@ -501,8 +864,8 @@ Lynx Capital overview page with a guided onboarding wizard.
     proceedSetup.disabled = !ack.checked;
   }
 
-  function openModal() {
-    if (accepted) {
+  function openModal(forceReview = false) {
+    if (accepted && !forceReview) {
       window.location = '/setup';
       return;
     }
@@ -516,15 +879,27 @@ Lynx Capital overview page with a guided onboarding wizard.
     wizard.setAttribute('aria-hidden', 'true');
   }
 
-  openWizard.addEventListener('click', openModal);
+  openWizard.addEventListener('click', () => openModal());
+  reviewOverview.addEventListener('click', () => openModal(true));
   closeWizard.addEventListener('click', closeModal);
   prevStep.addEventListener('click', () => showStep(step - 1));
   nextStep.addEventListener('click', () => showStep(step + 1));
   ack.addEventListener('change', () => { proceedSetup.disabled = !ack.checked; });
+  coverageItems.forEach(item => {
+    item.addEventListener('click', () => {
+      coverageItems.forEach(current => current.classList.toggle('active', current === item));
+      if (coverageDetailTitle) coverageDetailTitle.textContent = item.dataset.coverageLabel;
+      if (coverageDetailCopy) coverageDetailCopy.textContent = item.dataset.coverageDetail;
+    });
+  });
   proceedSetup.addEventListener('click', async () => {
     if (!ack.checked) return;
     proceedSetup.disabled = true;
-    await fetch('/api/session/accept', {method: 'POST'});
+    const response = await fetch('/api/session/accept', {method: 'POST'});
+    if (!response.ok) {
+      proceedSetup.disabled = false;
+      return;
+    }
     window.location = '/setup';
   });
   wizard.addEventListener('click', event => {

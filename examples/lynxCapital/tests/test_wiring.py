@@ -181,3 +181,37 @@ def test_settle_vendor_fx_payment_chains_conversion_beneficiary_payment(provider
     settled = tool_fns.get_fx_settlement_status("r", "a", payment["id"])
     assert settled["data"]["status"] in ("submitted", "completed")
 
+
+
+# --------------------------------------------------------------------------- #
+# Treasury tools reach Keystone over its gRPC-style surface
+# --------------------------------------------------------------------------- #
+def test_cash_position_and_summary_reach_keystone(providerlab):
+    pos = tool_fns.get_cash_position("r", "a", "US")
+    assert _provider_of(pos) == "keystone-treasury" and pos["operation"] == "get_position"
+    assert pos["data"]["currency"] == "USD" and pos["data"]["accountCount"] >= 1
+
+    summary = tool_fns.get_treasury_summary("r", "a")
+    assert _provider_of(summary) == "keystone-treasury"
+    assert summary["data"]["reportingCurrency"] == "USD"
+    assert summary["data"]["byCurrency"]
+
+
+def test_forecast_and_exposure_reach_keystone(providerlab):
+    fc = tool_fns.forecast_liquidity("r", "a", 30, "stress")
+    assert _provider_of(fc) == "keystone-treasury" and fc["data"]["scenario"] == "stress"
+    assert fc["data"]["points"]
+
+    exp = tool_fns.get_fx_exposure("r", "a", "EUR")
+    assert _provider_of(exp) == "keystone-treasury" and exp["operation"] == "get_exposure"
+    assert "unhedgedAmount" in exp["data"]
+
+
+def test_hedge_and_transfer_reach_keystone(providerlab):
+    hedge = tool_fns.place_fx_hedge("r", "a", "EUR", "USD", 1_000_000.0, 90)
+    assert _provider_of(hedge) == "keystone-treasury" and hedge["operation"] == "place_hedge"
+    assert hedge["data"]["status"] == "booked" and hedge["data"]["instrument"] == "forward"
+
+    transfer = tool_fns.transfer_funds("r", "a", "US", "DE", 25_000.0)
+    assert _provider_of(transfer) == "keystone-treasury"
+    assert transfer["data"]["type"] == "intercompany"
