@@ -6,6 +6,7 @@ Web HTML routes: landing, setup, demo, and logs pages.
 """
 from __future__ import annotations
 
+from collections import Counter
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -26,8 +27,35 @@ def _setup_validated(request: Request) -> bool:
     return request.cookies.get(SETUP_COOKIE) == "1"
 
 
+def _overview() -> dict:
+    cfg = get_config()
+    auth = Counter(p.authType for p in cfg.providers)
+    protocols = Counter(p.protocol for p in cfg.providers)
+    categories = Counter(p.category for p in cfg.providers)
+    persistent_agents = 1 + sum(
+        l.perRegion * len(cfg.regions) for l in cfg.agentLayers if not l.ephemeral
+    )
+    ephemeral_agents = sum(
+        l.perRegion * len(cfg.regions) for l in cfg.agentLayers if l.ephemeral
+    )
+    return {
+        "provider_count": len(cfg.providers),
+        "workflow_count": len(cfg.workflows),
+        "region_count": len(cfg.regions),
+        "agent_layer_count": len(cfg.agentLayers),
+        "persistent_agents": persistent_agents,
+        "ephemeral_agents": ephemeral_agents,
+        "auth_methods": [{"name": k, "count": v} for k, v in sorted(auth.items())],
+        "protocols": [{"name": k, "count": v} for k, v in sorted(protocols.items())],
+        "categories": [{"name": k, "count": v} for k, v in sorted(categories.items())],
+        "internal_providers": [p.model_dump() for p in cfg.providers if p.authType == "none"],
+        "mandate_providers": [p.model_dump() for p in cfg.providers if p.authType == "caracal_mandate"],
+    }
+
+
 def _ctx(request: Request) -> dict:
     cfg = get_config()
+    accepted = _accepted(request)
     return {
         "company": cfg.company,
         "shortName": cfg.shortName,
@@ -37,8 +65,10 @@ def _ctx(request: Request) -> dict:
         "regions": [r.model_dump() for r in cfg.regions],
         "agentLayers": [l.model_dump() for l in cfg.agentLayers],
         "providers": [p.model_dump() for p in cfg.providers],
-        "accepted": _accepted(request),
-        "setup_validated": _setup_validated(request),
+        "workflows": [w.model_dump() for w in cfg.workflows],
+        "overview": _overview(),
+        "accepted": accepted,
+        "setup_validated": accepted and _setup_validated(request),
     }
 
 
@@ -59,22 +89,33 @@ def setup(request: Request):
     return templates.TemplateResponse(request, "setup.html", _ctx(request))
 
 
+def _require_ready(request: Request):
+    if not _accepted(request):
+        return RedirectResponse(url="/", status_code=303)
+    if not _setup_validated(request):
+        return RedirectResponse(url="/setup", status_code=303)
+    return None
+
+
 @router.get("/demo", response_class=HTMLResponse)
 def demo(request: Request):
-    if not _setup_validated(request):
-        return RedirectResponse(url="/setup" if _accepted(request) else "/", status_code=303)
+    redirect = _require_ready(request)
+    if redirect is not None:
+        return redirect
     return templates.TemplateResponse(request, "demo.html", _ctx(request))
 
 
 @router.get("/logs", response_class=HTMLResponse)
 def logs(request: Request):
-    if not _setup_validated(request):
-        return RedirectResponse(url="/setup" if _accepted(request) else "/", status_code=303)
+    redirect = _require_ready(request)
+    if redirect is not None:
+        return redirect
     return templates.TemplateResponse(request, "logs.html", _ctx(request))
 
 
 @router.get("/prompts", response_class=HTMLResponse)
 def prompts(request: Request):
-    if not _setup_validated(request):
-        return RedirectResponse(url="/setup" if _accepted(request) else "/", status_code=303)
+    redirect = _require_ready(request)
+    if redirect is not None:
+        return redirect
     return templates.TemplateResponse(request, "prompts.html", _ctx(request))

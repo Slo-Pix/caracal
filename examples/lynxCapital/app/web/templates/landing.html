@@ -1,71 +1,394 @@
+{#
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+Lynx Capital landing page for scenario context, provider coverage, and access acceptance.
+#}
 {% extends "layout.html" %}
 {% block title %}{{ company }} - Overview{% endblock %}
 {% block content %}
 <style>
-  .landing { max-width: 680px; margin: 0 auto; padding: 56px 24px 40px; }
-  .landing h1 { font-size: 22px; font-weight: 600; color: var(--primary); margin-bottom: 6px; }
-  .landing .tagline { color: var(--text); opacity: 0.65; margin-bottom: 32px; font-size: 13px; }
-  .scenario-card { background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 20px 24px; margin-bottom: 24px; }
-  .scenario-card h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary); margin-bottom: 14px; }
-  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
-  .stat { text-align: center; }
-  .stat .val { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
-  .stat .lbl { font-size: 11px; color: var(--text); opacity: 0.6; margin-top: 4px; }
-  .description { font-size: 12px; color: var(--text); opacity: 0.7; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
-  .layers { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-  .layer-badge { background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 3px 8px; font-size: 11px; color: var(--text); }
-  .layer-badge.ephemeral { border-color: var(--accent); color: var(--accent); }
-  .disclaimer-block { background: #fff; border: 1px solid var(--border); border-left: 3px solid var(--warning); border-radius: 4px; padding: 14px 16px; margin-bottom: 24px; }
-  .disclaimer-block p { font-size: 12px; color: var(--text); opacity: 0.75; line-height: 1.5; margin-bottom: 10px; }
-  .disclaimer-block label { display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; }
-  .disclaimer-block input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; }
-  .continue-btn { display: inline-block; background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 10px 28px; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none; transition: opacity 0.15s; }
-  .continue-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .landing {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 34px 24px 52px;
+  }
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+    gap: 18px;
+    align-items: stretch;
+    margin-bottom: 18px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .hero-copy h1 {
+    color: var(--primary);
+    font-size: 28px;
+    line-height: 1.05;
+    margin-bottom: 8px;
+  }
+  .tagline {
+    color: #4b5567;
+    font-size: 14px;
+    line-height: 1.6;
+    max-width: 76ch;
+    margin-bottom: 18px;
+  }
+  .scenario-text {
+    color: #4b5567;
+    line-height: 1.58;
+    font-size: 13px;
+  }
+  .section-title {
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin: 18px 0;
+  }
+  .stat {
+    border: 1px solid #e1e7f0;
+    border-radius: 6px;
+    padding: 12px;
+    background: var(--surface);
+  }
+  .stat .val {
+    color: var(--accent);
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1;
+  }
+  .stat .lbl {
+    color: #5a6478;
+    font-size: 11px;
+    margin-top: 6px;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+  }
+  .wide-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 14px;
+    margin-top: 14px;
+  }
+  .mini-list {
+    display: grid;
+    gap: 7px;
+  }
+  .mini-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid #edf1f6;
+    padding-bottom: 7px;
+    font-size: 12px;
+  }
+  .mini-row:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .mini-row strong {
+    color: var(--text);
+    font-weight: 700;
+  }
+  .mini-row span {
+    color: #5a6478;
+    text-align: right;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .chip {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 11px;
+    padding: 4px 9px;
+  }
+  .chip strong {
+    color: var(--primary);
+  }
+  .provider-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .provider-card {
+    border: 1px solid #e1e7f0;
+    border-radius: 6px;
+    padding: 10px;
+    background: #fff;
+    min-height: 92px;
+  }
+  .provider-card h3 {
+    color: var(--text);
+    font-size: 12px;
+    margin-bottom: 5px;
+  }
+  .provider-card p {
+    color: #5a6478;
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .workflow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .workflow-card {
+    border: 1px solid #e1e7f0;
+    border-radius: 6px;
+    padding: 12px;
+    background: #fff;
+  }
+  .workflow-card h3 {
+    color: var(--primary);
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .workflow-card p {
+    color: #4b5567;
+    font-size: 11.5px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+  .stage-line {
+    color: #5a6478;
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .terms {
+    border-left: 4px solid var(--warning);
+  }
+  .terms p {
+    color: #4b5567;
+    font-size: 12px;
+    line-height: 1.55;
+    margin-bottom: 12px;
+  }
+  .terms label {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .terms input {
+    margin-top: 1px;
+  }
+  .continue-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .continue-btn {
+    background: var(--accent);
+    color: #fff;
+    border: 0;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 10px 22px;
+  }
+  .continue-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
+  }
+  .guard-note {
+    color: #5a6478;
+    font-size: 11px;
+  }
+  .routes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .route-card {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    color: #5a6478;
+    padding: 10px;
+    font-size: 11px;
+  }
+  .route-card strong {
+    color: var(--primary);
+    display: block;
+    margin-bottom: 4px;
+  }
+  @media (max-width: 980px) {
+    .hero, .wide-grid { grid-template-columns: 1fr; }
+    .provider-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .workflow-grid, .routes { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 680px) {
+    .stats, .detail-grid, .provider-grid { grid-template-columns: 1fr; }
+  }
 </style>
 
 <div class="landing">
-  <h1>{{ company }}</h1>
-  <p class="tagline">{{ content.tagline }}</p>
+  <section class="hero">
+    <div class="panel hero-copy">
+      <div class="section-title">Production-style finance AI lab</div>
+      <h1>{{ company }}</h1>
+      <p class="tagline">{{ content.tagline }} This workspace models a multi-region finance operations company with provider-backed workflows, real network boundaries, human approval gates, durable memory, and live runtime observability.</p>
+      <p class="scenario-text">{{ scenario.description }}</p>
 
-  <div class="scenario-card">
-    <h2>{{ content.scenarioTitle }}</h2>
-    <div class="stats">
-      <div class="stat">
-        <div class="val">{{ "{:,}".format(scenario.invoices) }}</div>
-        <div class="lbl">Invoices</div>
+      <div class="stats">
+        <div class="stat">
+          <div class="val">{{ "{:,}".format(scenario.invoices) }}</div>
+          <div class="lbl">Invoices in weekly payout scenario</div>
+        </div>
+        <div class="stat">
+          <div class="val">${{ "%.1fM" | format(scenario.totalUsd / 1000000) }}</div>
+          <div class="lbl">USD-equivalent payment value</div>
+        </div>
+        <div class="stat">
+          <div class="val">{{ overview.region_count }}</div>
+          <div class="lbl">Operating regions</div>
+        </div>
+        <div class="stat">
+          <div class="val">~{{ "{:,}".format(scenario.peakAgents) }}</div>
+          <div class="lbl">Peak worker agents</div>
+        </div>
       </div>
-      <div class="stat">
-        <div class="val">${{ "%.1fM" | format(scenario.totalUsd / 1000000) }}</div>
-        <div class="lbl">Total value</div>
-      </div>
-      <div class="stat">
-        <div class="val">{{ scenario.regions }}</div>
-        <div class="lbl">Regions</div>
-      </div>
-      <div class="stat">
-        <div class="val">~{{ "{:,}".format(scenario.peakAgents) }}</div>
-        <div class="lbl">Peak agents</div>
+
+      <div class="chips">
+        <span class="chip"><strong>{{ overview.provider_count }}</strong> providers</span>
+        <span class="chip"><strong>{{ overview.workflow_count }}</strong> workflows</span>
+        <span class="chip"><strong>{{ overview.agent_layer_count }}</strong> agent layers</span>
+        <span class="chip"><strong>{{ overview.persistent_agents }}</strong> standing agents</span>
+        <span class="chip"><strong>{{ overview.ephemeral_agents }}</strong> ephemeral per-cycle workers</span>
       </div>
     </div>
-    <div class="layers">
-      {% for l in agentLayers %}
-      <span class="layer-badge {% if l.ephemeral %}ephemeral{% endif %}">{{ l.label }}</span>
+
+    <div class="panel terms">
+      <div class="section-title">Access gate</div>
+      <p>{{ content.disclaimer }}</p>
+      <p>Accepting the terms unlocks Setup. Demo, Prompts, and Logs remain blocked until setup validation is completed from the Setup page.</p>
+      <label>
+        <input type="checkbox" id="ack" {% if accepted %}checked{% endif %}>
+        <span>I understand this is a local simulation environment using provider fixtures, generated credentials, and AI-driven operational workflows. I will not treat outputs as real payment, tax, legal, or compliance decisions.</span>
+      </label>
+      <div class="continue-row">
+        <button class="continue-btn" id="continue-btn" {% if not accepted %}disabled{% endif %}>Continue to setup</button>
+        <span class="guard-note">Protected paths: /setup, /demo, /prompts, /logs.</span>
+      </div>
+      <div class="routes">
+        <div class="route-card"><strong>Setup</strong>Environment, OpenAI key, provider network, webhook secrets, and Caracal control-plane checks when enabled.</div>
+        <div class="route-card"><strong>Demo</strong>Chat workspace with live agent execution, graph topology, memory pressure, and runtime activity.</div>
+        <div class="route-card"><strong>Prompts</strong>Curated single-region, multi-region, full-pipeline, and workflow prompts.</div>
+        <div class="route-card"><strong>Logs</strong>Structured stream of system, agent, tool, service, audit, delegation, and chat events.</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="wide-grid">
+    <div class="panel">
+      <div class="section-title">Regions and operating currencies</div>
+      <div class="mini-list">
+        {% for region in regions %}
+        <div class="mini-row">
+          <strong>{{ region.id }} · {{ region.name }}</strong>
+          <span>{{ region.currency }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">Agent architecture</div>
+      <div class="mini-list">
+        {% for layer in agentLayers %}
+        <div class="mini-row">
+          <strong>{{ layer.label }}</strong>
+          <span>{% if layer.ephemeral %}ephemeral{% else %}standing{% endif %}; {{ layer.perRegion }} per region</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-grid">
+    <div class="panel">
+      <div class="section-title">Authentication coverage</div>
+      <div class="chips">
+        {% for item in overview.auth_methods %}
+        <span class="chip"><strong>{{ item.count }}</strong> {{ item.name.replace("_", " ") }}</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="section-title">Protocol coverage</div>
+      <div class="chips">
+        {% for item in overview.protocols %}
+        <span class="chip"><strong>{{ item.count }}</strong> {{ item.name.upper() }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:14px">
+    <div class="section-title">Provider ecosystem</div>
+    <div class="chips">
+      {% for item in overview.categories %}
+      <span class="chip"><strong>{{ item.count }}</strong> {{ item.name.replace("_", " ") }}</span>
       {% endfor %}
     </div>
-    <div class="description">{{ scenario.description }}</div>
-  </div>
+    <div class="provider-grid">
+      {% for provider in providers %}
+      <div class="provider-card">
+        <h3>{{ provider.name }}</h3>
+        <p>{{ provider.industry }} · {{ provider.protocol.upper() }}</p>
+        <p>{{ provider.authType.replace("_", " ") }} · {{ provider.category.replace("_", " ") }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
 
-  <div class="disclaimer-block">
-    <p>{{ content.disclaimer }}</p>
-    <label>
-      <input type="checkbox" id="ack">
-      I understand this is a simulation environment.
-    </label>
-  </div>
-
-  <button class="continue-btn" id="continue-btn" disabled>
-    Continue to setup
-  </button>
+  <section class="panel" style="margin-top:14px">
+    <div class="section-title">Workflow coverage</div>
+    <div class="workflow-grid">
+      {% for workflow in workflows %}
+      <div class="workflow-card">
+        <h3>{{ workflow.label }}</h3>
+        <p>{{ workflow.focus }}</p>
+        <div class="stage-line">
+          {% for stage in workflow.stages %}
+          {{ stage.label }}{% if not loop.last %} → {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
 </div>
 
 <script>
@@ -73,6 +396,7 @@
   const btn = document.getElementById('continue-btn');
   ack.addEventListener('change', () => { btn.disabled = !ack.checked; });
   btn.addEventListener('click', async () => {
+    if (!ack.checked) return;
     btn.disabled = true;
     await fetch('/api/session/accept', {method: 'POST'});
     window.location = '/setup';

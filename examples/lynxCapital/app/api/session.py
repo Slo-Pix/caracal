@@ -6,7 +6,7 @@ Session endpoints: two-state gate (landing accepted, setup validated).
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 
 router = APIRouter()
 
@@ -21,7 +21,10 @@ def accept(response: Response) -> dict:
 
 
 @router.post("/setup-complete")
-def setup_complete(response: Response) -> dict:
+def setup_complete(request: Request, response: Response) -> dict:
+    if request.cookies.get(COOKIE) != "1":
+        response.delete_cookie(SETUP_COOKIE)
+        raise HTTPException(status_code=403, detail="Accept terms before completing setup.")
     response.set_cookie(SETUP_COOKIE, "1", max_age=86400, httponly=False, samesite="lax")
     return {"setup": True}
 
