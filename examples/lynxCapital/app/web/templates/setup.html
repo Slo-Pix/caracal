@@ -246,12 +246,12 @@ Lynx Capital guided setup page for Caracal configuration, providers, and launch.
     <div class="automation-body">
       <div class="automation-path">
         <article>
-          <h3>1. Select the Lynx zone</h3>
-          <p>Use the zone you created in Caracal Console. The script provisions objects inside that zone only.</p>
+          <h3>1. Create the control key</h3>
+          <p>Create the key inside the Lynx zone in Caracal Console. The key is already bound to that zone.</p>
         </article>
         <article>
-          <h3>2. Create one control key</h3>
-          <p>Create a scoped key in the Control menu and copy the one-time client id and secret.</p>
+          <h3>2. Copy the credentials</h3>
+          <p>Copy the one-time client id and secret from the Control menu. No zone value is required.</p>
         </article>
         <article>
           <h3>3. Run provision</h3>
@@ -267,8 +267,7 @@ Lynx Capital guided setup page for Caracal configuration, providers, and launch.
       <div class="automation-terminal">
         <div class="command-block">
           <h3>Export once</h3>
-        <pre class="script">export CARACAL_ZONE_ID="<placeholder-zone-id>"
-export CONTROL_CLIENT_ID="<placeholder-control-client-id>"
+        <pre class="script">export CONTROL_CLIENT_ID="<placeholder-control-client-id>"
 export CONTROL_CLIENT_SECRET="<placeholder-control-client-secret>"</pre>
           <p class="automation-note">Replace every placeholder with the value issued by Caracal Console.</p>
         </div>

@@ -23,8 +23,9 @@ Automation does not get the root admin token. It gets a **scoped control key**:
 This keeps least-privilege automation the easy path rather than the exception.
 
 A control key operates **inside its bound zone**. Creating zones stays a Console
-operation because a zone is the tenancy boundary the key is scoped to; the script
-provisions the resource, provider, and policy within an existing zone.
+operation because a zone is the tenancy boundary the key is scoped to. The STS
+resolves that zone from the authenticated key, so the script only needs the
+control client id and client secret.
 
 ## One-time setup in Console
 
@@ -36,13 +37,13 @@ provisions the resource, provider, and policy within an existing zone.
 2. In the Control menu, create a control key. Grant only the scopes this script
    needs (provider, resource, and policy read/write/delete). Console returns a
    one-time `client_id` and `client_secret`.
-3. Note the zone id and the control audience the deployment uses.
+3. Note the control audience only if your deployment overrides the default.
 
 ## Run the bootstrap
 
 ```bash
 cp env.example .env
-$EDITOR .env        # fill in CONTROL_CLIENT_ID, CONTROL_CLIENT_SECRET, zone, URLs
+$EDITOR .env        # fill in CONTROL_CLIENT_ID, CONTROL_CLIENT_SECRET, URLs
 . .env
 npm run bootstrap   # creates the PiperNet provider, resource, and policy
 npm run teardown    # removes them again

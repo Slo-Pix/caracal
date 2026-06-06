@@ -14,7 +14,6 @@ const BASE_CONFIG = {
   stsUrl: 'http://sts.example',
   controlUrl: 'http://control.example',
   audience: 'caracal-control',
-  zoneId: 'zone_pied_piper_production',
   clientId: 'app_pipernet_bootstrap',
   clientSecret: 'secret-value',
   scopes: ['control:resource:write', 'control:policy:write'],
@@ -49,7 +48,7 @@ describe('control client token exchange', () => {
     assert.equal(form.get('grant_type'), 'client_credentials')
     assert.equal(form.get('application_id'), 'app_pipernet_bootstrap')
     assert.equal(form.get('client_secret'), 'secret-value')
-    assert.equal(form.get('zone_id'), 'zone_pied_piper_production')
+    assert.equal(form.has('zone_id'), false)
     assert.equal(form.get('resource'), 'caracal-control')
     assert.equal(form.get('scope'), 'control:resource:write control:policy:write')
   })
