@@ -117,26 +117,33 @@ def test_setup_page_is_guided_and_provider_backed():
         response = client.get("/setup")
     assert response.status_code == 200
     body = response.text
-    assert "Configure the workspace, connect providers, validate readiness." in body
+    assert "Connect Caracal, validate gateway routing, open the workspace." in body
     assert "setup-shell" in body
     assert "setup-strip" in body
-    assert "Environment preparation" in body
-    assert "Operational setup checklist" in body
+    assert "Caracal configuration" in body
+    assert "Caracal setup checklist" in body
     assert "Readiness validation" in body
     assert "Run Validation" in body
     assert "Launch Demo" in body
     assert "Open Workspace" in body
     assert "Start First Workflow" in body
-    assert "Provider credentials" in body
+    assert "Caracal resource bindings" in body
+    assert "Caracal owns provider access" in body
+    assert "CARACAL_ZONE_ID=zone_lynxcapital" in body
+    assert "CARACAL_APP_CLIENT_SECRET=&lt;application-secret&gt;" in body
+    assert "CARACAL_STS_URL=http://localhost:8080" in body
+    assert "CARACAL_RESOURCES=meridian-pay=http://127.0.0.1:9401,halcyon-bank=http://127.0.0.1:9400" in body
     assert "Halcyon Bank" in body
     assert "Quetzal Payouts" in body
     assert "Junction Procurement" in body
-    assert "/__lab/credentials" in body
-    assert "/__lab/clients" in body
-    assert "/__lab/resources" in body
-    assert "python -m _mock.providerlab.seedenv" in body
-    assert "docker compose -f _mock/docker-compose.yml up -d --build --wait" in body
-    assert "uv run uvicorn app.main:app --reload --port 8000" in body
+    assert "/__lab/credentials" not in body
+    assert "/__lab/clients" not in body
+    assert "/__lab/resources" not in body
+    assert "python -m _mock.providerlab.seedenv" not in body
+    assert "docker compose -f _mock/docker-compose.yml up -d --build --wait" not in body
+    assert "uv run uvicorn app.main:app --reload --port 8000" not in body
+    assert "Start provider network" not in body
+    assert "Launch Lynx Capital" not in body
     assert ".panel {" not in body
     assert "Validate configuration" not in body
     assert "gradient(" not in body

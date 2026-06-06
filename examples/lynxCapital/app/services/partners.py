@@ -183,7 +183,12 @@ _SPECS: dict[str, PartnerSpec] = {
         auth_header="Authorization", auth_scheme="Bearer"),
     "vela-notify": PartnerSpec(
         "vela-notify", "bearer", 9415,
-        ("send_message", "get_message", "list_templates"),
+        ("send_message", "send_batch", "get_message", "list_messages",
+         "get_message_events",
+         "list_templates", "get_template", "create_template", "render_template",
+         "list_suppressions", "create_suppression", "delete_suppression",
+         "list_webhooks", "get_webhook", "create_webhook",
+         "get_delivery_stats"),
         auth_header="X-Vela-Token", auth_scheme="Token"),
     "core-billing": PartnerSpec(
         "core-billing", "none", 9416,

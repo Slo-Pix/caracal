@@ -2,25 +2,19 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Setup validation endpoint for environment, provider, webhook, and runtime readiness.
+Setup validation endpoint for Caracal SDK and gateway readiness.
 """
 from __future__ import annotations
 
-import asyncio
 import os
-import shutil
-import sys
 
 import httpx
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.services import partners
-from app.services.setup_catalog import base_url, credential_vars
+from app.services import partners, setup_catalog
 
 router = APIRouter()
-
-_PROVIDER_HEALTH_DEFAULT = "http://127.0.0.1:9400/healthz"
 
 
 def _step(step_id: str, label: str, status: str, detail: str) -> dict:
@@ -40,92 +34,70 @@ async def _ping(url: str) -> tuple[bool, str]:
 async def validate_setup():
     steps: list[dict] = []
 
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    caracal_identity = bool(os.environ.get("CARACAL_ZONE_ID") and os.environ.get("CARACAL_APPLICATION_ID"))
     steps.append(_step(
-        "openai_key",
-        "OpenAI configuration",
-        "passed" if api_key else "failed",
-        "OPENAI_API_KEY is set." if api_key else "Missing OPENAI_API_KEY; add it to .env or your shell.",
+        "caracal_identity",
+        "Caracal identity",
+        "passed" if caracal_identity else "failed",
+        "CARACAL_ZONE_ID and CARACAL_APPLICATION_ID are set." if caracal_identity else "Missing CARACAL_ZONE_ID or CARACAL_APPLICATION_ID.",
     ))
 
+    caracal_auth = bool(os.environ.get("CARACAL_APP_CLIENT_SECRET") or os.environ.get("CARACAL_SUBJECT_TOKEN"))
     steps.append(_step(
-        "python_runtime",
-        "Python runtime",
-        "passed" if sys.version_info >= (3, 12) else "failed",
-        f"Running Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}.",
+        "caracal_auth",
+        "Application credential",
+        "passed" if caracal_auth else "failed",
+        "Application auth is configured." if caracal_auth else "Set CARACAL_APP_CLIENT_SECRET or CARACAL_SUBJECT_TOKEN.",
     ))
 
-    docker_path = shutil.which("docker")
+    resources = setup_catalog.resource_bindings()
+    external_provider_ids = [spec.id for spec in partners.catalog().values() if spec.auth != "none"]
+    unmapped = [provider_id for provider_id in external_provider_ids if provider_id not in resources]
+    resource_status = "passed" if resources and not unmapped else "warning" if resources else "failed"
     steps.append(_step(
-        "docker",
-        "Docker CLI",
-        "passed" if docker_path else "warning",
-        f"Docker CLI found at {docker_path}." if docker_path else "Docker CLI not found in PATH; provider startup commands require Docker.",
+        "caracal_resources",
+        "Resource bindings",
+        resource_status,
+        f"{len(resources)} resource bindings configured." if resources and not unmapped else (
+            f"{len(resources)} resource bindings configured; {len(unmapped)} provider ids are not mapped."
+            if resources else "Set CARACAL_RESOURCES with provider resource ids and upstream URLs."
+        ),
     ))
 
-    provider_health = os.environ.get("LYNX_PROVIDER_HEALTH_URL", _PROVIDER_HEALTH_DEFAULT)
-    ok, detail = await _ping(provider_health)
-    specs = partners.catalog()
-    health_results = await asyncio.gather(*(
-        _ping(f"{base_url(spec)}/healthz")
-        for spec in specs.values()
-    ))
-    reachable = sum(1 for provider_ok, _ in health_results if provider_ok)
-    provider_status = "passed" if ok and reachable == len(health_results) else "failed"
+    caracal_ok = True
+    details: list[str] = []
+    for sid, label, default in (
+        ("CARACAL_STS_URL", "Caracal STS", "http://localhost:8080"),
+        ("CARACAL_COORDINATOR_URL", "Caracal Coordinator", "http://localhost:4000"),
+        ("CARACAL_GATEWAY_URL", "Caracal Gateway", "http://localhost:8081"),
+    ):
+        base = os.environ.get(sid, default).rstrip("/")
+        ok, detail = await _ping(f"{base}/healthz")
+        caracal_ok = caracal_ok and ok
+        details.append(f"{label}: {detail}")
     steps.append(_step(
-        "provider_network",
-        "Provider network",
-        provider_status,
-        f"{reachable}/{len(health_results)} providers reachable. Primary probe: {detail}",
-    ))
-
-    missing_provider_vars = [
-        name
-        for spec in specs.values()
-        for name in credential_vars(spec)
-        if not os.environ.get(name)
-    ]
-    steps.append(_step(
-        "provider_credentials",
-        "Provider credentials",
-        "passed" if not missing_provider_vars else "failed",
-        "All provider credential variables are set." if not missing_provider_vars else f"Missing: {', '.join(missing_provider_vars[:8])}{'...' if len(missing_provider_vars) > 8 else ''}",
-    ))
-
-    from app.api.hooks import required_secret_envs
-    missing_secrets = [k for k in required_secret_envs() if not os.environ.get(k)]
-    steps.append(_step(
-        "webhook_secrets",
-        "Webhook signing secrets",
-        "passed" if not missing_secrets else "failed",
-        "All provider hook secrets present." if not missing_secrets else f"Missing: {', '.join(missing_secrets)}",
+        "caracal_runtime",
+        "Caracal runtime",
+        "passed" if caracal_ok else "failed",
+        "; ".join(details),
     ))
 
     from app import caracal
-    if caracal.enabled():
-        caracal_ok = True
-        details: list[str] = []
-        for sid, label, default in (
-            ("CARACAL_STS_URL", "Caracal STS reachable", "http://localhost:8080"),
-            ("CARACAL_COORDINATOR_URL", "Caracal Coordinator reachable", "http://localhost:4000"),
-            ("CARACAL_GATEWAY_URL", "Caracal Gateway reachable", "http://localhost:8081"),
-        ):
-            base = os.environ.get(sid, default).rstrip("/")
-            ok, detail = await _ping(f"{base}/healthz")
-            caracal_ok = caracal_ok and ok
-            details.append(f"{label}: {detail}")
+    try:
+        runtime = caracal.runtime()
+        sdk_ok = runtime is not None
         steps.append(_step(
-            "caracal_runtime",
-            "Caracal runtime",
-            "passed" if caracal_ok else "failed",
-            "; ".join(details),
+            "caracal_sdk",
+            "Caracal SDK client",
+            "passed" if sdk_ok else "failed",
+            "SDK client is configured from CARACAL_* environment." if sdk_ok else "SDK client is not configured.",
         ))
-    else:
+    except Exception as exc:
         steps.append(_step(
-            "caracal_runtime",
-            "Caracal runtime",
-            "warning",
-            "CARACAL_ZONE_ID and CARACAL_APPLICATION_ID are not set; direct local provider mode will be used.",
+            "caracal_sdk",
+            "Caracal SDK client",
+            "failed",
+            f"SDK client failed to initialize: {exc.__class__.__name__}",
         ))
 
     overall = not any(s["status"] == "failed" for s in steps)
