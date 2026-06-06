@@ -148,8 +148,8 @@ def _overview_pages() -> dict[str, dict]:
                     "and generated outcomes require human review."
                 ),
                 (
-                    "Setup is Caracal-side only: create a zone, application, and "
-                    "policy, then map each provider to a resource."
+                    "Setup is Caracal-side only: fill the zone, application, and "
+                    "policy fields, then map each provider to a resource."
                 ),
             ],
             "items": [
@@ -227,29 +227,30 @@ def _env(name: str) -> str:
 
 
 def _caracal_steps() -> list[dict[str, str]]:
+    cfg = get_config()
     zone = _env("CARACAL_ZONE_ID") or "<placeholder-zone-id>"
     application = _env("CARACAL_APPLICATION_ID") or "<placeholder-application-id>"
     return [
         {
             "step": "01",
-            "title": "Create the zone",
-            "console": "In Caracal Console, create a zone for this workspace. The zone is the tenancy boundary every application, provider, and policy lives in.",
-            "why": "Lynx runs as one application inside a single Caracal zone.",
+            "title": "Enter the zone fields",
+            "console": f"Zone name field: {cfg.company}. Zone ID field: {zone}. Replace the placeholder with the zone id generated or approved in Caracal Console.",
+            "why": "The zone is the boundary that owns the Lynx application, policy, and provider resources.",
             "field": "CARACAL_ZONE_ID",
             "value": zone,
         },
         {
             "step": "02",
-            "title": "Register the application",
-            "console": "Add a Caracal application inside the zone and issue its client secret. This is the identity the Lynx SDK presents for delegated work.",
-            "why": "The application authenticates Lynx to STS and the gateway without exposing provider secrets.",
+            "title": "Enter the application fields",
+            "console": f"Application name field: {cfg.company}. Application ID field: {application}. Issue a client secret for this application.",
+            "why": "The application id and secret are the identity Lynx uses for STS exchange and gateway access.",
             "field": "CARACAL_APPLICATION_ID",
             "value": application,
         },
         {
             "step": "03",
-            "title": "Publish the access policy",
-            "console": "Create a policy in the zone that allows the Lynx application to read and act on the resources it routes to. Activate the policy set.",
+            "title": "Enter the policy fields",
+            "console": "Policy name field: Lynx Capital baseline. Policy target: the Lynx application and provider resources. Activate the policy set after saving.",
             "why": "The gateway evaluates this policy on every provider call Lynx makes.",
             "field": "CARACAL_APP_CLIENT_SECRET",
             "value": "<placeholder-application-secret>",

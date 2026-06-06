@@ -145,9 +145,12 @@ def test_setup_page_is_guided_and_provider_backed():
     assert "python scripts/teardown.py" in body
     # Caracal configuration: zone, application, policy
     assert "Caracal configuration" in body
-    assert "Create the zone" in body
-    assert "Register the application" in body
-    assert "Publish the access policy" in body
+    assert "Enter the zone fields" in body
+    assert "Zone name field: Lynx Capital" in body
+    assert "Enter the application fields" in body
+    assert "Application name field: Lynx Capital" in body
+    assert "Enter the policy fields" in body
+    assert "Policy name field: Lynx Capital baseline" in body
     assert "CARACAL_ZONE_ID=&lt;placeholder-zone-id&gt;" in body
     assert "CARACAL_APPLICATION_ID=&lt;placeholder-application-id&gt;" in body
     assert "CARACAL_APP_CLIENT_SECRET=&lt;placeholder-application-secret&gt;" in body
