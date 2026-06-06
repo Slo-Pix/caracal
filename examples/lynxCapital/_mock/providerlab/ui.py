@@ -68,13 +68,13 @@ def _config_rows(provider: catalog.Provider) -> list[tuple[str, str]]:
             rows.append(("Proto package", descriptor["package"]))
             rows.append(("Server reflection", "enabled"))
     c = provider.category
-    if c in ("api_key", "sdk"):
+    if catalog.apikey_auth(provider):
         if provider.protocol == "grpc":
             where = "call metadata"
         else:
             where = "query parameter" if provider.apikey_location == "query" else "request header"
         rows.append(("API key parameter", f"{provider.apikey_field} ({where})"))
-    if c == "bearer_token" or (c == "mcp" and provider.mcp_auth == "bearer"):
+    if catalog.bearer_auth(provider) or (c == "mcp" and provider.mcp_auth == "bearer"):
         rows.append(("Token header", f"{provider.auth_header}: {provider.auth_scheme} <token>"))
     if c in ("oauth2_client_credentials", "oauth2_authorization_code"):
         rows.append(("Token endpoint", f"{base_url}/oauth/token"))
@@ -282,13 +282,16 @@ def _credential_counts(store) -> tuple[int, int]:
 
 def _auth_summary(provider: catalog.Provider) -> str:
     c = provider.category
-    if c in ("api_key", "sdk"):
+    if c == "sdk" and catalog.bearer_auth(provider):
+        return (f"Initialize the {_esc(provider.sdk_package)} SDK with your secret key; "
+                f"the SDK sends it as <code>{_esc(provider.auth_header)}: {_esc(provider.auth_scheme)} &lt;secret&gt;</code>.")
+    if catalog.apikey_auth(provider):
         if provider.protocol == "grpc":
             return (f"Attach the API key as the <code>{_esc(provider.apikey_field)}</code> "
                     "gRPC call metadata on every RPC.")
         loc = "query parameter" if provider.apikey_location == "query" else "header"
         return f"Send the API key in the <code>{_esc(provider.apikey_field)}</code> {loc}."
-    if c == "bearer_token":
+    if catalog.bearer_auth(provider):
         return f"Send the static token as <code>{_esc(provider.auth_header)}: {_esc(provider.auth_scheme)} &lt;token&gt;</code>."
     if c == "oauth2_client_credentials":
         return (f"Exchange client credentials at <code>POST /oauth/token</code> "
@@ -326,7 +329,7 @@ def credentials_page(provider: catalog.Provider) -> str:
     cat = provider.category
     sections: list[str] = []
 
-    if cat in ("api_key", "sdk"):
+    if catalog.apikey_auth(provider):
         rows = [
             f"<tr><td><code>{_esc(r['keyId'])}</code></td><td>{_secret(r['apiKey'])}</td>"
             f"<td>{_esc(r['label'])}</td><td>{_ts(r.get('createdAt'))}</td>"
@@ -339,7 +342,8 @@ def credentials_page(provider: catalog.Provider) -> str:
         sections.append(_create_form("apiKey", "Create API key"))
         sections.append(_validate_widget("apiKey", "Test an API key"))
 
-    if cat == "bearer_token" or (cat == "mcp" and provider.mcp_auth == "bearer"):
+    if catalog.bearer_auth(provider) or (cat == "mcp" and provider.mcp_auth == "bearer"):
+        label_noun = "Secret keys" if cat == "sdk" else "Bearer tokens"
         rows = [
             f"<tr><td><code>{_esc(r['tokenId'])}</code></td><td>{_secret(r['accessToken'])}</td>"
             f"<td>{_esc(r['label'])}</td><td>{_ts(r.get('createdAt'))}</td>"
@@ -348,9 +352,9 @@ def credentials_page(provider: catalog.Provider) -> str:
             for r in store.data["bearerTokens"]
         ]
         sections.append(_cred_table(
-            "Bearer tokens", ["tokenId", "accessToken", "label", "created", "usage", "status", ""], rows))
-        sections.append(_create_form("bearer", "Issue bearer token"))
-        sections.append(_validate_widget("bearer", "Test a bearer token"))
+            label_noun, ["tokenId", "accessToken", "label", "created", "usage", "status", ""], rows))
+        sections.append(_create_form("bearer", "Issue secret key" if cat == "sdk" else "Issue bearer token"))
+        sections.append(_validate_widget("bearer", "Test a secret key" if cat == "sdk" else "Test a bearer token"))
 
     if cat in ("oauth2_client_credentials", "oauth2_authorization_code"):
         rows = [
