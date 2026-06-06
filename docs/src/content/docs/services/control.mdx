@@ -77,8 +77,9 @@ receives the root admin token; it uses a scoped control key.
    ```
 
 STS resolves the bound zone from the authenticated control key; standard
-bootstrap workflows must not ask users to provide a separate zone id. Each token
-is short-lived, replay-protected, rate-limited, and audited, so
+bootstrap workflows must not ask users to provide a separate zone id. Supplying
+`zone_id` on a Control key token exchange remains accepted for compatibility but
+is deprecated. Each token is short-lived, replay-protected, rate-limited, and audited, so
 least-privilege automation stays the easy path. The `controlBootstrap` example
 ships a reusable client plus idempotent bootstrap and teardown scripts that
 provision a demo provider, resource, and policy through this flow.
