@@ -473,9 +473,11 @@ def close_period(run_id: str, agent_id: str, period: str) -> dict[str, object]:
 
 # -- compliance / regulatory tools --
 
-def aml_monitor_transaction(run_id: str, agent_id: str, vendor_id: str, amount: float, currency: str) -> dict[str, object]:
+def aml_monitor_transaction(run_id: str, agent_id: str, vendor_id: str, amount: float,
+                            currency: str, channel: str = "wire") -> dict[str, object]:
     return _run(run_id, agent_id, "aml_monitor_transaction", "verafin-monitor", "monitor_transaction",
-                {"transactionId": vendor_id, "amount": amount, "currency": currency})
+                {"transactionId": vendor_id, "customerId": vendor_id, "amount": amount,
+                 "currency": currency, "channel": channel})
 
 
 def sanctions_screen_batch(run_id: str, agent_id: str, batch_id: str) -> dict[str, object]:
@@ -483,14 +485,20 @@ def sanctions_screen_batch(run_id: str, agent_id: str, batch_id: str) -> dict[st
                 {"batchId": batch_id})
 
 
-def prepare_regulatory_filing(run_id: str, agent_id: str, filing_type: str, period: str) -> dict[str, object]:
+def prepare_regulatory_filing(run_id: str, agent_id: str, filing_type: str, alert_id: str) -> dict[str, object]:
     return _run(run_id, agent_id, "prepare_regulatory_filing", "verafin-monitor", "prepare_filing",
-                {"alertId": period, "filingType": filing_type})
+                {"alertId": alert_id, "filingType": filing_type})
 
 
-def attest_control(run_id: str, agent_id: str, control_id: str) -> dict[str, object]:
+def submit_regulatory_filing(run_id: str, agent_id: str, filing_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "submit_regulatory_filing", "verafin-monitor", "submit_filing",
+                {"filingId": filing_id})
+
+
+def attest_control(run_id: str, agent_id: str, control_id: str,
+                   effectiveness: str = "effective") -> dict[str, object]:
     return _run(run_id, agent_id, "attest_control", "verafin-monitor", "attest_control",
-                {"controlId": control_id, "attestor": agent_id})
+                {"controlId": control_id, "attestor": agent_id, "effectiveness": effectiveness})
 
 
 # -- receivables tools --
@@ -556,7 +564,28 @@ def resolve_user(run_id: str, agent_id: str, user_id: str) -> dict[str, object]:
 
 
 def list_approver_groups(run_id: str, agent_id: str) -> dict[str, object]:
-    return _run(run_id, agent_id, "list_approver_groups", "lumen-identity", "list_groups", {})
+    return _run(run_id, agent_id, "list_approver_groups", "lumen-identity", "list_groups",
+                {"type": "access"})
+
+
+def resolve_approver_chain(run_id: str, agent_id: str, user_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "resolve_approver_chain", "lumen-identity", "get_manager_chain",
+                {"userId": user_id})
+
+
+def check_user_access(run_id: str, agent_id: str, user_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "check_user_access", "lumen-identity", "get_user_access",
+                {"userId": user_id})
+
+
+def list_team_members(run_id: str, agent_id: str, team_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "list_team_members", "lumen-identity", "list_users",
+                {"teamId": team_id})
+
+
+def get_service_identity(run_id: str, agent_id: str, service_account_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_service_identity", "lumen-identity", "get_service_account",
+                {"serviceAccountId": service_account_id})
 
 
 # -- market data tools (pulse-market) --
@@ -639,6 +668,7 @@ TOOLS: dict[str, Callable] = {
     "aml_monitor_transaction": aml_monitor_transaction,
     "sanctions_screen_batch": sanctions_screen_batch,
     "prepare_regulatory_filing": prepare_regulatory_filing,
+    "submit_regulatory_filing": submit_regulatory_filing,
     "attest_control": attest_control,
     "issue_customer_invoice": issue_customer_invoice,
     "send_dunning_notice": send_dunning_notice,
@@ -652,6 +682,10 @@ TOOLS: dict[str, Callable] = {
     "log_supplier_activity": log_supplier_activity,
     "resolve_user": resolve_user,
     "list_approver_groups": list_approver_groups,
+    "resolve_approver_chain": resolve_approver_chain,
+    "check_user_access": check_user_access,
+    "list_team_members": list_team_members,
+    "get_service_identity": get_service_identity,
     "get_market_snapshot": get_market_snapshot,
     "partner_operation": partner_operation,
 }
