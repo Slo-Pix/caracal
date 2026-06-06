@@ -40,6 +40,17 @@ await caracal.spawn(async () => {
 
 `spawn()` creates an agent session, binds the Caracal context while the callback runs, and terminates non-service sessions when the callback exits.
 
+To make agents distinguishable in policy and audit, pass `kind` and `capabilities`. These become `input.principal.agent_kind` and `input.principal.capabilities`, so several agents under one application stay separable without one application per agent.
+
+```ts
+await caracal.spawn(async () => {
+  const headers = await caracal.headersAsync();
+  await fetch("https://api.example.com/tickets", { headers });
+}, { kind: "instance", capabilities: ["refunds.execute"] });
+```
+
+See [If many agents share one managed application, can policy and audit still tell them apart?](/reference/faq/#faq-distinguish-agents-under-one-application).
+
 ## Delegate to a child agent
 
 ```ts

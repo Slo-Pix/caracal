@@ -521,7 +521,7 @@ describe("agent lifecycle and delegation", () => {
         expect(c.current()?.delegationEdgeId).toBe("edge-1");
         expect(c.current()?.hop).toBe(1);
       });
-    }, { metadata: { purpose: "test" } });
+    }, { metadata: { purpose: "test" }, capabilities: ["refunds.execute", "ledger.read"] });
 
     expect(events).toEqual(["start:agent-1", "end:agent-1"]);
     expect(calls.map((call) => [call.init.method, call.url])).toEqual([
@@ -534,6 +534,7 @@ describe("agent lifecycle and delegation", () => {
       kind: AgentKind.Ephemeral,
       ttl_seconds: 60,
       metadata: { purpose: "test" },
+      capabilities: ["refunds.execute", "ledger.read"],
     });
     expect(JSON.parse(String(calls[1].init.body))).toMatchObject({
       source_session_id: "agent-1",

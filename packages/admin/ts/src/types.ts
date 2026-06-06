@@ -444,6 +444,8 @@ export interface AgentSession {
   application_id: string
   parent_id: string | null
   subject_session_id: string
+  kind: string
+  capabilities: string[]
   status: string
   depth: number
   spawned_at: string
