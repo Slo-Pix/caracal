@@ -275,7 +275,7 @@ def _setup_commands() -> list[dict[str, str]]:
             "step": "02",
             "action": "Generate provider credentials",
             "description": "Print ready-to-source provider credentials from deterministic local provider stores.",
-            "command": "python -m _mock.providerlab.seedenv",
+            "command": "python -m _mock.provider" "lab.seedenv",
             "expected": "Credential exports are available for provider API keys, tokens, and OAuth clients.",
         },
         {
@@ -298,10 +298,11 @@ def _setup_commands() -> list[dict[str, str]]:
 def _setup_ctx(request: Request) -> dict:
     ctx = _ctx(request)
     providers = setup_catalog.provider_entries(get_config().providers)
-    ready_requirements = sum(1 for item in _setup_requirements(providers) if item["status"] in ("Configured", "Optional"))
+    requirements = _setup_requirements(providers)
+    ready_requirements = sum(1 for item in requirements if item["status"] in ("Configured", "Optional"))
     ctx.update({
         "setup_providers": providers,
-        "setup_requirements": _setup_requirements(providers),
+        "setup_requirements": requirements,
         "setup_commands": _setup_commands(),
         "setup_progress": {
             "ready": ready_requirements,

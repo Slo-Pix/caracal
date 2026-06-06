@@ -2,114 +2,313 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Lynx Capital setup checklist for environment and provider configuration.
+Lynx Capital guided setup page for environment readiness and provider credentials.
 #}
 {% extends "layout.html" %}
 {% block title %}Setup: {{ company }}{% endblock %}
 
 {% block content %}
 <style>
-  .setup-wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 48px; }
-  h1 { font-size: 17px; font-weight: 600; margin-bottom: 4px; }
-  .sub { color: #5a6478; font-size: 12px; margin-bottom: 24px; }
-  .panel { border: 1px solid var(--border); border-radius: 4px; padding: 18px; background: #fff; margin-bottom: 16px; }
-  .panel h2 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
-  .panel p { font-size: 12px; color: #5a6478; margin-bottom: 12px; }
-  .panel code { font-family: ui-monospace, monospace; font-size: 11px; background: #1a1f2e; color: #c9d1e0; padding: 1px 5px; border-radius: 2px; }
-  pre.cmd { background: #1a1f2e; color: #c9d1e0; font-family: ui-monospace, monospace; font-size: 11px; padding: 10px 12px; border-radius: 3px; margin: 6px 0 10px; overflow-x: auto; }
-  pre.cmd .c { color: #6c7689; }
-  .validate-bar { display: flex; align-items: center; gap: 12px; margin-top: 20px; flex-wrap: wrap; }
-  #validate-btn { background: var(--primary); color: #fff; border: none; padding: 8px 18px; font-size: 12px; font-weight: 600; border-radius: 3px; cursor: pointer; }
-  #validate-btn:hover { opacity: 0.85; }
-  #validate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  #start-demo-btn { background: var(--accent); color: #fff; border: none; padding: 8px 18px; font-size: 12px; font-weight: 600; border-radius: 3px; cursor: pointer; }
-  #start-demo-btn:hover { opacity: 0.85; }
-  #validate-out { width: 100%; margin-top: 8px; }
-  .rs { display: flex; align-items: center; gap: 7px; font-size: 12px; padding: 4px 0; }
-  .rs .badge { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 800; }
-  .badge-ok { background: var(--success); color: #fff; }
-  .badge-fail { background: var(--danger); color: #fff; }
-  .rd { font-size: 10px; color: #5a6478; margin-left: 21px; }
+  .setup-page { width: min(1440px, calc(100vw - 48px)); margin: 0 auto; padding: 26px 0 34px; }
+  .setup-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 28px; margin-bottom: 24px; }
+  .setup-eyebrow { color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .16em; margin: 0 0 8px; text-transform: uppercase; }
+  .setup-title { color: #111827; font-family: Outfit, Inter, sans-serif; font-size: clamp(32px, 4vw, 56px); font-weight: 760; letter-spacing: -.045em; line-height: .94; margin: 0; max-width: 780px; }
+  .setup-sub { color: #536173; font-size: 15px; line-height: 1.6; margin: 16px 0 0; max-width: 680px; }
+  .setup-return { align-items: center; border: 1px solid #cbd5e1; border-radius: 999px; color: #253244; display: inline-flex; font-size: 12px; font-weight: 700; gap: 8px; padding: 9px 13px; text-decoration: none; white-space: nowrap; }
+  .setup-return:hover { border-color: var(--primary); color: var(--primary); }
+
+  .setup-shell { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); gap: 34px; align-items: start; }
+  .setup-left, .setup-right { min-width: 0; }
+  .setup-strip { border-bottom: 1px solid #d9e0ea; border-top: 1px solid #d9e0ea; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 24px; }
+  .setup-stage { padding: 14px 12px; position: relative; }
+  .setup-stage + .setup-stage { border-left: 1px solid #e4e9f0; }
+  .setup-stage span { color: #8a94a6; display: block; font-size: 10px; font-weight: 800; letter-spacing: .14em; margin-bottom: 5px; text-transform: uppercase; }
+  .setup-stage strong { color: #1c2635; display: block; font-size: 12px; font-weight: 750; line-height: 1.25; }
+
+  .setup-section { margin-bottom: 28px; }
+  .section-head { align-items: baseline; display: flex; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+  .section-head h2 { color: #111827; font-size: 15px; font-weight: 760; letter-spacing: -.01em; margin: 0; }
+  .section-head p { color: #687386; font-size: 12px; margin: 0; }
+
+  .requirement-list { border-bottom: 1px solid #e1e7ef; border-top: 1px solid #e1e7ef; }
+  .requirement-row { align-items: center; display: grid; grid-template-columns: 170px 88px 116px minmax(0, 1fr); gap: 16px; padding: 13px 0; }
+  .requirement-row + .requirement-row { border-top: 1px solid #eef2f6; }
+  .requirement-row strong { color: #182333; font-size: 13px; font-weight: 750; }
+  .requirement-row p { color: #687386; font-size: 12px; line-height: 1.45; margin: 0; }
+  .scope { color: #758195; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+  .status { border-radius: 999px; display: inline-flex; font-size: 10px; font-weight: 850; justify-content: center; letter-spacing: .08em; padding: 5px 8px; text-transform: uppercase; }
+  .status-configured, .status-ready, .status-credentials-added, .status-caracal-configured, .status-passed { background: #e8f5ef; color: #136c45; }
+  .status-optional, .status-warning, .status-requires-caracal { background: #fff7e6; color: #91610a; }
+  .status-missing, .status-not-configured, .status-failed { background: #faecec; color: #a33434; }
+
+  .command-list { border-left: 2px solid #d8e0ea; display: grid; gap: 18px; margin-left: 9px; padding-left: 24px; }
+  .command-item { position: relative; }
+  .command-item::before { background: #fff; border: 2px solid var(--primary); border-radius: 999px; content: ""; height: 11px; left: -31px; position: absolute; top: 2px; width: 11px; }
+  .command-meta { align-items: baseline; display: flex; gap: 12px; margin-bottom: 6px; }
+  .command-meta span { color: var(--accent); font-size: 10px; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+  .command-meta strong { color: #111827; font-size: 14px; font-weight: 760; }
+  .command-item p { color: #5f6b7e; font-size: 12px; line-height: 1.5; margin: 0 0 8px; }
+  .command-block { background: #111827; border-radius: 8px; color: #dbe5f1; font-family: "Fira Code", ui-monospace, monospace; font-size: 11px; line-height: 1.55; margin: 0 0 8px; overflow-x: auto; padding: 12px 14px; }
+  .expected { color: #687386; font-size: 11px; }
+  .expected b { color: #273449; }
+
+  .readiness-panel { background: #f8fafc; border: 1px solid #dbe3ee; border-radius: 12px; padding: 18px; }
+  .readiness-top { align-items: start; display: flex; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+  .readiness-top h2 { color: #111827; font-size: 16px; font-weight: 780; margin: 0 0 5px; }
+  .readiness-top p { color: #647187; font-size: 12px; line-height: 1.45; margin: 0; max-width: 520px; }
+  .progress-ring { align-items: center; border: 1px solid #d8e2ed; border-radius: 999px; color: #142033; display: flex; font-size: 12px; font-weight: 850; height: 58px; justify-content: center; width: 58px; }
+  .validation-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .primary-btn, .secondary-btn { border-radius: 999px; cursor: pointer; font-size: 12px; font-weight: 800; padding: 9px 14px; }
+  .primary-btn { background: var(--primary); border: 1px solid var(--primary); color: #fff; }
+  .secondary-btn { background: #fff; border: 1px solid #cbd5e1; color: #263449; }
+  .primary-btn:disabled, .secondary-btn:disabled { cursor: not-allowed; opacity: .45; }
+  .validation-results { display: grid; gap: 8px; }
+  .validation-row { align-items: start; background: #fff; border: 1px solid #e0e6ee; border-radius: 8px; display: grid; gap: 8px; grid-template-columns: 94px minmax(140px, 180px) minmax(0, 1fr); padding: 10px 12px; }
+  .validation-row strong { color: #1e293b; font-size: 12px; }
+  .validation-row p { color: #647187; font-size: 11px; line-height: 1.4; margin: 0; }
+
+  .provider-panel { border-top: 1px solid #d9e0ea; }
+  .provider-row { display: grid; gap: 14px; grid-template-columns: minmax(150px, .95fr) minmax(122px, .68fr) minmax(170px, 1fr) 112px; padding: 13px 0; }
+  .provider-row + .provider-row { border-top: 1px solid #edf1f6; }
+  .provider-name strong { color: #182333; display: block; font-size: 13px; font-weight: 780; }
+  .provider-name span, .provider-meta span { color: #7a8495; display: block; font-size: 11px; line-height: 1.4; margin-top: 3px; }
+  .provider-meta strong { color: #2c394c; display: block; font-size: 12px; font-weight: 700; }
+  .provider-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .provider-links a, .side-link { border-bottom: 1px solid #b7c3d3; color: #24364d; font-size: 11px; font-weight: 800; padding-bottom: 2px; text-decoration: none; }
+  .provider-links a:hover, .side-link:hover { border-color: var(--primary); color: var(--primary); }
+  .side-panel { background: #f8fafc; border: 1px solid #dbe3ee; border-radius: 12px; margin-bottom: 18px; padding: 16px; }
+  .side-panel h2 { color: #111827; font-size: 14px; font-weight: 780; margin: 0 0 8px; }
+  .side-panel p { color: #647187; font-size: 12px; line-height: 1.5; margin: 0 0 11px; }
+  .shortcut-list { display: flex; flex-wrap: wrap; gap: 10px; }
+
+  @media (max-width: 1180px) {
+    .setup-shell { grid-template-columns: 1fr; }
+    .setup-right { display: grid; gap: 24px; grid-template-columns: 1fr; }
+  }
+  @media (max-width: 860px) {
+    .setup-page { width: min(100% - 28px, 760px); padding-top: 18px; }
+    .setup-header { grid-template-columns: 1fr; }
+    .setup-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .setup-stage:nth-child(4) { border-left: 0; border-top: 1px solid #e4e9f0; }
+    .setup-stage:nth-child(n+4) { border-top: 1px solid #e4e9f0; }
+    .requirement-row, .provider-row, .validation-row { grid-template-columns: 1fr; gap: 6px; }
+    .readiness-top { flex-direction: column; }
+  }
+  @media (max-width: 560px) {
+    .setup-strip { grid-template-columns: 1fr 1fr; }
+    .setup-stage:nth-child(odd) { border-left: 0; }
+    .setup-stage:nth-child(n+3) { border-top: 1px solid #e4e9f0; }
+  }
 </style>
 
-<div class="setup-wrap">
-  <h1>Setup</h1>
-  <p class="sub">Confirm your environment is ready to run the {{ company }} demo.</p>
-
-  <div class="panel">
-    <h2>1 · Configure environment</h2>
-    <p>Copy the template and fill in <code>OPENAI_API_KEY</code>. Provider credentials are normal integration settings supplied through <code>.env</code>.</p>
-<pre class="cmd">cp .env.example .env
-<span class="c"># edit .env → set OPENAI_API_KEY=sk-...</span></pre>
-  </div>
-
-  <div class="panel">
-    <h2>2 · Start the local provider network</h2>
-    <p>The local provider network is isolated under <code>_mock/</code>. The Lynx app calls providers through its real registry and transport clients.</p>
-<pre class="cmd">docker compose -f _mock/docker-compose.yml up -d --build --wait</pre>
-  </div>
-
-  <div class="panel">
-    <h2>3 · Run Lynx Capital</h2>
-<pre class="cmd">uv run uvicorn app.main:app --reload --port 8000</pre>
-  </div>
-
-  <div class="panel">
-    <h2>4 · Validate</h2>
-    <p>Confirms <code>OPENAI_API_KEY</code>, the local provider network, and provider webhook secrets.</p>
-
-    <div class="validate-bar">
-      <button id="validate-btn">Validate configuration</button>
-      <button id="start-demo-btn" style="display:none">Start Demo →</button>
-      <div id="validate-out"></div>
+<div class="setup-page">
+  <header class="setup-header">
+    <div>
+      <p class="setup-eyebrow">Setup workflow</p>
+      <h1 class="setup-title">Configure the workspace, connect providers, validate readiness.</h1>
+      <p class="setup-sub">{{ company }} uses local provider services, generated provider credentials, OpenAI orchestration, and optional Caracal routing. Complete the checks here before launching the demo workspace.</p>
     </div>
+    <a class="setup-return" href="{{ setup_links.overview }}">Return to Overview</a>
+  </header>
+
+  <div class="setup-shell">
+    <section class="setup-left">
+      <div class="setup-strip" aria-label="Setup progress">
+        <div class="setup-stage"><span>01</span><strong>Environment</strong></div>
+        <div class="setup-stage"><span>02</span><strong>Credentials</strong></div>
+        <div class="setup-stage"><span>03</span><strong>Infrastructure</strong></div>
+        <div class="setup-stage"><span>04</span><strong>Launch</strong></div>
+        <div class="setup-stage"><span>05</span><strong>Validate</strong></div>
+        <div class="setup-stage"><span>06</span><strong>Run</strong></div>
+      </div>
+
+      <section class="setup-section" aria-labelledby="environment-heading">
+        <div class="section-head">
+          <h2 id="environment-heading">Environment preparation</h2>
+          <p>{{ setup_progress.ready }}/{{ setup_progress.total }} prerequisites currently ready</p>
+        </div>
+        <div class="requirement-list">
+          {% for item in setup_requirements %}
+          <div class="requirement-row">
+            <strong>{{ item.name }}</strong>
+            <span class="scope">{{ item.scope }}</span>
+            <span class="status status-{{ item.status|lower|replace(' ', '-') }}">{{ item.status }}</span>
+            <p>{{ item.detail }}</p>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="setup-section" aria-labelledby="workflow-heading">
+        <div class="section-head">
+          <h2 id="workflow-heading">Operational setup checklist</h2>
+          <p>Commands are paired with the action they unlock.</p>
+        </div>
+        <div class="command-list">
+          {% for command in setup_commands %}
+          <article class="command-item">
+            <div class="command-meta"><span>{{ command.step }}</span><strong>{{ command.action }}</strong></div>
+            <p>{{ command.description }}</p>
+            <pre class="command-block"><code>{{ command.command }}</code></pre>
+            <div class="expected"><b>Expected result:</b> {{ command.expected }}</div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="readiness-panel" aria-labelledby="readiness-heading">
+        <div class="readiness-top">
+          <div>
+            <h2 id="readiness-heading">Readiness validation</h2>
+            <p id="readiness-copy">Run validation after credentials and providers are configured. Results cover environment variables, provider connectivity, OpenAI, webhook secrets, local services, and Caracal runtime state.</p>
+          </div>
+          <div class="progress-ring" aria-label="Current setup readiness">{{ setup_progress.percent }}%</div>
+        </div>
+        <div class="validation-actions">
+          <button id="validate-btn" class="primary-btn">Run Validation</button>
+          <button id="launch-demo-btn" class="secondary-btn ready-action" data-target="/demo" disabled>Launch Demo</button>
+          <button id="open-workspace-btn" class="secondary-btn ready-action" data-target="/demo" disabled>Open Workspace</button>
+          <button id="first-workflow-btn" class="secondary-btn ready-action" data-target="/prompts" disabled>Start First Workflow</button>
+        </div>
+        <div id="validation-results" class="validation-results" aria-live="polite">
+          <div class="validation-row">
+            <span class="status status-warning">Pending</span>
+            <strong>Validation not run</strong>
+            <p>Run the readiness check when the local provider network and environment variables are in place.</p>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="setup-right" aria-label="Provider and setup resources">
+      <section class="side-panel">
+        <h2>Credential shortcuts</h2>
+        <p>Open the local provider lab to inspect generated credentials, registered OAuth clients, provider resources, and API client surfaces.</p>
+        <div class="shortcut-list">
+          <a class="side-link" href="{{ setup_links.providerDashboard }}" target="_blank" rel="noreferrer">Provider Dashboard</a>
+          <a class="side-link" href="{{ setup_links.credentials }}" target="_blank" rel="noreferrer">Credential Store</a>
+        </div>
+      </section>
+
+      <section class="setup-section" aria-labelledby="providers-heading">
+        <div class="section-head">
+          <h2 id="providers-heading">Provider credentials</h2>
+          <p>{{ setup_providers|length }} configured provider surfaces</p>
+        </div>
+        <div class="provider-panel">
+          {% for provider in setup_providers %}
+          <article class="provider-row">
+            <div class="provider-name">
+              <strong>{{ provider.name }}</strong>
+              <span>{{ provider.category }} · {{ provider.protocol }}</span>
+            </div>
+            <div class="provider-meta">
+              <strong>{{ provider.auth }}</strong>
+              <span>{{ provider.credentials }}</span>
+            </div>
+            <div class="provider-meta">
+              <strong>Purpose</strong>
+              <span>{{ provider.purpose }}</span>
+              <div class="provider-links">
+                <a href="{{ provider.dashboardUrl }}" target="_blank" rel="noreferrer">Dashboard</a>
+                <a href="{{ provider.credentialUrl }}" target="_blank" rel="noreferrer">Credentials</a>
+                <a href="{{ provider.documentationUrl }}" target="_blank" rel="noreferrer">Documentation</a>
+              </div>
+            </div>
+            <div><span class="status status-{{ provider.status|lower|replace(' ', '-') }}">{{ provider.status }}</span></div>
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+    </aside>
   </div>
 </div>
 
 <script type="module">
   const validateBtn = document.getElementById('validate-btn');
-  const startDemoBtn = document.getElementById('start-demo-btn');
-  const validateOut = document.getElementById('validate-out');
+  const validationResults = document.getElementById('validation-results');
+  const readinessCopy = document.getElementById('readiness-copy');
+  const readyActions = [...document.querySelectorAll('.ready-action')];
+
+  const labels = {
+    passed: 'Passed',
+    warning: 'Warning',
+    failed: 'Failed'
+  };
+
+  function renderValidation(steps) {
+    validationResults.replaceChildren();
+    for (const step of steps) {
+      const row = document.createElement('div');
+      row.className = 'validation-row';
+
+      const status = document.createElement('span');
+      const state = step.status || (step.ok ? 'passed' : 'failed');
+      status.className = `status status-${state}`;
+      status.textContent = labels[state] || state;
+
+      const label = document.createElement('strong');
+      label.textContent = step.label;
+
+      const detail = document.createElement('p');
+      detail.textContent = step.detail || '';
+
+      row.append(status, label, detail);
+      validationResults.appendChild(row);
+    }
+  }
+
+  async function completeSetup(target) {
+    const response = await fetch('/api/session/setup-complete', {method: 'POST'});
+    if (!response.ok) throw new Error('Setup acknowledgement failed.');
+    window.location = target;
+  }
 
   validateBtn.addEventListener('click', async () => {
     validateBtn.disabled = true;
     validateBtn.textContent = 'Checking...';
-    validateOut.replaceChildren();
-    startDemoBtn.style.display = 'none';
     try {
-      const r = await fetch('/api/setup/validate');
-      const data = await r.json();
-      for (const s of data.steps) {
-        const row = document.createElement('div');
-        row.className = 'rs';
-        const badge = document.createElement('div');
-        badge.className = `badge ${s.ok ? 'badge-ok' : 'badge-fail'}`;
-        badge.textContent = s.ok ? '✓' : '✗';
-        const label = document.createElement('span');
-        label.textContent = s.label;
-        row.appendChild(badge);
-        row.appendChild(label);
-        validateOut.appendChild(row);
-        if (s.detail) {
-          const detail = document.createElement('div');
-          detail.className = 'rd';
-          detail.textContent = s.detail;
-          validateOut.appendChild(detail);
-        }
-      }
-      if (data.ok) startDemoBtn.style.display = 'inline-block';
-    } catch (e) {
-      validateOut.textContent = 'Validation failed: ' + e.message;
+      const response = await fetch('/api/setup/validate');
+      const data = await response.json();
+      renderValidation(data.steps || []);
+      readyActions.forEach((button) => {
+        button.disabled = !data.ok;
+      });
+      readinessCopy.textContent = data.ok
+        ? 'Environment Ready. You can launch the demo workspace, open the application, or continue into the first workflow.'
+        : 'Resolve failed checks, then run validation again. Warnings can be acceptable when the related capability is optional.';
+    } catch (error) {
+      validationResults.replaceChildren();
+      const row = document.createElement('div');
+      row.className = 'validation-row';
+      const status = document.createElement('span');
+      status.className = 'status status-failed';
+      status.textContent = 'Failed';
+      const label = document.createElement('strong');
+      label.textContent = 'Validation request';
+      const detail = document.createElement('p');
+      detail.textContent = error.message;
+      row.append(status, label, detail);
+      validationResults.appendChild(row);
+      readyActions.forEach((button) => {
+        button.disabled = true;
+      });
     } finally {
       validateBtn.disabled = false;
-      validateBtn.textContent = 'Validate configuration';
+      validateBtn.textContent = 'Run Validation';
     }
   });
 
-  startDemoBtn.addEventListener('click', async () => {
-    startDemoBtn.disabled = true;
-    await fetch('/api/session/setup-complete', {method: 'POST'});
-    window.location = '/demo';
+  readyActions.forEach((button) => {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await completeSetup(button.dataset.target);
+      } catch (error) {
+        readinessCopy.textContent = error.message;
+        button.disabled = false;
+      }
+    });
   });
 </script>
 {% endblock %}
