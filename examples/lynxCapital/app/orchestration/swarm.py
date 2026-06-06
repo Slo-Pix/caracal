@@ -406,7 +406,7 @@ def _build_regional_domain_tools(run_id, runner, parent, region):
         Use for third-party services beyond the core flow: meridian-pay/quetzal-payouts/halcyon-bank
         (payments, payouts, open banking), inkwell-ocr (document extraction), slate-ledger (journals),
         vela-notify (transactional email/SMS, templates, delivery tracking, suppressions, webhooks), cordoba-fx (fx quotes/conversions/settlement payments), ironbark-erp/tallyhall-books (vendors/bills),
-        beacon-crm (CRM accounts/contacts/deal pipeline/activities), core-billing, lumen-identity (directory),
+        beacon-crm (CRM accounts/contacts/deal pipeline/activities), core-billing (internal AR: customers/invoices/payments/dunning/collections/aging), lumen-identity (directory),
         atlas-vendor (vendor MDM/onboarding/verification/compliance/contracts over MCP),
         sabre-tax, pulse-market (market data), junction-procure (requisitions/POs/budgets).
         relay-automation, aegis-screening, and verafin-monitor require a Caracal mandate and are
@@ -845,11 +845,23 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"customer_id": customer_id})
 
     @tool
-    def send_dunning_notice(customer_id: str, stage: int) -> str:
-        """Send a dunning notice (stage 1=reminder, 2=second notice, 3=collections)."""
+    def send_dunning_notice(customer_id: str, stage: int, invoice_id: str = "") -> str:
+        """Send a dunning notice (stage 1=reminder, 2=second notice, 3=collections).
+        Pass invoice_id to record the dunning action against that invoice in Core Billing."""
         w = _worker("receivables", f"ar-dun:{customer_id}")
         try:
-            return json.dumps(tool_fns.send_dunning_notice(run_id, w.id, customer_id, int(stage)))
+            return json.dumps(tool_fns.send_dunning_notice(
+                run_id, w.id, customer_id, int(stage), invoice_id or None))
+        finally:
+            _finish(w, {"customer_id": customer_id})
+
+    @tool
+    def run_dunning_cycle(min_days_past_due: int = 1, customer_id: str = "") -> str:
+        """Sweep overdue receivables in Core Billing and escalate dunning by policy."""
+        w = _worker("receivables", f"ar-cycle:{customer_id or 'all'}")
+        try:
+            return json.dumps(tool_fns.run_dunning_cycle(
+                run_id, w.id, int(min_days_past_due), customer_id or None))
         finally:
             _finish(w, {"customer_id": customer_id})
 
@@ -901,6 +913,61 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             return json.dumps(tool_fns.get_ar_aging(run_id, w.id, region))
         finally:
             _finish(w, {"region": region})
+
+    @tool
+    def get_ar_summary() -> str:
+        """Return the receivables dashboard: total/overdue AR, DSO, disputes, write-offs, and collections."""
+        w = _worker("receivables", "ar-summary")
+        try:
+            return json.dumps(tool_fns.get_ar_summary(run_id, w.id))
+        finally:
+            _finish(w, {})
+
+    @tool
+    def get_customer_account(customer_id: str) -> str:
+        """Return a customer's billing profile, credit terms, AR balance, and aging."""
+        w = _worker("receivables", f"ar-cust:{customer_id}")
+        try:
+            return json.dumps(tool_fns.get_customer_account(run_id, w.id, customer_id))
+        finally:
+            _finish(w, {"customer_id": customer_id})
+
+    @tool
+    def list_customer_invoices(customer_id: str, overdue: bool = False) -> str:
+        """List a customer's invoices, optionally only those overdue."""
+        w = _worker("receivables", f"ar-inv:{customer_id}")
+        try:
+            return json.dumps(tool_fns.list_customer_invoices(run_id, w.id, customer_id, bool(overdue)))
+        finally:
+            _finish(w, {"customer_id": customer_id})
+
+    @tool
+    def record_customer_payment(customer_id: str, amount: float, reference: str = "") -> str:
+        """Record a customer remittance and apply it across open invoices oldest-first."""
+        w = _worker("receivables", f"ar-remit:{customer_id}")
+        try:
+            return json.dumps(tool_fns.record_customer_payment(
+                run_id, w.id, customer_id, float(amount), reference or None))
+        finally:
+            _finish(w, {"customer_id": customer_id})
+
+    @tool
+    def write_off_invoice(invoice_id: str, reason: str = "bad_debt") -> str:
+        """Write off an uncollectible invoice as bad debt."""
+        w = _worker("receivables", f"ar-writeoff:{invoice_id}")
+        try:
+            return json.dumps(tool_fns.write_off_invoice(run_id, w.id, invoice_id, reason))
+        finally:
+            _finish(w, {"invoice_id": invoice_id})
+
+    @tool
+    def open_collection_case(customer_id: str) -> str:
+        """Open a collections case for a customer's severely overdue invoices."""
+        w = _worker("receivables", f"ar-collect:{customer_id}")
+        try:
+            return json.dumps(tool_fns.open_collection_case(run_id, w.id, customer_id))
+        finally:
+            _finish(w, {"customer_id": customer_id})
 
     @tool
     def get_department_budget(department: str) -> str:
@@ -1060,7 +1127,9 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
         get_trial_balance, close_period,
         aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing,
         submit_regulatory_filing, attest_control,
-        issue_customer_invoice, send_dunning_notice, apply_customer_payment, get_ar_aging,
+        issue_customer_invoice, send_dunning_notice, run_dunning_cycle,
+        apply_customer_payment, record_customer_payment, get_ar_aging, get_ar_summary,
+        get_customer_account, list_customer_invoices, write_off_invoice, open_collection_case,
         send_remittance_advice, send_payment_confirmation, track_message_delivery,
         get_department_budget, raise_requisition, approve_requisition, raise_purchase_order,
         get_supplier_contact, get_supplier_account, list_supplier_contacts,

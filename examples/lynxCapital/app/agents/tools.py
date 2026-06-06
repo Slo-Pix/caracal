@@ -568,11 +568,24 @@ def _notify_recipient(party_id: str) -> str:
     return f"{party_id.strip().lower().replace(' ', '.')}@accounts.lynxcapital.test"
 
 
-def send_dunning_notice(run_id: str, agent_id: str, customer_id: str, stage: int) -> dict[str, object]:
+def send_dunning_notice(run_id: str, agent_id: str, customer_id: str, stage: int,
+                        invoice_id: str | None = None) -> dict[str, object]:
     template = _DUNNING_TEMPLATES.get(int(stage), "dunning_final_notice")
+    if invoice_id:
+        _run(run_id, agent_id, "send_dunning_notice", "core-billing", "issue_dunning",
+             {"invoiceId": invoice_id, "channel": "email"})
     return _run(run_id, agent_id, "send_dunning_notice", "vela-notify", "send_message",
                 {"channel": "email", "to": _notify_recipient(customer_id), "template": template,
-                 "tag": "dunning", "metadata": {"customerId": customer_id, "stage": int(stage)}})
+                 "tag": "dunning", "metadata": {"customerId": customer_id, "stage": int(stage),
+                                                 "invoiceId": invoice_id}})
+
+
+def run_dunning_cycle(run_id: str, agent_id: str, min_days_past_due: int = 1,
+                      customer_id: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {"minDaysPastDue": int(min_days_past_due)}
+    if customer_id:
+        payload["customerId"] = customer_id
+    return _run(run_id, agent_id, "run_dunning_cycle", "core-billing", "run_dunning_cycle", payload)
 
 
 def send_remittance_advice(run_id: str, agent_id: str, vendor_id: str, amount: float,
@@ -606,6 +619,40 @@ def apply_customer_payment(run_id: str, agent_id: str, invoice_id: str, amount: 
 
 def get_ar_aging(run_id: str, agent_id: str, region: str) -> dict[str, object]:
     return _run(run_id, agent_id, "get_ar_aging", "core-billing", "get_ar_aging", {})
+
+
+def get_ar_summary(run_id: str, agent_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_ar_summary", "core-billing", "get_ar_summary", {})
+
+
+def get_customer_account(run_id: str, agent_id: str, customer_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_customer_account", "core-billing", "get_customer",
+                {"customerId": customer_id})
+
+
+def list_customer_invoices(run_id: str, agent_id: str, customer_id: str,
+                           overdue: bool = False) -> dict[str, object]:
+    return _run(run_id, agent_id, "list_customer_invoices", "core-billing", "list_invoices",
+                {"customerId": customer_id, "overdue": bool(overdue)})
+
+
+def record_customer_payment(run_id: str, agent_id: str, customer_id: str, amount: float,
+                            reference: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {"customerId": customer_id, "amount": amount}
+    if reference:
+        payload["reference"] = reference
+    return _run(run_id, agent_id, "record_customer_payment", "core-billing", "record_payment", payload)
+
+
+def write_off_invoice(run_id: str, agent_id: str, invoice_id: str,
+                      reason: str = "bad_debt") -> dict[str, object]:
+    return _run(run_id, agent_id, "write_off_invoice", "core-billing", "write_off_invoice",
+                {"invoiceId": invoice_id, "reason": reason})
+
+
+def open_collection_case(run_id: str, agent_id: str, customer_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "open_collection_case", "core-billing", "open_collection_case",
+                {"customerId": customer_id})
 
 
 # -- procurement tools (junction-procure) --
@@ -793,6 +840,13 @@ TOOLS: dict[str, Callable] = {
     "track_message_delivery": track_message_delivery,
     "apply_customer_payment": apply_customer_payment,
     "get_ar_aging": get_ar_aging,
+    "get_ar_summary": get_ar_summary,
+    "get_customer_account": get_customer_account,
+    "list_customer_invoices": list_customer_invoices,
+    "record_customer_payment": record_customer_payment,
+    "run_dunning_cycle": run_dunning_cycle,
+    "write_off_invoice": write_off_invoice,
+    "open_collection_case": open_collection_case,
     "create_requisition": create_requisition,
     "approve_requisition": approve_requisition,
     "create_purchase_order": create_purchase_order,

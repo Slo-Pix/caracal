@@ -226,7 +226,7 @@ def _env(name: str) -> str:
     return os.environ.get(name, "").strip()
 
 
-def _caracal_steps() -> list[dict[str, str]]:
+def _caracal_steps() -> list[dict[str, object]]:
     cfg = get_config()
     zone = _env("CARACAL_ZONE_ID") or "<placeholder-zone-id>"
     application = _env("CARACAL_APPLICATION_ID") or "<placeholder-application-id>"
@@ -234,15 +234,25 @@ def _caracal_steps() -> list[dict[str, str]]:
         {
             "step": "01",
             "title": "Enter the zone fields",
-            "console": f"Zone name field: {cfg.company}. Zone ID field: {zone}. Replace the placeholder with the zone id generated or approved in Caracal Console.",
-            "why": "The zone is the boundary that owns the Lynx application, policy, and provider resources.",
+            "path": "Go to Caracal Console > Zones > New",
+            "consoleFields": [
+                {"label": "Name", "value": f"\"{cfg.company}\""},
+                {"label": "Dynamic clients", "value": "[x] enabled"},
+                {"label": "Zone ID", "value": zone},
+            ],
+            "why": "The zone is the boundary that owns the application, policy, and provider resources.",
             "field": "CARACAL_ZONE_ID",
             "value": zone,
         },
         {
             "step": "02",
             "title": "Enter the application fields",
-            "console": f"Application name field: {cfg.company}. Application ID field: {application}. Issue a client secret for this application.",
+            "path": f"Go to Applications > New in the \"{cfg.company}\" zone",
+            "consoleFields": [
+                {"label": "Name", "value": f"\"{cfg.company}\""},
+                {"label": "Application ID", "value": application},
+                {"label": "Client secret", "value": "issue after saving"},
+            ],
             "why": "The application id and secret are the identity Lynx uses for STS exchange and gateway access.",
             "field": "CARACAL_APPLICATION_ID",
             "value": application,
@@ -250,7 +260,12 @@ def _caracal_steps() -> list[dict[str, str]]:
         {
             "step": "03",
             "title": "Enter the policy fields",
-            "console": "Policy name field: Lynx Capital baseline. Policy target: the Lynx application and provider resources. Activate the policy set after saving.",
+            "path": "Go to Policies > New",
+            "consoleFields": [
+                {"label": "Name", "value": "\"Lynx Capital baseline\""},
+                {"label": "Target application", "value": "\"Lynx Capital\""},
+                {"label": "Target resources", "value": "Lynx provider resources"},
+            ],
             "why": "The gateway evaluates this policy on every provider call Lynx makes.",
             "field": "CARACAL_APP_CLIENT_SECRET",
             "value": "<placeholder-application-secret>",
