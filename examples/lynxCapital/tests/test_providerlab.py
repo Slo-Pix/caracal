@@ -744,6 +744,82 @@ def test_internal_pair_distinct_cases():
     assert page1["page"] == 1 and len(page1["items"]) <= 10
 
 
+def test_lumen_identity_directory_model():
+    idn = client("lumen-identity")
+
+    # Employee records carry enterprise identity fields and resolve to an org node.
+    ceo = idn.post("/api/get_user", json={"userId": "EMP-1001"}).json()["data"]
+    for field in ("username", "userPrincipalName", "displayName", "status",
+                  "employmentType", "jobTitle", "departmentId", "teamId",
+                  "costCenter", "roleIds", "groupIds", "mfaEnabled", "hireDate"):
+        assert field in ceo, f"missing employee field {field}"
+    assert ceo["managerId"] is None  # CEO sits at the top of the chart
+
+    # Users are resolvable by username / email, not only by id.
+    by_email = idn.post("/api/get_user", json={"userId": ceo["workEmail"]}).json()["data"]
+    assert by_email["id"] == ceo["id"]
+    assert idn.post("/api/get_user", json={"userId": "EMP-does-not-exist"}).status_code == 404
+
+    # Effective access resolves directly-assigned and group-derived roles into permissions.
+    access = idn.post("/api/get_user_access", json={"userId": "EMP-1001"}).json()["data"]
+    assert "directory:read" in access["permissions"]
+    assert access["privileged"] is True
+
+    # Org chart: manager chain walks up to the CEO; direct reports resolve downward.
+    chain = idn.post("/api/get_manager_chain", json={"userId": "EMP-1002"}).json()["data"]
+    assert chain["chain"] and chain["chain"][-1]["id"] == "EMP-1001"
+    reports = idn.post("/api/list_direct_reports", json={"managerId": "EMP-1001"}).json()["data"]
+    assert reports["count"] >= 1
+
+    # RBAC roles expose permission grants and category; lookups 404 cleanly.
+    role = idn.post("/api/get_role", json={"roleId": "ROLE-treasury-manager"}).json()["data"]
+    assert "payments:approve" in role["permissions"] and role["category"] == "privileged"
+    assert idn.post("/api/get_role", json={"roleId": "ROLE-nope"}).status_code == 404
+
+    # Groups, teams, and departments are first-class and cross-referenced.
+    grp = idn.post("/api/get_group", json={"groupId": "GRP-treasury-operators"}).json()["data"]
+    assert grp["type"] == "access" and grp["members"] and grp["roleIds"]
+    team = idn.post("/api/get_team", json={"teamId": "TEAM-ap"}).json()["data"]
+    assert team["managerId"] and team["memberIds"]
+    dept = idn.post("/api/get_department", json={"departmentId": "DEPT-finance"}).json()["data"]
+    assert dept["headEmployeeId"] and dept["teamIds"]
+
+    # Service accounts are governed: owner, roles, scopes, environment, rotation.
+    svc = idn.post("/api/get_service_account", json={"serviceAccountId": "SVC-ap-bot"}).json()["data"]
+    for field in ("ownerTeamId", "ownerEmployeeId", "roleIds", "scopes",
+                  "environment", "status", "secretRotatedAt", "secretExpiresAt"):
+        assert field in svc, f"missing service-account field {field}"
+    assert idn.post("/api/get_service_account",
+                    json={"serviceAccountId": "SVC-nope"}).status_code == 404
+
+
+def test_lumen_identity_filters_and_listing():
+    idn = client("lumen-identity")
+
+    # Listing is filterable on enterprise dimensions.
+    finance = idn.post("/api/list_users", json={"departmentId": "DEPT-finance",
+                                                "pageSize": 100}).json()["data"]
+    assert finance["total"] >= 1
+    assert all(u["departmentId"] == "DEPT-finance" for u in finance["items"])
+
+    active = idn.post("/api/list_users", json={"status": "active", "pageSize": 100}).json()["data"]
+    assert all(u["status"] == "active" for u in active["items"])
+
+    # Privileged-role catalog and access-group views.
+    priv = idn.post("/api/list_roles", json={"category": "privileged"}).json()["data"]
+    assert priv["items"] and all(r["category"] == "privileged" for r in priv["items"])
+    access_groups = idn.post("/api/list_groups", json={"type": "access"}).json()["data"]
+    assert all(g["type"] == "access" for g in access_groups["items"])
+
+    prod_svc = idn.post("/api/list_service_accounts",
+                        json={"environment": "production"}).json()["data"]
+    assert prod_svc["items"] and all(s["environment"] == "production" for s in prod_svc["items"])
+
+    # Free-text lookup over the directory.
+    hit = idn.post("/api/lookup_user", json={"query": "@lynxcapital.example"}).json()["data"]
+    assert hit["total"] >= 1
+
+
 def test_sdk_pair_distinct_cases():
     # Sabre Tax: rate-table calculation and jurisdiction not-found.
     t = client("sabre-tax")

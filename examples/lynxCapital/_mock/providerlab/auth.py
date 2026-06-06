@@ -82,7 +82,18 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
         except mandate.VerifyError as exc:
             status = 403 if exc.code in ("insufficient_scope", "delegation_required", "session_revoked", "invalid_zone") else 401
             raise AuthError(status, exc.code, exc.message) from exc
-        return {"principal": claims.get("sub"), "auth": "caracal_mandate", "scope": claims.get("scopes")}
+        return {
+            "principal": claims.get("sub"),
+            "auth": "caracal_mandate",
+            "scope": claims.get("scopes"),
+            "subjectType": claims.get("sub_type"),
+            "zone": claims.get("zone"),
+            "sessionId": claims.get("sid"),
+            "rootSessionId": claims.get("root_sid"),
+            "agentSessionId": claims.get("agent_session_id"),
+            "delegationEdgeId": claims.get("delegation_edge_id"),
+            "mandateId": claims.get("jti"),
+        }
 
     if cat == "mcp" and provider.mcp_auth == "bearer":
         presented = _bearer_from(request, provider.auth_header, provider.auth_scheme)
