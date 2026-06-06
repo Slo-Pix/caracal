@@ -154,7 +154,7 @@ def test_setup_page_is_guided_and_provider_backed():
     assert 'export CONTROL_CLIENT_ID="<placeholder-control-client-id>"' in body
     assert 'export CONTROL_CLIENT_SECRET="<placeholder-control-client-secret>"' in body
     assert 'export CARACAL_ZONE_ID="<placeholder-zone-id>"' not in body
-    assert "Replace every placeholder with the value issued by Caracal Console." in body
+    assert "Replace each placeholder with the value issued by Caracal Console." in body
     # Providers: manual mapping to Caracal resources
     assert "Providers" in body
     assert "resource://halcyon-bank" in body

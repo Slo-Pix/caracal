@@ -43,7 +43,7 @@ control client id and client secret.
 
 ```bash
 cp env.example .env
-$EDITOR .env        # fill in CONTROL_CLIENT_ID, CONTROL_CLIENT_SECRET, URLs
+$EDITOR .env        # fill in CONTROL_CLIENT_ID and CONTROL_CLIENT_SECRET
 . .env
 npm run bootstrap   # creates the PiperNet provider, resource, and policy
 npm run teardown    # removes them again
