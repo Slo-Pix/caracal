@@ -74,6 +74,24 @@ def test_identity_directory_reachable(providerlab):
     assert "items" in res["data"]
 
 
+def test_identity_org_and_access_tools_reachable(providerlab):
+    chain = tool_fns.resolve_approver_chain("r", "a", "EMP-1002")
+    assert _provider_of(chain) == "lumen-identity"
+    assert chain["data"]["chain"][-1]["id"] == "EMP-1001"
+
+    access = tool_fns.check_user_access("r", "a", "EMP-1001")
+    assert _provider_of(access) == "lumen-identity"
+    assert "directory:read" in access["data"]["permissions"]
+
+    members = tool_fns.list_team_members("r", "a", "TEAM-ap")
+    assert _provider_of(members) == "lumen-identity"
+    assert all(u["teamId"] == "TEAM-ap" for u in members["data"]["items"])
+
+    svc = tool_fns.get_service_identity("r", "a", "SVC-ap-bot")
+    assert _provider_of(svc) == "lumen-identity"
+    assert svc["data"]["ownerTeamId"] == "TEAM-ap"
+
+
 def test_market_snapshot_reachable(providerlab):
     res = tool_fns.get_market_snapshot("r", "a", "USD/EUR")
     assert _provider_of(res) == "pulse-market"

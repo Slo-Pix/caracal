@@ -734,12 +734,13 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"period": period})
 
     @tool
-    def aml_monitor_transaction(vendor_id: str, amount: float, currency: str) -> str:
-        """Run AML monitoring on a transaction."""
+    def aml_monitor_transaction(vendor_id: str, amount: float, currency: str, channel: str = "wire") -> str:
+        """Run AML transaction monitoring. Returns a risk score and, when flagged,
+        an alertId to investigate. `channel` is one of wire/ach/cash/card/crypto/check."""
         w = _worker("compliance", f"aml:{vendor_id}")
         try:
             return json.dumps(tool_fns.aml_monitor_transaction(
-                run_id, w.id, vendor_id, float(amount), currency))
+                run_id, w.id, vendor_id, float(amount), currency, channel))
         finally:
             _finish(w, {"vendor_id": vendor_id})
 
@@ -753,21 +754,33 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"batch_id": batch_id})
 
     @tool
-    def prepare_regulatory_filing(filing_type: str, period: str) -> str:
-        """Prepare a regulatory filing draft."""
+    def prepare_regulatory_filing(filing_type: str, alert_id: str) -> str:
+        """Prepare a SAR or CTR filing draft from a monitoring alert. `filing_type`
+        is 'SAR' or 'CTR'; `alert_id` is the alertId returned by aml_monitor_transaction.
+        Returns a filingId and the regulator deadline."""
         w = _worker("compliance", f"filing:{filing_type}")
         try:
             return json.dumps(tool_fns.prepare_regulatory_filing(
-                run_id, w.id, filing_type, period))
+                run_id, w.id, filing_type, alert_id))
         finally:
             _finish(w, {"filing_type": filing_type})
 
     @tool
-    def attest_control(control_id: str) -> str:
-        """Attest a SOX/internal control."""
+    def submit_regulatory_filing(filing_id: str) -> str:
+        """Submit a prepared SAR/CTR filing to FinCEN. `filing_id` is the filingId
+        from prepare_regulatory_filing. Returns the BSA confirmation number."""
+        w = _worker("compliance", f"submit:{filing_id}")
+        try:
+            return json.dumps(tool_fns.submit_regulatory_filing(run_id, w.id, filing_id))
+        finally:
+            _finish(w, {"filing_id": filing_id})
+
+    @tool
+    def attest_control(control_id: str, effectiveness: str = "effective") -> str:
+        """Attest a BSA/AML or internal control. `effectiveness` is 'effective' or 'deficient'."""
         w = _worker("compliance", f"control:{control_id}")
         try:
-            return json.dumps(tool_fns.attest_control(run_id, w.id, control_id))
+            return json.dumps(tool_fns.attest_control(run_id, w.id, control_id, effectiveness))
         finally:
             _finish(w, {"control_id": control_id})
 
@@ -877,6 +890,32 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
             _finish(w, {"scope": "groups"})
 
     @tool
+    def resolve_approver_chain(user_id: str) -> str:
+        """Resolve a requester's management chain from the identity directory to route an approval.
+
+        `user_id` accepts an employee id, username, or work email. Returns the ordered
+        manager chain used to find an authorised approver above the requester.
+        """
+        w = _worker("compliance", f"identity:chain:{user_id}")
+        try:
+            return json.dumps(tool_fns.resolve_approver_chain(run_id, w.id, user_id))
+        finally:
+            _finish(w, {"user_id": user_id})
+
+    @tool
+    def check_user_access(user_id: str) -> str:
+        """Resolve a user's effective roles and permissions for a segregation-of-duties check.
+
+        `user_id` accepts an employee id, username, or work email. Returns the union of
+        permissions granted by the user's directly assigned roles and group-derived roles.
+        """
+        w = _worker("compliance", f"identity:access:{user_id}")
+        try:
+            return json.dumps(tool_fns.check_user_access(run_id, w.id, user_id))
+        finally:
+            _finish(w, {"user_id": user_id})
+
+    @tool
     def record_audit(summary: str) -> str:
         """Record a final audit entry for this workflow."""
         w = _worker("audit", f"audit:workflow:{workflow_id}")
@@ -892,10 +931,12 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
         get_cash_position, forecast_liquidity, place_fx_hedge, transfer_funds,
         post_journal_entry, list_ledger_accounts, reconcile_account, compute_accrual,
         get_trial_balance, close_period,
-        aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing, attest_control,
+        aml_monitor_transaction, sanctions_screen_batch, prepare_regulatory_filing,
+        submit_regulatory_filing, attest_control,
         issue_customer_invoice, send_dunning_notice, apply_customer_payment, get_ar_aging,
         get_department_budget, raise_requisition, approve_requisition, raise_purchase_order,
         get_supplier_contact, log_supplier_activity, list_approver_groups,
+        resolve_approver_chain, check_user_access,
         record_audit,
     ]
 
