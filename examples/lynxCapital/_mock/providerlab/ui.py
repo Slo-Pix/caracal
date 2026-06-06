@@ -55,27 +55,36 @@ _SECRET_FIELDS = {"apiKey", "bearerToken", "clientSecret", "accessToken", "manda
 def _config_rows(provider: catalog.Provider) -> list[tuple[str, str]]:
     """Real-world connection settings a caller configures to integrate, named
     with each provider's own wire vocabulary rather than any internal scheme."""
-    base = f"http://localhost:{provider.port}"
+    base_url = f"http://localhost:{provider.port}"
     rows: list[tuple[str, str]] = [
-        ("Base URL", base),
+        ("Base URL", base_url),
         ("Protocol", provider.protocol.upper()),
         ("Authentication", _CATEGORY_LABEL[provider.category]),
     ]
+    if provider.protocol == "grpc":
+        descriptor = base.GRPC_SERVICES.get(provider.id)
+        if descriptor:
+            rows.append(("gRPC target", f"localhost:{provider.port}"))
+            rows.append(("Proto package", descriptor["package"]))
+            rows.append(("Server reflection", "enabled"))
     c = provider.category
     if c in ("api_key", "sdk"):
-        where = "query parameter" if provider.apikey_location == "query" else "request header"
+        if provider.protocol == "grpc":
+            where = "call metadata"
+        else:
+            where = "query parameter" if provider.apikey_location == "query" else "request header"
         rows.append(("API key parameter", f"{provider.apikey_field} ({where})"))
     if c == "bearer_token" or (c == "mcp" and provider.mcp_auth == "bearer"):
         rows.append(("Token header", f"{provider.auth_header}: {provider.auth_scheme} <token>"))
     if c in ("oauth2_client_credentials", "oauth2_authorization_code"):
-        rows.append(("Token endpoint", f"{base}/oauth/token"))
-        rows.append(("Revocation endpoint", f"{base}/oauth/revoke"))
-        rows.append(("Introspection endpoint", f"{base}/oauth/introspect"))
-        rows.append(("Discovery", f"{base}/.well-known/oauth-authorization-server"))
+        rows.append(("Token endpoint", f"{base_url}/oauth/token"))
+        rows.append(("Revocation endpoint", f"{base_url}/oauth/revoke"))
+        rows.append(("Introspection endpoint", f"{base_url}/oauth/introspect"))
+        rows.append(("Discovery", f"{base_url}/.well-known/oauth-authorization-server"))
         rows.append(("Client authentication", provider.client_auth_method))
         rows.append(("Scopes", " ".join(provider.scopes) or "—"))
     if c == "oauth2_authorization_code":
-        rows.append(("Authorization endpoint", f"{base}/oauth/authorize"))
+        rows.append(("Authorization endpoint", f"{base_url}/oauth/authorize"))
         rows.append(("PKCE", "required (S256)" if provider.use_pkce else "not required"))
         rows.append(("Refresh tokens", "issued (offline access)" if provider.offline_access else "not issued"))
     if c == "oauth2_client_credentials" and provider.audience:
@@ -85,12 +94,12 @@ def _config_rows(provider: catalog.Provider) -> list[tuple[str, str]]:
         rows.append(("Required scopes", " ".join(provider.scopes) or "—"))
         rows.append(("Delegation", "required" if provider.require_delegation else "optional"))
     if c == "mcp":
-        rows.append(("MCP endpoint", f"{base}/mcp (JSON-RPC)"))
+        rows.append(("MCP endpoint", f"{base_url}/mcp (JSON-RPC)"))
     if provider.protocol == "sse":
-        rows.append(("Stream endpoint", f"{base}/stream"))
+        rows.append(("Stream endpoint", f"{base_url}/stream"))
     if provider.sdk_package:
         rows.append(("SDK package", provider.sdk_package))
-    rows.append(("Health check", f"{base}/healthz"))
+    rows.append(("Health check", f"{base_url}/healthz"))
     return rows
 
 
@@ -158,9 +167,13 @@ def overview(provider: catalog.Provider) -> str:
     ops = "".join(f"<li><code>{_esc(o)}</code></li>" for o in provider.operations)
     if provider.category == "mcp":
         ops_hint = "Tools are invoked over JSON-RPC at <code>POST /mcp</code>."
+    elif provider.protocol == "grpc":
+        ops_hint = ("Each operation maps to a unary or server-streaming gRPC method; "
+                    "the lab serves them over the shared HTTP transport.")
     else:
         ops_hint = "Domain calls are served under <code>/api/&lt;operation&gt;</code>."
     mcp_panel = _mcp_panel(provider)
+    grpc_panel = _grpc_panel(provider)
     auth_summary = _auth_summary(provider)
     config = "".join(
         f"<tr><td>{_esc(label)}</td><td><code>{_esc(value)}</code></td></tr>"
@@ -187,8 +200,34 @@ def overview(provider: catalog.Provider) -> str:
   <h2>Operations</h2>
   <ul>{ops}</ul>
   <p class="muted">{ops_hint}</p>
-</div>{mcp_panel}"""
+</div>{grpc_panel}{mcp_panel}"""
     return layout(provider, "home", body)
+
+
+def _grpc_panel(provider: catalog.Provider) -> str:
+    """Render the gRPC service/method surface for a grpc provider."""
+    descriptor = base.GRPC_SERVICES.get(provider.id)
+    if provider.protocol != "grpc" or not descriptor:
+        return ""
+    blocks = []
+    for service in descriptor["services"]:
+        rpc_rows = []
+        for rpc in service["rpcs"]:
+            response = rpc["response"]
+            if rpc.get("server_streaming"):
+                response = f"stream {response}"
+            badge = ' <span class="badge">server streaming</span>' if rpc.get("server_streaming") else ""
+            rpc_rows.append(
+                f"<tr><td><code>{_esc(rpc['name'])}</code>{badge}</td>"
+                f"<td><code>({_esc(rpc['request'])}) returns ({_esc(response)})</code></td></tr>")
+        blocks.append(
+            f"<h2>{_esc(descriptor['package'])}.{_esc(service['name'])}</h2>"
+            f"<table><tr><th>rpc</th><th>signature</th></tr>{''.join(rpc_rows)}</table>")
+    return (f'<div class="panel"><h2>gRPC service definition '
+            f'<span class="badge">{len(descriptor["services"])} services</span></h2>'
+            f"{''.join(blocks)}"
+            '<p class="muted">Methods are discoverable through server reflection and '
+            'authenticated with the <code>x-api-key</code> call metadata.</p></div>')
 
 
 def _mcp_panel(provider: catalog.Provider) -> str:
@@ -244,6 +283,9 @@ def _credential_counts(store) -> tuple[int, int]:
 def _auth_summary(provider: catalog.Provider) -> str:
     c = provider.category
     if c in ("api_key", "sdk"):
+        if provider.protocol == "grpc":
+            return (f"Attach the API key as the <code>{_esc(provider.apikey_field)}</code> "
+                    "gRPC call metadata on every RPC.")
         loc = "query parameter" if provider.apikey_location == "query" else "header"
         return f"Send the API key in the <code>{_esc(provider.apikey_field)}</code> {loc}."
     if c == "bearer_token":

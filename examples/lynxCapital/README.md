@@ -82,7 +82,7 @@ docker compose -f _mock/docker-compose.yml down
 | Lumen Identity | Internal directory & IAM | none (internal) | REST | 9409 |
 | Beacon CRM | Vendor/customer CRM | OAuth 2.0 auth code (refresh) | REST + webhooks | 9410 |
 | Atlas Vendor Network | Vendor master data | MCP (bearer) | MCP JSON-RPC | 9411 |
-| Keystone Treasury | Cash/forecast/hedge | API key (metadata) | gRPC-style | 9412 |
+| Keystone Treasury | Cash position/forecast/hedge/transfer/exposure | API key (`x-api-key` metadata) | gRPC-style (unary + server streaming) | 9412 |
 | Sabre Tax | Tax determination | SDK (api key) | SDK shim over REST | 9413 |
 | Quetzal Payouts | Global mass payouts | SDK (api key) | SDK shim + webhooks | 9414 |
 | Vela Notify | Email/SMS dunning | Bearer (custom header) | REST | 9415 |

@@ -16,22 +16,26 @@ def test_landing_is_lightweight_with_guided_onboarding():
         response = client.get("/")
     assert response.status_code == 200
     body = response.text
-    assert "Get Started" in body
+    assert "Finance operations, clearly routed." in body
+    assert "Continue Setup" in body
+    assert "View Overview" in body
+    assert "Demo scope" in body
+    assert "Operational coverage" in body
+    assert "coverage-item" in body
+    assert "data-coverage-detail" in body
+    assert "3-page overview" in body
     assert "About Lynx Capital" in body
     assert "Architecture & Providers" in body
     assert "Demo Environment Notice" in body
     assert "Proceed to Setup" in body
     assert "I understand that this is a demonstration environment" in body
-    assert "width: min(960px" in body
-    assert "height: 680px" in body
-    assert "height: 464px" in body
+    assert "width: min(1180px" in body
+    assert "width: min(1020px" in body
+    assert "@media (max-width: 980px)" in body
+    assert "@media (max-width: 760px)" in body
     assert "rgba(" not in body
     assert "gradient(" not in body
     assert "box-shadow" not in body
-    overview_card_block = body.split(".overview-card {", 1)[1].split("}", 1)[0]
-    assert "background:" not in overview_card_block
-    assert "border:" not in overview_card_block
-    assert "border-radius" not in overview_card_block
     assert "Halcyon Bank" not in body
     assert "Provider ecosystem" not in body
 
