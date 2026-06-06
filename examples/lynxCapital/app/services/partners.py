@@ -161,8 +161,13 @@ _SPECS: dict[str, PartnerSpec] = {
         auth_header="Authorization", auth_scheme="Bearer"),
     "keystone-treasury": PartnerSpec(
         "keystone-treasury", "api_key", 9412,
-        ("get_position", "forecast_liquidity", "place_hedge", "transfer_funds"),
-        apikey_location="header", apikey_field="X-Api-Key"),
+        ("list_positions", "get_position", "get_account", "get_position_summary",
+         "watch_positions", "forecast_liquidity",
+         "list_hedges", "place_hedge", "get_hedge", "cancel_hedge",
+         "transfer_funds", "get_transfer", "list_transfers",
+         "get_exposure", "list_exposures",
+         "list_operations", "get_operation"),
+        apikey_location="header", apikey_field="x-api-key"),
     "sabre-tax": PartnerSpec(
         "sabre-tax", "api_key", 9413,
         ("calculate", "get_jurisdiction", "validate_id"),

@@ -434,19 +434,32 @@ def get_cash_position(run_id: str, agent_id: str, region: str) -> dict[str, obje
                 {"currency": _ccy(region)})
 
 
-def forecast_liquidity(run_id: str, agent_id: str, horizon_days: int) -> dict[str, object]:
+def get_treasury_summary(run_id: str, agent_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_treasury_summary", "keystone-treasury",
+                "get_position_summary", {})
+
+
+def forecast_liquidity(run_id: str, agent_id: str, horizon_days: int,
+                       scenario: str = "base") -> dict[str, object]:
     return _run(run_id, agent_id, "forecast_liquidity", "keystone-treasury", "forecast_liquidity",
-                {"currency": "USD", "horizonDays": horizon_days})
+                {"currency": "USD", "horizonDays": horizon_days, "scenario": scenario})
+
+
+def get_fx_exposure(run_id: str, agent_id: str, currency: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "get_fx_exposure", "keystone-treasury", "get_exposure",
+                {"currency": currency.upper()})
 
 
 def place_fx_hedge(run_id: str, agent_id: str, from_currency: str, to_currency: str, notional: float, tenor_days: int) -> dict[str, object]:
     return _run(run_id, agent_id, "place_fx_hedge", "keystone-treasury", "place_hedge",
-                {"pair": f"{from_currency}/{to_currency}", "notional": notional, "side": "buy"})
+                {"pair": f"{from_currency}/{to_currency}", "notional": notional, "side": "buy",
+                 "instrument": "forward", "tenorDays": tenor_days})
 
 
 def transfer_funds(run_id: str, agent_id: str, from_region: str, to_region: str, amount_usd: float) -> dict[str, object]:
     return _run(run_id, agent_id, "transfer_funds", "keystone-treasury", "transfer_funds",
-                {"currency": "USD", "amount": amount_usd, "destination": to_region})
+                {"currency": "USD", "amount": amount_usd, "destination": to_region,
+                 "purposeCode": "INTC"})
 
 
 # -- close tools --
@@ -704,7 +717,9 @@ TOOLS: dict[str, Callable] = {
     "advance_vendor_onboarding": advance_vendor_onboarding,
     "verify_vendor_banking": verify_vendor_banking,
     "get_cash_position": get_cash_position,
+    "get_treasury_summary": get_treasury_summary,
     "forecast_liquidity": forecast_liquidity,
+    "get_fx_exposure": get_fx_exposure,
     "place_fx_hedge": place_fx_hedge,
     "transfer_funds": transfer_funds,
     "post_journal_entry": post_journal_entry,
