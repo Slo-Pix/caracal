@@ -11,7 +11,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   Caracal,
-  AgentKind,
 } from "../../../../packages/sdk/ts/src/index.js";
 import {
   HeaderAuthorization,
@@ -503,7 +502,6 @@ describe("agent lifecycle and delegation", () => {
     const c = new Caracal({
       ...baseConfig,
       coordinator: { baseUrl: "https://coordinator.example.com", fetchImpl: fakeFetch },
-      defaultKind: AgentKind.Ephemeral,
       defaultTtlSeconds: 60,
     });
     const events: string[] = [];
@@ -531,7 +529,6 @@ describe("agent lifecycle and delegation", () => {
     ]);
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
       application_id: "app",
-      kind: AgentKind.Ephemeral,
       ttl_seconds: 60,
       metadata: { purpose: "test" },
       capabilities: ["refunds.execute", "ledger.read"],
@@ -543,6 +540,40 @@ describe("agent lifecycle and delegation", () => {
       scopes: ["tool:call"],
       ttl_seconds: 30,
     });
+  });
+
+  it("starts a service agent that heartbeats and is not auto-terminated", async () => {
+    const calls: { url: string; init: RequestInit }[] = [];
+    const fakeFetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+      calls.push({ url: String(input), init });
+      if (init.method === "POST" && String(input).endsWith("/agents")) {
+        return new Response(JSON.stringify({ agent_session_id: "svc-1" }), { status: 200 });
+      }
+      if (init.method === "POST" && String(input).endsWith("/heartbeat")) {
+        return new Response(JSON.stringify({ agent: { id: "svc-1" } }), { status: 200 });
+      }
+      return new Response(null, { status: 204 });
+    }) as unknown as typeof fetch;
+    const c = new Caracal({
+      ...baseConfig,
+      coordinator: { baseUrl: "https://coordinator.example.com", fetchImpl: fakeFetch },
+    });
+
+    const svc = await c.service({ capabilities: ["billing-worker"] });
+    expect(svc.agentSessionId).toBe("svc-1");
+    expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
+      application_id: "app",
+      kind: "service",
+      capabilities: ["billing-worker"],
+    });
+
+    await svc.heartbeat();
+    await svc.close();
+    expect(calls.map((call) => [call.init.method, call.url])).toEqual([
+      ["POST", "https://coordinator.example.com/zones/z/agents"],
+      ["POST", "https://coordinator.example.com/zones/z/agents/svc-1/heartbeat"],
+      ["DELETE", "https://coordinator.example.com/zones/z/agents/svc-1"],
+    ]);
   });
 
   it("derives a stable Idempotency-Key on spawn when subjectSessionId or parentId is present", async () => {

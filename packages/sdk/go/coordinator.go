@@ -121,7 +121,9 @@ type DelegationResponse struct {
 func SpawnAgent(ctx context.Context, client *CoordinatorClient, bearer string, req SpawnRequest) (SpawnResponse, error) {
 	body := map[string]any{
 		"application_id": req.ApplicationID,
-		"kind":           string(req.Kind),
+	}
+	if req.Kind != "" {
+		body["kind"] = string(req.Kind)
 	}
 	if req.SubjectSessionID != "" {
 		body["subject_session_id"] = req.SubjectSessionID
@@ -168,6 +170,13 @@ func deriveIdempotencyKey(req SpawnRequest) string {
 // TerminateAgent calls DELETE /zones/:zoneId/agents/:id.
 func TerminateAgent(ctx context.Context, client *CoordinatorClient, bearer, zoneID, agentSessionID string) error {
 	return doJSON(ctx, client, "DELETE", fmt.Sprintf("/zones/%s/agents/%s", zoneID, agentSessionID), bearer, nil, nil, nil)
+}
+
+// HeartbeatAgent renews a service agent's lease. A service session is reaped by
+// the coordinator if it stops heartbeating before the lease expires.
+func HeartbeatAgent(ctx context.Context, client *CoordinatorClient, bearer, zoneID, agentSessionID string) error {
+	body := map[string]any{"status": "healthy"}
+	return doJSON(ctx, client, "POST", fmt.Sprintf("/zones/%s/agents/%s/heartbeat", zoneID, agentSessionID), bearer, body, nil, nil)
 }
 
 // CreateDelegation calls POST /zones/:zoneId/delegations.

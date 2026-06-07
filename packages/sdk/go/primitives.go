@@ -39,9 +39,6 @@ func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error)
 		parentID = parent.AgentSessionID
 	}
 	kind := opts.Kind
-	if kind == "" {
-		kind = KindInstance
-	}
 
 	res, err := SpawnAgent(ctx, opts.Coordinator, opts.SubjectToken, SpawnRequest{
 		ZoneID:           opts.ZoneID,
@@ -171,9 +168,6 @@ func DelegateToSpawn(ctx context.Context, opts DelegateToSpawnInput, fn func(con
 		return errors.New("caracal: DelegateToSpawn requires an active agent session in context")
 	}
 	kind := opts.Kind
-	if kind == "" {
-		kind = KindInstance
-	}
 
 	spawnRes, err := SpawnAgent(ctx, opts.Coordinator, opts.SubjectToken, SpawnRequest{
 		ZoneID:           opts.ZoneID,
