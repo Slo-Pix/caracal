@@ -7,18 +7,18 @@ ALTER TABLE agent_sessions
     DROP CONSTRAINT IF EXISTS agent_sessions_agent_kind_check;
 
 UPDATE agent_sessions
-    SET agent_kind = 'agent'
+    SET agent_kind = 'task'
     WHERE agent_kind IN ('instance', 'ephemeral');
 
 ALTER TABLE agent_sessions
     RENAME COLUMN agent_kind TO lifecycle;
 
 ALTER TABLE agent_sessions
-    ALTER COLUMN lifecycle SET DEFAULT 'agent';
+    ALTER COLUMN lifecycle SET DEFAULT 'task';
 
 ALTER TABLE agent_sessions
     ADD CONSTRAINT agent_sessions_lifecycle_check
-    CHECK (lifecycle IN ('agent', 'service'));
+    CHECK (lifecycle IN ('task', 'service'));
 
 DROP INDEX IF EXISTS agent_sessions_service_heartbeat_deadline_idx;
 

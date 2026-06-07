@@ -30,12 +30,12 @@ func (c *CoordinatorClient) http() *http.Client {
 	return http.DefaultClient
 }
 
-// AgentLifecycle distinguishes the agent session lifecycle.
-type AgentLifecycle string
+// Lifecycle distinguishes the agent session lifecycle.
+type Lifecycle string
 
 const (
-	LifecycleAgent   AgentLifecycle = "agent"
-	LifecycleService AgentLifecycle = "service"
+	LifecycleTask    Lifecycle = "task"
+	LifecycleService Lifecycle = "service"
 )
 
 // SpawnRequest parameters for coordinator agent spawn.
@@ -44,7 +44,7 @@ type SpawnRequest struct {
 	ApplicationID    string
 	SubjectSessionID string
 	ParentID         string
-	Lifecycle        AgentLifecycle
+	Lifecycle        Lifecycle
 	TTLSeconds       int
 	Metadata         map[string]any
 	Labels           []string

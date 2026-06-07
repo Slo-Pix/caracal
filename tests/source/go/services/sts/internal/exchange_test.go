@@ -1330,10 +1330,10 @@ func TestValidateSessionReferencesAcceptsActiveGraphEdge(t *testing.T) {
 func TestAgentSessionMetadataIsPolicyAndAuditInput(t *testing.T) {
 	session := &AgentSession{
 		ID:           "agent-1",
-		Lifecycle:    "agent",
+		Lifecycle:    "task",
 		Labels: []string{"browser", "code"},
 	}
-	if got := agentSessionLifecycle(session); got != "agent" {
+	if got := agentSessionLifecycle(session); got != "task" {
 		t.Fatalf("lifecycle = %q", got)
 	}
 	caps := agentSessionLabels(session)
@@ -1342,7 +1342,7 @@ func TestAgentSessionMetadataIsPolicyAndAuditInput(t *testing.T) {
 		t.Fatal("labels must be copied before policy evaluation")
 	}
 	meta := agentAuditMeta(session)
-	if meta["agent_lifecycle"] != "agent" {
+	if meta["agent_lifecycle"] != "task" {
 		t.Fatalf("audit metadata missing lifecycle: %#v", meta)
 	}
 	gotCaps, ok := meta["agent_labels"].([]string)

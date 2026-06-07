@@ -13,7 +13,7 @@ ALTER TABLE agent_sessions
 
 UPDATE agent_sessions
     SET agent_kind = 'instance'
-    WHERE agent_kind = 'agent';
+    WHERE agent_kind = 'task';
 
 ALTER TABLE agent_sessions
     ALTER COLUMN agent_kind SET DEFAULT 'ephemeral';
