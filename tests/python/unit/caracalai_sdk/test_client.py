@@ -447,7 +447,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(svc.agent_session_id, "svc-1")
         self.assertEqual(json.loads(requests[0].content), {
             "application_id": "app",
-            "kind": "service",
+            "lifecycle": "service",
             "labels": ["billing-worker"],
         })
 

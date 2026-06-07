@@ -563,7 +563,7 @@ describe("agent lifecycle and delegation", () => {
     expect(svc.agentSessionId).toBe("svc-1");
     expect(JSON.parse(String(calls[0].init.body))).toMatchObject({
       application_id: "app",
-      kind: "service",
+      lifecycle: "service",
       labels: ["billing-worker"],
     });
 
