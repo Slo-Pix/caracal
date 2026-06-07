@@ -40,7 +40,7 @@ await caracal.spawn(async () => {
 
 `spawn()` creates an agent session, binds the Caracal context while the callback runs, and terminates the session when the callback exits.
 
-To make agents distinguishable in policy and audit, pass `labels`. These become `input.principal.labels`, so several agents under one application stay separable without one application per agent. `labels` are descriptive, for policy and audit, not grants; authority always comes from scopes and delegation. The session lifecycle is handled for you: `spawn()` records an ordinary `agent` session, while `service()` records a heartbeat-leased `service`.
+To make agents distinguishable in policy and audit, pass `labels`. These become `input.principal.labels`, so several agents under one application stay separable without one application per agent. `labels` are descriptive, for policy and audit, not grants; authority always comes from scopes and delegation. The session lifecycle is handled for you: `spawn()` records a `task` session, while `service()` records a heartbeat-leased `service`.
 
 ```ts
 await caracal.spawn(async () => {
