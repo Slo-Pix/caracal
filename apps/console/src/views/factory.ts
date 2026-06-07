@@ -1965,7 +1965,7 @@ export function agentsView(ctx: Ctx): View {
     info: resourceListInfo('agent session'),
     columns: [
       { header: 'application', width: 24, value: (r) => r.application_name },
-      { header: 'kind', width: 10, value: (r) => r.kind ?? '-' },
+      { header: 'lifecycle', width: 10, value: (r) => r.lifecycle ?? '-' },
       { header: 'labels', width: 28, value: (r) => r.labels?.length ? r.labels.join(', ') : '-' },
       { header: 'parent', width: 24, value: (r) => r.parent_id ?? '-' },
       { header: 'status', width: 10, value: (r) => r.status },
