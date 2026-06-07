@@ -12,7 +12,7 @@ import {
   terminateAgent,
   heartbeatAgent,
   createDelegation,
-  AgentLifecycle,
+  Lifecycle,
   DelegationConstraints,
 } from "./coordinator.js";
 import type { JsonObject } from "./json.js";
@@ -209,7 +209,7 @@ export async function spawnService(input: SpawnServiceInput): Promise<ServiceAge
     applicationId: input.applicationId,
     subjectSessionId: input.subjectSessionId,
     parentId,
-    lifecycle: AgentLifecycle.Service,
+    lifecycle: Lifecycle.Service,
     ttlSeconds: input.ttlSeconds,
     metadata: input.metadata,
     labels: input.labels,

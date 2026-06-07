@@ -22,12 +22,12 @@ const LIST_MAX_LIMIT = 500
 export const MAX_AGENT_LABELS = 32
 export const MAX_AGENT_LABEL_LENGTH = 64
 
-export const AgentLifecycle = z.enum(['agent', 'service'])
+export const Lifecycle = z.enum(['task', 'service'])
 export const AgentLabels = z.array(
   z.string().trim().min(1).max(MAX_AGENT_LABEL_LENGTH),
 ).max(MAX_AGENT_LABELS).default([])
 
-function heartbeatDeadline(lifecycle: z.infer<typeof AgentLifecycle>): Date | null {
+function heartbeatDeadline(lifecycle: z.infer<typeof Lifecycle>): Date | null {
   return lifecycle === 'service' ? new Date(Date.now() + cfg.serviceAgentLeaseSeconds * 1000) : null
 }
 
@@ -35,7 +35,7 @@ const SpawnBody = z.object({
   application_id: z.string().min(1),
   subject_session_id: z.string().min(1).optional(),
   parent_id: z.string().nullable().default(null),
-  lifecycle: AgentLifecycle.optional(),
+  lifecycle: Lifecycle.optional(),
   labels: AgentLabels,
   ttl_seconds: z.number().int().min(1).max(86400).default(DEFAULT_TTL),
   metadata: z.record(z.string(), z.unknown()).default({}),
@@ -117,8 +117,8 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
         await client.query('ROLLBACK')
         return reply.code(404).send({ error: 'application_not_found' })
       }
-      const lifecycle = body.lifecycle ?? 'agent'
-      if (refs[0].registration_method === 'dcr' && lifecycle !== 'agent') {
+      const lifecycle = body.lifecycle ?? 'task'
+      if (refs[0].registration_method === 'dcr' && lifecycle !== 'task') {
         await client.query('ROLLBACK')
         return reply.code(409).send({ error: 'dcr_application_cannot_host_service' })
       }

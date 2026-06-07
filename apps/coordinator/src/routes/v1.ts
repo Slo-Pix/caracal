@@ -8,14 +8,14 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply, FastifyInstance 
 import { z } from 'zod'
 import { verify, type JwtConfig } from '@caracalai/identity'
 import { cfg } from '../config.js'
-import { AgentLabels, AgentLifecycle } from './agents.js'
+import { AgentLabels, Lifecycle } from './agents.js'
 
 const BeginBody = z.object({
   zone_id: z.string().min(1),
   application_id: z.string().min(1),
   subject_session_id: z.string().min(1),
   parent_id: z.string().nullable().default(null),
-  lifecycle: AgentLifecycle.optional(),
+  lifecycle: Lifecycle.optional(),
   labels: AgentLabels,
   ttl_seconds: z.number().int().min(1).max(86400).optional(),
 })

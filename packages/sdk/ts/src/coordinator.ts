@@ -13,12 +13,12 @@ export interface CoordinatorClient {
   fetchImpl?: typeof fetch;
 }
 
-export const AgentLifecycle = {
-  Agent: "agent",
+export const Lifecycle = {
+  Task: "task",
   Service: "service",
 } as const;
 
-export type AgentLifecycle = typeof AgentLifecycle[keyof typeof AgentLifecycle];
+export type Lifecycle = typeof Lifecycle[keyof typeof Lifecycle];
 
 export interface DelegationConstraints {
   resources?: string[];
@@ -36,7 +36,7 @@ export interface SpawnRequest {
   applicationId: string;
   subjectSessionId?: string;
   parentId?: string;
-  lifecycle?: AgentLifecycle;
+  lifecycle?: Lifecycle;
   ttlSeconds?: number;
   metadata?: JsonObject;
   labels?: string[];
