@@ -30,10 +30,10 @@ from .coordinator import CoordinatorClient, DelegationConstraints
 from .envelope import decode_envelope, to_headers
 from .json_types import JsonObject
 from .primitives import (
+    Grant,
     LifecycleHook,
     ServiceAgent,
     delegate,
-    delegate_to_spawn,
     spawn,
     spawn_service,
 )
@@ -719,6 +719,7 @@ class Caracal:
     async def spawn(
         self,
         *,
+        grant: Grant | None = None,
         ttl_seconds: int | None = None,
         parent_id: str | None = None,
         parent_ctx: CaracalContext | None = None,
@@ -726,6 +727,9 @@ class Caracal:
         labels: list[str] | None = None,
         trace_id: str | None = None,
     ) -> AsyncGenerator[CaracalContext, None]:
+        """Spawn a child agent. The child inherits this application's authority
+        by default; pass ``grant=Grant.narrow([...])`` to issue a bounded
+        delegation edge so the child holds only a subset of scopes."""
         on_start: LifecycleHook | None = (
             (lambda c: self._fire(self._agent_start_hooks, c)) if self._agent_start_hooks else None
         )
@@ -739,6 +743,7 @@ class Caracal:
             subject_token=self.config.subject_token,
             parent_id=parent_id,
             parent_ctx=parent_ctx,
+            grant=grant,
             ttl_seconds=ttl_seconds if ttl_seconds is not None else self.config.default_ttl_seconds,
             metadata=metadata,
             labels=labels,
@@ -800,45 +805,6 @@ class Caracal:
             scopes=scopes,
             constraints=constraints,
             ttl_seconds=ttl_seconds,
-        ) as ctx:
-            yield ctx
-
-    @asynccontextmanager
-    async def delegate_to_spawn(
-        self,
-        *,
-        scopes: list[str],
-        resource_id: str | None = None,
-        parent_ctx: CaracalContext | None = None,
-        constraints: DelegationConstraints | None = None,
-        delegation_ttl_seconds: int | None = None,
-        ttl_seconds: int | None = None,
-        metadata: JsonObject | None = None,
-        labels: list[str] | None = None,
-        trace_id: str | None = None,
-    ) -> AsyncGenerator[CaracalContext, None]:
-        on_start: LifecycleHook | None = (
-            (lambda c: self._fire(self._agent_start_hooks, c)) if self._agent_start_hooks else None
-        )
-        on_end: LifecycleHook | None = (
-            (lambda c: self._fire(self._agent_end_hooks, c)) if self._agent_end_hooks else None
-        )
-        async with delegate_to_spawn(
-            coordinator=self.config.coordinator,
-            zone_id=self.config.zone_id,
-            application_id=self.config.application_id,
-            subject_token=self.config.subject_token,
-            resource_id=resource_id,
-            scopes=scopes,
-            parent_ctx=parent_ctx,
-            constraints=constraints,
-            delegation_ttl_seconds=delegation_ttl_seconds,
-            ttl_seconds=ttl_seconds if ttl_seconds is not None else self.config.default_ttl_seconds,
-            metadata=metadata,
-            labels=labels,
-            trace_id=trace_id,
-            on_agent_start=on_start,
-            on_agent_end=on_end,
         ) as ctx:
             yield ctx
 

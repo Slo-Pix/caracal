@@ -9,9 +9,9 @@ import unittest
 
 import httpx
 
-from caracalai_sdk.coordinator import AgentKind, CoordinatorClient
+from caracalai_sdk.coordinator import CoordinatorClient
 from caracalai_sdk.context import current
-from caracalai_sdk.primitives import spawn, delegate, delegate_to_spawn
+from caracalai_sdk.primitives import Grant, spawn, delegate
 
 
 def _coord(handler) -> CoordinatorClient:
@@ -52,7 +52,7 @@ class SpawnTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(current())
         self.assertIsNone(current())
 
-    async def test_service_kind_skips_termination(self) -> None:
+    async def test_terminates_on_exit(self) -> None:
         requests: list[httpx.Request] = []
 
         async def handler(req: httpx.Request) -> httpx.Response:
@@ -64,26 +64,7 @@ class SpawnTests(unittest.IsolatedAsyncioTestCase):
         coord = _coord(handler)
         async with spawn(
             coordinator=coord, zone_id="z", application_id="app",
-            subject_token="tok", kind=AgentKind.SERVICE,
-        ):
-            pass
-
-        methods = [r.method for r in requests]
-        self.assertNotIn("DELETE", methods)
-
-    async def test_non_service_kind_terminates_on_exit(self) -> None:
-        requests: list[httpx.Request] = []
-
-        async def handler(req: httpx.Request) -> httpx.Response:
-            requests.append(req)
-            if req.method == "POST":
-                return httpx.Response(200, json={"agent_session_id": "agent-1"})
-            return httpx.Response(204)
-
-        coord = _coord(handler)
-        async with spawn(
-            coordinator=coord, zone_id="z", application_id="app",
-            subject_token="tok", kind=AgentKind.EPHEMERAL,
+            subject_token="tok",
         ):
             pass
 
@@ -202,13 +183,13 @@ class DelegateTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(current().agent_session_id, parent.agent_session_id)
 
 
-class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
+class SpawnNarrowGrantTests(unittest.IsolatedAsyncioTestCase):
     async def test_raises_without_active_parent(self) -> None:
         coord = _coord(_default_handler)
         with self.assertRaises(RuntimeError):
-            async with delegate_to_spawn(
+            async with spawn(
                 coordinator=coord, zone_id="z", application_id="app",
-                subject_token="tok", scopes=["tool:call"],
+                subject_token="tok", grant=Grant.narrow(["tool:call"]),
             ):
                 pass  # pragma: no cover
 
@@ -230,9 +211,9 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
         async with spawn(
             coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
         ) as parent:
-            async with delegate_to_spawn(
+            async with spawn(
                 coordinator=coord, zone_id="z", application_id="app-child",
-                subject_token="tok", scopes=["tool:call"],
+                subject_token="tok", grant=Grant.narrow(["tool:call"]),
             ) as child:
                 self.assertEqual(child.agent_session_id, "child-1")
                 self.assertEqual(child.delegation_edge_id, "edge-9")
@@ -244,29 +225,6 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(posts[1][1].endswith("/agents"))
         self.assertTrue(posts[2][1].endswith("/delegations"))
         self.assertTrue(any(m == "DELETE" for m, _ in calls))
-
-    async def test_service_kind_skips_termination(self) -> None:
-        calls: list[str] = []
-
-        async def handler(req: httpx.Request) -> httpx.Response:
-            calls.append(req.method)
-            if req.method == "POST" and req.url.path.endswith("/agents"):
-                return httpx.Response(200, json={"agent_session_id": "child-1"})
-            if req.method == "POST" and req.url.path.endswith("/delegations"):
-                return httpx.Response(200, json={"delegation_edge_id": "edge-9"})
-            return httpx.Response(204)
-
-        coord = _coord(handler)
-        async with spawn(
-            coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
-        ):
-            async with delegate_to_spawn(
-                coordinator=coord, zone_id="z", application_id="app-child",
-                subject_token="tok", scopes=["tool:call"], kind=AgentKind.SERVICE,
-            ):
-                pass
-
-        self.assertEqual(calls.count("DELETE"), 1)
 
     async def test_delegation_failure_terminates_spawned_child(self) -> None:
         calls: list[tuple[str, str]] = []
@@ -286,9 +244,9 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
             coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
         ):
             with self.assertRaises(httpx.HTTPStatusError):
-                async with delegate_to_spawn(
+                async with spawn(
                     coordinator=coord, zone_id="z", application_id="app-child",
-                    subject_token="tok", scopes=["tool:call"],
+                    subject_token="tok", grant=Grant.narrow(["tool:call"]),
                 ):
                     pass  # pragma: no cover
 
@@ -320,9 +278,9 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
             coordinator=coord, zone_id="z", application_id="app", subject_token="tok"
         ):
             with self.assertRaises(RuntimeError):
-                async with delegate_to_spawn(
+                async with spawn(
                     coordinator=coord, zone_id="z", application_id="app-child",
-                    subject_token="tok", scopes=["tool:call"],
+                    subject_token="tok", grant=Grant.narrow(["tool:call"]),
                     on_agent_start=on_start, on_agent_end=on_end,
                 ):
                     pass  # pragma: no cover
@@ -332,7 +290,7 @@ class DelegateToSpawnTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
-    """CP-3: spawn / delegate_to_spawn must accept an explicit parent context."""
+    """CP-3: spawn must accept an explicit parent context."""
 
     async def test_spawn_uses_explicit_parent_ctx_when_no_current(self) -> None:
         from caracalai_sdk.context import CaracalContext
@@ -369,7 +327,7 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(ctx.trace_id, "11111111111111111111111111111111")
         self.assertEqual(captured["body"].get("parent_id"), "parent-session")
 
-    async def test_delegate_to_spawn_uses_explicit_parent_ctx(self) -> None:
+    async def test_spawn_narrow_uses_explicit_parent_ctx(self) -> None:
         from caracalai_sdk.context import CaracalContext
 
         seen = {"delegations": 0, "agents": 0}
@@ -394,13 +352,12 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
         )
         coord = _coord(handler)
         self.assertIsNone(current())
-        async with delegate_to_spawn(
+        async with spawn(
             coordinator=coord,
             zone_id="z",
             application_id="child-app",
             subject_token="tok",
-            scopes=["tool:call"],
-            kind=AgentKind.SERVICE,
+            grant=Grant.narrow(["tool:call"]),
             parent_ctx=parent,
         ) as ctx:
             self.assertEqual(ctx.hop, 2)
@@ -408,7 +365,7 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen["delegations"], 1)
         self.assertEqual(seen["agents"], 1)
 
-    async def test_delegate_to_spawn_requires_parent_session(self) -> None:
+    async def test_spawn_narrow_requires_parent_session(self) -> None:
         from caracalai_sdk.context import CaracalContext
 
         coord = _coord(_default_handler)
@@ -419,13 +376,12 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
             agent_session_id=None,
         )
         with self.assertRaises(RuntimeError):
-            async with delegate_to_spawn(
+            async with spawn(
                 coordinator=coord,
                 zone_id="z",
                 application_id="child-app",
                 subject_token="tok",
-                scopes=["tool:call"],
-                kind=AgentKind.SERVICE,
+                grant=Grant.narrow(["tool:call"]),
                 parent_ctx=bare,
             ):
                 pass

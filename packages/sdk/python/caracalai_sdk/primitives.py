@@ -29,6 +29,47 @@ from .json_types import JsonObject
 LifecycleHook = Callable[[CaracalContext], Awaitable[None]]
 
 
+@dataclass(frozen=True)
+class Grant:
+    """Authority handed to a spawned child.
+
+    ``inherit`` (the default) runs the child under its application's authority
+    with no delegation edge. ``narrow`` issues a bounded delegation edge so the
+    child holds only the listed scopes; the server re-validates the subset, so a
+    narrow can never broaden. ``none`` spawns without issuing any edge.
+    """
+
+    mode: str = "inherit"
+    scopes: tuple[str, ...] = ()
+    resource_id: str | None = None
+    constraints: DelegationConstraints | None = None
+    ttl_seconds: int | None = None
+
+    @staticmethod
+    def inherit() -> Grant:
+        return Grant(mode="inherit")
+
+    @staticmethod
+    def none() -> Grant:
+        return Grant(mode="none")
+
+    @staticmethod
+    def narrow(
+        scopes: list[str],
+        *,
+        resource_id: str | None = None,
+        constraints: DelegationConstraints | None = None,
+        ttl_seconds: int | None = None,
+    ) -> Grant:
+        return Grant(
+            mode="narrow",
+            scopes=tuple(scopes),
+            resource_id=resource_id,
+            constraints=constraints,
+            ttl_seconds=ttl_seconds,
+        )
+
+
 @asynccontextmanager
 async def spawn(
     *,
@@ -38,7 +79,7 @@ async def spawn(
     subject_token: str,
     parent_id: str | None = None,
     parent_ctx: CaracalContext | None = None,
-    kind: AgentKind | None = None,
+    grant: Grant | None = None,
     ttl_seconds: int | None = None,
     metadata: JsonObject | None = None,
     labels: list[str] | None = None,
@@ -48,11 +89,14 @@ async def spawn(
 ) -> AsyncGenerator[CaracalContext, None]:
     """Spawn a child agent session and bind it to the current task.
 
-    ``parent_ctx`` overrides the bound :func:`current` lookup; pass it
-    explicitly when the orchestrator owns the parent context but the
-    spawn runs on a different task (asyncio TaskGroup, thread pool,
-    framework worker) where the parent's contextvar is not visible.
+    The child inherits its application's authority by default. Pass
+    ``grant=Grant.narrow([...])`` to issue a bounded delegation edge so the
+    child holds only a subset. ``parent_ctx`` overrides the bound
+    :func:`current` lookup; pass it explicitly when the orchestrator owns the
+    parent context but the spawn runs on a different task (asyncio TaskGroup,
+    thread pool, framework worker) where the parent's contextvar is not visible.
     """
+    grant = grant or Grant.inherit()
     parent = parent_ctx if parent_ctx is not None else current()
     parent_agent_session_id = parent_id or (parent.agent_session_id if parent else None)
     bearer = subject_token
@@ -64,22 +108,50 @@ async def spawn(
             zone_id=zone_id,
             application_id=application_id,
             parent_id=parent_agent_session_id,
-            kind=kind,
             ttl_seconds=ttl_seconds,
             metadata=metadata,
             labels=labels,
         ),
     )
 
+    delegation_edge_id: str | None = None
+    hop = parent.hop if parent else 0
+    try:
+        if grant.mode == "narrow":
+            if parent is None or not parent.agent_session_id:
+                raise RuntimeError("grant=narrow requires an active parent agent session")
+            deleg = await create_delegation(
+                coordinator,
+                parent.subject_token,
+                DelegationRequest(
+                    zone_id=zone_id,
+                    issuer_application_id=parent.client_id,
+                    source_session_id=parent.agent_session_id,
+                    target_session_id=res.agent_session_id,
+                    receiver_application_id=application_id,
+                    parent_edge_id=parent.delegation_edge_id,
+                    resource_id=grant.resource_id,
+                    scopes=list(grant.scopes),
+                    constraints=grant.constraints,
+                    ttl_seconds=grant.ttl_seconds,
+                ),
+            )
+            delegation_edge_id = deleg.delegation_edge_id
+            hop = parent.hop + 1
+    except BaseException:
+        await terminate_agent(coordinator, bearer, zone_id, res.agent_session_id)
+        raise
+
     ctx = CaracalContext(
         subject_token=bearer,
         zone_id=zone_id,
         client_id=application_id,
         agent_session_id=res.agent_session_id,
+        delegation_edge_id=delegation_edge_id,
         parent_edge_id=parent.delegation_edge_id if parent else None,
         session_id=parent.session_id if parent else None,
         trace_id=trace_id or (parent.trace_id if parent else None),
-        hop=parent.hop if parent else 0,
+        hop=hop,
     )
 
     token = None
@@ -95,8 +167,7 @@ async def spawn(
             _ctx_var.reset(token)
         if started and on_agent_end is not None:
             await on_agent_end(ctx)
-        if kind != AgentKind.SERVICE:
-            await terminate_agent(coordinator, bearer, zone_id, res.agent_session_id)
+        await terminate_agent(coordinator, bearer, zone_id, res.agent_session_id)
 
 
 @dataclass
@@ -229,99 +300,3 @@ async def delegate(
         yield child
     finally:
         _ctx_var.reset(token)
-
-
-@asynccontextmanager
-async def delegate_to_spawn(
-    *,
-    coordinator: CoordinatorClient,
-    zone_id: str,
-    application_id: str,
-    subject_token: str,
-    scopes: list[str],
-    resource_id: str | None = None,
-    parent_ctx: CaracalContext | None = None,
-    constraints: DelegationConstraints | None = None,
-    delegation_ttl_seconds: int | None = None,
-    kind: AgentKind | None = None,
-    ttl_seconds: int | None = None,
-    metadata: JsonObject | None = None,
-    labels: list[str] | None = None,
-    trace_id: str | None = None,
-    on_agent_start: LifecycleHook | None = None,
-    on_agent_end: LifecycleHook | None = None,
-) -> AsyncGenerator[CaracalContext, None]:
-    """Atomic spawn + delegate for fan-out workflows.
-
-    The parent context must be active (or supplied via ``parent_ctx``).
-    The child session is created and the parent→child delegation edge is
-    recorded before the child context is yielded, so callers can safely
-    hand the resulting context off to a background task without racing
-    the parent's lifecycle.
-
-    ``parent_ctx`` overrides the bound :func:`current` lookup; pass it
-    explicitly from background tasks or worker pools that do not inherit
-    the orchestrator's contextvar.
-    """
-    parent = parent_ctx if parent_ctx is not None else current()
-    if parent is None or not parent.agent_session_id:
-        raise RuntimeError("delegate_to_spawn requires an active agent session in context")
-
-    spawn_res = await spawn_agent(
-        coordinator,
-        subject_token,
-        SpawnRequest(
-            zone_id=zone_id,
-            application_id=application_id,
-            parent_id=parent.agent_session_id,
-            kind=kind,
-            ttl_seconds=ttl_seconds,
-            metadata=metadata,
-            labels=labels,
-        ),
-    )
-
-    token = None
-    started = False
-    try:
-        delegation_res = await create_delegation(
-            coordinator,
-            parent.subject_token,
-            DelegationRequest(
-                zone_id=parent.zone_id,
-                issuer_application_id=parent.client_id,
-                source_session_id=parent.agent_session_id,
-                target_session_id=spawn_res.agent_session_id,
-                receiver_application_id=application_id,
-                parent_edge_id=parent.delegation_edge_id,
-                resource_id=resource_id,
-                scopes=scopes,
-                constraints=constraints,
-                ttl_seconds=delegation_ttl_seconds,
-            ),
-        )
-
-        ctx = CaracalContext(
-            subject_token=subject_token,
-            zone_id=zone_id,
-            client_id=application_id,
-            agent_session_id=spawn_res.agent_session_id,
-            delegation_edge_id=delegation_res.delegation_edge_id,
-            parent_edge_id=parent.delegation_edge_id,
-            session_id=parent.session_id,
-            trace_id=trace_id or parent.trace_id,
-            hop=parent.hop + 1,
-        )
-
-        if on_agent_start is not None:
-            await on_agent_start(ctx)
-        started = True
-        token = _ctx_var.set(ctx)
-        yield ctx
-    finally:
-        if token is not None:
-            _ctx_var.reset(token)
-        if started and on_agent_end is not None:
-            await on_agent_end(ctx)
-        if kind != AgentKind.SERVICE:
-            await terminate_agent(coordinator, subject_token, zone_id, spawn_res.agent_session_id)
