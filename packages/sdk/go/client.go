@@ -845,11 +845,11 @@ func (c *Caracal) fire(hooks []LifecycleHook, ctx context.Context, cc CaracalCon
 
 // SpawnOptions overrides defaults for a single Spawn call.
 type SpawnOptions struct {
-	TTLSeconds   int
-	ParentID     string
-	Metadata     map[string]any
-	Capabilities []string
-	TraceID      string
+	TTLSeconds int
+	ParentID   string
+	Metadata   map[string]any
+	Labels     []string
+	TraceID    string
 }
 
 // Spawn spawns an agent session and invokes fn with the bound context.
@@ -881,7 +881,7 @@ func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opt
 		ParentID:      o.ParentID,
 		TTLSeconds:    ttl,
 		Metadata:      o.Metadata,
-		Capabilities:  o.Capabilities,
+		Labels:        o.Labels,
 		TraceID:       o.TraceID,
 		OnAgentStart:  onStart,
 		OnAgentEnd:    onEnd,
@@ -890,11 +890,11 @@ func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opt
 
 // ServiceOptions overrides defaults for a single Service call.
 type ServiceOptions struct {
-	TTLSeconds   int
-	ParentID     string
-	Metadata     map[string]any
-	Capabilities []string
-	TraceID      string
+	TTLSeconds int
+	ParentID   string
+	Metadata   map[string]any
+	Labels     []string
+	TraceID    string
 }
 
 // Service starts a long-lived service agent and returns a handle the caller
@@ -926,7 +926,7 @@ func (c *Caracal) Service(ctx context.Context, opts ...ServiceOptions) (*Service
 		ParentID:      o.ParentID,
 		TTLSeconds:    ttl,
 		Metadata:      o.Metadata,
-		Capabilities:  o.Capabilities,
+		Labels:        o.Labels,
 		TraceID:       o.TraceID,
 		OnAgentStart:  onStart,
 	})
@@ -960,7 +960,7 @@ type DelegateToSpawnOptions struct {
 	DelegationTTLSeconds int
 	TTLSeconds           int
 	Metadata             map[string]any
-	Capabilities         []string
+	Labels               []string
 	TraceID              string
 }
 
@@ -994,7 +994,7 @@ func (c *Caracal) DelegateToSpawn(ctx context.Context, opts DelegateToSpawnOptio
 		DelegationTTLSeconds: opts.DelegationTTLSeconds,
 		TTLSeconds:           ttl,
 		Metadata:             opts.Metadata,
-		Capabilities:         opts.Capabilities,
+		Labels:               opts.Labels,
 		TraceID:              opts.TraceID,
 		OnAgentStart:         onStart,
 		OnAgentEnd:           onEnd,

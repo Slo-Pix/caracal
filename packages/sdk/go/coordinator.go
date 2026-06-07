@@ -48,7 +48,7 @@ type SpawnRequest struct {
 	Kind             AgentKind
 	TTLSeconds       int
 	Metadata         map[string]any
-	Capabilities     []string
+	Labels           []string
 	IdempotencyKey   string
 }
 
@@ -137,8 +137,8 @@ func SpawnAgent(ctx context.Context, client *CoordinatorClient, bearer string, r
 	if req.Metadata != nil {
 		body["metadata"] = req.Metadata
 	}
-	if len(req.Capabilities) > 0 {
-		body["capabilities"] = req.Capabilities
+	if len(req.Labels) > 0 {
+		body["labels"] = req.Labels
 	}
 
 	extra := map[string]string{}
@@ -162,7 +162,7 @@ func deriveIdempotencyKey(req SpawnRequest) string {
 	if req.SubjectSessionID == "" && req.ParentID == "" {
 		return ""
 	}
-	seed := req.ApplicationID + "|" + req.SubjectSessionID + "|" + req.ParentID + "|" + string(req.Kind) + "|" + strings.Join(req.Capabilities, ",")
+	seed := req.ApplicationID + "|" + req.SubjectSessionID + "|" + req.ParentID + "|" + string(req.Kind) + "|" + strings.Join(req.Labels, ",")
 	sum := sha256.Sum256([]byte(seed))
 	return hex.EncodeToString(sum[:])
 }
