@@ -8,7 +8,7 @@ import FaqRegistryScript from '../../../components/FaqRegistryScript.astro';
 
 <section className="faqSearchPanel" aria-label="Search FAQs">
   <div className="faqSearchMeta">
-    <span id="faq-search-status" className="faqSearchStatus" aria-live="polite">19 results</span>
+    <span id="faq-search-status" className="faqSearchStatus" aria-live="polite">21 results</span>
   </div>
   <div className="faqSearchRow">
     <label className="faqSearchLabel" htmlFor="faq-search">Search FAQs</label>
@@ -36,6 +36,7 @@ import FaqRegistryScript from '../../../components/FaqRegistryScript.astro';
   <a className="faqStripItem" href="#faq-003"><span>FAQ-003</span><strong>What should a zone represent?</strong></a>
   <a className="faqStripItem" href="#faq-006"><span>FAQ-006</span><strong>Should I create one application per agent?</strong></a>
   <a className="faqStripItem" href="#faq-008"><span>FAQ-008</span><strong>Can policy and audit tell agents apart under one application?</strong></a>
+  <a className="faqStripItem" href="#faq-021"><span>FAQ-021</span><strong>Policy vs grant — which wins?</strong></a>
   <a className="faqStripItem" href="#faq-016"><span>FAQ-016</span><strong>403 from STS vs Gateway?</strong></a>
   <a className="faqStripItem" href="#faq-017"><span>FAQ-017</span><strong>Where is the diagnostic bundle or doctor command?</strong></a>
   <a className="faqStripItem" href="#faq-019"><span>FAQ-019</span><strong>Which features are Enterprise Edition only?</strong></a>
@@ -294,6 +295,35 @@ import FaqRegistryScript from '../../../components/FaqRegistryScript.astro';
       <p>Managed multi-tenancy, hosted management UI, managed Gateway and service operation, SSO, SCIM provisioning, teams, organization-level RBAC, commercial support, and enterprise lifecycle features are Enterprise Edition features. The Community Edition remains self-hosted and uses zones, Admin API automation, Console workflows, SDKs, and connectors.</p>
       <p>See <a href="/enterprise/">Compare Editions</a> or <a href="https://cal.com/rawx18/caracal-enterprise-sales">book an enterprise call</a>.</p>
       <p className="faqRelated">Related: <a href="#faq-004">FAQ-004</a></p>
+    </details>
+
+    <details id="faq-020" className="faqEntry faqEntryImportant" data-faq-entry data-faq-category="model" data-faq-id="FAQ-020" data-faq-title="Two agents share the same application and labels — how do I tell which one acted?" data-keywords="agent session id attribution which agent did this fungible fan out labels metadata trace id audit filter observability identity">
+      <summary className="faqEntryHeader">
+        <span className="faqNumber">FAQ-020</span>
+        <span className="faqTag faqTagIdentity">Identity</span>
+        <h3>Two agents share the same application and labels — how do I tell which one acted?</h3>
+        <button type="button" className="faqShareButton" data-faq-share aria-label="Share FAQ-020">Share</button>
+      </summary>
+      <span id="faq-which-agent-session-acted" className="faqAnchor"></span>
+      <p>Every agent has exactly one canonical identity: the server-minted <code>agent_session_id</code>. It is unique, returned to the caller the moment <code>spawn()</code> or <code>service()</code> creates the session, and stamped onto every token exchange and audit event that session produces. That id — not the application, kind, or labels — is the answer to "which agent did this?". Even two sessions that share the same application, labels, and metadata are still separated by their <code>agent_session_id</code> in audit.</p>
+      <p>Identical sessions are interchangeable on purpose. A hundred <code>["pricing-worker"]</code> sessions fanned out under one application are meant to be fungible — that is how fan-out works, and it is why labels are a descriptor rather than a unique name. When you need to tell sessions apart by <em>meaning</em> rather than by raw id, give them distinguishing <code>labels</code>, attach business correlation in <code>metadata</code>, or propagate a <code>trace_id</code> through the work.</p>
+      <p>To investigate, the zone audit endpoint filters directly on these fields: query <code>agent_session_id</code> to follow one exact session end to end, or <code>label</code> to scope to a role across a whole fleet of sessions. The Console audit view exposes both filters.</p>
+      <p className="faqRelated">Related: <a href="#faq-006">FAQ-006</a>, <a href="#faq-008">FAQ-008</a>, <a href="#faq-021">FAQ-021</a></p>
+    </details>
+
+    <details id="faq-021" className="faqEntry faqEntryImportant" data-faq-entry data-faq-category="model" data-faq-id="FAQ-021" data-faq-title="A spawned agent inherits its application's policy and also carries a grant — which wins?" data-keywords="policy grant scope intersection AND narrower wins least privilege delegation edge spawned agent application authority authorization defense in depth">
+      <summary className="faqEntryHeader">
+        <span className="faqNumber">FAQ-021</span>
+        <span className="faqTag faqTagSecurity">Security</span>
+        <h3>A spawned agent inherits its application's policy and also carries a grant — which wins?</h3>
+        <button type="button" className="faqShareButton" data-faq-share aria-label="Share FAQ-021">Share</button>
+      </summary>
+      <span id="faq-policy-and-grant-composition" className="faqAnchor"></span>
+      <p>Both apply, and they compose as a strict intersection — a logical <strong>AND</strong> — so the <em>narrower</em> of the two always wins. They are two independent layers with different jobs: a <strong>grant</strong> (the delegation edge a narrowing <code>spawn(grant=…)</code> creates) caps <em>which scopes the token may carry at all</em>, while <strong>policy</strong> decides <em>whether the action is allowed</em>. Neither layer can ever add authority; each one can only subtract.</p>
+      <p>At token exchange a resource is released only if it passes every gate: the requested scopes must be within the resource's own scopes, within the grant edge's scopes (which is itself re-validated to be within the parent's authority), the resource must fall inside the delegation, and policy must return <code>allow</code>. The effective authority is therefore <code>policy ∩ grant ∩ resource ∩ delegation</code>. This holds in both directions: if policy is the narrower of the two, policy wins and the grant cannot widen past it; if the grant is the narrower, the grant wins, because the token cannot request scopes outside the grant and resources outside the delegation are rejected even when policy would have allowed them.</p>
+      <p>This means there is no "clash" to resolve when a spawned agent runs under its parent's application. A plain <code>spawn()</code> carries no grant edge, so the child runs at the application's full, policy-bounded authority — deliberately identical to the parent, which is what inheriting means. Reach for <code>spawn(grant=Grant.narrow([...]))</code> when the child should hold strictly less; the grant then sub-bounds the authority further while policy continues to apply on top. Because every layer is subtractive, inheriting an application's policy and carrying a grant can only ever narrow access, never expand it.</p>
+      <p>See <a href="/concepts/delegation/">Delegation</a> and <a href="/concepts/policy/">Policy</a>.</p>
+      <p className="faqRelated">Related: <a href="#faq-006">FAQ-006</a>, <a href="#faq-008">FAQ-008</a>, <a href="#faq-011">FAQ-011</a></p>
     </details>
 </div>
 
