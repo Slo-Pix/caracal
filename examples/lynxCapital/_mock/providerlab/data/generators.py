@@ -903,21 +903,6 @@ def lumen_directory(seed: str) -> dict[str, dict]:
     }
 
 
-def instruments(seed: str) -> list[dict]:
-    pairs = ("USD/EUR", "USD/GBP", "USD/JPY", "USD/BRL", "USD/SGD", "EUR/GBP",
-             "EUR/JPY", "GBP/JPY", "USD/CAD", "EUR/CHF")
-    out = []
-    for sym in pairs:
-        rng = _rng(seed, "instrument", sym)
-        out.append({
-            "symbol": sym,
-            "mid": round(rng.uniform(0.6, 160.0), 4),
-            "spreadBps": rng.randint(2, 18),
-            "venue": rng.choice(("LDN", "NYC", "SGP", "TKY")),
-        })
-    return out
-
-
 def recipients(seed: str, count: int) -> list[dict]:
     out = []
     methods = ("bank", "wallet", "card")
@@ -1993,6 +1978,118 @@ def fx_next_status(current: str, kind: str) -> str:
     if current not in flow:
         return current
     return flow[min(flow.index(current) + 1, len(flow) - 1)]
+
+
+# --------------------------------------------------------------------------- #
+# Pulse Market Data: FX instrument reference, intraday quotes, and EOD fixings
+# --------------------------------------------------------------------------- #
+_PULSE_PAIRS = ("USD/EUR", "USD/GBP", "USD/JPY", "USD/BRL", "USD/SGD", "EUR/GBP",
+                "EUR/JPY", "GBP/JPY", "USD/CAD", "EUR/CHF", "USD/CHF", "USD/MXN",
+                "USD/INR", "AUD/USD")
+_PULSE_VENUE = {"USD": "NYC", "EUR": "LDN", "GBP": "LDN", "JPY": "TKY", "SGD": "SGP",
+                "CHF": "ZRH", "CAD": "TOR", "AUD": "SYD", "BRL": "SAO", "MXN": "MEX",
+                "INR": "MUM"}
+_PULSE_CCY_NAME = {"USD": "US Dollar", "EUR": "Euro", "GBP": "British Pound",
+                   "JPY": "Japanese Yen", "BRL": "Brazilian Real", "SGD": "Singapore Dollar",
+                   "CAD": "Canadian Dollar", "CHF": "Swiss Franc", "AUD": "Australian Dollar",
+                   "MXN": "Mexican Peso", "INR": "Indian Rupee"}
+_PULSE_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_PULSE_FIXING_DAYS = 5
+
+
+def pulse_pairs() -> tuple[str, ...]:
+    return _PULSE_PAIRS
+
+
+def pulse_price_decimals(quote: str) -> int:
+    """FX market convention: yen crosses quote to three decimals, the rest to five."""
+    return 3 if quote == "JPY" else 5
+
+
+def pulse_pip(quote: str) -> float:
+    return 0.01 if quote == "JPY" else 0.0001
+
+
+def _pulse_spread_bps(base: str, quote: str) -> int:
+    return max(_FX_SPREAD_BPS.get(quote, 12), _FX_SPREAD_BPS.get(base, 12))
+
+
+def pulse_instrument(seed: str, symbol: str) -> dict:
+    base, quote = symbol.split("/")
+    rng = _rng(seed, "pulse-instrument", symbol)
+    decimals = pulse_price_decimals(quote)
+    mid = round(fx_mid_rate(base, quote), decimals)
+    pip = pulse_pip(quote)
+    prev_close = round(mid * (1 + rng.uniform(-0.0015, 0.0015)), decimals)
+    day_open = round(prev_close * (1 + rng.uniform(-0.0008, 0.0008)), decimals)
+    return {
+        "symbol": symbol,
+        "ticker": f"{base}{quote}",
+        "baseCurrency": base,
+        "quoteCurrency": quote,
+        "description": f"{_PULSE_CCY_NAME.get(base, base)} / {_PULSE_CCY_NAME.get(quote, quote)}",
+        "assetClass": "fx_spot",
+        "mid": mid,
+        "pip": pip,
+        "priceDecimals": decimals,
+        "spreadBps": _pulse_spread_bps(base, quote),
+        "minTickSize": round(pip / 10, decimals + 1),
+        "contractSize": 100_000,
+        "venue": _PULSE_VENUE.get(base, "LDN"),
+        "tradingSession": "24x5",
+        "prevClose": prev_close,
+        "dayOpen": day_open,
+        "status": "active",
+    }
+
+
+def pulse_instruments(seed: str) -> list[dict]:
+    return [pulse_instrument(seed, symbol) for symbol in _PULSE_PAIRS]
+
+
+def _pulse_business_days(count: int) -> list[date]:
+    """The most recent settlement (weekday) dates strictly before the lab epoch."""
+    out: list[date] = []
+    cursor = _PULSE_EPOCH.date()
+    while len(out) < count:
+        cursor -= timedelta(days=1)
+        if cursor.weekday() < 5:
+            out.append(cursor)
+    return out
+
+
+def pulse_reference_rates(seed: str) -> list[dict]:
+    """Official end-of-day fixings, one series of recent settlement dates per pair."""
+    out = []
+    fixing_dates = _pulse_business_days(_PULSE_FIXING_DAYS)
+    for symbol in _PULSE_PAIRS:
+        base, quote = symbol.split("/")
+        decimals = pulse_price_decimals(quote)
+        mid = fx_mid_rate(base, quote)
+        for fixing_date in fixing_dates:
+            rng = _rng(seed, "pulse-fixing", symbol, fixing_date.isoformat())
+            rate = round(mid * (1 + rng.uniform(-0.004, 0.004)), decimals)
+            published = datetime.combine(fixing_date, time(16, 0), tzinfo=timezone.utc)
+            out.append({
+                "rateId": f"{base}{quote}-{fixing_date.isoformat()}",
+                "symbol": symbol,
+                "baseCurrency": base,
+                "quoteCurrency": quote,
+                "rate": rate,
+                "fixingDate": fixing_date.isoformat(),
+                "publishedAt": _fx_iso(published).replace("+00:00", "Z"),
+                "source": "PULSE_REF",
+                "session": "EOD",
+            })
+    return out
+
+
+def pulse_dataset(seed: str) -> dict[str, dict]:
+    return {
+        "instruments": index_by(pulse_instruments(seed), key="symbol"),
+        "reference_rates": index_by(pulse_reference_rates(seed), key="rateId"),
+        "subscriptions": {},
+    }
 
 
 def _fx_iso(dt: datetime) -> str:

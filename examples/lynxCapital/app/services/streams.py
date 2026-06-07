@@ -29,10 +29,15 @@ def _consume_pulse(url: str, api_key: str, symbol: str) -> None:
     while not _stop.is_set():
         try:
             with httpx.stream("GET", f"{url}/stream", headers=headers, params=params, timeout=None) as resp:
+                event = "message"
                 for line in resp.iter_lines():
                     if _stop.is_set():
                         return
-                    if line.startswith("data:"):
+                    if not line:
+                        event = "message"
+                    elif line.startswith("event:"):
+                        event = line[6:].strip()
+                    elif line.startswith("data:") and event == "tick":
                         _publish_tick(json.loads(line[5:].strip()))
         except Exception:
             if _stop.is_set():
