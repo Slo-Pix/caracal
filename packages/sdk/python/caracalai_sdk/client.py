@@ -26,10 +26,17 @@ from .context import (
     to_envelope,
 )
 from .auth import ClientSecretExchanger, TokenSource, _decode_jwt_exp
-from .coordinator import AgentKind, CoordinatorClient, DelegationConstraints
+from .coordinator import CoordinatorClient, DelegationConstraints
 from .envelope import decode_envelope, to_headers
 from .json_types import JsonObject
-from .primitives import LifecycleHook, delegate, delegate_to_spawn, spawn
+from .primitives import (
+    LifecycleHook,
+    ServiceAgent,
+    delegate,
+    delegate_to_spawn,
+    spawn,
+    spawn_service,
+)
 
 DEFAULT_STS_URL = "http://localhost:8080"
 DEFAULT_COORDINATOR_URL = "http://localhost:4000"
@@ -69,7 +76,6 @@ class CaracalConfig:
         token_source: TokenSource | None = None,
         gateway_url: str | None = None,
         resources: list[ResourceBinding] | None = None,
-        default_kind: AgentKind = AgentKind.INSTANCE,
         default_ttl_seconds: int | None = None,
     ) -> None:
         if (subject_token is None) == (token_source is None):
@@ -83,7 +89,6 @@ class CaracalConfig:
         self._token_source = token_source
         self.gateway_url = gateway_url
         self.resources = sort_bindings_longest_first(resources or [])
-        self.default_kind = default_kind
         self.default_ttl_seconds = default_ttl_seconds
 
     @property
@@ -714,7 +719,6 @@ class Caracal:
     async def spawn(
         self,
         *,
-        kind: AgentKind | None = None,
         ttl_seconds: int | None = None,
         parent_id: str | None = None,
         parent_ctx: CaracalContext | None = None,
@@ -735,7 +739,6 @@ class Caracal:
             subject_token=self.config.subject_token,
             parent_id=parent_id,
             parent_ctx=parent_ctx,
-            kind=kind or self.config.default_kind,
             ttl_seconds=ttl_seconds if ttl_seconds is not None else self.config.default_ttl_seconds,
             metadata=metadata,
             capabilities=capabilities,
@@ -744,6 +747,39 @@ class Caracal:
             on_agent_end=on_end,
         ) as ctx:
             yield ctx
+
+    async def service(
+        self,
+        *,
+        ttl_seconds: int | None = None,
+        parent_id: str | None = None,
+        parent_ctx: CaracalContext | None = None,
+        metadata: JsonObject | None = None,
+        capabilities: list[str] | None = None,
+        trace_id: str | None = None,
+    ) -> ServiceAgent:
+        """Start a long-lived service agent and return a handle the caller owns.
+
+        Unlike :meth:`spawn`, the session is not retired when a block exits: keep
+        it alive by calling :meth:`ServiceAgent.heartbeat` and retire it with
+        :meth:`ServiceAgent.aclose`. Use for daemons and workers that outlive a
+        single request."""
+        on_start: LifecycleHook | None = (
+            (lambda c: self._fire(self._agent_start_hooks, c)) if self._agent_start_hooks else None
+        )
+        return await spawn_service(
+            coordinator=self.config.coordinator,
+            zone_id=self.config.zone_id,
+            application_id=self.config.application_id,
+            subject_token=self.config.subject_token,
+            parent_id=parent_id,
+            parent_ctx=parent_ctx,
+            ttl_seconds=ttl_seconds if ttl_seconds is not None else self.config.default_ttl_seconds,
+            metadata=metadata,
+            capabilities=capabilities,
+            trace_id=trace_id,
+            on_agent_start=on_start,
+        )
 
     @asynccontextmanager
     async def delegate(
@@ -776,7 +812,6 @@ class Caracal:
         parent_ctx: CaracalContext | None = None,
         constraints: DelegationConstraints | None = None,
         delegation_ttl_seconds: int | None = None,
-        kind: AgentKind | None = None,
         ttl_seconds: int | None = None,
         metadata: JsonObject | None = None,
         capabilities: list[str] | None = None,
@@ -798,7 +833,6 @@ class Caracal:
             parent_ctx=parent_ctx,
             constraints=constraints,
             delegation_ttl_seconds=delegation_ttl_seconds,
-            kind=kind or self.config.default_kind,
             ttl_seconds=ttl_seconds if ttl_seconds is not None else self.config.default_ttl_seconds,
             metadata=metadata,
             capabilities=capabilities,

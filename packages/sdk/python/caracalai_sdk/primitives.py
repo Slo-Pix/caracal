@@ -8,7 +8,7 @@ SDK primitives: spawn an agent session and delegate authority as async context m
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from .context import CaracalContext, current, _ctx_var
@@ -19,6 +19,7 @@ from .coordinator import (
     DelegationRequest,
     SpawnRequest,
     create_delegation,
+    heartbeat_agent,
     spawn_agent,
     terminate_agent,
 )
@@ -37,7 +38,7 @@ async def spawn(
     subject_token: str,
     parent_id: str | None = None,
     parent_ctx: CaracalContext | None = None,
-    kind: AgentKind = AgentKind.INSTANCE,
+    kind: AgentKind | None = None,
     ttl_seconds: int | None = None,
     metadata: JsonObject | None = None,
     capabilities: list[str] | None = None,
@@ -98,6 +99,93 @@ async def spawn(
             await terminate_agent(coordinator, bearer, zone_id, res.agent_session_id)
 
 
+@dataclass
+class ServiceAgent:
+    """Handle for a long-lived service agent session. Unlike :func:`spawn`,
+    a service session is not terminated automatically: the holder must
+    :meth:`heartbeat` to keep its lease and :meth:`aclose` to retire it."""
+
+    coordinator: CoordinatorClient
+    subject_token: str
+    context: CaracalContext
+
+    @property
+    def agent_session_id(self) -> str:
+        return self.context.agent_session_id
+
+    async def heartbeat(self, status: str = "healthy") -> None:
+        await heartbeat_agent(
+            self.coordinator,
+            self.subject_token,
+            self.context.zone_id,
+            self.context.agent_session_id,
+            status,
+        )
+
+    async def aclose(self) -> None:
+        await terminate_agent(
+            self.coordinator,
+            self.subject_token,
+            self.context.zone_id,
+            self.context.agent_session_id,
+        )
+
+    async def __aenter__(self) -> ServiceAgent:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        await self.aclose()
+
+
+async def spawn_service(
+    *,
+    coordinator: CoordinatorClient,
+    zone_id: str,
+    application_id: str,
+    subject_token: str,
+    parent_id: str | None = None,
+    parent_ctx: CaracalContext | None = None,
+    ttl_seconds: int | None = None,
+    metadata: JsonObject | None = None,
+    capabilities: list[str] | None = None,
+    trace_id: str | None = None,
+    on_agent_start: LifecycleHook | None = None,
+) -> ServiceAgent:
+    """Spawn a long-lived service agent session and return a handle the caller
+    owns. The session carries a heartbeat lease; renew it with
+    :meth:`ServiceAgent.heartbeat` and retire it with :meth:`ServiceAgent.aclose`."""
+    parent = parent_ctx if parent_ctx is not None else current()
+    parent_agent_session_id = parent_id or (parent.agent_session_id if parent else None)
+
+    res = await spawn_agent(
+        coordinator,
+        subject_token,
+        SpawnRequest(
+            zone_id=zone_id,
+            application_id=application_id,
+            parent_id=parent_agent_session_id,
+            kind=AgentKind.SERVICE,
+            ttl_seconds=ttl_seconds,
+            metadata=metadata,
+            capabilities=capabilities,
+        ),
+    )
+
+    ctx = CaracalContext(
+        subject_token=subject_token,
+        zone_id=zone_id,
+        client_id=application_id,
+        agent_session_id=res.agent_session_id,
+        parent_edge_id=parent.delegation_edge_id if parent else None,
+        session_id=parent.session_id if parent else None,
+        trace_id=trace_id or (parent.trace_id if parent else None),
+        hop=parent.hop if parent else 0,
+    )
+    if on_agent_start is not None:
+        await on_agent_start(ctx)
+    return ServiceAgent(coordinator=coordinator, subject_token=subject_token, context=ctx)
+
+
 @asynccontextmanager
 async def delegate(
     *,
@@ -155,7 +243,7 @@ async def delegate_to_spawn(
     parent_ctx: CaracalContext | None = None,
     constraints: DelegationConstraints | None = None,
     delegation_ttl_seconds: int | None = None,
-    kind: AgentKind = AgentKind.INSTANCE,
+    kind: AgentKind | None = None,
     ttl_seconds: int | None = None,
     metadata: JsonObject | None = None,
     capabilities: list[str] | None = None,
