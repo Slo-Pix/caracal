@@ -51,6 +51,7 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
               data-markdown-url={markdownPath}
               data-markdown-absolute-url={markdownUrl}
               data-page-url={pageUrl}
+              data-copy-prompt="true"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -168,7 +169,7 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
         const url = new URL(link.dataset.aiUrl!)
         url.searchParams.set(link.dataset.aiParam!, prompt)
 
-        if (url.href.length > 24000) {
+        if (link.dataset.copyPrompt === 'true' || url.href.length > 24000) {
           await navigator.clipboard.writeText(prompt)
           if (label) label.textContent = 'Copied prompt!'
           if (popup) popup.location.href = link.dataset.aiUrl!
