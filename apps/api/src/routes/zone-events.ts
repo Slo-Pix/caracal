@@ -27,7 +27,7 @@ function reconstructPolicyInput(zoneId: string, metadata: unknown): Record<strin
   }
   if (typeof meta.agent_session_id === 'string') principal.agent_session_id = meta.agent_session_id
   if (typeof meta.agent_kind === 'string') principal.agent_kind = meta.agent_kind
-  if (Array.isArray(meta.agent_capabilities)) principal.capabilities = meta.agent_capabilities
+  if (Array.isArray(meta.agent_labels)) principal.labels = meta.agent_labels
 
   const context: Record<string, unknown> = {
     actor_claims: {},

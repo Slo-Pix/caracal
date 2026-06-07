@@ -1966,7 +1966,7 @@ export function agentsView(ctx: Ctx): View {
     columns: [
       { header: 'application', width: 24, value: (r) => r.application_name },
       { header: 'kind', width: 10, value: (r) => r.kind ?? '-' },
-      { header: 'capabilities', width: 28, value: (r) => r.capabilities?.length ? r.capabilities.join(', ') : '-' },
+      { header: 'labels', width: 28, value: (r) => r.labels?.length ? r.labels.join(', ') : '-' },
       { header: 'parent', width: 24, value: (r) => r.parent_id ?? '-' },
       { header: 'status', width: 10, value: (r) => r.status },
       { header: 'depth', width: 6, value: (r) => String(r.depth) },

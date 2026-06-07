@@ -8,7 +8,7 @@ import type { FastifyPluginAsync, FastifyRequest, FastifyReply, FastifyInstance 
 import { z } from 'zod'
 import { verify, type JwtConfig } from '@caracalai/identity'
 import { cfg } from '../config.js'
-import { AgentCapabilities, AgentKind } from './agents.js'
+import { AgentLabels, AgentKind } from './agents.js'
 
 const BeginBody = z.object({
   zone_id: z.string().min(1),
@@ -16,7 +16,7 @@ const BeginBody = z.object({
   subject_session_id: z.string().min(1),
   parent_id: z.string().nullable().default(null),
   kind: AgentKind.optional(),
-  capabilities: AgentCapabilities,
+  labels: AgentLabels,
   ttl_seconds: z.number().int().min(1).max(86400).optional(),
 })
 
@@ -102,7 +102,7 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
         subject_session_id: body.subject_session_id,
         parent_id: body.parent_id,
         ...(body.kind ? { kind: body.kind } : {}),
-        capabilities: body.capabilities,
+        labels: body.labels,
         ...(body.ttl_seconds ? { ttl_seconds: body.ttl_seconds } : {}),
       },
     })
@@ -134,7 +134,7 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
         subject_session_id: body.subject_session_id,
         parent_id: body.parent_agent_session_id,
         ...(body.kind ? { kind: body.kind } : {}),
-        capabilities: body.capabilities,
+        labels: body.labels,
         ...(body.ttl_seconds ? { ttl_seconds: body.ttl_seconds } : {}),
       },
     })
