@@ -228,6 +228,8 @@ export class AuditTailView implements View {
         { key: 'request_id', label: 'request ID', kind: 'text', default: this.filters.request_id ?? '', hint: 'paste one request ID or leave blank for recent events' },
         { key: 'decision', label: 'decision', kind: 'select', options: ['', 'allow', 'deny', 'partial'], default: this.decision === 'all' ? '' : this.decision, advanced: true },
         { key: 'event_type', label: 'event type', kind: 'text', default: this.filters.event_type ?? '', advanced: true },
+        { key: 'agent_session_id', label: 'agent session', kind: 'text', default: this.filters.agent_session_id ?? '', advanced: true, hint: 'follow one exact agent session id' },
+        { key: 'label', label: 'agent label', kind: 'text', default: this.filters.label ?? '', advanced: true, hint: 'scope to one agent role across sessions' },
         { key: 'since', label: 'since', kind: 'text', default: this.filters.since ?? '', advanced: true },
         { key: 'until', label: 'until', kind: 'text', default: this.filters.until ?? '', advanced: true },
         { key: 'limit', label: 'limit', kind: 'text', default: this.filters.limit === undefined ? '100' : String(this.filters.limit), advanced: true, validate: (v) => v && !/^[1-9]\d*$/.test(v.trim()) ? 'limit must be a positive integer' : undefined },
@@ -237,6 +239,8 @@ export class AuditTailView implements View {
         this.filters.request_id = v.request_id || undefined
         this.filters.decision = decision
         this.filters.event_type = v.event_type || undefined
+        this.filters.agent_session_id = v.agent_session_id || undefined
+        this.filters.label = v.label || undefined
         this.filters.since = v.since || undefined
         this.filters.until = v.until || undefined
         this.filters.limit = parseLimit(v.limit)
@@ -254,6 +258,8 @@ export class AuditTailView implements View {
       this.filters.until ? `until:${this.filters.until}` : undefined,
       this.filters.request_id ? `request:${this.filters.request_id}` : undefined,
       this.filters.event_type ? `event:${this.filters.event_type}` : undefined,
+      this.filters.agent_session_id ? `agent:${this.filters.agent_session_id}` : undefined,
+      this.filters.label ? `label:${this.filters.label}` : undefined,
       this.filters.limit ? `limit:${this.filters.limit}` : undefined,
     ]) || 'filters:none'
   }

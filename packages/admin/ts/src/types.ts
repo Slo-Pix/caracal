@@ -407,6 +407,8 @@ export interface AuditQuery {
   request_id?: string
   decision?: 'allow' | 'deny' | 'partial'
   event_type?: string
+  agent_session_id?: string
+  label?: string
   limit?: number
 }
 

@@ -78,6 +78,8 @@ const AuditQuery = z.object({
   request_id: z.string().min(1).optional(),
   decision: z.enum(['allow', 'deny', 'partial']).optional(),
   event_type: z.string().min(1).optional(),
+  agent_session_id: z.string().min(1).max(128).optional(),
+  label: z.string().min(1).max(64).optional(),
   cursor: z.string().min(1).max(512).optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(100),
 })
@@ -106,6 +108,14 @@ export const zoneEventsRoutes: FastifyPluginAsync = async (fastify) => {
     if (q.request_id) { values.push(q.request_id); conds.push(`request_id = $${values.length}`) }
     if (q.decision) { values.push(q.decision); conds.push(`decision = $${values.length}`) }
     if (q.event_type) { values.push(q.event_type); conds.push(`event_type = $${values.length}`) }
+    if (q.agent_session_id) {
+      values.push(q.agent_session_id)
+      conds.push(`metadata_json->>'agent_session_id' = $${values.length}`)
+    }
+    if (q.label) {
+      values.push(JSON.stringify([q.label]))
+      conds.push(`metadata_json->'agent_labels' @> $${values.length}::jsonb`)
+    }
 
     const cursor = q.cursor ? decodeCursor(q.cursor) : null
     if (q.cursor && !cursor) return reply.code(400).send({ error: 'invalid_cursor' })
