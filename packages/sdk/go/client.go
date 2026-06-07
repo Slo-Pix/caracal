@@ -845,6 +845,7 @@ func (c *Caracal) fire(hooks []LifecycleHook, ctx context.Context, cc CaracalCon
 
 // SpawnOptions overrides defaults for a single Spawn call.
 type SpawnOptions struct {
+	Grant      Grant
 	TTLSeconds int
 	ParentID   string
 	Metadata   map[string]any
@@ -852,7 +853,10 @@ type SpawnOptions struct {
 	TraceID    string
 }
 
-// Spawn spawns an agent session and invokes fn with the bound context.
+// Spawn spawns a child agent session and invokes fn with the bound context.
+// The child inherits this application's authority by default; set Options.Grant
+// to GrantNarrow(...) to issue a bounded delegation edge so the child holds
+// only a subset of scopes.
 func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opts ...SpawnOptions) error {
 	o := SpawnOptions{}
 	if len(opts) > 0 {
@@ -879,6 +883,7 @@ func (c *Caracal) Spawn(ctx context.Context, fn func(context.Context) error, opt
 		ApplicationID: c.ApplicationID,
 		SubjectToken:  subjectToken,
 		ParentID:      o.ParentID,
+		Grant:         o.Grant,
 		TTLSeconds:    ttl,
 		Metadata:      o.Metadata,
 		Labels:        o.Labels,
@@ -950,54 +955,6 @@ func (c *Caracal) Delegate(ctx context.Context, opts DelegateOptions, fn func(co
 		Scopes:           opts.Scopes,
 		Constraints:      opts.Constraints,
 		TTLSeconds:       opts.TTLSeconds,
-	}, fn)
-}
-
-// DelegateToSpawnOptions configures the atomic spawn+delegate primitive.
-type DelegateToSpawnOptions struct {
-	Scopes               []string
-	Constraints          *DelegationConstraints
-	DelegationTTLSeconds int
-	TTLSeconds           int
-	Metadata             map[string]any
-	Labels               []string
-	TraceID              string
-}
-
-// DelegateToSpawn atomically spawns a child session and records a parent→child
-// delegation edge before yielding the child context to fn. Use this at fan-out
-// boundaries (e.g. before launching a child goroutine) where the parent may
-// stop interacting before the child can issue any call.
-func (c *Caracal) DelegateToSpawn(ctx context.Context, opts DelegateToSpawnOptions, fn func(context.Context) error) error {
-	ttl := opts.TTLSeconds
-	if ttl == 0 {
-		ttl = c.DefaultTTLSeconds
-	}
-	var onStart, onEnd LifecycleHook
-	if len(c.agentStartHooks) > 0 {
-		onStart = func(cx context.Context, cc CaracalContext) error { return c.fire(c.agentStartHooks, cx, cc) }
-	}
-	if len(c.agentEndHooks) > 0 {
-		onEnd = func(cx context.Context, cc CaracalContext) error { return c.fire(c.agentEndHooks, cx, cc) }
-	}
-	subjectToken, err := c.rootToken(ctx)
-	if err != nil {
-		return err
-	}
-	return DelegateToSpawn(ctx, DelegateToSpawnInput{
-		Coordinator:          c.Coordinator,
-		ZoneID:               c.ZoneID,
-		ApplicationID:        c.ApplicationID,
-		SubjectToken:         subjectToken,
-		Scopes:               opts.Scopes,
-		Constraints:          opts.Constraints,
-		DelegationTTLSeconds: opts.DelegationTTLSeconds,
-		TTLSeconds:           ttl,
-		Metadata:             opts.Metadata,
-		Labels:               opts.Labels,
-		TraceID:              opts.TraceID,
-		OnAgentStart:         onStart,
-		OnAgentEnd:           onEnd,
 	}, fn)
 }
 

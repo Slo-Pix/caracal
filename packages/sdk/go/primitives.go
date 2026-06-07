@@ -13,6 +13,40 @@ import (
 // LifecycleHook fires before fn runs (start) and after it returns (end).
 type LifecycleHook func(context.Context, CaracalContext) error
 
+// GrantMode selects how a spawned child receives authority.
+type GrantMode string
+
+const (
+	GrantModeInherit GrantMode = "inherit"
+	GrantModeNarrow  GrantMode = "narrow"
+	GrantModeNone    GrantMode = "none"
+)
+
+// Grant is the authority handed to a spawned child. The zero value (and
+// GrantInherit) runs the child under its application's authority with no
+// delegation edge. GrantNarrow issues a bounded delegation edge so the child
+// holds only the listed scopes; the server re-validates the subset, so a narrow
+// can never broaden. GrantNone spawns without issuing any edge.
+type Grant struct {
+	Mode        GrantMode
+	Scopes      []string
+	ResourceID  string
+	Constraints *DelegationConstraints
+	TTLSeconds  int
+}
+
+// GrantInherit runs the child under its application's authority (the default).
+func GrantInherit() Grant { return Grant{Mode: GrantModeInherit} }
+
+// GrantNone spawns a child without any delegation edge.
+func GrantNone() Grant { return Grant{Mode: GrantModeNone} }
+
+// GrantNarrow issues a bounded delegation edge limited to scopes. Set
+// ResourceID, Constraints, or TTLSeconds on the returned Grant for finer control.
+func GrantNarrow(scopes ...string) Grant {
+	return Grant{Mode: GrantModeNarrow, Scopes: scopes}
+}
+
 // SpawnInput controls agent session spawning.
 type SpawnInput struct {
 	Coordinator      *CoordinatorClient
@@ -21,7 +55,7 @@ type SpawnInput struct {
 	SubjectToken     string
 	SubjectSessionID string
 	ParentID         string
-	Kind             AgentKind
+	Grant            Grant
 	TTLSeconds       int
 	Metadata         map[string]any
 	Labels           []string
@@ -30,28 +64,60 @@ type SpawnInput struct {
 	OnAgentEnd       LifecycleHook
 }
 
-// Spawn spawns an agent session, runs fn with the bound CaracalContext,
-// then terminates the session. For Kind==KindService, termination is skipped.
+// Spawn spawns a child agent session, runs fn with the bound CaracalContext,
+// then terminates the session. The child inherits its application's authority
+// by default; set Grant to GrantNarrow(...) to issue a bounded delegation edge
+// so the child holds only a subset of scopes.
 func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error) error {
+	grant := opts.Grant
+	if grant.Mode == "" {
+		grant.Mode = GrantModeInherit
+	}
 	parent, _ := Current(ctx)
 	parentID := opts.ParentID
 	if parentID == "" {
 		parentID = parent.AgentSessionID
 	}
-	kind := opts.Kind
 
 	res, err := SpawnAgent(ctx, opts.Coordinator, opts.SubjectToken, SpawnRequest{
 		ZoneID:           opts.ZoneID,
 		ApplicationID:    opts.ApplicationID,
 		SubjectSessionID: opts.SubjectSessionID,
 		ParentID:         parentID,
-		Kind:             kind,
 		TTLSeconds:       opts.TTLSeconds,
 		Metadata:         opts.Metadata,
 		Labels:           opts.Labels,
 	})
 	if err != nil {
 		return err
+	}
+
+	var delegationEdgeID string
+	hop := parent.Hop
+	if grant.Mode == GrantModeNarrow {
+		if parent.AgentSessionID == "" {
+			return errors.Join(
+				errors.New("caracal: grant narrow requires an active parent agent session"),
+				TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID),
+			)
+		}
+		delRes, derr := CreateDelegation(ctx, opts.Coordinator, parent.SubjectToken, DelegationRequest{
+			ZoneID:                opts.ZoneID,
+			IssuerApplicationID:   parent.ClientID,
+			SourceSessionID:       parent.AgentSessionID,
+			TargetSessionID:       res.AgentSessionID,
+			ReceiverApplicationID: opts.ApplicationID,
+			ParentEdgeID:          parent.DelegationEdgeID,
+			ResourceID:            grant.ResourceID,
+			Scopes:                grant.Scopes,
+			Constraints:           grant.Constraints,
+			TTLSeconds:            grant.TTLSeconds,
+		})
+		if derr != nil {
+			return errors.Join(derr, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID))
+		}
+		delegationEdgeID = delRes.DelegationEdgeID
+		hop = parent.Hop + 1
 	}
 
 	traceID := opts.TraceID
@@ -64,33 +130,28 @@ func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error)
 	}
 
 	c := CaracalContext{
-		SubjectToken:   opts.SubjectToken,
-		ZoneID:         opts.ZoneID,
-		ClientID:       opts.ApplicationID,
-		AgentSessionID: res.AgentSessionID,
-		ParentEdgeID:   parent.DelegationEdgeID,
-		SessionID:      sessionID,
-		TraceID:        traceID,
-		Hop:            parent.Hop,
+		SubjectToken:     opts.SubjectToken,
+		ZoneID:           opts.ZoneID,
+		ClientID:         opts.ApplicationID,
+		AgentSessionID:   res.AgentSessionID,
+		DelegationEdgeID: delegationEdgeID,
+		ParentEdgeID:     parent.DelegationEdgeID,
+		SessionID:        sessionID,
+		TraceID:          traceID,
+		Hop:              hop,
 	}
 
 	child := Bind(ctx, c)
 	if opts.OnAgentStart != nil {
 		if err := opts.OnAgentStart(child, c); err != nil {
-			if kind != KindService {
-				return errors.Join(err, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID))
-			}
-			return err
+			return errors.Join(err, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID))
 		}
 	}
 	runErr := fn(child)
 	if opts.OnAgentEnd != nil {
 		runErr = errors.Join(runErr, opts.OnAgentEnd(child, c))
 	}
-
-	if kind != KindService {
-		runErr = errors.Join(runErr, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID))
-	}
+	runErr = errors.Join(runErr, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, res.AgentSessionID))
 	return runErr
 }
 
@@ -135,112 +196,6 @@ func Delegate(ctx context.Context, opts DelegateInput, fn func(context.Context) 
 	child.Hop = c.Hop + 1
 
 	return fn(Bind(ctx, child))
-}
-
-// DelegateToSpawnInput atomically spawns a child agent session and records
-// a delegation edge from the parent before running fn.
-type DelegateToSpawnInput struct {
-	Coordinator          *CoordinatorClient
-	ZoneID               string
-	ApplicationID        string
-	SubjectToken         string
-	ResourceID           string
-	Scopes               []string
-	Constraints          *DelegationConstraints
-	DelegationTTLSeconds int
-	SubjectSessionID     string
-	Kind                 AgentKind
-	TTLSeconds           int
-	Metadata             map[string]any
-	Labels               []string
-	TraceID              string
-	OnAgentStart         LifecycleHook
-	OnAgentEnd           LifecycleHook
-}
-
-// DelegateToSpawn spawns a child session and immediately issues a
-// parent→child delegation edge before yielding the child context to fn.
-// Use this when handing the resulting context off to a background goroutine
-// where the parent may go out of scope before the child issues its first call.
-func DelegateToSpawn(ctx context.Context, opts DelegateToSpawnInput, fn func(context.Context) error) error {
-	parent, ok := Current(ctx)
-	if !ok || parent.AgentSessionID == "" {
-		return errors.New("caracal: DelegateToSpawn requires an active agent session in context")
-	}
-	kind := opts.Kind
-
-	spawnRes, err := SpawnAgent(ctx, opts.Coordinator, opts.SubjectToken, SpawnRequest{
-		ZoneID:           opts.ZoneID,
-		ApplicationID:    opts.ApplicationID,
-		SubjectSessionID: opts.SubjectSessionID,
-		ParentID:         parent.AgentSessionID,
-		Kind:             kind,
-		TTLSeconds:       opts.TTLSeconds,
-		Metadata:         opts.Metadata,
-		Labels:           opts.Labels,
-	})
-	if err != nil {
-		return err
-	}
-
-	delRes, err := CreateDelegation(ctx, opts.Coordinator, parent.SubjectToken, DelegationRequest{
-		ZoneID:                parent.ZoneID,
-		IssuerApplicationID:   parent.ClientID,
-		SourceSessionID:       parent.AgentSessionID,
-		TargetSessionID:       spawnRes.AgentSessionID,
-		ReceiverApplicationID: opts.ApplicationID,
-		ParentEdgeID:          parent.DelegationEdgeID,
-		ResourceID:            opts.ResourceID,
-		Scopes:                opts.Scopes,
-		Constraints:           opts.Constraints,
-		TTLSeconds:            opts.DelegationTTLSeconds,
-	})
-	if err != nil {
-		if kind != KindService {
-			return errors.Join(err, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, spawnRes.AgentSessionID))
-		}
-		return err
-	}
-
-	traceID := opts.TraceID
-	if traceID == "" {
-		traceID = parent.TraceID
-	}
-	sessionID := opts.SubjectSessionID
-	if sessionID == "" {
-		sessionID = parent.SessionID
-	}
-
-	c := CaracalContext{
-		SubjectToken:     opts.SubjectToken,
-		ZoneID:           opts.ZoneID,
-		ClientID:         opts.ApplicationID,
-		AgentSessionID:   spawnRes.AgentSessionID,
-		DelegationEdgeID: delRes.DelegationEdgeID,
-		ParentEdgeID:     parent.DelegationEdgeID,
-		SessionID:        sessionID,
-		TraceID:          traceID,
-		Hop:              parent.Hop + 1,
-	}
-
-	child := Bind(ctx, c)
-	if opts.OnAgentStart != nil {
-		if err := opts.OnAgentStart(child, c); err != nil {
-			if kind != KindService {
-				return errors.Join(err, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, spawnRes.AgentSessionID))
-			}
-			return err
-		}
-	}
-	runErr := fn(child)
-	if opts.OnAgentEnd != nil {
-		runErr = errors.Join(runErr, opts.OnAgentEnd(child, c))
-	}
-
-	if kind != KindService {
-		runErr = errors.Join(runErr, TerminateAgent(ctx, opts.Coordinator, opts.SubjectToken, opts.ZoneID, spawnRes.AgentSessionID))
-	}
-	return runErr
 }
 
 // SpawnServiceInput controls long-lived service agent spawning.

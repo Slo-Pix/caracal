@@ -47,7 +47,6 @@ func TestSpawnRunsCallbackWithBoundContext(t *testing.T) {
 		ZoneID:        "z",
 		ApplicationID: "app",
 		SubjectToken:  "tok",
-		Kind:          sdk.KindEphemeral,
 	}, func(ctx context.Context) error {
 		c, ok := sdk.Current(ctx)
 		if !ok {
@@ -67,7 +66,7 @@ func TestSpawnRunsCallbackWithBoundContext(t *testing.T) {
 	}
 }
 
-func TestSpawnTerminatesNonServiceKind(t *testing.T) {
+func TestSpawnTerminatesOnExit(t *testing.T) {
 	srv, calls := makeCoordinatorServer(t)
 	coord := &sdk.CoordinatorClient{BaseURL: srv.URL}
 
@@ -76,7 +75,6 @@ func TestSpawnTerminatesNonServiceKind(t *testing.T) {
 		ZoneID:        "z",
 		ApplicationID: "app",
 		SubjectToken:  "tok",
-		Kind:          sdk.KindEphemeral,
 	}, func(ctx context.Context) error { return nil })
 
 	var deleted bool
@@ -86,7 +84,7 @@ func TestSpawnTerminatesNonServiceKind(t *testing.T) {
 		}
 	}
 	if !deleted {
-		t.Errorf("expected DELETE call for non-service kind; calls: %v", *calls)
+		t.Errorf("expected DELETE call on spawn exit; calls: %v", *calls)
 	}
 }
 
@@ -138,25 +136,6 @@ func TestSpawnServiceHeartbeatAndClose(t *testing.T) {
 	}
 }
 
-func TestSpawnSkipsTerminationForServiceKind(t *testing.T) {
-	srv, calls := makeCoordinatorServer(t)
-	coord := &sdk.CoordinatorClient{BaseURL: srv.URL}
-
-	_ = sdk.Spawn(context.Background(), sdk.SpawnInput{
-		Coordinator:   coord,
-		ZoneID:        "z",
-		ApplicationID: "app",
-		SubjectToken:  "tok",
-		Kind:          sdk.KindService,
-	}, func(ctx context.Context) error { return nil })
-
-	for _, c := range *calls {
-		if strings.HasPrefix(c, "DELETE") {
-			t.Errorf("DELETE must not be called for service kind; calls: %v", *calls)
-		}
-	}
-}
-
 func TestSpawnOnAgentStartHookCalled(t *testing.T) {
 	srv, _ := makeCoordinatorServer(t)
 	coord := &sdk.CoordinatorClient{BaseURL: srv.URL}
@@ -167,7 +146,6 @@ func TestSpawnOnAgentStartHookCalled(t *testing.T) {
 		ZoneID:        "z",
 		ApplicationID: "app",
 		SubjectToken:  "tok",
-		Kind:          sdk.KindEphemeral,
 		OnAgentStart: func(ctx context.Context, c sdk.CaracalContext) error {
 			started = true
 			return nil
@@ -190,7 +168,6 @@ func TestSpawnOnAgentStartErrorAbortsAndTerminates(t *testing.T) {
 		ZoneID:        "z",
 		ApplicationID: "app",
 		SubjectToken:  "tok",
-		Kind:          sdk.KindEphemeral,
 		OnAgentStart: func(ctx context.Context, c sdk.CaracalContext) error {
 			return hookErr
 		},
@@ -289,33 +266,33 @@ func TestDelegateIncrementsHopAndBindsEdge(t *testing.T) {
 	}
 }
 
-func TestDelegateToSpawnRequiresActiveParent(t *testing.T) {
+func TestSpawnNarrowRequiresActiveParent(t *testing.T) {
 	srv, _ := makeCoordinatorServer(t)
 	coord := &sdk.CoordinatorClient{BaseURL: srv.URL}
-	err := sdk.DelegateToSpawn(context.Background(), sdk.DelegateToSpawnInput{
+	err := sdk.Spawn(context.Background(), sdk.SpawnInput{
 		Coordinator:   coord,
 		ZoneID:        "z",
 		ApplicationID: "app-child",
 		SubjectToken:  "tok",
-		Scopes:        []string{"tool:call"},
+		Grant:         sdk.GrantNarrow("tool:call"),
 	}, func(ctx context.Context) error { return nil })
 	if err == nil {
 		t.Fatal("expected error without active parent")
 	}
 }
 
-func TestDelegateToSpawnIssuesSpawnThenDelegation(t *testing.T) {
+func TestSpawnNarrowIssuesSpawnThenDelegation(t *testing.T) {
 	srv, calls := makeCoordinatorServer(t)
 	coord := &sdk.CoordinatorClient{BaseURL: srv.URL}
 
 	var child sdk.CaracalContext
 	err := sdk.Spawn(context.Background(), sdk.SpawnInput{
 		Coordinator: coord, ZoneID: "z", ApplicationID: "app",
-		SubjectToken: "tok", Kind: sdk.KindEphemeral,
+		SubjectToken: "tok",
 	}, func(parentCtx context.Context) error {
-		return sdk.DelegateToSpawn(parentCtx, sdk.DelegateToSpawnInput{
+		return sdk.Spawn(parentCtx, sdk.SpawnInput{
 			Coordinator: coord, ZoneID: "z", ApplicationID: "app-child",
-			SubjectToken: "tok", Scopes: []string{"tool:call"}, Kind: sdk.KindEphemeral,
+			SubjectToken: "tok", Grant: sdk.GrantNarrow("tool:call"),
 		}, func(ctx context.Context) error {
 			c, _ := sdk.Current(ctx)
 			child = c
