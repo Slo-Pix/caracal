@@ -7,7 +7,7 @@
     "registration_method": "dcr",
     "agent_session_id": "agent-session-1",
     "agent_kind": "planner",
-    "capabilities": ["files.read"]
+    "labels": ["files.read"]
   },
   "resource": {
     "type": "http",

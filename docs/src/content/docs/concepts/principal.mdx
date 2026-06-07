@@ -36,7 +36,7 @@ Applications have registration metadata, a server-owned token credential, and a 
 | Managed | One durable service, orchestrator, Gateway, or known agent runtime. | Operators create it intentionally and may reuse it across many sessions for the same workload. |
 | DCR | One spawned ephemeral agent identity. | DCR applications always expire, can bind to only one active ephemeral agent session, and should not be shared across spawned agents. |
 
-DCR is for identity isolation, not bulk credential pooling. A runtime that spawns several ephemeral agents should register a separate DCR application for each spawned agent, then create exactly one ephemeral agent session for that application. The agent session carries the parent relationship, subject session, capabilities, and delegation context; the DCR application carries the short-lived credential identity used to authenticate token exchanges.
+DCR is for identity isolation, not bulk credential pooling. A runtime that spawns several ephemeral agents should register a separate DCR application for each spawned agent, then create exactly one ephemeral agent session for that application. The agent session carries the parent relationship, subject session, labels, and delegation context; the DCR application carries the short-lived credential identity used to authenticate token exchanges.
 
 :::note[FAQ]
 [What is the difference between an application, principal, and agent session?](/reference/faq/#faq-application-principal-agent-session) and [when should I use a managed application versus DCR?](/reference/faq/#faq-managed-application-versus-dcr)
@@ -44,7 +44,7 @@ DCR is for identity isolation, not bulk credential pooling. A runtime that spawn
 
 Disabling DCR on a zone has two separate operational meanings. The zone flag always stops future dynamic registration immediately. If live DCR applications already exist, operators must choose whether those identities continue until expiry or are revoked immediately. Revocation archives the live DCR applications, revokes related authority sessions and delegation anchors, and terminates related ephemeral agent access so STS, Gateway, and Coordinator paths stop accepting those identities.
 
-Policies receive `input.principal.registration_method`, `input.principal.agent_session_id`, `input.principal.agent_kind`, and `input.principal.capabilities`, so policy authors can distinguish durable managed clients from ephemeral DCR clients without relying on SDK-specific behavior. Audit metadata records the application id, application name, registration method, agent session id, parent/delegation context, requested scopes, and resource for each token-exchange decision.
+Policies receive `input.principal.registration_method`, `input.principal.agent_session_id`, `input.principal.agent_kind`, and `input.principal.labels`, so policy authors can distinguish durable managed clients from ephemeral DCR clients without relying on SDK-specific behavior. Audit metadata records the application id, application name, registration method, agent session id, parent/delegation context, requested scopes, and resource for each token-exchange decision.
 
 ## Sessions Bind Identity to Time
 

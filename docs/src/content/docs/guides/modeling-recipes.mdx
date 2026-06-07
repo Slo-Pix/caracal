@@ -88,7 +88,7 @@ The principal type decides who the authority belongs to and which provider flow 
 | Upstream credential | Shared broker credential the agent never sees: `oauth2_client_credentials`, `api_key`, or `bearer_token`. | Per-user delegated consent: `oauth2_authorization_code`. |
 | Audit attribution | Application and agent session. | User subject plus the agent and delegation chain. |
 
-Policy can tell these apart with `input.principal.registration_method`, `input.principal.agent_session_id`, and `input.principal.capabilities`, so you author one policy set that handles both without SDK-specific branching. See [Identities and Applications](/concepts/principal/).
+Policy can tell these apart with `input.principal.registration_method`, `input.principal.agent_session_id`, and `input.principal.labels`, so you author one policy set that handles both without SDK-specific branching. See [Identities and Applications](/concepts/principal/).
 
 ## Per-User OAuth or Shared Credential
 
