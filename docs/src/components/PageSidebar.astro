@@ -46,6 +46,11 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
             <a
               class="ai-btn"
               href={`https://claude.ai/new?q=${encodeURIComponent(aiPrompt)}`}
+              data-ai-url="https://claude.ai/new"
+              data-ai-param="q"
+              data-markdown-url={markdownPath}
+              data-markdown-absolute-url={markdownUrl}
+              data-page-url={pageUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -55,6 +60,11 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
             <a
               class="ai-btn"
               href={`https://chatgpt.com/?q=${encodeURIComponent(aiPrompt)}`}
+              data-ai-url="https://chatgpt.com/"
+              data-ai-param="q"
+              data-markdown-url={markdownPath}
+              data-markdown-absolute-url={markdownUrl}
+              data-page-url={pageUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -64,11 +74,31 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
             <a
               class="ai-btn"
               href={`https://gemini.google.com/app?prompt=${encodeURIComponent(aiPrompt)}`}
+              data-ai-url="https://gemini.google.com/app"
+              data-ai-param="prompt"
+              data-markdown-url={markdownPath}
+              data-markdown-absolute-url={markdownUrl}
+              data-page-url={pageUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
               <img class="ai-icon" src="/img/gemini.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
               <span class="ai-btn-label">Ask Gemini</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="mcp-actions">
+          <p class="ai-actions-label">MCP</p>
+          <div class="ai-actions-buttons">
+            <a
+              class="ai-btn"
+              href="https://context7.com/websites/caracal_run?tab=chat"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <img class="ai-icon" src="/img/context7.png" alt="" aria-hidden="true" loading="lazy" decoding="async" />
+              <span class="ai-btn-label">Read in Context7</span>
             </a>
           </div>
         </div>
@@ -104,6 +134,62 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
       }, 2000)
     })
   }
+
+  const aiLinks = document.querySelectorAll<HTMLAnchorElement>('.ai-btn[data-ai-url]')
+  aiLinks.forEach((link) => {
+    link.addEventListener('click', async (event) => {
+      event.preventDefault()
+
+      const popup = window.open('about:blank', '_blank')
+      if (popup) popup.opener = null
+
+      const label = link.querySelector('.ai-btn-label')
+      const originalText = label?.textContent ?? ''
+
+      try {
+        if (label) label.textContent = 'Loading page...'
+
+        const response = await fetch(link.dataset.markdownUrl!)
+        if (!response.ok) {
+          throw new Error(`Markdown request failed with ${response.status}`)
+        }
+
+        const prompt = [
+          'Explain this Caracal documentation page using the Markdown content below.',
+          '',
+          `Canonical URL: ${link.dataset.pageUrl}`,
+          `Markdown URL: ${link.dataset.markdownAbsoluteUrl}`,
+          '',
+          'Markdown content:',
+          '',
+          await response.text(),
+        ].join('\n')
+
+        const url = new URL(link.dataset.aiUrl!)
+        url.searchParams.set(link.dataset.aiParam!, prompt)
+
+        if (url.href.length > 24000) {
+          await navigator.clipboard.writeText(prompt)
+          if (label) label.textContent = 'Copied prompt!'
+          if (popup) popup.location.href = link.dataset.aiUrl!
+          else window.location.href = link.dataset.aiUrl!
+        } else if (popup) {
+          popup.location.href = url.href
+        } else {
+          window.location.href = url.href
+        }
+      } catch (err) {
+        console.error('AI prompt preparation failed', err)
+        if (label) label.textContent = 'Opening fallback...'
+        if (popup) popup.location.href = link.href
+        else window.location.href = link.href
+      }
+
+      setTimeout(() => {
+        if (label) label.textContent = originalText
+      }, 2000)
+    })
+  })
 </script>
 
 <style>
@@ -137,6 +223,12 @@ If retrieval fails, read ${site}/llms-full.txt and find the section with "# URL:
     }
 
     .ai-actions {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1.25rem;
+      border-bottom: 1px solid var(--sl-color-hairline);
+    }
+
+    .mcp-actions {
       margin-bottom: 1.25rem;
       padding-bottom: 1.25rem;
       border-bottom: 1px solid var(--sl-color-hairline);
