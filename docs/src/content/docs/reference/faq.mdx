@@ -9,6 +9,9 @@ import FaqRegistryScript from '../../../components/FaqRegistryScript.astro';
 This FAQ is a permanent knowledge registry for high-friction Caracal questions. Each entry has a stable number, category, searchable keywords, and a direct URL anchor that can be shared externally.
 
 <section className="faqSearchPanel" aria-label="Search FAQs">
+  <div className="faqSearchMeta">
+    <span id="faq-search-status" className="faqSearchStatus" aria-live="polite">19 results</span>
+  </div>
   <div className="faqSearchRow">
     <label className="faqSearchLabel" htmlFor="faq-search">Search FAQs</label>
     <input id="faq-search" className="faqSearchInput" type="search" placeholder="Search by FAQ ID, title, keyword..." aria-controls="faq-registry" autocomplete="off" />
@@ -25,7 +28,6 @@ This FAQ is a permanent knowledge registry for high-friction Caracal questions. 
         <button type="button" data-faq-filter-option="editions">Editions</button>
       </div>
     </details>
-    <span id="faq-search-status" className="faqSearchStatus" aria-live="polite">19 results</span>
   </div>
 </section>
 
