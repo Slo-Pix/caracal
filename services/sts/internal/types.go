@@ -71,7 +71,7 @@ type OPAPrincipal struct {
 	ZoneID             string   `json:"zone_id"`
 	RegistrationMethod string   `json:"registration_method,omitempty"`
 	AgentSessionID     string   `json:"agent_session_id,omitempty"`
-	AgentKind          string   `json:"agent_kind,omitempty"`
+	Lifecycle          string   `json:"lifecycle,omitempty"`
 	Labels             []string `json:"labels,omitempty"`
 }
 

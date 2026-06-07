@@ -362,7 +362,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 				ZoneID:             zoneID,
 				RegistrationMethod: app.RegistrationMethod,
 				AgentSessionID:     req.AgentSessionID,
-				AgentKind:          agentSessionKind(agentSession),
+				Lifecycle:          agentSessionLifecycle(agentSession),
 				Labels:             agentSessionLabels(agentSession),
 			},
 			Resource: OPAResource{
@@ -1315,11 +1315,11 @@ func sessionInput(sessionID string) *OPASession {
 	return &OPASession{ID: sessionID}
 }
 
-func agentSessionKind(session *AgentSession) string {
+func agentSessionLifecycle(session *AgentSession) string {
 	if session == nil {
 		return ""
 	}
-	return session.Kind
+	return session.Lifecycle
 }
 
 func agentSessionLabels(session *AgentSession) []string {
@@ -1334,9 +1334,9 @@ func agentAuditMeta(session *AgentSession) map[string]any {
 		return nil
 	}
 	meta := map[string]any{
-		"agent_kind":   session.Kind,
-		"agent_labels": agentSessionLabels(session),
-		"agent_depth":  session.Depth,
+		"agent_lifecycle": session.Lifecycle,
+		"agent_labels":    agentSessionLabels(session),
+		"agent_depth":     session.Depth,
 	}
 	if session.ParentID != nil {
 		meta["agent_parent_id"] = *session.ParentID
