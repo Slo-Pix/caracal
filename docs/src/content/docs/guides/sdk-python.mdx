@@ -93,7 +93,7 @@ async with caracal.spawn() as parent:
         headers = caracal.headers()
 ```
 
-A plain `caracal.spawn()` already runs the child under the application's authority. Pass `grant=Grant.narrow(...)` only when the child should hold a least-privilege subset, or `grant=Grant.none()` for a child with no inherited authority.
+A plain `caracal.spawn()` runs the child under its parent's effective authority — the application's authority for a root parent, or the parent's narrowed slice when the parent was itself narrowed (transitive least-privilege). Pass `grant=Grant.narrow(...)` only when the child should hold a smaller subset, or `grant=Grant.none()` for a child with no inherited authority.
 
 Use `async with caracal.bind(ctx)` before handing a captured context to a background task.
 

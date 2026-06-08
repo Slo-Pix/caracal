@@ -387,7 +387,112 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
                 pass
 
 
-class ServiceAutoHeartbeatTests(unittest.IsolatedAsyncioTestCase):
+class SpawnInheritEdgeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_inherit_child_carries_parent_edge_forward(self) -> None:
+        from caracalai_sdk.context import CaracalContext
+
+        captured: dict = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                import json
+
+                captured["body"] = json.loads(req.content.decode())
+                return httpx.Response(
+                    200,
+                    json={"agent_session_id": "agent-2", "delegation_edge_id": "edge-child"},
+                )
+            return httpx.Response(204)
+
+        parent = CaracalContext(
+            subject_token="parent-tok",
+            zone_id="z",
+            client_id="app",
+            agent_session_id="parent-session",
+            delegation_edge_id="edge-parent",
+            hop=1,
+            trace_id="11111111111111111111111111111111",
+        )
+        coord = _coord(handler)
+        async with spawn(
+            coordinator=coord,
+            zone_id="z",
+            application_id="app",
+            subject_token="tok",
+            parent_ctx=parent,
+        ) as ctx:
+            self.assertEqual(ctx.delegation_edge_id, "edge-child")
+            self.assertEqual(ctx.parent_edge_id, "edge-parent")
+            self.assertEqual(ctx.hop, parent.hop + 1)
+        self.assertEqual(captured["body"].get("inherit_parent_edge_id"), "edge-parent")
+
+    async def test_inherit_skips_edge_when_cross_app(self) -> None:
+        from caracalai_sdk.context import CaracalContext
+
+        captured: dict = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                import json
+
+                captured["body"] = json.loads(req.content.decode())
+                return httpx.Response(200, json={"agent_session_id": "agent-2"})
+            return httpx.Response(204)
+
+        parent = CaracalContext(
+            subject_token="parent-tok",
+            zone_id="z",
+            client_id="parent-app",
+            agent_session_id="parent-session",
+            delegation_edge_id="edge-parent",
+            hop=1,
+        )
+        coord = _coord(handler)
+        async with spawn(
+            coordinator=coord,
+            zone_id="z",
+            application_id="child-app",
+            subject_token="tok",
+            parent_ctx=parent,
+        ) as ctx:
+            self.assertIsNone(ctx.delegation_edge_id)
+            self.assertEqual(ctx.hop, parent.hop)
+        self.assertIsNone(captured["body"].get("inherit_parent_edge_id"))
+
+    async def test_inherit_root_parent_creates_no_edge(self) -> None:
+        from caracalai_sdk.context import CaracalContext
+
+        captured: dict = {}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                import json
+
+                captured["body"] = json.loads(req.content.decode())
+                return httpx.Response(200, json={"agent_session_id": "agent-2"})
+            return httpx.Response(204)
+
+        parent = CaracalContext(
+            subject_token="parent-tok",
+            zone_id="z",
+            client_id="app",
+            agent_session_id="parent-session",
+            delegation_edge_id=None,
+            hop=0,
+        )
+        coord = _coord(handler)
+        async with spawn(
+            coordinator=coord,
+            zone_id="z",
+            application_id="app",
+            subject_token="tok",
+            parent_ctx=parent,
+        ) as ctx:
+            self.assertIsNone(ctx.delegation_edge_id)
+            self.assertEqual(ctx.hop, 0)
+        self.assertIsNone(captured["body"].get("inherit_parent_edge_id"))
+
+
     async def test_auto_heartbeat_renews_in_background(self) -> None:
         import asyncio
         from caracalai_sdk.primitives import spawn_service

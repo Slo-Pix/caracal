@@ -102,7 +102,7 @@ await caracal.spawn(async () => {
 });
 ```
 
-A plain `spawn()` runs the child under the application's authority. Pass `grant: Grant.narrow(...)` only when the child should hold a least-privilege subset, or `Grant.none()` for a child with no inherited authority. Use `delegate()` when you need to grant authority to an agent session that already exists, typically in another application.
+A plain `spawn()` runs the child under its parent's effective authority — the application's authority for a root parent, or the parent's narrowed slice when the parent was itself narrowed (transitive least-privilege). Pass `grant: Grant.narrow(...)` only when the child should hold a smaller subset, or `Grant.none()` for a child with no inherited authority. Use `delegate()` when you need to grant authority to an agent session that already exists, typically in another application.
 
 ## Route through the Gateway
 

@@ -48,17 +48,18 @@ flowchart LR
 
 ## What an Edge Bounds — and What It Does Not
 
-An edge bounds **the token issued for that edge** and **any further edge chained from it**. It does **not** lower the application's authority ceiling. This distinction is the whole security model, so make it explicit:
+An edge bounds **the token issued for that edge** and **any further edge chained from it**. It does **not** raise the application's authority ceiling. This distinction is the whole security model, so make it explicit:
 
 - When a child is created with a **narrowing grant**, a `source → child` edge is recorded. A token exchange that presents this edge is bounded to the edge's scopes, and the coordinator enforces that any edge chained from the child is a subset of it (`scopes ⊆ parent`, plus TTL, hop, budget, and resource narrowing).
-- When a child is created with **inherit** (the default), **no edge is recorded**. The child authenticates as the application and re-derives the application's authority, bounded only by policy — it is **not** bounded by an ancestor's narrowing.
+- When a child is created with **inherit** (the default) under a **narrowed parent**, the coordinator **mirrors the parent's edge onto the child** in the same spawn transaction — a `parent → child` edge copying the parent's exact scopes, resource, constraints, and expiry. Least-privilege is therefore **transitive by default**: an inherit child cannot exceed its parent's narrowing.
+- When a child is created with **inherit** under a **root parent** (one that holds the application's full authority with no inbound edge), no edge is recorded and the child runs under the application's authority bounded by policy. There is nothing narrower to carry forward.
 
 Worked example: A spawns B with `grant=narrow([tickets:read])`, then B spawns C.
 
-- If B spawns C with **inherit**, C presents no edge and receives the **application's** authority (subject to policy) — *not* B's `tickets:read` slice. B did not "grant" anything; C simply runs as the app.
+- If B spawns C with **inherit**, the coordinator records a `B → C` edge mirroring B's `tickets:read` slice, so C is bounded by B's narrowing — not the application's full authority.
 - If B spawns C with a **narrowing grant**, a `B → C` edge is recorded and the coordinator rejects it unless `C ⊆ B` — so B can never pass on authority it does not hold.
 
-The consequence: the **application plus policy** is the hard, server-enforced boundary every session is contained by. Delegation edges are a **least-privilege tool within that boundary** — to bound an entire subtree below the application, narrow at **every hop** (or move the subtree under a different application via `delegate()`, which is a real cross-application trust boundary requiring receiver consent). All sessions of one application share a credential and a trust domain by design; do not rely on a single narrowed intermediary to contain its descendants.
+The consequence: the **application plus policy** is the hard, server-enforced boundary every session is contained by. Within one application, transitive inheritance keeps a narrowed subtree narrowed automatically. To place a subtree behind a real cross-application trust boundary, move it under a different application via `delegate()`, which requires receiver consent. All sessions of one application share a credential and a trust domain by design; transitive inheritance contains an *accidentally* un-narrowed descendant, while a separate application contains a *mutually distrusting* one.
 
 ## SDK Relationship
 
