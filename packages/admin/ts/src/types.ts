@@ -418,6 +418,31 @@ export interface SessionQuery {
   limit?: number
 }
 
+export interface AgentSessionRow {
+  id: string
+  application_id: string
+  parent_id: string | null
+  status: string
+  lifecycle: string
+  labels: string[]
+  depth: number
+  child_count: number
+  spawned_at: string
+  last_active_at: string
+  terminated_at: string | null
+  ttl_seconds: number | null
+}
+
+export interface AgentSessionQuery {
+  status?: 'active' | 'suspended' | 'terminated' | 'expired'
+  lifecycle?: 'task' | 'service'
+  application_id?: string
+  parent_id?: string
+  label?: string
+  cursor?: string
+  limit?: number
+}
+
 export interface StepUpChallenge {
   id: string
   zone_id: string

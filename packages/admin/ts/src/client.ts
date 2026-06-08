@@ -41,6 +41,8 @@ import type {
   ResourceInput,
   Session,
   SessionQuery,
+  AgentSessionRow,
+  AgentSessionQuery,
   StepUpChallenge,
   StepUpChallengeSatisfaction,
   StepUpChallengeSatisfyInput,
@@ -363,6 +365,16 @@ export class AdminClient {
     list: async (zoneId: string, query?: SessionQuery) => {
       const response = await this.request<RowListResponse<Session>>(`/v1/zones/${zoneId}/sessions`, { query: { ...query } })
       if (!Array.isArray(response.rows)) throw new Error('sessions response missing rows')
+      return response.rows
+    },
+  }
+
+  // Agent sessions (read; status filtering for active/suspended/terminated). CSV export is
+  // available directly from the API endpoint with format=csv.
+  agentSessions = {
+    list: async (zoneId: string, query?: AgentSessionQuery) => {
+      const response = await this.request<RowListResponse<AgentSessionRow>>(`/v1/zones/${zoneId}/agent-sessions`, { query: { ...query } })
+      if (!Array.isArray(response.rows)) throw new Error('agent-sessions response missing rows')
       return response.rows
     },
   }

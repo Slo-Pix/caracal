@@ -74,10 +74,10 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
     const constraintsResult = normalizedConstraints(body.constraints_json, body.constraints, body.ttl_seconds)
     if (!constraintsResult.ok) return reply.code(400).send({ error: constraintsResult.error })
     const constraints = constraintsResult.constraints
-    const expiresAt = body.expires_at
+    const requestedExpiresAt = body.expires_at
       ?? (typeof constraints.expires_at === 'string' ? constraints.expires_at : undefined)
-      ?? (body.ttl_seconds ? new Date(Date.now() + body.ttl_seconds * 1000).toISOString() : undefined)
-    if (!expiresAt) {
+    const ttlSeconds = requestedExpiresAt ? null : constraints.ttl_seconds ?? null
+    if (!requestedExpiresAt && ttlSeconds === null) {
       return reply.code(400).send({ error: 'delegation_expiry_required' })
     }
     if (!ownsApplication(req, body.issuer_application_id)
@@ -92,9 +92,6 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
     }
     if (body.source_session_id === body.target_session_id) {
       return reply.code(400).send({ error: 'self_delegation_denied' })
-    }
-    if (new Date(expiresAt).getTime() <= Date.now()) {
-      return reply.code(400).send({ error: 'delegation_expired' })
     }
     const resourceScoped = body.resource_id !== null || (constraints.resources?.length ?? 0) > 0
     const warnings = resourceScoped
@@ -153,7 +150,7 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
             error: body.parent_edge_id ? 'parent_delegation_not_active' : 'parent_delegation_ambiguous',
           })
         }
-        if (!parentAllowsDelegation(parent, body, constraints, resources.items, expiresAt)) {
+        if (!parentAllowsDelegation(parent, body, constraints, resources.items, requestedExpiresAt)) {
           await client.query('ROLLBACK')
           return reply.code(403).send({ error: 'delegation_exceeds_parent_authority' })
         }
@@ -166,12 +163,23 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const edgeId = uuidv7()
       const { rows } = await client.query(
-        `INSERT INTO delegation_edges
-         (id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
-          parent_edge_id, resource_id, scopes, constraints_json, expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-         RETURNING id AS delegation_edge_id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
-                   parent_edge_id, resource_id, scopes, constraints_json, status, expires_at, edge_version, revoked_at, created_at`,
+        `WITH expiry AS (
+           SELECT COALESCE($11::timestamptz, now() + ($12::int * interval '1 second')) AS expires_at
+         )
+         INSERT INTO delegation_edges
+          (id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
+           parent_edge_id, resource_id, scopes, constraints_json, expires_at)
+          SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,expiry.expires_at
+          FROM expiry
+          WHERE expiry.expires_at > now()
+            AND (
+              $7::text IS NULL
+              OR expiry.expires_at <= (
+                SELECT expires_at FROM delegation_edges WHERE id = $7 AND zone_id = $2
+              )
+            )
+          RETURNING id AS delegation_edge_id, zone_id, source_session_id, target_session_id, issuer_application_id, receiver_application_id,
+                    parent_edge_id, resource_id, scopes, constraints_json, status, expires_at, edge_version, revoked_at, created_at`,
         [
           edgeId,
           zoneId,
@@ -183,9 +191,16 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
           body.resource_id,
           body.scopes,
           constraints,
-          expiresAt,
+          requestedExpiresAt ?? null,
+          ttlSeconds,
         ],
       )
+      if (!rows[0]) {
+        await client.query('ROLLBACK')
+        return reply.code(parentEdgeId ? 403 : 400).send({
+          error: parentEdgeId ? 'delegation_exceeds_parent_authority' : 'delegation_expired',
+        })
+      }
       const epoch = await bumpDelegationEpoch(client, zoneId)
       await enqueue(client, Topics.DelegationsInvalidate, `edge_create:${edgeId}`, {
         event: 'edge_create',
@@ -205,7 +220,7 @@ export const delegationsRoutes: FastifyPluginAsync = async (fastify) => {
           parentEdgeId ? 'parent_authority_narrowed' : 'source_authority_root',
           'typed_constraints_validated',
         ],
-        effective_authority: effectiveAuthority(body, constraints, resources.items, expiresAt, parents, parentEdgeId),
+        effective_authority: effectiveAuthority(body, constraints, resources.items, String(rows[0].expires_at), parents, parentEdgeId),
       })
     } catch (err) {
       await client.query('ROLLBACK')
@@ -579,8 +594,10 @@ async function activeAgentEndpoints(
      WHERE zone_id = $1
        AND id = ANY($2::text[])
        AND status = 'active'
-       AND ttl_seconds IS NOT NULL
-       AND spawned_at + (ttl_seconds * interval '1 second') > now()
+        AND (
+          (ttl_seconds IS NOT NULL AND spawned_at + (ttl_seconds * interval '1 second') > now())
+          OR (lifecycle = 'service' AND heartbeat_deadline_at IS NOT NULL AND heartbeat_deadline_at > now())
+        )
      FOR SHARE`,
     [zoneId, [sourceId, targetId]],
   )
@@ -668,13 +685,13 @@ function parentAllowsDelegation(
   body: z.infer<typeof DelegationBody>,
   childConstraints: DelegationConstraints,
   resources: ResourceAuthority[],
-  expiresAt: string,
+  expiresAt: string | undefined,
 ): boolean {
   const parentConstraints = normalizedConstraints(parent.constraints_json, undefined, undefined)
   if (!parentConstraints.ok) return false
   const constraints = parentConstraints.constraints
   if (!scopesAllowed(body.scopes, parent.scopes)) return false
-  if (new Date(expiresAt).getTime() > new Date(parent.expires_at).getTime()) return false
+  if (expiresAt !== undefined && new Date(expiresAt).getTime() > new Date(parent.expires_at).getTime()) return false
   if (!resourcesNarrowParent(parent, constraints, body.resource_id, resources)) return false
   const parentMaxHops = constraints.max_hops ?? 1
   const childMaxHops = childConstraints.max_hops ?? 1
