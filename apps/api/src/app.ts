@@ -14,6 +14,7 @@ import { ZodError } from 'zod'
 import type { Config } from './config.js'
 import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
+import { redisMinuteBucket } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
 import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError } from '@caracalai/core'
@@ -200,7 +201,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
     }
     app.addHook('onRequest', async (req, reply) => {
       if (!req.url.startsWith('/v1/')) return
-      const minute = Math.floor(Date.now() / 60_000)
+      const minute = await redisMinuteBucket(redis)
       const count = await tick(`api:v1_rl:ip:${req.ip}:${minute}`)
       if (count > cfg.v1RateLimitPerMin) {
         return reply.code(429).send({ error: 'rate_limited' })
@@ -209,7 +210,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
     app.addHook('preHandler', async (req, reply) => {
       if (!req.url.startsWith('/v1/')) return
       if (!req.actor?.id) return
-      const minute = Math.floor(Date.now() / 60_000)
+      const minute = await redisMinuteBucket(redis)
       const count = await tick(`api:v1_rl:actor:${req.actor.id}:${minute}`)
       if (count > cfg.v1RateLimitPerMin) {
         return reply.code(429).send({ error: 'rate_limited' })
@@ -263,7 +264,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   })
   app.get('/ready', async (req, reply) => {
     if (cfg.readyRateLimitPerMin > 0) {
-      const minute = Math.floor(Date.now() / 60_000)
+      const minute = await redisMinuteBucket(redis)
       const key = `api:ready_rl:${req.ip}:${minute}`
       const count = await redis.incr(key)
       if (count === 1) await redis.expire(key, 90)

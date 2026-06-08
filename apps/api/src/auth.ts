@@ -10,6 +10,7 @@ import { sha256 } from '@caracalai/core'
 import { v7 as uuidv7 } from 'uuid'
 import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
+import { redisMinuteBucket } from './redis.js'
 import { hashAdminToken, verifyAdminTokenHash } from './hash-secret.js'
 
 type AdminScope = 'global' | 'zone'
@@ -116,7 +117,7 @@ async function recordAuthFailure(
   limitPerMin: number,
 ): Promise<boolean> {
   if (!redis || limitPerMin <= 0) return false
-  const minute = Math.floor(Date.now() / 60_000)
+  const minute = await redisMinuteBucket(redis)
   const key = `api:admin_auth_fail:${ip}:${minute}`
   const count = await redis.incr(key)
   if (count === 1) await redis.expire(key, 90)

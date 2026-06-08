@@ -14,6 +14,12 @@ export function buildRedis(config: Cfg = cfg): Redis {
   })
 }
 
+export async function redisMinuteBucket(redis: Redis): Promise<number> {
+  if (typeof redis.time !== 'function') return Math.floor(Date.now() / 60_000)
+  const [seconds] = await redis.time()
+  return Math.floor(Number(seconds) / 60)
+}
+
 export async function closeRedis(client: Redis): Promise<void> {
   try {
     await client.quit()
