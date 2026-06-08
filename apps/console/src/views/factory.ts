@@ -22,6 +22,7 @@ import type {
   ResourceInput,
   Session,
   SessionQuery,
+  AgentListQuery,
   DelegationEdge,
   TraverseNode,
   Zone,
@@ -816,9 +817,21 @@ async function loadResourceRows(ctx: Ctx): Promise<ResourceRow[]> {
   })
 }
 
-async function loadAgents(ctx: Ctx): Promise<AgentRow[]> {
-  const agents = await ctx.client.agents.list(ctx.zoneId)
+async function loadAgents(ctx: Ctx, filters?: AgentListQuery): Promise<AgentRow[]> {
+  const agents = await ctx.client.agents.list(ctx.zoneId, filters)
   return agents.map((agent) => ({ ...agent, application_name: agent.application_id }))
+}
+
+function agentExpiry(row: AgentRow): string {
+  if (row.status !== 'active') return '-'
+  if (row.lifecycle === 'service') {
+    return row.heartbeat_deadline_at ? formatDateTimeOrValue(row.heartbeat_deadline_at, { compact: true }) : 'no lease'
+  }
+  if (row.ttl_seconds && row.spawned_at) {
+    const deadline = new Date(new Date(row.spawned_at).getTime() + row.ttl_seconds * 1000)
+    return formatDateTimeOrValue(deadline.toISOString(), { compact: true })
+  }
+  return '-'
 }
 
 async function labelDelegations(ctx: Ctx, rows: DelegationEdge[]): Promise<DelegationRow[]> {
@@ -1712,18 +1725,6 @@ export function sessionsView(ctx: Ctx): View {
           })
         },
       },
-      {
-        key: 'i', label: 'inbound', build: (row) => {
-          if (!row) throw new Error('no row selected')
-          return delegationEdgesView(ctx, 'inbound', row.id)
-        },
-      },
-      {
-        key: 'o', label: 'outbound', build: (row) => {
-          if (!row) throw new Error('no row selected')
-          return delegationEdgesView(ctx, 'outbound', row.id)
-        },
-      },
     ],
   })
   return list
@@ -1951,19 +1952,20 @@ function effectiveAuthorityView(ctx: Ctx, sessionId: string): DetailView {
 }
 
 export function agentsView(ctx: Ctx): View {
+  const filters: AgentListQuery = { ...ctx.state?.agentFilters(ctx.zoneId) }
   const list: ListView<AgentRow> = new ListView<AgentRow>({
     title: 'agent sessions',
     info: resourceListInfo('agent session'),
     columns: [
       { header: 'application', width: 24, value: (r) => r.application_name },
       { header: 'lifecycle', width: 10, value: (r) => r.lifecycle ?? '-' },
-      { header: 'labels', width: 28, value: (r) => r.labels?.length ? r.labels.join(', ') : '-' },
-      { header: 'parent', width: 24, value: (r) => r.parent_id ?? '-' },
+      { header: 'labels', width: 24, value: (r) => r.labels?.length ? r.labels.join(', ') : '-' },
+      { header: 'parent', width: 20, value: (r) => r.parent_id ?? '-' },
       { header: 'status', width: 10, value: (r) => r.status },
       { header: 'depth', width: 6, value: (r) => String(r.depth) },
-      { header: 'spawned_at', width: 24, value: (r) => formatDateTimeOrValue(r.spawned_at, { compact: true }) },
+      { header: 'expires', width: 20, value: (r) => agentExpiry(r) },
     ],
-    load: () => loadAgents(ctx),
+    load: () => loadAgents(ctx, filters),
     state: ctx.state,
     stateKey: 'agents',
     zoneId: ctx.zoneId,
@@ -1972,6 +1974,29 @@ export function agentsView(ctx: Ctx): View {
     rowName: (row) => row.application_name,
     onEnter: (app, row) => open(app, entityDetail(`agent session / ${row.agent_session_id}`, () => ctx.client.agents.get(ctx.zoneId, row.agent_session_id))),
     actions: [
+      {
+        key: 'f', label: 'filter', build: () => {
+          return new FormView({
+            title: 'filter agent sessions',
+            fields: [
+              { key: 'status', label: 'status', kind: 'select', options: ['', 'active', 'suspended', 'terminated'], default: filters.status ?? '' },
+              { key: 'lifecycle', label: 'lifecycle', kind: 'select', options: ['', 'task', 'service'], default: filters.lifecycle ?? '' },
+              { key: 'application_id', label: 'application', kind: 'text', default: filters.application_id ?? '', pick: applicationPicker(ctx), resolve: applicationResolver(ctx) },
+              { key: 'label', label: 'label', kind: 'text', default: filters.label ?? '' },
+              { key: 'limit', label: 'limit', kind: 'text', default: filters.limit === undefined ? '' : String(filters.limit), validate: (v) => v ? (Number.isFinite(Number.parseInt(v, 10)) ? undefined : 'limit must be an integer') : undefined },
+            ],
+            onSubmit: async (v, app) => {
+              filters.status = (v.status as AgentListQuery['status']) || undefined
+              filters.lifecycle = (v.lifecycle as AgentListQuery['lifecycle']) || undefined
+              filters.application_id = v.application_id || undefined
+              filters.label = v.label || undefined
+              filters.limit = int(v.limit)
+              ctx.state?.setAgentFilters(ctx.zoneId, filters)
+              await popAndReload(app, list as unknown as ListView<unknown>)
+            },
+          })
+        },
+      },
       {
         key: 's', label: 'suspend', build: (row) => {
           if (!row) throw new Error('no row selected')
@@ -2017,13 +2042,13 @@ export function agentsView(ctx: Ctx): View {
       {
         key: 'i', label: 'inbound', build: (row) => {
           if (!row) throw new Error('no row selected')
-          return delegationEdgesView(ctx, 'inbound', row.subject_session_id)
+          return delegationEdgesView(ctx, 'inbound', row.agent_session_id)
         },
       },
       {
         key: 'o', label: 'outbound', build: (row) => {
           if (!row) throw new Error('no row selected')
-          return delegationEdgesView(ctx, 'outbound', row.subject_session_id)
+          return delegationEdgesView(ctx, 'outbound', row.agent_session_id)
         },
       },
     ],

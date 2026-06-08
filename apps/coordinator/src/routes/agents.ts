@@ -42,6 +42,10 @@ const SpawnBody = z.object({
 const ListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(LIST_MAX_LIMIT).default(LIST_DEFAULT_LIMIT),
   cursor: z.string().min(1).optional(),
+  status: z.enum(['active', 'suspended', 'terminated']).optional(),
+  lifecycle: z.enum(['task', 'service']).optional(),
+  application_id: z.string().min(1).optional(),
+  label: z.string().min(1).optional(),
 })
 
 const TerminateQuery = z.object({
@@ -296,7 +300,7 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
     const { zoneId } = params
     const query = ListQuery.safeParse(req.query)
     if (!query.success) return reply.code(400).send({ error: 'invalid_query' })
-    const { limit, cursor } = query.data
+    const { limit, cursor, status, lifecycle, application_id, label } = query.data
     if (cursor) {
       const { rows: probe } = await fastify.db.query(
         `SELECT 1 FROM agent_sessions WHERE id = $1 AND zone_id = $2`,
@@ -304,19 +308,22 @@ export const agentsRoutes: FastifyPluginAsync = async (fastify) => {
       )
       if (!probe[0]) return reply.code(400).send({ error: 'invalid_cursor' })
     }
-    const queryParams: unknown[] = [zoneId, limit]
-    let cursorClause = ''
-    if (cursor) {
-      queryParams.push(cursor)
-      cursorClause = `AND id < $3`
-    }
+    const conds = ['zone_id = $1']
+    const queryParams: unknown[] = [zoneId]
+    if (status) { queryParams.push(status); conds.push(`status = $${queryParams.length}`) }
+    if (lifecycle) { queryParams.push(lifecycle); conds.push(`lifecycle = $${queryParams.length}`) }
+    if (application_id) { queryParams.push(application_id); conds.push(`application_id = $${queryParams.length}`) }
+    if (label) { queryParams.push(label); conds.push(`$${queryParams.length} = ANY(labels)`) }
+    if (cursor) { queryParams.push(cursor); conds.push(`id < $${queryParams.length}`) }
+    queryParams.push(limit)
+    const limitPlaceholder = `$${queryParams.length}`
     const { rows } = await fastify.db.query(
         `SELECT id AS agent_session_id, zone_id, application_id, parent_id,
                 subject_session_id, lifecycle,
                 labels, status, depth, ttl_seconds, metadata_json AS metadata,
                 spawned_at, terminated_at, last_heartbeat_at, heartbeat_deadline_at
-         FROM agent_sessions WHERE zone_id = $1 ${cursorClause}
-       ORDER BY id DESC LIMIT $2`,
+         FROM agent_sessions WHERE ${conds.join(' AND ')}
+       ORDER BY id DESC LIMIT ${limitPlaceholder}`,
       queryParams,
     )
     const nextCursor = rows.length === limit ? rows[rows.length - 1].agent_session_id : null
