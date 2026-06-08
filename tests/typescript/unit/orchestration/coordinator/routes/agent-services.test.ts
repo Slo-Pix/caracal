@@ -297,12 +297,11 @@ describe('POST /v1/zones/:zoneId/agents/:id/heartbeat: lifecycle guards', () => 
 
   it('suspends and returns 409 when a service lease has expired', async () => {
     const { app, db } = buildApp()
-    const expired = new Date(Date.now() - 1000)
     const client = {
       query: vi.fn()
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [{
-          application_id: 'app-1', status: 'active', lifecycle: 'service', heartbeat_deadline_at: expired,
+          application_id: 'app-1', status: 'active', lifecycle: 'service', lease_expired: true,
         }] })
         .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValue({ rows: [] }),
