@@ -37,10 +37,14 @@ LifecycleHook = Callable[[CaracalContext], Awaitable[None]]
 class Grant:
     """Authority handed to a spawned child.
 
-    ``inherit`` (the default) runs the child under its application's authority
-    with no delegation edge. ``narrow`` issues a bounded delegation edge so the
-    child holds only the listed scopes; the server re-validates the subset, so a
-    narrow can never broaden. ``none`` spawns without issuing any edge.
+    ``inherit`` (the default) runs the child under its parent's effective
+    authority: if the parent itself holds a narrowing delegation edge the child
+    inherits that same narrowing (the server mirrors the parent's edge onto the
+    child), so least-privilege is transitive by default; a root parent under full
+    application authority yields a child under that same full authority.
+    ``narrow`` issues a bounded delegation edge so the child holds only the listed
+    scopes; the server re-validates the subset, so a narrow can never broaden.
+    ``none`` spawns without issuing any edge.
     """
 
     mode: str = "inherit"
@@ -93,9 +97,11 @@ async def spawn(
 ) -> AsyncGenerator[CaracalContext, None]:
     """Spawn a child agent session and bind it to the current task.
 
-    The child inherits its application's authority by default. Pass
-    ``grant=Grant.narrow([...])`` to issue a bounded delegation edge so the
-    child holds only a subset. ``parent_ctx`` overrides the bound
+    The child inherits its parent's effective authority by default: a child of a
+    narrowed parent carries that same narrowing forward (transitive
+    least-privilege), while a child of a root parent runs under full application
+    authority. Pass ``grant=Grant.narrow([...])`` to issue a bounded delegation
+    edge so the child holds only a subset. ``parent_ctx`` overrides the bound
     :func:`current` lookup; pass it explicitly when the orchestrator owns the
     parent context but the spawn runs on a different task (asyncio TaskGroup,
     thread pool, framework worker) where the parent's contextvar is not visible.
@@ -104,6 +110,18 @@ async def spawn(
     parent = parent_ctx if parent_ctx is not None else current()
     parent_agent_session_id = parent_id or (parent.agent_session_id if parent else None)
     bearer = subject_token
+
+    inherit_parent_edge_id = (
+        parent.delegation_edge_id
+        if (
+            grant.mode == "inherit"
+            and parent is not None
+            and parent.agent_session_id
+            and parent.delegation_edge_id
+            and application_id == parent.client_id
+        )
+        else None
+    )
 
     res = await spawn_agent(
         coordinator,
@@ -115,11 +133,12 @@ async def spawn(
             ttl_seconds=ttl_seconds,
             metadata=metadata,
             labels=labels,
+            inherit_parent_edge_id=inherit_parent_edge_id,
         ),
     )
 
-    delegation_edge_id: str | None = None
-    hop = parent.hop if parent else 0
+    delegation_edge_id: str | None = res.delegation_edge_id
+    hop = parent.hop + 1 if (delegation_edge_id is not None and parent is not None) else (parent.hop if parent else 0)
     try:
         if grant.mode == "narrow":
             if parent is None or not parent.agent_session_id:

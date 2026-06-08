@@ -387,5 +387,83 @@ class ParentCtxOverrideTests(unittest.IsolatedAsyncioTestCase):
                 pass
 
 
+class ServiceAutoHeartbeatTests(unittest.IsolatedAsyncioTestCase):
+    async def test_auto_heartbeat_renews_in_background(self) -> None:
+        import asyncio
+        from caracalai_sdk.primitives import spawn_service
+
+        heartbeats = 0
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            nonlocal heartbeats
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                return httpx.Response(200, json={"agent_session_id": "agent-1"})
+            if req.method == "POST" and str(req.url).endswith("/heartbeat"):
+                heartbeats += 1
+                return httpx.Response(200, json={"id": "agent-1"})
+            return httpx.Response(204)
+
+        coord = _coord(handler)
+        agent = await spawn_service(
+            coordinator=coord, zone_id="z", application_id="app",
+            subject_token="tok", heartbeat_interval=0.01,
+        )
+        await asyncio.sleep(0.05)
+        await agent.aclose()
+        after_close = heartbeats
+        self.assertGreater(heartbeats, 0)
+        await asyncio.sleep(0.03)
+        self.assertEqual(heartbeats, after_close)
+
+    async def test_auto_heartbeat_survives_transient_failure(self) -> None:
+        import asyncio
+        from caracalai_sdk.primitives import spawn_service
+
+        calls = 0
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                return httpx.Response(200, json={"agent_session_id": "agent-1"})
+            if req.method == "POST" and str(req.url).endswith("/heartbeat"):
+                calls += 1
+                if calls == 1:
+                    return httpx.Response(503)
+                return httpx.Response(200, json={"id": "agent-1"})
+            return httpx.Response(204)
+
+        coord = _coord(handler)
+        agent = await spawn_service(
+            coordinator=coord, zone_id="z", application_id="app",
+            subject_token="tok", heartbeat_interval=0.01,
+        )
+        await asyncio.sleep(0.05)
+        await agent.aclose()
+        self.assertGreaterEqual(calls, 2)
+
+    async def test_no_auto_heartbeat_without_interval(self) -> None:
+        import asyncio
+        from caracalai_sdk.primitives import spawn_service
+
+        heartbeats = 0
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            nonlocal heartbeats
+            if req.method == "POST" and str(req.url).endswith("/agents"):
+                return httpx.Response(200, json={"agent_session_id": "agent-1"})
+            if req.method == "POST" and str(req.url).endswith("/heartbeat"):
+                heartbeats += 1
+                return httpx.Response(200, json={"id": "agent-1"})
+            return httpx.Response(204)
+
+        coord = _coord(handler)
+        agent = await spawn_service(
+            coordinator=coord, zone_id="z", application_id="app", subject_token="tok",
+        )
+        await asyncio.sleep(0.03)
+        await agent.aclose()
+        self.assertEqual(heartbeats, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

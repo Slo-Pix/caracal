@@ -82,11 +82,13 @@ class SpawnRequest:
     metadata: JsonObject | None = None
     labels: list[str] | None = None
     idempotency_key: str | None = None
+    inherit_parent_edge_id: str | None = None
 
 
 @dataclass
 class SpawnResponse:
     agent_session_id: str
+    delegation_edge_id: str | None = None
 
 
 @dataclass
@@ -124,6 +126,8 @@ async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest)
         body["metadata"] = req.metadata
     if req.labels:
         body["labels"] = req.labels
+    if req.inherit_parent_edge_id:
+        body["inherit_parent_edge_id"] = req.inherit_parent_edge_id
 
     headers = {"authorization": f"Bearer {bearer}"}
     key = req.idempotency_key or _derive_idempotency_key(req)
@@ -140,7 +144,10 @@ async def spawn_agent(client: CoordinatorClient, bearer: str, req: SpawnRequest)
     agent_session_id = data.get("agent_session_id")
     if not agent_session_id:
         raise KeyError("agent_session_id")
-    return SpawnResponse(agent_session_id=agent_session_id)
+    return SpawnResponse(
+        agent_session_id=agent_session_id,
+        delegation_edge_id=data.get("delegation_edge_id"),
+    )
 
 
 def _derive_idempotency_key(req: SpawnRequest) -> str | None:
