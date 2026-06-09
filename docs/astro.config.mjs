@@ -373,6 +373,7 @@ export default defineConfig({
             { label: 'Secure Caracal', link: '/security/' },
             { label: 'Review the Threat Model', link: '/security/threat-model/' },
             { label: 'Harden Security Posture', link: '/security/hardening/' },
+            { label: 'Verify a Release', link: '/security/verify-releases/' },
             { label: 'Report a Vulnerability', link: '/security/disclosure/' },
           ],
         },
