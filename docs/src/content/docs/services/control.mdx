@@ -84,6 +84,27 @@ least-privilege automation stays the easy path. The `controlBootstrap` example
 ships a reusable client plus idempotent bootstrap and teardown scripts that
 provision a demo provider, resource, and policy through this flow.
 
+## Manage Control Keys
+
+Control keys are created and managed in Console from the **Control** menu. A key is
+a managed, zone-bound application whose only authority is the
+`control:<command>:<verb>` scopes you grant it — never the root admin token.
+
+When you create a key, Console opens a grouped permission picker:
+
+- Each command is a group shown as `control:<command>:*` (for example
+  `control:agent:*`). Toggling a group grants every action under that command.
+- Reveal a group to expand its branch and grant a single action — `read`,
+  `write`, or `delete` — instead of the whole command.
+- Selections are checkboxes that persist while you move through the tree; the key
+  is written with exactly the scopes you keep when you save.
+
+A key can never exceed Console's own zone-bound management surface. The picker
+offers only the commands Control exposes: local-only operations (the Control
+lifecycle itself), non-zone operations, and hidden commands are never grantable.
+A token later exchanged from the key is additionally checked against the scopes
+recorded on the key, so a token can only narrow, never widen, the granted set.
+
 ## Safety Behavior
 
 Control returns `503` when the gate is disabled, `401` for authentication or replay failures, `429` for rate limiting, `403` for denied dispatch, `400` for invalid requests, `501` for unsupported commands, and `502` for upstream errors.
