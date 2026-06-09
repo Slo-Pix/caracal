@@ -157,14 +157,14 @@ def test_setup_page_is_guided_and_provider_backed():
     assert "Create the zone" in body
     assert '<dt class="field-name">Name</dt>' in body
     assert '<dd class="field-value">&#34;Lynx Capital&#34;</dd>' in body
-    assert "Create the managed application" in body
+    assert "Create one managed application per service" in body
     assert "Go to Applications &gt; New in the &#34;Lynx Capital&#34; zone" in body
     assert '<dt class="field-name">Registration method</dt>' in body
     assert '<dd class="field-value">managed</dd>' in body
-    assert '<dd class="field-value">&#34;lynx-platform&#34;</dd>' in body
+    assert '<dd class="field-value">&#34;lynx-portfolio&#34;, &#34;lynx-research&#34;, &#34;lynx-compliance&#34;</dd>' in body
     assert "Register the credential providers and domain resources" in body
     assert '<dd class="field-value">pf-mandate, rs-mandate, cp-mandate</dd>' in body
-    assert '<dd class="field-value">caracal_mandate</dd>' in body
+    assert '<dd class="field-value">each resource bound to its service application</dd>' in body
     assert "Import the policy library and activate the policy set" in body
     assert '<dd class="field-value">examples/lynxCapital/policies</dd>' in body
     assert '<dd class="field-value">&#34;lynx-platform&#34;</dd>' in body

@@ -19,6 +19,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("PROVIDERLAB_FAST", "1")
+# The provider test harness exercises the simulated provider surface directly; opt into
+# simulation mode so those providers are reachable without a live Caracal zone.
+os.environ.setdefault("LYNX_SIMULATION", "1")
 
 
 @pytest.fixture(autouse=True)
