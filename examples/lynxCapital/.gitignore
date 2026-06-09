@@ -1,0 +1,2 @@
+# One-time DCR and managed-application secrets written by scripts/provision.py.
+config/provisioned.json
