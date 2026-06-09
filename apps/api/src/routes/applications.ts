@@ -3,7 +3,7 @@
 //
 // Application CRUD routes: managed and DCR app registration.
 
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { v7 as uuidv7 } from 'uuid'
 import { randomBytes } from 'node:crypto'
@@ -15,7 +15,6 @@ import { zoneExists } from '../zone-guard.js'
 import { appendKeysetCondition, parseListPagination, setNextLink } from './list-pagination.js'
 import { validateTraits } from '../traits.js'
 
-const APPLICATION_INTERNALS_HEADER = 'x-caracal-application-internals'
 const DCR_DEFAULT_LIFETIME_SECONDS = 3600
 const DCR_MAX_LIFETIME_SECONDS = 3600
 
@@ -40,8 +39,8 @@ function generateClientSecret(): string {
   return `cs_${randomBytes(32).toString('base64url')}`
 }
 
-function applicationSelect(req: { headers: Record<string, unknown> }): string {
-  return req.headers[APPLICATION_INTERNALS_HEADER] === 'control'
+function applicationSelect(req: FastifyRequest): string {
+  return req.actor?.scope === 'global'
     ? 'id, zone_id, name, registration_method, traits, expires_at, created_at'
     : 'id, zone_id, name, registration_method, expires_at, created_at'
 }
