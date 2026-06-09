@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-# Caracal runtime client and configuration types from the published SDK (v2026.06.04-rc.1 / caracalai-sdk==0.1.4rc1).
+# Caracal runtime client and configuration types from the published SDK (v2026.06.09-rc.1 / caracalai-sdk==0.1.5rc1).
 from caracalai_sdk import Caracal, CaracalContext
 # Caracal verifier primitives used to authenticate inbound authority before serving internal providers.
 from caracalai_identity import (
