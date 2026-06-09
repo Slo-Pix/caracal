@@ -2,7 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Multi-tenant identity model loader and provisioning-plan builders for Lynx Capital.
+Identity-model loader and Control provisioning-plan builders for the Lynx Capital platform.
 """
 from __future__ import annotations
 
@@ -24,12 +24,20 @@ class PlatformSpec(BaseModel):
     controlKeyName: str = ""
 
 
+class ProviderSpec(BaseModel):
+    identifier: str
+    name: str
+    kind: str = "caracal_mandate"
+    config: dict = {}
+
+
 class ResourceSpec(BaseModel):
     identifier: str
     resourceId: str
     name: str
     scopes: list[str]
     upstreamEnv: str
+    providerRef: str
 
     def upstream_url(self) -> str:
         return os.environ.get(self.upstreamEnv, "").rstrip("/")
@@ -41,26 +49,32 @@ class PolicySetSpec(BaseModel):
     schemaVersion: str = SCHEMA_VERSION
 
 
-class TenantSpec(BaseModel):
+class CustomerSpec(BaseModel):
     id: str
     name: str
-    dcrApplicationName: str
-    dcrExpiresIn: int = 3600
     subject: str
+    plan: str = "growth"
     agents: list[str]
 
 
 class TenancyModel(BaseModel):
     platform: PlatformSpec
+    providers: list[ProviderSpec]
     resources: list[ResourceSpec]
     policySet: PolicySetSpec
-    tenants: list[TenantSpec]
+    customers: list[CustomerSpec]
 
     def resource(self, identifier: str) -> ResourceSpec:
         for spec in self.resources:
             if spec.identifier == identifier or spec.resourceId == identifier:
                 return spec
         raise KeyError(f"unknown resource: {identifier!r}")
+
+    def customer(self, customer_id: str) -> CustomerSpec:
+        for spec in self.customers:
+            if spec.id == customer_id:
+                return spec
+        raise KeyError(f"unknown customer: {customer_id!r}")
 
 
 class PolicyManifest(BaseModel):
@@ -101,11 +115,12 @@ def load_manifest(path: str | os.PathLike[str] | None = None) -> PolicyManifest:
     return manifest
 
 
-def agent_labels(tenant_id: str, role: str, manifest: PolicyManifest | None = None) -> list[str]:
-    """The Caracal agent-session labels for one tenant's role: the tenant binding label
-    plus every capability label the role's policies key on."""
+def agent_labels(role: str, manifest: PolicyManifest | None = None) -> list[str]:
+    """The Caracal agent-session labels for a role: every capability label the role's
+    policies key on. Labels are descriptive authority hints the policy set reads; the
+    customer the agent acts for travels in the subject and spawn metadata, not in a label."""
     manifest = manifest or load_manifest()
-    return [f"tenant:{tenant_id}", *manifest.capabilities_for(role)]
+    return list(manifest.capabilities_for(role))
 
 
 def role_scopes(
@@ -113,8 +128,8 @@ def role_scopes(
     model: TenancyModel | None = None,
     manifest: PolicyManifest | None = None,
 ) -> list[str]:
-    """The union of resource scopes a role's capabilities can ever grant, used to narrow
-    a spawned agent's delegation edge to least privilege for that role."""
+    """The union of resource scopes a role's capabilities can ever grant, used to narrow a
+    spawned agent's delegation edge to least privilege for that role."""
     model = model or load_model()
     manifest = manifest or load_manifest()
     known = {scope for resource in model.resources for scope in resource.scopes}
@@ -126,39 +141,62 @@ def role_scopes(
     return sorted(scopes)
 
 
+def customer_metadata(customer_id: str, role: str) -> dict[str, str]:
+    """The spawn metadata that correlates an agent session to the customer it serves and
+    the role it runs. The policy set reads the customer from the subject claims; this
+    metadata is the audit-trail correlation key."""
+    return {"customer_id": customer_id, "role": role}
+
+
 def managed_app_command(model: TenancyModel) -> dict:
-    """Control invoke payload that creates the durable managed platform application."""
+    """Control invoke payload that creates the durable managed platform application. The
+    managed application is normally created once in Console; this is provided for scripted
+    bootstrap of a fresh zone."""
     return {"command": "app", "subcommand": "create", "flags": {"name": model.platform.applicationName}}
 
 
-def dcr_app_command(tenant: TenantSpec) -> dict:
-    """Control invoke payload that registers a tenant's isolated DCR application."""
-    return {
-        "command": "app",
-        "subcommand": "dcr",
-        "flags": {"name": tenant.dcrApplicationName, "expires-in": tenant.dcrExpiresIn},
-    }
+def provider_commands(model: TenancyModel) -> list[dict]:
+    """Control invoke payloads that register each upstream credential provider."""
+    return [
+        {
+            "command": "identity-provider",
+            "subcommand": "create",
+            "flags": {
+                "name": provider.name,
+                "identifier": provider.identifier,
+                "kind": provider.kind,
+                "config": json.dumps(provider.config),
+            },
+        }
+        for provider in model.providers
+    ]
 
 
-def resource_commands(model: TenancyModel) -> list[dict]:
-    """Control invoke payloads that register each Lynx domain resource."""
+def resource_commands(model: TenancyModel, provider_ids: dict[str, str] | None = None) -> list[dict]:
+    """Control invoke payloads that register each Lynx domain resource. provider_ids maps a
+    provider identifier to the id the control plane returned, so each resource binds to its
+    credential provider."""
+    provider_ids = provider_ids or {}
     commands: list[dict] = []
     for spec in model.resources:
-        flags = {
+        flags: dict[str, object] = {
             "name": spec.name,
             "identifier": spec.identifier,
-            "scopes": " ".join(spec.scopes),
+            "scopes": spec.scopes,
         }
         upstream = spec.upstream_url()
         if upstream:
             flags["upstream-url"] = upstream
+        provider_id = provider_ids.get(spec.providerRef)
+        if provider_id:
+            flags["credential-provider-id"] = provider_id
         commands.append({"command": "resource", "subcommand": "create", "flags": flags})
     return commands
 
 
 def policy_files(policies_dir: str | os.PathLike[str] | None = None) -> list[tuple[str, str]]:
-    """The policy library as ordered (name, content) pairs. 00-base is always first so
-    the decision contract is present before the scenario policies that contribute to it."""
+    """The policy library as ordered (name, content) pairs. 00-base is always first so the
+    decision contract is present before the scenario policies that contribute to it."""
     directory = Path(policies_dir) if policies_dir is not None else DEFAULT_POLICIES_DIR
     files = sorted(p for p in directory.glob("*.rego") if not p.name.endswith("_test.rego"))
     return [(p.stem, p.read_text(encoding="utf-8")) for p in files]
@@ -174,36 +212,3 @@ def policy_commands(model: TenancyModel, policies_dir: str | os.PathLike[str] | 
         }
         for name, content in policy_files(policies_dir)
     ]
-
-
-def grant_specs(model: TenancyModel, manifest: PolicyManifest | None = None) -> list[dict]:
-    """Admin REST grant bodies binding each tenant's subject to the resource scopes its
-    agents may request. application_id is filled in at provisioning time with the
-    tenant's DCR application id. Cross-tenant access has no grant and is therefore
-    impossible even before policy evaluation."""
-    manifest = manifest or load_manifest()
-    specs: list[dict] = []
-    for tenant in model.tenants:
-        scopes_by_resource: dict[str, set[str]] = {}
-        for role in tenant.agents:
-            for capability in manifest.capabilities_for(role):
-                for entry in manifest.policies:
-                    if entry.get("capability") != capability:
-                        continue
-                    resource = entry.get("resource")
-                    grants = entry.get("grants", [])
-                    targets = [r.identifier for r in model.resources] if resource == "*" else [resource]
-                    for target in targets:
-                        resource_scopes = set(model.resource(target).scopes)
-                        scopes_by_resource.setdefault(target, set()).update(set(grants) & resource_scopes)
-        for resource_identifier, scopes in scopes_by_resource.items():
-            if not scopes:
-                continue
-            specs.append({
-                "tenant_id": tenant.id,
-                "user_id": tenant.subject,
-                "resource_identifier": resource_identifier,
-                "resource_id": model.resource(resource_identifier).resourceId,
-                "scopes": sorted(scopes),
-            })
-    return specs

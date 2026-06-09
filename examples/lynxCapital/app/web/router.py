@@ -213,12 +213,10 @@ def _overview_ctx(request: Request, key: str) -> dict:
 
 
 CONTROL_SCOPES = [
-    "control:app:read",
-    "control:app:write",
-    "control:resource:read",
-    "control:resource:write",
     "control:identity-provider:read",
     "control:identity-provider:write",
+    "control:resource:read",
+    "control:resource:write",
     "control:policy:read",
     "control:policy:write",
     "control:policy-set:read",
@@ -232,8 +230,8 @@ def _env(name: str) -> str:
 
 def _caracal_steps() -> list[dict[str, object]]:
     cfg = get_config()
-    zone = _env("CARACAL_ZONE_ID") or "<placeholder-zone-id>"
-    application = _env("CARACAL_APPLICATION_ID") or "<placeholder-managed-application-id>"
+    zone = _env("CARACAL_ZONE_ID") or "<zone-id>"
+    application = _env("CARACAL_APPLICATION_ID") or "<managed-application-id>"
     return [
         {
             "step": "01",
@@ -241,46 +239,56 @@ def _caracal_steps() -> list[dict[str, object]]:
             "path": "Go to Caracal Console > Zones > New",
             "consoleFields": [
                 {"label": "Name", "value": f"\"{cfg.company}\""},
-                {"label": "Dynamic clients", "value": "[x] enabled (required for per-tenant DCR apps)"},
                 {"label": "Zone ID", "value": zone},
             ],
-            "why": "The zone is the isolation boundary that owns the managed platform application, the domain resources, the policy set, and every per-tenant DCR application. Dynamic client registration is enabled so each customer tenant gets its own auto-expiring application.",
+            "why": "The zone is the isolation boundary that owns the managed application, the domain resources, and the policy set. One zone backs the whole Lynx Capital platform.",
             "field": "CARACAL_ZONE_ID",
             "value": zone,
         },
         {
             "step": "02",
-            "title": "Create the managed platform application",
+            "title": "Create the managed application",
             "path": f"Go to Applications > New in the \"{cfg.company}\" zone",
             "consoleFields": [
                 {"label": "Name", "value": "\"lynx-platform\""},
                 {"label": "Registration method", "value": "managed"},
             ],
-            "why": "This durable managed application is the platform runtime credential. Every tenant's Portfolio, Research, and Compliance agents are spawned as labelled sessions under it. Copy the generated Application ID and one-time secret into CARACAL_APPLICATION_ID and CARACAL_APP_CLIENT_SECRET; the secret is shown once.",
+            "why": "This one durable managed application is the platform runtime credential. Every customer's Portfolio, Research, and Compliance agents are spawned as least-privilege sessions under it. Download its caracal.toml profile (or copy the Application ID and one-time secret into CARACAL_APPLICATION_ID and CARACAL_APP_CLIENT_SECRET); the secret is shown once.",
             "field": "CARACAL_APPLICATION_ID",
             "value": application,
         },
         {
             "step": "03",
+            "title": "Register the credential providers and domain resources",
+            "path": "Control key > identity-provider create, then resource create",
+            "consoleFields": [
+                {"label": "Providers", "value": "pf-mandate, rs-mandate, cp-mandate"},
+                {"label": "Resources", "value": "resource://portfolio, resource://research, resource://compliance"},
+                {"label": "Provider kind", "value": "caracal_mandate"},
+            ],
+            "why": "Each domain service is a Caracal resource the Gateway protects, bound to a credential provider that forwards the agent's mandate upstream. scripts/provision.py creates these idempotently from config/tenancy.yaml.",
+        },
+        {
+            "step": "04",
             "title": "Import the policy library and activate the policy set",
             "path": "Go to Policies > Import, then Policy sets > Activate",
             "consoleFields": [
                 {"label": "Library", "value": "examples/lynxCapital/policies"},
-                {"label": "Policy set", "value": "\"lynx-multitenant\""},
+                {"label": "Policy set", "value": "\"lynx-platform\""},
                 {"label": "Activate", "value": "latest version"},
             ],
-            "why": "The library's 00-base policy plus eleven scenario policies enforce per-tenant isolation, role capabilities, delegation, and step-up. The active policy set is evaluated on every token exchange and gateway call.",
+            "why": "The library's 00-base policy plus eleven scenario policies enforce per-customer subject scoping, role capabilities, plan entitlements, delegation, and step-up. The active policy set is evaluated on every token exchange and gateway call.",
         },
         {
-            "step": "04",
-            "title": "Register a DCR application per tenant",
-            "path": "Control > app dcr — once per customer tenant",
+            "step": "05",
+            "title": "Serve customers as subjects",
+            "path": "Application code — caracal.spawn_customer_agent(customer_id, role)",
             "consoleFields": [
-                {"label": "Applications", "value": "tenant-aurora, tenant-borealis"},
-                {"label": "Registration method", "value": "dcr"},
-                {"label": "Expires in", "value": "3600s"},
+                {"label": "Customers", "value": "aurora (enterprise), borealis (growth)"},
+                {"label": "Identity", "value": "subject + spawn metadata"},
+                {"label": "Roles", "value": "portfolio, research, compliance"},
             ],
-            "why": "Each customer tenant gets its own dynamically registered, auto-expiring, independently revocable application — the per-tenant credential boundary. The one-time secrets are written to config/provisioned.json.",
+            "why": "Each customer is a Caracal subject, not a separate application. The platform spawns one least-privilege agent per role under the one managed application, correlating the customer in the subject and spawn metadata. The policy set differentiates customers by their subject claims, so isolation never depends on a forgeable label or scope name.",
         },
     ]
 
@@ -311,11 +319,11 @@ def _setup_ctx(request: Request) -> dict:
         "setup_caracal_steps": _caracal_steps(),
         "setup_automate": _automate_plan(),
         "setup_env": {
-            "zone": _env("CARACAL_ZONE_ID") or "<placeholder-zone-id>",
-            "application": _env("CARACAL_APPLICATION_ID") or "<placeholder-managed-application-id>",
-            "applicationSecret": "<placeholder-application-secret>",
-            "controlClient": "<placeholder-control-client-id>",
-            "controlSecret": "<placeholder-control-client-secret>",
+            "zone": _env("CARACAL_ZONE_ID") or "<zone-id>",
+            "application": _env("CARACAL_APPLICATION_ID") or "<managed-application-id>",
+            "applicationSecret": "<managed-application-secret>",
+            "controlClient": "<control-key-client-id>",
+            "controlSecret": "<one-time-control-key-secret>",
         },
         "setup_progress": {
             "ready": ready,
