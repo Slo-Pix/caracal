@@ -78,16 +78,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - uses: docker/setup-buildx-action@v3
-
       - name: Build image
-        uses: docker/build-push-action@v6
-        with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.dockerfile }}
-          build-args: ${{ matrix.build_args }}
-          load: true
-          tags: caracal-${{ matrix.name }}:${{ github.sha }}
+        shell: bash
+        env:
+          DOCKER_BUILDKIT: "1"
+          BUILD_CONTEXT: ${{ matrix.context }}
+          BUILD_DOCKERFILE: ${{ matrix.dockerfile }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+          IMAGE_TAG: caracal-${{ matrix.name }}:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r arg; do
+            if [ -n "$arg" ]; then
+              args+=(--build-arg "$arg")
+            fi
+          done <<< "$BUILD_ARGS"
+          for attempt in 1 2 3; do
+            if docker build --file "$BUILD_DOCKERFILE" --tag "$IMAGE_TAG" "${args[@]}" "$BUILD_CONTEXT"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 20))
+          done
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
