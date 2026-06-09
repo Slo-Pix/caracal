@@ -17,7 +17,7 @@ import type { RedisClient } from './redis.js'
 import { redisMinuteBucket } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
-import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError } from '@caracalai/core'
+import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError, pathOnly } from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
 import { resourcesRoutes } from './routes/resources.js'
@@ -123,7 +123,15 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
       messageKey: 'msg',
       timestamp: pino.stdTimeFunctions.isoTime,
       formatters: { level: (label) => ({ level: label }) },
-      serializers: { err: pino.stdSerializers.err, error: pino.stdSerializers.err },
+      serializers: {
+        err: pino.stdSerializers.err,
+        error: pino.stdSerializers.err,
+        req: (request: { method?: string; url?: string; ip?: string }) => ({
+          method: request.method,
+          url: request.url ? pathOnly(request.url) : request.url,
+          ip: request.ip,
+        }),
+      },
       redact: { paths: redactPaths, censor: '***' },
       mixin: () => {
         const tc = getTraceContext()
@@ -224,7 +232,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
     authFailLimitPerMin: cfg.adminAuthFailLimitPerMin,
     lastUsedDebounceSec: cfg.lastUsedDebounceSec,
   })
-  registerAdminAuditHook(app, { db })
+  registerAdminAuditHook(app, { db, hmacKey: cfg.auditHmacKey })
 
   if (cfg.enableDocs) {
     await app.register(swagger, {
