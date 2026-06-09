@@ -223,4 +223,40 @@ describe('detectActiveLocalStackRuntime', () => {
       secretsDir: '/home/raw/.config/caracal/secrets',
     })
   })
+
+  it('derives the dev repo root from the compose project directory, not the compose subdir', () => {
+    spawnSyncMock
+      .mockReturnValueOnce({ status: 0, stdout: 'api-container\n' })
+      .mockReturnValueOnce({
+        status: 0,
+        stdout: JSON.stringify([{
+          Config: {
+            Image: 'caracal-api:dev',
+            Env: ['CARACAL_MODE=dev'],
+            Labels: {
+              'com.docker.compose.project.working_dir': '/home/raw/code/caracal/infra/docker',
+              'com.docker.compose.project.config_files': '/home/raw/code/caracal/infra/docker/docker-compose.yml',
+            },
+          },
+          Mounts: [
+            { Source: '/home/raw/code/caracal/.caracal/dev-secrets/caracalAdminToken', Destination: '/run/secrets/caracalAdminToken' },
+          ],
+          NetworkSettings: {
+            Ports: {
+              '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3000' }],
+            },
+          },
+        }]),
+      })
+
+    expect(detectActiveLocalStackRuntime()).toEqual({
+      mode: 'dev',
+      version: 'dev',
+      registry: undefined,
+      home: undefined,
+      repoRoot: '/home/raw/code/caracal',
+      composeFile: '/home/raw/code/caracal/infra/docker/docker-compose.yml',
+      secretsDir: '/home/raw/code/caracal/.caracal/dev-secrets',
+    })
+  })
 })
