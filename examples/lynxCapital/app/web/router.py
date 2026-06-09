@@ -247,13 +247,13 @@ def _caracal_steps() -> list[dict[str, object]]:
         },
         {
             "step": "02",
-            "title": "Create the managed application",
+            "title": "Create one managed application per service",
             "path": f"Go to Applications > New in the \"{cfg.company}\" zone",
             "consoleFields": [
-                {"label": "Name", "value": "\"lynx-platform\""},
+                {"label": "Names", "value": "\"lynx-portfolio\", \"lynx-research\", \"lynx-compliance\""},
                 {"label": "Registration method", "value": "managed"},
             ],
-            "why": "This one durable managed application is the platform runtime credential. Every customer's Portfolio, Research, and Compliance agents are spawned as least-privilege sessions under it. Download its caracal.toml profile (or copy the Application ID and one-time secret into CARACAL_APPLICATION_ID and CARACAL_APP_CLIENT_SECRET); the secret is shown once.",
+            "why": "Each domain service runs as its own durable managed application — its own trust boundary that can reach only its own resource. A customer's agents are spawned as least-privilege sessions under the relevant service application. Download each caracal.toml profile (or copy the Application ID and one-time secret into CARACAL_APPLICATION_ID and CARACAL_APP_CLIENT_SECRET for that service); the secret is shown once.",
             "field": "CARACAL_APPLICATION_ID",
             "value": application,
         },
@@ -264,9 +264,9 @@ def _caracal_steps() -> list[dict[str, object]]:
             "consoleFields": [
                 {"label": "Providers", "value": "pf-mandate, rs-mandate, cp-mandate"},
                 {"label": "Resources", "value": "resource://portfolio, resource://research, resource://compliance"},
-                {"label": "Provider kind", "value": "caracal_mandate"},
+                {"label": "Binding", "value": "each resource bound to its service application"},
             ],
-            "why": "Each domain service is a Caracal resource the Gateway protects, bound to a credential provider that forwards the agent's mandate upstream. scripts/provision.py creates these idempotently from config/tenancy.yaml.",
+            "why": "Each domain service is a Caracal resource the Gateway protects, bound to a credential provider that forwards the agent's mandate upstream and to the one application allowed to select it. scripts/provision.py creates these idempotently from config/tenancy.yaml.",
         },
         {
             "step": "04",
@@ -282,13 +282,13 @@ def _caracal_steps() -> list[dict[str, object]]:
         {
             "step": "05",
             "title": "Serve customers as subjects",
-            "path": "Application code — caracal.spawn_customer_agent(customer_id, role)",
+            "path": "Application code — caracal.spawn_customer_agent(customer_id, role, application_id=...)",
             "consoleFields": [
                 {"label": "Customers", "value": "aurora (enterprise), borealis (growth)"},
                 {"label": "Identity", "value": "subject + spawn metadata"},
-                {"label": "Roles", "value": "portfolio, research, compliance"},
+                {"label": "Applications", "value": "lynx-portfolio, lynx-research, lynx-compliance"},
             ],
-            "why": "Each customer is a Caracal subject, not a separate application. The platform spawns one least-privilege agent per role under the one managed application, correlating the customer in the subject and spawn metadata. The policy set differentiates customers by their subject claims, so isolation never depends on a forgeable label or scope name.",
+            "why": "Each customer is a Caracal subject, not a separate application. Each service application spawns least-privilege agents narrowed to its own resource scopes, correlating the customer in the subject and spawn metadata. The policy set differentiates customers by their subject claims, so isolation never depends on a forgeable label or scope name.",
         },
     ]
 

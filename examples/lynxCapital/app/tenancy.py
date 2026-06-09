@@ -19,11 +19,6 @@ DEFAULT_POLICIES_DIR = ROOT / "policies"
 SCHEMA_VERSION = "2026-05-20"
 
 
-class PlatformSpec(BaseModel):
-    applicationName: str
-    controlKeyName: str = ""
-
-
 class ProviderSpec(BaseModel):
     identifier: str
     name: str
@@ -37,10 +32,18 @@ class ResourceSpec(BaseModel):
     name: str
     scopes: list[str]
     upstreamEnv: str
-    providerRef: str
 
     def upstream_url(self) -> str:
         return os.environ.get(self.upstreamEnv, "").rstrip("/")
+
+
+class ApplicationSpec(BaseModel):
+    id: str
+    applicationName: str
+    controlKeyName: str = ""
+    provider: ProviderSpec
+    resource: ResourceSpec
+    agents: list[str]
 
 
 class PolicySetSpec(BaseModel):
@@ -54,20 +57,37 @@ class CustomerSpec(BaseModel):
     name: str
     subject: str
     plan: str = "growth"
-    agents: list[str]
 
 
 class TenancyModel(BaseModel):
-    platform: PlatformSpec
-    providers: list[ProviderSpec]
-    resources: list[ResourceSpec]
+    applications: list[ApplicationSpec]
     policySet: PolicySetSpec
     customers: list[CustomerSpec]
 
-    def resource(self, identifier: str) -> ResourceSpec:
-        for spec in self.resources:
-            if spec.identifier == identifier or spec.resourceId == identifier:
+    @property
+    def providers(self) -> list[ProviderSpec]:
+        return [app.provider for app in self.applications]
+
+    @property
+    def resources(self) -> list[ResourceSpec]:
+        return [app.resource for app in self.applications]
+
+    def application(self, application_id: str) -> ApplicationSpec:
+        for spec in self.applications:
+            if spec.id == application_id or spec.applicationName == application_id:
                 return spec
+        raise KeyError(f"unknown application: {application_id!r}")
+
+    def application_for_resource(self, identifier: str) -> ApplicationSpec:
+        for spec in self.applications:
+            if spec.resource.identifier == identifier or spec.resource.resourceId == identifier:
+                return spec
+        raise KeyError(f"no application owns resource: {identifier!r}")
+
+    def resource(self, identifier: str) -> ResourceSpec:
+        for spec in self.applications:
+            if spec.resource.identifier == identifier or spec.resource.resourceId == identifier:
+                return spec.resource
         raise KeyError(f"unknown resource: {identifier!r}")
 
     def customer(self, customer_id: str) -> CustomerSpec:
@@ -125,14 +145,22 @@ def agent_labels(role: str, manifest: PolicyManifest | None = None) -> list[str]
 
 def role_scopes(
     role: str,
+    *,
+    application: "ApplicationSpec | str | None" = None,
     model: TenancyModel | None = None,
     manifest: PolicyManifest | None = None,
 ) -> list[str]:
-    """The union of resource scopes a role's capabilities can ever grant, used to narrow a
-    spawned agent's delegation edge to least privilege for that role."""
+    """The least-privilege scopes a role's agent may hold, used to narrow a spawned agent's
+    delegation edge. The union of the role's capability grants is intersected with the scopes
+    that actually exist; when an application is given it is further intersected with that
+    application's resource scopes, so an agent spawned under a service application can never
+    obtain authority over another service's resource even if its role is cross-domain."""
     model = model or load_model()
     manifest = manifest or load_manifest()
     known = {scope for resource in model.resources for scope in resource.scopes}
+    if application is not None:
+        app = application if isinstance(application, ApplicationSpec) else model.application(application)
+        known = set(app.resource.scopes)
     scopes: set[str] = set()
     for capability in manifest.capabilities_for(role):
         for entry in manifest.policies:
@@ -141,44 +169,57 @@ def role_scopes(
     return sorted(scopes)
 
 
-def customer_metadata(customer_id: str, role: str) -> dict[str, str]:
-    """The spawn metadata that correlates an agent session to the customer it serves and
-    the role it runs. The policy set reads the customer from the subject claims; this
-    metadata is the audit-trail correlation key."""
-    return {"customer_id": customer_id, "role": role}
+def customer_metadata(customer_id: str, role: str, application_id: str | None = None) -> dict[str, str]:
+    """The spawn metadata that correlates an agent session to the customer it serves, the
+    role it runs, and the service application it runs under. The policy set reads the customer
+    from the subject claims; this metadata is the audit-trail correlation key."""
+    metadata = {"customer_id": customer_id, "role": role}
+    if application_id is not None:
+        metadata["application_id"] = application_id
+    return metadata
 
 
-def managed_app_command(model: TenancyModel) -> dict:
-    """Control invoke payload that creates the durable managed platform application. The
-    managed application is normally created once in Console; this is provided for scripted
-    bootstrap of a fresh zone."""
-    return {"command": "app", "subcommand": "create", "flags": {"name": model.platform.applicationName}}
+def application_commands(model: TenancyModel) -> list[dict]:
+    """Control invoke payloads that create each durable managed service application. Managed
+    applications are normally created once in Console; this is provided for scripted bootstrap
+    of a fresh zone."""
+    return [
+        {"command": "app", "subcommand": "create", "flags": {"name": app.applicationName}}
+        for app in model.applications
+    ]
 
 
 def provider_commands(model: TenancyModel) -> list[dict]:
-    """Control invoke payloads that register each upstream credential provider."""
+    """Control invoke payloads that register each application's upstream credential provider."""
     return [
         {
             "command": "identity-provider",
             "subcommand": "create",
             "flags": {
-                "name": provider.name,
-                "identifier": provider.identifier,
-                "kind": provider.kind,
-                "config": json.dumps(provider.config),
+                "name": app.provider.name,
+                "identifier": app.provider.identifier,
+                "kind": app.provider.kind,
+                "config": json.dumps(app.provider.config),
             },
         }
-        for provider in model.providers
+        for app in model.applications
     ]
 
 
-def resource_commands(model: TenancyModel, provider_ids: dict[str, str] | None = None) -> list[dict]:
-    """Control invoke payloads that register each Lynx domain resource. provider_ids maps a
-    provider identifier to the id the control plane returned, so each resource binds to its
-    credential provider."""
+def resource_commands(
+    model: TenancyModel,
+    provider_ids: dict[str, str] | None = None,
+    application_ids: dict[str, str] | None = None,
+) -> list[dict]:
+    """Control invoke payloads that register each Lynx domain resource and bind it to its
+    application's trust boundary. provider_ids maps a provider identifier to the id the control
+    plane returned; application_ids maps an application id to the gateway application id, so the
+    gateway only honours that application's mandate for the resource."""
     provider_ids = provider_ids or {}
+    application_ids = application_ids or {}
     commands: list[dict] = []
-    for spec in model.resources:
+    for app in model.applications:
+        spec = app.resource
         flags: dict[str, object] = {
             "name": spec.name,
             "identifier": spec.identifier,
@@ -187,9 +228,12 @@ def resource_commands(model: TenancyModel, provider_ids: dict[str, str] | None =
         upstream = spec.upstream_url()
         if upstream:
             flags["upstream-url"] = upstream
-        provider_id = provider_ids.get(spec.providerRef)
+        provider_id = provider_ids.get(app.provider.identifier)
         if provider_id:
             flags["credential-provider-id"] = provider_id
+        application_id = application_ids.get(app.id)
+        if application_id:
+            flags["gateway-application-id"] = application_id
         commands.append({"command": "resource", "subcommand": "create", "flags": flags})
     return commands
 

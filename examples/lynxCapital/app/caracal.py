@@ -2,9 +2,9 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Caracal SDK seam for the Lynx Capital platform: the one managed-application client, the
-per-customer agent spawn and delegation flows, and the gateway and verifier paths the
-application authorizes through.
+Caracal SDK seam for the Lynx Capital platform: the per-service managed-application client,
+the per-customer agent spawn and delegation flows, and the gateway and verifier paths the
+service authorizes through.
 """
 from __future__ import annotations
 
@@ -58,8 +58,9 @@ def runtime() -> Caracal | None:
     """Build (once) and return the process-wide managed application client, or None when the
     integration is not configured. `connect()` reads the Console-generated runtime profile
     when present and otherwise the workload environment; service URLs resolve from there, so
-    the application never hardcodes an STS, gateway, or coordinator address. This one durable
-    managed application backs every customer's agent sessions."""
+    the application never hardcodes an STS, gateway, or coordinator address. Each service runs
+    as its own managed application; this process is whichever application its runtime profile
+    names, and it spawns only that service's agents."""
     global _client, _built
     if not enabled():
         return None
@@ -101,29 +102,34 @@ def spawn_customer_agent(
     customer_id: str,
     role: str,
     *,
+    application_id: str,
     parent_ctx: CaracalContext | None = None,
     ttl_seconds: int = DEFAULT_AGENT_TTL_SECONDS,
     budget: int = DEFAULT_AGENT_BUDGET,
 ):
-    """Spawn one customer's role agent under the managed platform application.
+    """Spawn one customer's role agent under a service managed application.
 
-    The customer the agent serves travels in the spawn metadata (and, in production, in the
-    customer's subject token); it is never a separate application or a scope name. The agent
-    session carries only the role's capability labels — which the policy set keys on — and a
-    delegation edge narrowed to the role's least-privilege scopes, capped to a single hop, a
-    short TTL, and an explicit call budget. Effective authority is the intersection of policy,
-    this grant, the resource, and any inherited delegation, so the agent can never exceed the
-    role. Returns an async context manager, or None when Caracal is not configured."""
+    application_id selects the service whose resource bounds the agent: the role's capability
+    grants are intersected with that application's resource scopes, so an agent spawned under
+    the portfolio application can never obtain research or compliance authority even when its
+    role is cross-domain. The customer the agent serves travels in the spawn metadata (and, in
+    production, in the customer's subject token); it is never a separate application or a scope
+    name. The agent session carries only the role's capability labels — which the policy set
+    keys on — and a delegation edge narrowed to that least-privilege scope set, capped to a
+    single hop, a short TTL, and an explicit call budget. Effective authority is the
+    intersection of policy, this grant, the resource, and any inherited delegation, so the
+    agent can never exceed the role. Returns an async context manager, or None when Caracal is
+    not configured."""
     client = runtime()
     if client is None:
         return None
-    scopes = tenancy.role_scopes(role)
+    scopes = tenancy.role_scopes(role, application=application_id)
     constraints = DelegationConstraints(max_hops=1, budget=budget, ttl_seconds=ttl_seconds)
     grant = Grant.narrow(scopes, constraints=constraints, ttl_seconds=ttl_seconds) if scopes else Grant.none()
     return client.spawn(
         grant=grant,
         labels=tenancy.agent_labels(role),
-        metadata=tenancy.customer_metadata(customer_id, role),
+        metadata=tenancy.customer_metadata(customer_id, role, application_id),
         parent_ctx=parent_ctx,
         ttl_seconds=ttl_seconds,
     )
