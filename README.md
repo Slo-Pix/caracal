@@ -149,7 +149,7 @@ caracal run -- node worker.js         # workload execution
 - Python 3.14+ (only when changing Python packages)
 - Bun (only when building distributable runtime/console binaries)
 
-Run `pnpm run setup` after cloning to install workspace packages, Go modules, Python test/style tooling, and editable Python packages.
+Run `pnpm install` after cloning for the standard Node workspace setup. Run `pnpm run setup` when you need the full cross-platform developer environment with Go modules, Python test/style tooling, and editable Python packages.
 
 See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.
 

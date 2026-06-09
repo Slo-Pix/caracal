@@ -32,7 +32,7 @@
 
 ```bash
 git clone https://github.com/Garudex-Labs/caracal.git && cd caracal
-pnpm run setup
+pnpm install
 pnpm caracal up                     # Build and start the full stack
 
 # Essential Commands
@@ -42,7 +42,7 @@ pnpm caracal down [--help]          # Stop the stack
 pnpm caracal purge                  # Remove stack, volumes, logs, cache, and installed data
 ```
 
-`pnpm run setup` installs Node workspace packages, downloads Go module dependencies, creates `.venv`, installs Python test/style dependencies, and installs local Python packages in editable mode.
+`pnpm install` is the standard dependency install command for the Node workspace. Run `pnpm run setup` when you need the full cross-platform developer environment: it runs `pnpm install`, downloads Go module dependencies, creates `.venv`, installs Python test/style dependencies, and installs local Python packages in editable mode.
 
 <details>
 <summary>Drop the `pnpm` prefix</summary>

@@ -15,7 +15,7 @@
     "caracal-console": "apps/console/bin/caracal-console-workspace.mjs"
   },
   "scripts": {
-    "setup": "bash scripts/setupDev.sh",
+    "setup": "node scripts/setupDev.mjs",
     "caracal": "node apps/runtime/bin/caracal-workspace.mjs",
     "caracal-console": "node apps/console/bin/caracal-console-workspace.mjs",
     "secrets:init": "node infra/secrets/secretInit.mjs",
