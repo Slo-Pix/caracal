@@ -58,6 +58,12 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 - External upstreams, registries, package mirrors, S3-compatible export targets, and user-provided provider data are untrusted.
 - Maintainers can challenge any assumption during design review, incident response, or release hardening.
 
+### Known residual risks (tracked, not yet fully closed)
+
+- Row-level security is enabled and fail-closed but not `FORCE`d, and services connect as the table owner; the per-request `caracal.zone_id` binding is a forward-compatible backstop that only enforces once `FORCE ROW LEVEL SECURITY` or non-owner service roles are adopted across every service that touches zone tables. Authorization today still depends on the application-layer zone guards (T1).
+- A single shared global bootstrap admin token can administer every zone; the schema supports zone-scoped per-operator tokens, but no mint route/CLI exists yet, so operators must treat the global token as break-glass and limit its distribution.
+- `GATEWAY_STS_HMAC_KEY` is shared process-wide rather than per-zone; its compromise affects gateway↔STS binding integrity across zones.
+
 ## What Can Go Wrong
 
 | ID | Threat | Target area | Primary owner |
@@ -73,6 +79,7 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 | T9 | Optional control invocation becomes a command execution path outside `engine.dispatch`, without audit, or with remote scopes that expand zone-bound tokens into global admin authority. | `apps/control`, `packages/engine`, `packages/admin` | Control maintainers |
 | T10 | A compromised dependency, generated artifact, installer, image, or release process ships malicious or vulnerable code. | `package.json`, `pnpm-lock.yaml`, Go modules, Dockerfiles, installers, releases | Release maintainers |
 | T11 | Security boundaries drift when new services, ports, packages, transports, provider integrations, or enterprise references are added. | Repo architecture and governance | Maintainers approving the change |
+| T12 | A compromised or shared admin credential, a spoofed internal header, an unauthenticated metrics/docs surface, or a forgeable admin-audit record expands a single control-plane foothold into broad multi-zone compromise or hides the act. | `apps/api`, `apps/coordinator`, `packages/admin`, admin audit ledger | API/coordinator maintainers |
 
 ## Mitigations / Actions
 
@@ -89,6 +96,7 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 | T9 | Keep control disabled unless `CARACAL_CONTROL_ENABLED=true`; allow only `POST /v1/control/invoke`; require the per-resource `control:<command>:<verb>` scope derived from the engine catalog; validate commands through `engine.dispatch`; enforce zone binding before any admin call that can affect zone-scoped state, and require an explicit global-control model for zone CRUD or other global operations; audit accepted and rejected requests; never shell out. | Control service (`apps/control`), engine catalog (`packages/engine`), and admin client (`packages/admin`) | Control maintainers |
 | T10 | Keep lockfiles and module sums reviewed; publish versioned images and archives only from trusted release paths; verify installers, Dockerfiles, and generated artifacts do not embed secrets or uncontrolled network fetches. | Release tooling and dependencies | Release maintainers |
 | T11 | Update this model, service instructions, tests, and governance when boundaries change; reject OSS changes that depend on enterprise-only code or undocumented controls. | Architecture and governance | Reviewing maintainers |
+| T12 | Derive control-resource and internal-trait intent from the authenticated actor scope (`actor.scope === 'global'`), never from caller-supplied `X-Caracal-*` headers; bind step-up approver identity to the authenticated actor, never to a request body field; require a metrics bearer (or refuse) on the network-bound `/metrics` in rc/stable; default OpenAPI/docs off in published builds; redact OAuth `code`/`state` and all query strings from admin-audit action/path; chain admin-audit rows per zone with HMAC and write them in the same transaction as the mutation. Reduce blast radius by provisioning distinct zone-scoped, per-operator admin tokens (`scope='zone'`, named `created_by`) and reserving the shared global bootstrap token for break-glass. Bind per-request Postgres `caracal.zone_id` for zone-scoped actors so RLS becomes an enforced backstop once `FORCE ROW LEVEL SECURITY` (or non-owner service roles) is enabled. | API routes, admin client, admin audit, admin tokens, RLS | API/coordinator maintainers |
 
 ## Validation / How to Verify
 
@@ -105,6 +113,7 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 | T9 | Run `pnpm --dir apps/control test` and `pnpm --dir packages/engine test`; verify disabled startup, missing scope, hidden-command refusal, invalid flags, replay, rate limit, upstream failure, audit emission, zone-bound dispatch, and explicit denial or separate governance of global zone operations. |
 | T10 | Run dependency review, lockfile diff review, release smoke tests, image build checks, and installer/archive secret scans before publishing. |
 | T11 | During review, compare changed files against this model, `go.work`, workspace packages, service instructions, and Compose boundaries. |
+| T12 | Run `tests/typescript/unit/api/routes/{applications,resources,step-up-challenges}.test.ts`, `api/app.test.ts`, `api/config.test.ts`, `api/admin-audit.test.ts`, and `api/zone-scope.test.ts`; verify header-spoofing no longer alters control-resource/trait visibility, the step-up approver is the actor, `/metrics` denies unauthenticated access in published mode, docs default off when published, and admin-audit rows redact query strings and link a verifiable per-zone HMAC chain. |
 
 ## Review Triggers
 
