@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Grants break-glass administrative access across a tenant's resources, but only after a
+# Grants break-glass administrative access across a customer's resources, but only after a
 # step-up challenge is satisfied; otherwise it raises a step-up diagnostic.
 package caracal.authz
 
@@ -33,6 +33,7 @@ diagnostic contains {"step_up_required": "mfa"} if {
 
 emergency_request if {
 	lynx_resource
-	tenant_ok
+	customer_scoped
+	premium_plan
 	has_capability("emergency-access")
 }

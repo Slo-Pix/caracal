@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Grants a tenant administrator full authority across that tenant's portfolio, research,
-# and compliance resources, scoped strictly to the administrator's own tenant.
+# Grants a customer administrator full authority across that customer's portfolio, research,
+# and compliance resources, scoped strictly to the administrator's own customer.
 package caracal.authz
 
 import rego.v1
@@ -24,6 +24,7 @@ determining contains "customer-admin" if {
 
 customer_admin_request if {
 	lynx_resource
-	tenant_ok
+	customer_scoped
+	premium_plan
 	has_capability("customer-admin")
 }

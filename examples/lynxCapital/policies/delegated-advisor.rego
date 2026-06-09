@@ -23,7 +23,7 @@ advisable_scopes := {"portfolio:read", "research:read"}
 
 delegated_advisor_request if {
 	lynx_resource
-	tenant_ok
+	customer_scoped
 	has_capability("delegated-advisor")
 	input.delegation_edge.id
 }

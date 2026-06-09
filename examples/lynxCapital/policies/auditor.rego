@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Grants a tenant auditor read-only visibility across that tenant's portfolio, research,
+# Grants a customer auditor read-only visibility across that customer's portfolio, research,
 # and compliance resources. No write or admin scope is ever issued under this policy.
 package caracal.authz
 
@@ -24,6 +24,6 @@ determining contains "auditor" if {
 
 auditor_request if {
 	lynx_resource
-	tenant_ok
+	customer_scoped
 	has_capability("auditor")
 }
