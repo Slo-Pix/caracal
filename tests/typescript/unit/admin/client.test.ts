@@ -150,6 +150,8 @@ describe('AdminClient', () => {
     expect(url).toContain('label=worker')
     expect(url).toContain('limit=25')
   })
+
+  it('parses coordinator agent list responses', async () => {
     const f = fetchOk({
       items: [{
         agent_session_id: 'agent-1',
@@ -343,13 +345,13 @@ describe('AdminClient', () => {
     await c.zones.get('z1')
     await c.zones.dcrStatus('z1')
     await c.zones.delete('z1')
-    await c.applications.list('z1', { applicationInternals: true })
+    await c.applications.list('z1')
     await c.applications.get('z1', 'a1')
     await c.applications.create('z1', { name: 'A' } as never)
     await c.applications.patch('z1', 'a1', { name: 'B' } as never)
     await c.applications.delete('z1', 'a1')
     await c.applications.dcr('z1', {} as never)
-    await c.resources.list('z1', { controlResource: true })
+    await c.resources.list('z1')
     await c.resources.get('z1', 'r1')
     await c.resources.create('z1', {} as never)
     await c.resources.patch('z1', 'r1', {})
@@ -384,7 +386,7 @@ describe('AdminClient', () => {
     await c.audit.list('z1', { limit: 5 } as never)
     await c.stepUpChallenges.list('z1')
     await c.stepUpChallenges.get('z1', 'challenge1')
-    await c.stepUpChallenges.satisfy('z1', 'challenge1', { approver_subject_id: 'approver-1' })
+    await c.stepUpChallenges.satisfy('z1', 'challenge1')
 
     await c.agents.get('z1', 'ag1')
     await c.agents.children('z1', 'ag1')
