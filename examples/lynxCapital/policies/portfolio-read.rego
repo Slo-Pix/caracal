@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Grants read access to a tenant's portfolio resource for principals carrying the
+# Grants read access to a customer's portfolio resource for principals carrying the
 # portfolio-read capability.
 package caracal.authz
 
@@ -17,6 +17,6 @@ determining contains "portfolio-read" if {
 
 portfolio_read_request if {
 	input.resource.identifier == "resource://portfolio"
-	tenant_ok
+	customer_scoped
 	has_capability("portfolio-read")
 }

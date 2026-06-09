@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Grants read access to a tenant's research resource for principals carrying the
+# Grants read access to a customer's research resource for principals carrying the
 # research-read capability.
 package caracal.authz
 
@@ -17,6 +17,6 @@ determining contains "research-read" if {
 
 research_read_request if {
 	input.resource.identifier == "resource://research"
-	tenant_ok
+	customer_scoped
 	has_capability("research-read")
 }
