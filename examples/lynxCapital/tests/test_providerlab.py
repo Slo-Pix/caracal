@@ -633,6 +633,20 @@ def test_mandate_valid_and_seed():
                   headers={"Authorization": "Bearer junk"}).status_code == 401
 
 
+def test_seed_mandate_reissued_when_persisted_token_expires():
+    store = credentials.load("aegis-screening")
+    stale = _mint("aegis-screening", subject="lynx-bootstrap", ttl_seconds=-10)
+    store.data["seed"]["mandate"] = stale
+    store._save()
+    credentials._cache.pop("aegis-screening", None)
+    reloaded = seed("aegis-screening")["mandate"]
+    assert reloaded != stale
+    c = client("aegis-screening")
+    r = c.post("/api/screen_party", json={"name": "Acme Trading"},
+               headers={"Authorization": f"Bearer {reloaded}"})
+    assert r.status_code == 200
+
+
 def test_mandate_zone_mismatch_rejected():
     c = client("aegis-screening")
     token = _mint("aegis-screening", zone="wrong-zone")

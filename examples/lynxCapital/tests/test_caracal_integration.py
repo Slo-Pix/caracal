@@ -8,7 +8,6 @@ partner dispatch without a running control plane.
 from __future__ import annotations
 
 import asyncio
-import time
 
 import pytest
 
@@ -75,15 +74,20 @@ def test_worker_grant_is_minimal():
     assert grant.ttl_seconds == caracal.WORKER_TTL_SECONDS
 
 
+class _StubClient:
+    def __init__(self):
+        self.calls: list[tuple] = []
+
+    def mint_mandate(self, resource_id, scopes, *, ctx=None, ttl_seconds=None):
+        self.calls.append((resource_id, tuple(scopes), ctx, ttl_seconds))
+        return f"mandate-{len(self.calls)}"
+
+
 class _StubRuntime:
     key = "payments"
 
     def __init__(self):
-        self.mints = 0
-
-    def mint_mandate(self, ctx, view, scopes):
-        self.mints += 1
-        return f"mandate-{self.mints}", time.time() + 300
+        self.client = _StubClient()
 
 
 class _StubCtx:
@@ -91,17 +95,19 @@ class _StubCtx:
     delegation_edge_id = "edge_1"
 
 
-def test_worker_authority_scopes_and_mandate_cache():
+def test_worker_authority_scopes_and_mandate_delegation():
     runtime = _StubRuntime()
-    authority = caracal.WorkerAuthority(runtime, _StubCtx(), "payment-execution", ["meridian:payout"])
+    ctx = _StubCtx()
+    authority = caracal.WorkerAuthority(runtime, ctx, "payment-execution", ["meridian:payout"])
     assert authority.application == "payments"
+    assert authority.agent_session_id == "agent_1"
     assert authority.allows("meridian:payout")
     assert not authority.allows("meridian:charge")
-    first = authority.mandate("resource://payments-meridian", ["meridian:payout"])
-    again = authority.mandate("resource://payments-meridian", ["meridian:payout"])
-    assert first == again == "mandate-1"
-    other = authority.mandate("resource://payments-meridian", [])
-    assert other == "mandate-2"
+    token = authority.mandate("resource://payments-meridian", ["meridian:payout"])
+    assert token == "mandate-1"
+    assert runtime.client.calls == [
+        ("resource://payments-meridian", ("meridian:payout",), ctx, caracal.MANDATE_TTL_SECONDS)
+    ]
 
 
 def test_runner_local_spawn_tracks_identity_without_caracal():

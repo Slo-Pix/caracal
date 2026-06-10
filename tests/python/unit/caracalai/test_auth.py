@@ -171,5 +171,99 @@ class RefreshErrorTests(unittest.TestCase):
             self.assertGreater(ex._exp, time.time() + 500)
 
 
+class MintMandateTests(unittest.TestCase):
+    def test_sends_agent_identity_resource_scope_and_ttl(self):
+        captured: list[bytes] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req.content)
+            return httpx.Response(
+                200, json={"access_token": _jwt({"exp": time.time() + 300})}
+            )
+
+        with _patch_client(handler):
+            _exchanger().mint_mandate(
+                resource="resource://payments",
+                scopes=["pay:write", "pay:read"],
+                agent_session_id="agent_1",
+                delegation_edge_id="edge_1",
+                ttl_seconds=120,
+            )
+        body = captured[0].decode()
+        self.assertIn("agent_session_id=agent_1", body)
+        self.assertIn("delegation_edge_id=edge_1", body)
+        self.assertIn("ttl_seconds=120", body)
+        self.assertIn("scope=pay%3Aread+pay%3Awrite", body)
+        self.assertIn("resource=resource%3A%2F%2Fpayments", body)
+        self.assertIn(GRANT_TYPE.replace(":", "%3A"), body)
+
+    def test_omits_identity_fields_when_absent(self):
+        captured: list[bytes] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req.content)
+            return httpx.Response(
+                200, json={"access_token": _jwt({"exp": time.time() + 300})}
+            )
+
+        with _patch_client(handler):
+            _exchanger().mint_mandate(resource="urn:res:a", scopes=["s.read"])
+        body = captured[0].decode()
+        self.assertNotIn("agent_session_id", body)
+        self.assertNotIn("delegation_edge_id", body)
+        self.assertNotIn("ttl_seconds", body)
+
+    def test_caches_per_resource_scopes_and_agent(self):
+        calls = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            calls.append(req)
+            return httpx.Response(
+                200,
+                json={"access_token": _jwt({"exp": time.time() + 300, "n": len(calls)})},
+            )
+
+        with _patch_client(handler):
+            ex = _exchanger()
+            first = ex.mint_mandate(
+                resource="urn:res:a", scopes=["s.read"], agent_session_id="agent_1"
+            )
+            again = ex.mint_mandate(
+                resource="urn:res:a", scopes=["s.read"], agent_session_id="agent_1"
+            )
+            other_agent = ex.mint_mandate(
+                resource="urn:res:a", scopes=["s.read"], agent_session_id="agent_2"
+            )
+            other_scope = ex.mint_mandate(
+                resource="urn:res:a", scopes=["s.write"], agent_session_id="agent_1"
+            )
+        self.assertEqual(first, again)
+        self.assertNotEqual(first, other_agent)
+        self.assertNotEqual(first, other_scope)
+        self.assertEqual(len(calls), 3)
+
+    def test_refreshes_mandate_near_expiry(self):
+        tokens = [
+            _jwt({"exp": time.time() + 10}),
+            _jwt({"exp": time.time() + 300}),
+        ]
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"access_token": tokens.pop(0)})
+
+        with _patch_client(handler):
+            ex = _exchanger()
+            stale = ex.mint_mandate(resource="urn:res:a", scopes=["s.read"])
+            fresh = ex.mint_mandate(resource="urn:res:a", scopes=["s.read"])
+        self.assertNotEqual(stale, fresh)
+
+    def test_rejects_empty_resource_and_scopes(self):
+        ex = _exchanger()
+        with self.assertRaises(ValueError):
+            ex.mint_mandate(resource="", scopes=["s.read"])
+        with self.assertRaises(ValueError):
+            ex.mint_mandate(resource="urn:res:a", scopes=[])
+
+
 if __name__ == "__main__":
     unittest.main()

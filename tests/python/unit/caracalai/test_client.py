@@ -258,6 +258,71 @@ class FromClientSecretTests(unittest.TestCase):
         self.assertEqual(exchanger._resources, ["calendar"])
         self.assertEqual(exchanger._scope, "custom")
         self.assertEqual(c.config.resources[0].resource_id, "calendar")
+        self.assertIs(c.config.exchanger, exchanger)
+
+
+class MintMandateTests(unittest.TestCase):
+    def _client(self, handler) -> Caracal:
+        return Caracal.from_client_secret(
+            coordinator_url="http://coord",
+            sts_url="http://sts",
+            zone_id="z",
+            application_id="app",
+            client_secret="secret",
+            resources=["resource://payments"],
+            http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        )
+
+    def test_requires_client_secret_credentials(self) -> None:
+        with self.assertRaises(RuntimeError):
+            _build_caracal().mint_mandate("resource://payments", ["pay:write"])
+
+    def test_passes_explicit_context_identity(self) -> None:
+        captured: list[bytes] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req.content)
+            return httpx.Response(200, json={"access_token": "mandate-token"})
+
+        from caracalai import CaracalContext
+
+        ctx = CaracalContext(
+            subject_token="tok",
+            zone_id="z",
+            application_id="app",
+            agent_session_id="agent_9",
+            delegation_edge_id="edge_9",
+        )
+        token = self._client(handler).mint_mandate(
+            "resource://payments", ["pay:write"], ctx=ctx, ttl_seconds=60
+        )
+        self.assertEqual(token, "mandate-token")
+        body = captured[0].decode()
+        self.assertIn("agent_session_id=agent_9", body)
+        self.assertIn("delegation_edge_id=edge_9", body)
+        self.assertIn("ttl_seconds=60", body)
+
+    def test_uses_bound_context_identity(self) -> None:
+        captured: list[bytes] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req.content)
+            return httpx.Response(200, json={"access_token": "mandate-token"})
+
+        from caracalai import CaracalContext
+        from caracalai.advanced import bind
+
+        ctx = CaracalContext(
+            subject_token="tok",
+            zone_id="z",
+            application_id="app",
+            agent_session_id="agent_3",
+        )
+        client = self._client(handler)
+        bind(ctx, lambda: client.mint_mandate("resource://payments", ["pay:read"]))
+        body = captured[0].decode()
+        self.assertIn("agent_session_id=agent_3", body)
+        self.assertNotIn("delegation_edge_id", body)
 
 
 def _build_caracal() -> Caracal:
