@@ -221,7 +221,7 @@ See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for setup, workflow, tests, and
         This project is part of the <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">LFX Mentorship 2026</a> program under the <a href="https://www.lfdecentralizedtrust.org" target="_blank" rel="noopener">LF Decentralized Trust</a>.
       </td>
       <td align="center" width="50%">
-        <em>We’re excited to share that Caracal is now part of Microsoft for Startups!</em>
+        This project is part of the <a href="https://www.microsoft.com/en-us/startups" target="_blank" rel="noopener">Microsoft for Startups</a> program.
       </td>
     </tr>
   </table>
