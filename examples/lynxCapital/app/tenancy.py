@@ -210,17 +210,29 @@ def role_application(role: str, model: TenancyModel | None = None) -> str:
     return model.role(role).application
 
 
-def agent_labels(role: str) -> list[str]:
-    """The agent-session labels policy keys on: the role name plus the swarm marker."""
-    return [role, "lynx-swarm"]
+def agent_labels(role: str, customer_id: str | None = None) -> list[str]:
+    """The agent-session labels policy keys on: the role name, the swarm marker, and —
+    when the work is for one customer — a customer label policy can enforce against."""
+    labels = [role, "lynx-swarm"]
+    if customer_id:
+        labels.append(f"customer:{customer_id}")
+    return labels
 
 
-def agent_metadata(run_id: str, agent_id: str, scope: str, region: str | None = None) -> dict[str, str]:
+def agent_metadata(
+    run_id: str,
+    agent_id: str,
+    scope: str,
+    region: str | None = None,
+    customer_id: str | None = None,
+) -> dict[str, str]:
     """The spawn metadata that correlates an agent session to its run, local agent id,
-    and work item for the audit trail."""
+    work item, and customer for the audit trail."""
     metadata = {"run_id": run_id, "agent_id": agent_id, "scope": scope}
     if region:
         metadata["region"] = region
+    if customer_id:
+        metadata["customer_id"] = customer_id
     return metadata
 
 

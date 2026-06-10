@@ -23,12 +23,12 @@ class WorkerPool:
         self._parent = parent
         self._active: dict[str, AgentHandle] = {}
 
-    def acquire(self, role: str, scope: str) -> AgentHandle:
+    def acquire(self, role: str, scope: str, customer_id: str | None = None) -> AgentHandle:
         if role not in ROLES:
             raise ValueError(f"unknown role {role!r}; valid roles: {', '.join(sorted(ROLES))}")
         w = self._runner.spawn(
             role=role, scope=scope, parent=self._parent,
-            layer=role, region=self._parent.region,
+            layer=role, region=self._parent.region, customer_id=customer_id,
         )
         w.start()
         self._active[w.id] = w

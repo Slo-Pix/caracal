@@ -48,11 +48,13 @@ def agent_spawn(
     parent_id: str | None,
     layer: str,
     region: str | None = None,
+    customer_id: str | None = None,
 ) -> Event:
     return _mk(
         run_id, "agent", "agent_spawn",
         agent_id=agent_id, role=role, scope=scope,
         parent_id=parent_id, layer=layer, region=region,
+        customer_id=customer_id,
     )
 
 

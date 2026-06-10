@@ -31,6 +31,7 @@ class AgentHandle:
         region: str | None,
         run_id: str,
         authority: caracal.WorkerAuthority | None = None,
+        customer_id: str | None = None,
     ) -> None:
         self.id = id
         self.role = role
@@ -40,6 +41,7 @@ class AgentHandle:
         self.region = region
         self.run_id = run_id
         self.authority = authority
+        self.customer_id = customer_id
         self.status = "spawned"
         self._terminated = False
         self._release: Callable[[], None] | None = None
@@ -112,6 +114,7 @@ class AgentRunner:
         parent: AgentHandle | None,
         layer: str,
         region: str | None = None,
+        customer_id: str | None = None,
     ) -> AgentHandle:
         if self._loop is None:
             self._loop = asyncio.get_running_loop()
@@ -120,7 +123,7 @@ class AgentRunner:
         authority: caracal.WorkerAuthority | None = None
         release: Callable[[], None] | None = None
         if caracal.enabled():
-            authority, release = await self._open_session(role, scope, parent, agent_id, region)
+            authority, release = await self._open_session(role, scope, parent, agent_id, region, customer_id)
 
         handle = AgentHandle(
             id=agent_id,
@@ -131,13 +134,14 @@ class AgentRunner:
             region=region,
             run_id=self.run_id,
             authority=authority,
+            customer_id=customer_id,
         )
         handle._release = release
         self._handles[agent_id] = handle
         if parent_id:
             self._children.setdefault(parent_id, []).append(agent_id)
 
-        bus.publish(ev.agent_spawn(self.run_id, agent_id, role, scope, parent_id, layer, region))
+        bus.publish(ev.agent_spawn(self.run_id, agent_id, role, scope, parent_id, layer, region, customer_id))
         if parent_id:
             bus.publish(ev.delegation(self.run_id, parent_id, agent_id, scope))
         return handle
@@ -149,11 +153,12 @@ class AgentRunner:
         parent: AgentHandle | None,
         layer: str,
         region: str | None = None,
+        customer_id: str | None = None,
     ) -> AgentHandle:
         """Thread-safe spawn for tools running in executor threads. On the loop thread
         use aspawn; a blocking wait there would deadlock the run."""
         if not caracal.enabled():
-            return self._local_spawn(role, scope, parent, layer, region)
+            return self._local_spawn(role, scope, parent, layer, region, customer_id)
         if self._loop is None:
             raise RuntimeError("AgentRunner has no loop; spawn the run root with aspawn first")
         try:
@@ -163,7 +168,7 @@ class AgentRunner:
         if running is self._loop:
             raise RuntimeError("spawn called on the run loop; use aspawn")
         future = asyncio.run_coroutine_threadsafe(
-            self.aspawn(role, scope, parent, layer, region), self._loop,
+            self.aspawn(role, scope, parent, layer, region, customer_id), self._loop,
         )
         return future.result(timeout=SPAWN_TIMEOUT_SECONDS)
 
@@ -174,17 +179,18 @@ class AgentRunner:
         parent: AgentHandle | None,
         layer: str,
         region: str | None,
+        customer_id: str | None = None,
     ) -> AgentHandle:
         agent_id = str(uuid4())
         parent_id = parent.id if parent else None
         handle = AgentHandle(
             id=agent_id, role=role, scope=scope, parent_id=parent_id,
-            layer=layer, region=region, run_id=self.run_id,
+            layer=layer, region=region, run_id=self.run_id, customer_id=customer_id,
         )
         self._handles[agent_id] = handle
         if parent_id:
             self._children.setdefault(parent_id, []).append(agent_id)
-        bus.publish(ev.agent_spawn(self.run_id, agent_id, role, scope, parent_id, layer, region))
+        bus.publish(ev.agent_spawn(self.run_id, agent_id, role, scope, parent_id, layer, region, customer_id))
         if parent_id:
             bus.publish(ev.delegation(self.run_id, parent_id, agent_id, scope))
         return handle
@@ -196,6 +202,7 @@ class AgentRunner:
         parent: AgentHandle | None,
         agent_id: str,
         region: str | None,
+        customer_id: str | None = None,
     ) -> tuple[caracal.WorkerAuthority | None, Callable[[], None] | None]:
         model = tenancy.load_model()
         spec = model.role(role)
@@ -219,8 +226,8 @@ class AgentRunner:
         keeper = _SessionKeeper()
         ctx = await keeper.open(runtime.client.spawn(
             grant=grant,
-            labels=tenancy.agent_labels(role),
-            metadata=tenancy.agent_metadata(self.run_id, agent_id, scope, region),
+            labels=tenancy.agent_labels(role, customer_id),
+            metadata=tenancy.agent_metadata(self.run_id, agent_id, scope, region, customer_id),
             parent_ctx=parent_ctx,
             ttl_seconds=caracal.WORKER_TTL_SECONDS,
             trace_id=self.run_id,
