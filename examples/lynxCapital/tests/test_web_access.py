@@ -150,52 +150,52 @@ def test_setup_page_is_guided_and_provider_backed():
     assert "Add to examples/lynxCapital/.env.provision" in body
     assert "python scripts/provision.py" in body
     assert "python scripts/teardown.py" in body
-    # Caracal configuration: zone, managed app, providers/resources, policy set, customers
+    # Caracal configuration: zone, per-boundary applications, providers, views, policy set
     assert "Caracal configuration" in body
     assert "field-name" in body
     assert "field-value" in body
     assert "Create the zone" in body
     assert '<dt class="field-name">Name</dt>' in body
     assert '<dd class="field-value">&#34;Lynx Capital&#34;</dd>' in body
-    assert "Create one managed application per service" in body
-    assert "Go to Applications &gt; New in the &#34;Lynx Capital&#34; zone" in body
+    assert "Create one managed application per permission boundary" in body
     assert '<dt class="field-name">Registration method</dt>' in body
     assert '<dd class="field-value">managed</dd>' in body
-    assert '<dd class="field-value">&#34;lynx-portfolio&#34;, &#34;lynx-research&#34;, &#34;lynx-compliance&#34;</dd>' in body
-    assert "Register the credential providers and domain resources" in body
-    assert '<dd class="field-value">pf-mandate, rs-mandate, cp-mandate</dd>' in body
-    assert '<dd class="field-value">portfolio=http://127.0.0.1:9500, research=http://127.0.0.1:9501, compliance=http://127.0.0.1:9502</dd>' in body
-    assert "Import the policy library and activate the policy set" in body
-    assert '<dd class="field-value">examples/lynxCapital/policies</dd>' in body
-    assert '<dd class="field-value">&#34;lynx-platform&#34;</dd>' in body
-    assert "Serve customers as subjects" in body
-    assert '<dd class="field-value">aurora (enterprise), borealis (growth)</dd>' in body
-    assert '<dd class="field-value">subject + spawn metadata</dd>' in body
+    for boundary in (
+        "lynx-operations", "lynx-intake", "lynx-ledger", "lynx-compliance",
+        "lynx-treasury", "lynx-payments", "lynx-audit",
+    ):
+        assert boundary in body
+    assert "Register the partner credential providers" in body
+    assert "Create the per-application resource views" in body
+    assert "Author the policy library and activate the policy set" in body
+    assert "Run agents as labeled Caracal sessions" in body
+    assert "Grant.narrow" in body
     # The single-app / single-baseline-policy and per-tenant-DCR anti-patterns must be gone
     assert "Lynx Capital baseline" not in body
     assert "[ ] leave unchecked" not in body
     assert "per-tenant DCR" not in body
     assert "tenant-aurora" not in body
+    assert "lynx-portfolio" not in body
+    assert "pf-mandate" not in body
+    assert "CARACAL_APPLICATION_ID" not in body
+    assert "CARACAL_RESOURCES" not in body
+    assert "LYNX_RESOURCE_" not in body
+    # Workload env block: one zone id plus per-boundary application credentials.
     assert "CARACAL_ZONE_ID=&lt;zone-id&gt;" in body
-    assert "CARACAL_APPLICATION_ID=&lt;managed-application-id&gt;" in body
-    assert "CARACAL_APP_CLIENT_SECRET=&lt;managed-application-secret&gt;" in body
-    # The workload env block must carry the resource routing map and the model key so the demo runs.
-    assert "CARACAL_RESOURCES=portfolio=http://127.0.0.1:9500,research=http://127.0.0.1:9501,compliance=http://127.0.0.1:9502" in body
+    assert "LYNX_CARACAL_OPERATIONS_APPLICATION_ID=&lt;lynx-operations-application-id&gt;" in body
+    assert "LYNX_CARACAL_OPERATIONS_CLIENT_SECRET=&lt;lynx-operations-client-secret&gt;" in body
+    assert "LYNX_CARACAL_AUDIT_APPLICATION_ID=&lt;lynx-audit-application-id&gt;" in body
     assert "OPENAI_API_KEY=sk-..." in body
-    # Per-service application credentials are shown for the production one-process-per-service model.
-    assert "CARACAL_APPLICATION_ID=&lt;lynx-portfolio-application-id&gt;" in body
-    assert "CARACAL_APP_CLIENT_SECRET=&lt;lynx-research-secret&gt;" in body
-    assert "CARACAL_RESOURCES=compliance=http://127.0.0.1:9502" in body
     assert 'CONTROL_CLIENT_ID="&lt;control-key-client-id&gt;"' in body
     assert 'CONTROL_CLIENT_SECRET="&lt;one-time-control-key-secret&gt;"' in body
-    # Provisioning resource upstreams are surfaced so the operator registers real upstreams.
-    assert "LYNX_RESOURCE_PORTFOLIO_URL=http://127.0.0.1:9500" in body
-    assert "LYNX_RESOURCE_COMPLIANCE_URL=http://127.0.0.1:9502" in body
-    assert "Workload <code>examples/lynxCapital/.env</code> — run one process per service" in body
-    # Providers: manual mapping to Caracal resources
+    # Providers: registered with Caracal in provider-supported format, with per-app views
     assert "Providers" in body
-    assert "resource://halcyon-bank" in body
+    assert "provider://halcyon-bank" in body
+    assert "provider://meridian-pay" in body
+    assert "provider://relay-automation" in body
+    assert "resource://audit-meridian" in body
     assert "oauth2_authorization_code" in body
+    assert "caracal_mandate" in body
     assert "Open provider console" in body
     assert "Create credentials" in body
     assert "Provider docs" in body
@@ -206,10 +206,10 @@ def test_setup_page_is_guided_and_provider_backed():
     assert "Quetzal Payouts" in body
     assert "Junction Procurement" in body
     # Validation: user-facing checks only, no infra health
-    assert "Required identifiers" in body
-    assert "Application access" in body
-    assert "Caracal mapping" in body
-    assert "Provider setup" in body
+    assert "Zone<small>CARACAL_ZONE_ID is set</small>" in body
+    assert "Application boundaries<small>Every application has an id and secret</small>" in body
+    assert "Credential providers<small>All partners registered with Caracal</small>" in body
+    assert "Resource views<small>Per-application views created and bound</small>" in body
     assert "Run Validation" in body
     assert "Launch Demo" in body
     assert "Open Workspace" in body
@@ -285,23 +285,28 @@ def test_provision_scripts_exist_and_build_plan():
     finally:
         sys.path.remove(str(scripts_dir))
 
+    import json
+    import re
+
     model = tenancy.load_model()
-    providers = tenancy.provider_commands(model)
-    assert {c["flags"]["identifier"] for c in providers} == {"pf-mandate", "rs-mandate", "cp-mandate"}
+    stub_env = {
+        name: f"https://stub.lynx.test/{name.lower()}"
+        for provider in model.providers
+        for name in re.findall(r"\$\{([A-Z0-9_]+)", json.dumps(provider.config))
+    }
+    providers = tenancy.provider_commands(model, env=stub_env)
+    assert {c["flags"]["identifier"] for c in providers} == {p.identifier for p in model.providers}
+    assert "provider://halcyon-bank" in {c["flags"]["identifier"] for c in providers}
 
     provider_ids = {c["flags"]["identifier"]: c["flags"]["identifier"] for c in providers}
-    resources = tenancy.resource_commands(model, provider_ids)
-    assert {c["flags"]["identifier"] for c in resources} == {
-        "resource://portfolio",
-        "resource://research",
-        "resource://compliance",
-    }
+    application_ids = {a.id: f"app_{a.id}" for a in model.applications}
+    resources = tenancy.resource_commands(model, provider_ids, application_ids)
+    assert {c["flags"]["identifier"] for c in resources} == {r.identifier for r in model.resources}
+    assert len(resources) == len(model.resources)
 
     policies = tenancy.policy_commands(model)
     assert policies[0]["flags"]["name"] == "00-base"
     assert all("package caracal.authz" in c["flags"]["content"] for c in policies)
-
-    assert {c.id for c in model.customers} == {"aurora", "borealis"}
 
     import pytest
 

@@ -6,6 +6,7 @@ Runs the Lynx Capital Rego policy decision suite through OPA when the binary is 
 """
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -35,22 +36,20 @@ def test_policy_decision_suite_passes():
     assert "PASS" in result.stdout
 
 
-def test_policy_library_is_complete_and_base_first():
-    files = sorted(p.name for p in POLICIES_DIR.glob("*.rego"))
-    assert files[0] == "00-base.rego"
-    for required in (
-        "portfolio-read.rego",
-        "portfolio-write.rego",
-        "portfolio-admin.rego",
-        "research-read.rego",
-        "research-write.rego",
-        "compliance-review.rego",
-        "compliance-admin.rego",
-        "customer-admin.rego",
-        "auditor.rego",
-        "delegated-advisor.rego",
-        "emergency-access.rego",
-    ):
-        assert required in files
-    for path in POLICIES_DIR.glob("*.rego"):
-        assert "package caracal.authz" in path.read_text(encoding="utf-8")
+def test_policy_library_matches_the_manifest_base_first():
+    manifest = json.loads((POLICIES_DIR / "manifest.json").read_text(encoding="utf-8"))
+    files = sorted(p.stem for p in POLICIES_DIR.glob("*.rego"))
+    assert files == sorted(manifest["policies"])
+    assert manifest["policies"][0] == "00-base"
+    assert manifest["policySet"] == "lynx-finance-ops"
+    assert {"10-operations", "11-intake", "12-ledger", "13-compliance",
+            "14-treasury", "15-payments", "16-audit"} <= set(manifest["policies"])
+
+
+def test_every_policy_satisfies_the_authoring_contract():
+    contents = {p.stem: p.read_text(encoding="utf-8") for p in POLICIES_DIR.glob("*.rego")}
+    for name, content in contents.items():
+        assert "package caracal.authz" in content, name
+        assert "result" in content, name
+    defaults = [name for name, content in contents.items() if "default result" in content]
+    assert defaults == ["00-base"], "exactly one default result rule is allowed bundle-wide"

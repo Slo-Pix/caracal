@@ -30,7 +30,8 @@ def test_partner_catalog_covers_twenty():
 
 def test_partner_catalog_auth_kinds():
     auths = {s.auth for s in partners.catalog().values()}
-    assert auths == {"api_key", "bearer", "oauth_cc", "oauth_ac", "none", "mcp_bearer", "mandate"}
+    assert auths == {"api_key", "bearer", "oauth_cc", "oauth_ac", "none",
+                     "mcp_bearer", "mandate", "mcp_mandate"}
 
 
 # --------------------------------------------------------------------------- #
@@ -237,12 +238,22 @@ def test_sdk_payout_unverified_recipient(providerlab):
 
 
 # --------------------------------------------------------------------------- #
-# caracal_mandate providers are gated until the Caracal SDK phase
+# caracal_mandate providers verify the simulation lab's seeded mandate
 # --------------------------------------------------------------------------- #
-def test_mandate_providers_pending_caracal(providerlab):
-    for provider_id in ("aegis-screening", "verafin-monitor", "relay-automation"):
-        with pytest.raises(partners.PartnerPendingCaracal):
-            partners.call(provider_id, partners.spec(provider_id).operations[0], {})
+def test_mandate_provider_screening(providerlab):
+    res = partners.call("aegis-screening", "screen_party",
+                        {"name": "Northwind Trading GmbH", "entityType": "business"})
+    assert res["status"] == 200 and "data" in res
+
+
+def test_mandate_provider_monitoring(providerlab):
+    res = partners.call("verafin-monitor", "list_alerts", {})
+    assert res["status"] == 200
+
+
+def test_mcp_mandate_provider_workflows(providerlab):
+    res = partners.call("relay-automation", "list_workflows", {})
+    assert res["status"] == 200
 
 
 # --------------------------------------------------------------------------- #
@@ -254,9 +265,10 @@ def test_partner_operation_tool_emits_and_runs(providerlab):
     assert res["data"]["combinedRate"] == pytest.approx(0.08875)
 
 
-def test_partner_operation_tool_gates_mandate(providerlab):
-    res = tool_fns.partner_operation("run-1", "agent-1", "aegis-screening", "screen_party", {"name": "x"})
-    assert res["status"] == "pending_caracal_integration"
+def test_partner_operation_tool_runs_mandate_provider(providerlab):
+    res = tool_fns.partner_operation("run-1", "agent-1", "aegis-screening", "screen_party",
+                                     {"name": "Northwind Trading GmbH", "entityType": "business"})
+    assert res["status"] == 200
 
 
 def test_partner_operation_in_tools_registry():
