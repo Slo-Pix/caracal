@@ -5,7 +5,7 @@
 
 import { getenv, mustGetenv, intEnv, boolEnv, resolveFileSecrets } from '@caracalai/core'
 
-resolveFileSecrets(['DATABASE_URL', 'REDIS_URL', 'STREAMS_HMAC_KEY', 'AUDIT_HMAC_KEY', 'CARACAL_COORDINATOR_TOKEN'])
+resolveFileSecrets(['DATABASE_URL', 'REDIS_URL', 'STREAMS_HMAC_KEY', 'AUDIT_HMAC_KEY', 'CARACAL_COORDINATOR_TOKEN', 'METRICS_BEARER'])
 
 /**
  * Coordinator JWT audience. The STS issues ambient tokens with `aud=[ISSUER_URL]`
@@ -29,6 +29,7 @@ function buildCfg() {
     audience: issuerUrl,
     requiredScope: mustGetenv('AGENT_COORDINATOR_SCOPE'),
     coordinatorToken: getenv('CARACAL_COORDINATOR_TOKEN', ''),
+    metricsBearer: getenv('METRICS_BEARER', ''),
     dbPoolMax: intEnv('DB_POOL_MAX', 20),
     dbStatementTimeoutMs: intEnv('DB_STATEMENT_TIMEOUT_MS', 10_000),
     dbConnectionTimeoutMs: intEnv('DB_CONNECTION_TIMEOUT_MS', 5_000),
