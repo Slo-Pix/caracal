@@ -14,7 +14,8 @@ import { buildRouteApp } from '../../../../shared/test-utils/typescript/fastify.
 vi.mock('node:dns/promises', () => ({ lookup: vi.fn() }))
 vi.mock('node:https', () => ({ request: vi.fn() }))
 
-process.env.ZONE_KEK = '1111111111111111111111111111111111111111111111111111111111111111'
+// Test-only deterministic KEK fixture (32-byte hex). Never use in production.
+process.env.ZONE_KEK = '8f3d9a71c2b44e5f96a103d7be28cc41d5f09ab6731e4c8f2a7db56019ce34af'
 
 const grantBody = {
   application_id: 'app-1',
@@ -531,6 +532,52 @@ describe('OAuth provider grant browser flow', () => {
       ],
     })
     vi.mocked(lookup).mockResolvedValue([{ address: '64:ff9b::a9fe:a9fe', family: 6 }])
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/zones/z1/provider-grants/oauth/callback?state=${state}&code=provider-code`,
+    })
+
+    expect(res.statusCode).toBe(502)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'provider_token_exchange_failed' })
+    expect(httpsRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects callback token endpoints that resolve to IPv4-mapped metadata addresses', async () => {
+    const { app, db, redis } = buildRouteApp(grantsRoutes)
+    const state = 'abcdefghijklmnopqrstuvwxyz1234567890'
+    const sealed = sealedSecretConfig({ client_secret: 'google-secret' })
+    redis.call.mockResolvedValue(
+      JSON.stringify({
+        zone_id: 'z1',
+        user_id: 'user-1',
+        resource_id: 'res-1',
+        provider_id: 'provider-1',
+        scopes: ['read'],
+        code_verifier: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890-._~',
+      }),
+    )
+    db.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'provider-1',
+          provider_kind: 'oauth2_authorization_code',
+          config_json: {
+            token_endpoint: 'https://oauth2.googleapis.com/token',
+            redirect_uri: 'http://localhost:3000/v1/zones/z1/provider-grants/oauth/callback',
+            client_id: 'google-client',
+            client_auth_method: 'client_secret_basic',
+            allowed_token_hosts: ['oauth2.googleapis.com'],
+          },
+          secret_config_ct: sealed.ciphertext,
+          secret_config_nonce: sealed.nonce,
+          resource_scopes: ['read'],
+          resource_provider_id: 'provider-1',
+        },
+      ],
+    })
+    vi.mocked(lookup).mockResolvedValue([{ address: '::ffff:169.254.169.254', family: 6 }])
 
     await app.ready()
     const res = await app.inject({

@@ -60,7 +60,7 @@ describe('spawn', () => {
     const onAgentEnd = vi.fn()
     await spawn(
       { coordinator: client, zoneId: 'zone-1', applicationId: 'app-1', subjectToken: 'tok', onAgentStart, onAgentEnd },
-      async () => undefined,
+      async () => {},
     )
     expect(onAgentStart).toHaveBeenCalledOnce()
     expect(onAgentEnd).toHaveBeenCalledOnce()
@@ -93,7 +93,7 @@ describe('spawn', () => {
           },
           onAgentEnd,
         },
-        async () => undefined,
+        async () => {},
       ),
     ).rejects.toThrow('start failed')
     expect(onAgentEnd).not.toHaveBeenCalled()
@@ -103,7 +103,7 @@ describe('spawn', () => {
   it('inherits the parent agent session as parentId', async () => {
     const { client, calls } = recorder()
     await bind(baseCtx(), async () => {
-      await spawn({ coordinator: client, zoneId: 'zone-1', applicationId: 'app-1', subjectToken: 'tok' }, async () => undefined)
+      await spawn({ coordinator: client, zoneId: 'zone-1', applicationId: 'app-1', subjectToken: 'tok' }, async () => {})
     })
     expect(calls.some((c) => c.path.endsWith('/agents'))).toBe(true)
   })
@@ -127,7 +127,6 @@ describe('spawn', () => {
       await spawn({ coordinator: client, zoneId: 'zone-1', applicationId: 'app-1', subjectToken: 'tok' }, async () => {
         childEdge = current()?.delegationEdgeId
         childHop = current()?.hop
-        return undefined
       })
     })
     expect(bodies[0]?.inherit_parent_edge_id).toBe('edge-parent')
@@ -152,7 +151,6 @@ describe('spawn', () => {
     await bind(baseCtx({ delegationEdgeId: 'edge-parent', hop: 1 }), async () => {
       await spawn({ coordinator: client, zoneId: 'zone-1', applicationId: 'other-app', subjectToken: 'tok' }, async () => {
         childEdge = current()?.delegationEdgeId
-        return undefined
       })
     })
     expect(bodies[0]?.inherit_parent_edge_id).toBeUndefined()
@@ -164,7 +162,7 @@ describe('delegate', () => {
   it('requires an active context', async () => {
     const { client } = recorder()
     await expect(
-      delegate({ coordinator: client, toAgentSessionId: 'a2', toApplicationId: 'app-2', scopes: ['read'] }, async () => undefined),
+      delegate({ coordinator: client, toAgentSessionId: 'a2', toApplicationId: 'app-2', scopes: ['read'] }, async () => {}),
     ).rejects.toThrow(/requires a Caracal context/)
   })
 
@@ -172,7 +170,7 @@ describe('delegate', () => {
     const { client } = recorder()
     await bind(baseCtx({ agentSessionId: undefined }), async () => {
       await expect(
-        delegate({ coordinator: client, toAgentSessionId: 'a2', toApplicationId: 'app-2', scopes: ['read'] }, async () => undefined),
+        delegate({ coordinator: client, toAgentSessionId: 'a2', toApplicationId: 'app-2', scopes: ['read'] }, async () => {}),
       ).rejects.toThrow(/active agent session/)
     })
   })
@@ -196,7 +194,7 @@ describe('spawn with narrow grant', () => {
     await expect(
       spawn(
         { coordinator: client, zoneId: 'zone-1', applicationId: 'app-2', subjectToken: 'tok', grant: Grant.narrow(['read']) },
-        async () => undefined,
+        async () => {},
       ),
     ).rejects.toThrow(/active parent agent session/)
   })
@@ -233,7 +231,7 @@ describe('spawn with narrow grant', () => {
       await expect(
         spawn(
           { coordinator: client, zoneId: 'zone-1', applicationId: 'app-2', subjectToken: 'tok', grant: Grant.narrow(['read']) },
-          async () => undefined,
+          async () => {},
         ),
       ).rejects.toThrow()
     })
@@ -258,7 +256,7 @@ describe('spawn with narrow grant', () => {
             },
             onAgentEnd,
           },
-          async () => undefined,
+          async () => {},
         ),
       ).rejects.toThrow('start failed')
     })

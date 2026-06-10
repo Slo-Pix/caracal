@@ -4,7 +4,13 @@
 // Unit tests for the syntactic Rego validator.
 
 import { describe, it, expect } from 'vitest'
-import { analyzeAuthzPolicy, parseRego, previewAuthzPolicy, validatePolicySource, validateAuthzPolicy } from '../../../../apps/api/src/rego.js'
+import {
+  analyzeAuthzPolicy,
+  parseRego,
+  previewAuthzPolicy,
+  validatePolicySource,
+  validateAuthzPolicy,
+} from '../../../../apps/api/src/rego.js'
 
 describe('parseRego', () => {
   it('extracts package and rule names', () => {
@@ -65,12 +71,14 @@ describe('validateAuthzPolicy', () => {
 
 describe('analyzeAuthzPolicy', () => {
   it('warns for broad policies without requested scope checks', () => {
-    const warnings = analyzeAuthzPolicy('package caracal.authz\ndefault result := { "decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": [] }')
+    const warnings = analyzeAuthzPolicy(`package caracal.authz
+default result := { "decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": [] }`)
     expect(warnings).toEqual(expect.arrayContaining(['default_result_allows_access', 'missing_requested_scope_check']))
   })
 
   it('warns when no default result deny fallback is declared', () => {
-    const warnings = analyzeAuthzPolicy('package caracal.authz\nresult := { "decision": "allow" } if { "read" in input.context.requested_scopes }')
+    const warnings = analyzeAuthzPolicy(`package caracal.authz
+result := { "decision": "allow" } if { "read" in input.context.requested_scopes }`)
     expect(warnings).toContain('missing_default_result')
   })
 
