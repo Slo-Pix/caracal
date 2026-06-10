@@ -25,7 +25,7 @@ export CARACAL_RESOURCE_PATH=/charge
 
 ## 2. Connect with the SDK
 
-`connect()` is the standard entry point. It loads the generated profile when available, then falls back to environment configuration. See [Configuration Order](/reference/config-precedence/) for the exact resolution order.
+The client constructor is the standard entry point. It loads the generated profile when available, then falls back to environment configuration. See [Configuration Order](/reference/config-precedence/) for the exact resolution order.
 
 ### TypeScript
 
@@ -36,7 +36,7 @@ npm install @caracalai/sdk
 ```typescript
 import { Caracal } from "@caracalai/sdk";
 
-const caracal = Caracal.connect();
+const caracal = new Caracal();
 const resourceId = process.env.CARACAL_RESOURCE_ID!;
 const resourcePath = process.env.CARACAL_RESOURCE_PATH!;
 
@@ -64,7 +64,7 @@ import os
 
 from caracalai_sdk import Caracal
 
-caracal = Caracal.connect()
+caracal = Caracal()
 resource_id = os.environ["CARACAL_RESOURCE_ID"]
 resource_path = os.environ["CARACAL_RESOURCE_PATH"]
 
@@ -89,7 +89,7 @@ go get github.com/garudex-labs/caracal/packages/sdk/go
 ```
 
 ```go
-c, err := caracal.Connect()
+c, err := caracal.New()
 if err != nil {
     panic(err)
 }
@@ -126,7 +126,7 @@ if err != nil {
 
 | SDK call | What happens |
 | --- | --- |
-| `connect()` / `Connect()` | Loads configuration and prepares app-secret token exchange. |
+| `new Caracal()` / `Caracal()` / `New()` | Loads configuration and prepares app-secret token exchange. |
 | `spawn()` / `Spawn()` | Creates an agent session, binds context, and tears it down after the block returns. |
 | `gatewayRequest()` / `GatewayRequest()` | Builds the Gateway URL and `X-Caracal-Resource` header. |
 | `transport()` / `Transport()` | Injects Authorization, trace, baggage, and Gateway routing behavior. |

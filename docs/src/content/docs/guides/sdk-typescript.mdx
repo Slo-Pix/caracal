@@ -15,8 +15,8 @@ npm install @caracalai/sdk
 
 The SDK resolves configuration in this order:
 
-1. `Caracal.connect({ clientSecret: ... })` explicit options.
-2. `Caracal.connect({ configPath })`.
+1. `new Caracal({ clientSecret: ... })` explicit options.
+2. `new Caracal({ configPath })`.
 3. `CARACAL_CONFIG` or the default generated profile.
 4. Environment variables.
 
@@ -27,7 +27,7 @@ The Console guided setup can write the profile and secret file for you.
 ```ts
 import { Caracal } from "@caracalai/sdk";
 
-const caracal = Caracal.connect();
+const caracal = new Caracal();
 
 await caracal.spawn(async () => {
   const headers = await caracal.headersAsync();
