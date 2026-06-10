@@ -5,11 +5,12 @@
 
 import Fastify from 'fastify'
 import { hostname } from 'node:os'
+import { timingSafeEqual } from 'node:crypto'
 import pino from 'pino'
 import type { Pool } from 'pg'
 import type { Redis as RedisClient } from 'ioredis'
 import { ZodError } from 'zod'
-import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError } from '@caracalai/core'
+import { getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, devLogMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError, isPublished } from '@caracalai/core'
 import { agentsRoutes } from './routes/agents.js'
 import { agentServicesRoutes } from './routes/agent-services.js'
 import { delegationsRoutes } from './routes/delegations.js'
@@ -167,7 +168,18 @@ export async function buildApp({ cfg, db, redis, isDraining }: CoordinatorDeps) 
     }
     return { ok: true }
   })
-  app.get('/metrics', async (_req, reply) => {
+  app.get('/metrics', async (req, reply) => {
+    if (cfg.metricsBearer) {
+      const auth = req.headers.authorization
+      const expected = `Bearer ${cfg.metricsBearer}`
+      if (typeof auth !== 'string' || auth.length !== expected.length || !timingSafeEqual(Buffer.from(auth), Buffer.from(expected))) {
+        return reply.code(401).send({ error: 'unauthorized' })
+      }
+    } else if (isPublished()) {
+      // Published builds bind to 0.0.0.0; refuse to expose operational metrics
+      // on the network unless an operator has provisioned METRICS_BEARER.
+      return reply.code(401).send({ error: 'unauthorized' })
+    }
     const stats = await loadRuntimeStats()
     const lines: string[] = []
     lines.push('# HELP caracal_invocations_total Coordinator invocations by status')

@@ -17,7 +17,18 @@ import type { RedisClient } from './redis.js'
 import { redisMinuteBucket } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
-import { isPublished, getTraceContext, parseTraceparent, bindTrace, renderObservabilityMetrics, buildPinoRedactPaths, instrumentFastifyApp, withTimeout, CaracalError, pathOnly } from '@caracalai/core'
+import {
+  isPublished,
+  getTraceContext,
+  parseTraceparent,
+  bindTrace,
+  renderObservabilityMetrics,
+  buildPinoRedactPaths,
+  instrumentFastifyApp,
+  withTimeout,
+  CaracalError,
+  pathOnly,
+} from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
 import { resourcesRoutes } from './routes/resources.js'
@@ -28,6 +39,7 @@ import { grantsRoutes } from './routes/grants.js'
 import { stepUpChallengesRoutes } from './routes/step-up-challenges.js'
 import { policyTemplatesRoutes } from './routes/policy-templates.js'
 import { zoneEventsRoutes } from './routes/zone-events.js'
+import { adminTokensRoutes } from './routes/admin-tokens.js'
 
 import './fastify-augmentation.js'
 
@@ -256,6 +268,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   await app.register(stepUpChallengesRoutes, { prefix: '/v1' })
   await app.register(policyTemplatesRoutes, { prefix: '/v1' })
   await app.register(zoneEventsRoutes, { prefix: '/v1' })
+  await app.register(adminTokensRoutes, { prefix: '/v1' })
 
   app.get('/health', async () => ({ ok: true }))
   app.get('/metrics', async (req, reply) => {
