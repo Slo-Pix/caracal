@@ -38,41 +38,41 @@ Read the full documentation at [docs.caracal.run](https://docs.caracal.run).
 <div align="center">
   <table width="100%">
     <tr>
-      <td align="center" valign="top" width="25%">
+      <td align="center" valign="top" width="33%">
         <a href="https://www.youtube.com/live/tZ4FdO-zjeE" target="_blank" rel="noopener">
-          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
-            <div style="height:120px;display:flex;align-items:center;justify-content:center">
-              <img src="https://img.youtube.com/vi/tZ4FdO-zjeE/hqdefault.jpg" alt="GitHub Open Source Friday preview" width="196">
+          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
+            <div style="height:124px;display:flex;align-items:center;justify-content:center">
+              <img src="https://img.youtube.com/vi/tZ4FdO-zjeE/hqdefault.jpg" alt="GitHub Open Source Friday preview" width="165">
             </div>
-            <strong>GitHub's Open Source Friday</strong>
+            <div style="height:32px;display:flex;align-items:flex-end;justify-content:center;text-align:center">
+              <strong>GitHub's Open Source Friday</strong>
+            </div>
           </div>
         </a>
       </td>
-      <td align="center" valign="top" width="25%">
+      <td align="center" valign="top" width="33%">
         <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">
-          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
-            <div style="height:120px;display:flex;align-items:center;justify-content:center">
+          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
+            <div style="height:124px;display:flex;align-items:center;justify-content:center">
               <img src="public/programs/lfx-mentorship.png" alt="LFX Mentorship 2026" width="90" />
             </div>
-            <strong>LFX Mentorship 2026</strong>
+            <div style="height:32px;display:flex;align-items:flex-end;justify-content:center;text-align:center">
+              <strong>LFX Mentorship 2026</strong>
+            </div>
           </div>
         </a>
       </td>
-      <td align="center" valign="top" width="25%">
+      <td align="center" valign="top" width="33%">
         <a href="https://www.microsoft.com/startups" target="_blank" rel="noopener">
-          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
-            <div style="height:120px;display:flex;align-items:center;justify-content:center">
+          <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;border-radius:6px;border:1px solid #ddd;background:#fff;padding:12px;box-sizing:border-box">
+            <div style="height:124px;display:flex;align-items:center;justify-content:center">
               <img src="public/programs/microsoftStartup.png" alt="Microsoft for Startups" width="170" />
             </div>
-            <strong>Microsoft for Startups</strong>
+            <div style="height:32px;display:flex;align-items:flex-end;justify-content:center;text-align:center">
+              <strong>Microsoft for Startups</strong>
+            </div>
           </div>
         </a>
-      </td>
-      <td align="center" valign="top" width="25%">
-        <div style="width:220px;height:180px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;border-radius:6px;border:1px solid #ddd;background:#f8f8f8;padding:12px;box-sizing:border-box">
-          <div style="height:120px"></div>
-          <strong>Coming soon</strong>
-        </div>
       </td>
     </tr>
   </table>
