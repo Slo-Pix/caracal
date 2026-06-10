@@ -19,7 +19,7 @@ policies on Caracal.
 | Agents | Every spawned agent — orchestrator or worker — is its own **agent session** under its role's application, labeled `[role, lynx-swarm]` with run and agent metadata, narrowed by a delegation edge to its role's scopes and views. |
 | Providers | Twenty partner **credential providers** (`provider://<slug>`), each registered in the exact config shape its kind supports: API key, bearer token, OAuth client credentials, OAuth authorization code, Caracal mandate, or none. |
 | Resources | Per-application **resource views** (`resource://<app>-<provider>`). The Gateway binds each view to exactly one application, so shared partners expose one view per boundary, each carrying only that boundary's scopes. |
-| Policy set | `lynx-finance-ops`: default-deny base, generated bindings and grants data, and one policy per application allowing exactly its roles' mandate mints and gateway calls. |
+| Policy set | `lynx-finance-ops`: default-deny base, generated bindings and grants data, and one shared decisions policy allowing exactly each application's role-granted mandate mints and gateway calls. |
 
 The model is declared once in `config/tenancy.yaml`; the SDK seam, agent runner,
 provisioning, and policy all read from it.
@@ -95,9 +95,10 @@ key on the real control-plane UUIDs.
 
 `policies/` is an importable, OPA-tested library. The base policy default-denies and owns
 the decision contract; generated data documents carry the application bindings and the
-resource-view grants; one policy per application allows its roles' mandate mints (scope ∩
+resource-view grants; one shared decisions policy allows mandate mints (scope ∩
 delegation edge, role label granted, view owned by the caller) and gateway uses (mandate
-target includes the view). Expected access behavior is documented in
+target includes the view), naming the deciding application boundary in every decision.
+Expected access behavior is documented in
 `policies/README.md`.
 
 ```bash
