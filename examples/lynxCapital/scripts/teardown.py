@@ -3,7 +3,7 @@ Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
 Removes the Lynx Capital deployment through the Control API: the policy set, the policies,
-the domain resources, and the upstream credential providers.
+the resource views, the partner credential providers, and the application boundaries.
 """
 from __future__ import annotations
 
@@ -41,7 +41,14 @@ def main() -> None:
     for provider in model.providers:
         remove(client, "identity-provider", find_by_identifier(provider_list, provider.identifier), "provider")
 
-    print(f"removed the {model.policySet.name} policy set, {len(model.resources)} resources, and {len(model.providers)} providers")
+    app_list = client.invoke("app", "list")
+    for app in model.applications:
+        remove(client, "app", find_by_name(app_list, app.applicationName), "application")
+
+    print(
+        f"removed the {model.policySet.name} policy set, {len(model.resources)} resource views, "
+        f"{len(model.providers)} providers, and {len(model.applications)} applications"
+    )
 
 
 if __name__ == "__main__":

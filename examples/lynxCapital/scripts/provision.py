@@ -2,8 +2,9 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-Provisions the Lynx Capital deployment through the Control API: the upstream credential
-providers, the domain resources, and the policy library plus its active policy set.
+Provisions the Lynx Capital deployment through the Control API: the application
+boundaries, partner credential providers, per-application resource views, and the policy
+library plus its active policy set.
 """
 from __future__ import annotations
 
@@ -47,9 +48,9 @@ def _version_id(result: object) -> str:
 
 
 def ensure_applications(client: ControlClient, model: tenancy.TenancyModel) -> dict[str, str]:
-    """Create each durable managed service application, returning a map of application id to
-    the control-plane id so resources can bind to their application's trust boundary. Managed
-    applications are normally created once in Console; this keeps a fresh zone reproducible."""
+    """Create each managed application boundary, returning a map of application key to
+    the control-plane id. The create response carries the client secret exactly once;
+    it is printed as the runtime export and never written to disk."""
     existing = client.invoke("app", "list")
     application_ids: dict[str, str] = {}
     for app in model.applications:
@@ -57,6 +58,10 @@ def ensure_applications(client: ControlClient, model: tenancy.TenancyModel) -> d
         result = found if found else client.invoke("app", "create", {"name": app.applicationName})
         print(f"application {'exists' if found else 'created'}: {app.applicationName}")
         application_ids[app.id] = _id_of(result, app.applicationName)
+        env_key = app.id.upper().replace("-", "_")
+        if not found and isinstance(result, dict) and result.get("client_secret"):
+            print(f"  export LYNX_CARACAL_{env_key}_CLIENT_SECRET={result['client_secret']}")
+        print(f"  export LYNX_CARACAL_{env_key}_APPLICATION_ID={application_ids[app.id]}")
     return application_ids
 
 
@@ -90,14 +95,28 @@ def ensure_resources(
         print(f"resource created: {identifier}")
 
 
-def ensure_policy_set(client: ControlClient, model: tenancy.TenancyModel) -> None:
+def ensure_policy_set(client: ControlClient, model: tenancy.TenancyModel, application_ids: dict[str, str]) -> None:
+    """Author the policy library with the bindings and grants documents rendered from the
+    live application ids and tenancy plan, then version and activate the policy set."""
+    overrides = {
+        "01-bindings": tenancy.render_bindings_rego(application_ids),
+        "02-grants": tenancy.render_grants_rego(model),
+    }
     existing_policies = client.invoke("policy", "list")
     version_ids: list[str] = []
-    for command in tenancy.policy_commands(model):
+    for command in tenancy.policy_commands(model, overrides=overrides):
         name = command["flags"]["name"]
         found = find_by_name(existing_policies, name)
-        result = found if found else client.run(command)
-        print(f"policy {'exists' if found else 'created'}: {name}")
+        if found:
+            result = client.invoke("policy", "version", {
+                "id": found["id"],
+                "content": command["flags"]["content"],
+                "schema-version": command["flags"]["schema-version"],
+            })
+            print(f"policy versioned: {name}")
+        else:
+            result = client.run(command)
+            print(f"policy created: {name}")
         version = _version_id(result)
         if version:
             version_ids.append(version)
@@ -133,14 +152,13 @@ def write_outputs(
     model: tenancy.TenancyModel,
 ) -> None:
     outputs = {
-        "applications": [
-            {"id": a.id, "name": a.applicationName, "control_id": application_ids.get(a.id, "")}
+        "applications": {
+            a.id: {"name": a.applicationName, "application_id": application_ids.get(a.id, "")}
             for a in model.applications
-        ],
+        },
         "providers": provider_ids,
         "resources": [r.identifier for r in model.resources],
         "policy_set": model.policySet.name,
-        "customers": [{"id": c.id, "subject": c.subject, "plan": c.plan} for c in model.customers],
     }
     OUTPUTS_PATH.write_text(json.dumps(outputs, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {OUTPUTS_PATH.relative_to(ROOT)}")
@@ -152,12 +170,11 @@ def main() -> None:
     application_ids = ensure_applications(client, model)
     provider_ids = ensure_providers(client, model)
     ensure_resources(client, model, provider_ids, application_ids)
-    ensure_policy_set(client, model)
+    ensure_policy_set(client, model, application_ids)
     write_outputs(application_ids, provider_ids, model)
     print(
         f"provisioned {len(model.applications)} applications, {len(model.providers)} providers, "
-        f"{len(model.resources)} resources, and the {model.policySet.name} policy set "
-        f"for {len(model.customers)} customers"
+        f"{len(model.resources)} resource views, and the {model.policySet.name} policy set"
     )
 
 
