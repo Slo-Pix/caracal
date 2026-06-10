@@ -151,6 +151,15 @@ def test_customer_identity_propagates_through_spawn():
     assert tenancy.agent_labels("receivables") == ["receivables", "lynx-swarm"]
     assert "customer_id" not in tenancy.agent_metadata("run-cust", worker.id, "ar-summary")
 
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as client:
+        body = client.get("/api/logs/recent", params={"customerId": "cust-204"}).json()
+    assert body["events"]
+    assert all(e["payload"].get("customer_id") == "cust-204" for e in body["events"])
+
 
 def test_partner_call_fails_closed_without_caracal_or_simulation(monkeypatch):
     monkeypatch.delenv("LYNX_SIMULATION", raising=False)
