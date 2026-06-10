@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from caracalai_sdk.advanced import (
+from caracalai.advanced import (
     CaracalContext,
     Envelope,
     abind,
@@ -29,7 +29,7 @@ class CurrentTests(unittest.TestCase):
 
 class BindTests(unittest.TestCase):
     def test_sets_context_during_call_and_resets_after(self) -> None:
-        ctx = CaracalContext(subject_token="tok", zone_id="z", client_id="app")
+        ctx = CaracalContext(subject_token="tok", zone_id="z", application_id="app")
         captured: list[CaracalContext | None] = []
 
         def fn() -> None:
@@ -42,12 +42,12 @@ class BindTests(unittest.TestCase):
         self.assertIsNone(captured[1])
 
     def test_returns_the_function_return_value(self) -> None:
-        ctx = CaracalContext(subject_token="tok", zone_id="z", client_id="app")
+        ctx = CaracalContext(subject_token="tok", zone_id="z", application_id="app")
         result = bind(ctx, lambda: 42)
         self.assertEqual(result, 42)
 
     def test_resets_context_even_when_function_raises(self) -> None:
-        ctx = CaracalContext(subject_token="tok", zone_id="z", client_id="app")
+        ctx = CaracalContext(subject_token="tok", zone_id="z", application_id="app")
 
         def boom() -> None:
             raise ValueError("oops")
@@ -60,7 +60,7 @@ class BindTests(unittest.TestCase):
 
 class AbindTests(unittest.IsolatedAsyncioTestCase):
     async def test_sets_context_during_awaitable_and_resets_after(self) -> None:
-        ctx = CaracalContext(subject_token="tok", zone_id="z", client_id="app")
+        ctx = CaracalContext(subject_token="tok", zone_id="z", application_id="app")
         captured: CaracalContext | None = None
 
         async def coro() -> None:
@@ -74,7 +74,7 @@ class AbindTests(unittest.IsolatedAsyncioTestCase):
 
 class WithOverridesTests(unittest.TestCase):
     def test_returns_patched_copy_of_active_context(self) -> None:
-        ctx = CaracalContext(subject_token="tok", zone_id="z", client_id="app")
+        ctx = CaracalContext(subject_token="tok", zone_id="z", application_id="app")
 
         def fn() -> CaracalContext:
             return with_overrides(agent_session_id="agent-1")
@@ -93,7 +93,7 @@ class ToEnvelopeTests(unittest.TestCase):
         ctx = CaracalContext(
             subject_token="tok",
             zone_id="z",
-            client_id="app",
+            application_id="app",
             agent_session_id="agent-1",
             delegation_edge_id="edge-1",
             parent_edge_id="parent-1",
@@ -119,10 +119,10 @@ class FromEnvelopeTests(unittest.TestCase):
             session_id="sid-1",
             hop=2,
         )
-        ctx = from_envelope(env, zone_id="z1", client_id="app-1")
+        ctx = from_envelope(env, zone_id="z1", application_id="app-1")
         self.assertEqual(ctx.subject_token, "tok")
         self.assertEqual(ctx.zone_id, "z1")
-        self.assertEqual(ctx.client_id, "app-1")
+        self.assertEqual(ctx.application_id, "app-1")
         self.assertEqual(ctx.agent_session_id, "agent-1")
         self.assertEqual(ctx.session_id, "sid-1")
         self.assertEqual(ctx.hop, 2)
@@ -130,7 +130,7 @@ class FromEnvelopeTests(unittest.TestCase):
     def test_raises_when_envelope_has_no_subject_token(self) -> None:
         env = Envelope()
         with self.assertRaises(ValueError):
-            from_envelope(env, zone_id="z", client_id="app")
+            from_envelope(env, zone_id="z", application_id="app")
 
 
 class DescribeAuthorityTests(unittest.TestCase):
@@ -138,7 +138,7 @@ class DescribeAuthorityTests(unittest.TestCase):
         ctx = CaracalContext(
             subject_token="tok",
             zone_id="z",
-            client_id="app",
+            application_id="app",
             session_id="sid-1",
             agent_session_id="agent-1",
             delegation_edge_id="edge-1",
@@ -148,8 +148,11 @@ class DescribeAuthorityTests(unittest.TestCase):
         self.assertIsNotNone(summary)
         assert summary is not None
         self.assertEqual(summary.application_id, "app")
-        self.assertEqual(summary.authority_session_id, "sid-1")
-        self.assertEqual(summary.chain, ("authority:sid-1", "agent-run:agent-1", "delegated-permission:edge-1"))
+        self.assertEqual(summary.session_id, "sid-1")
+        self.assertEqual(
+            summary.chain,
+            ("session:sid-1", "agent-session:agent-1", "delegation-edge:edge-1"),
+        )
         self.assertNotIn("tok", repr(summary))
 
 

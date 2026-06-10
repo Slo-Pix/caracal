@@ -15,13 +15,13 @@ from typing import Any
 
 import httpx
 
-from caracalai_sdk import (
+from caracalai import (
     Caracal,
-    CaracalContextASGIMiddleware,
+    CaracalASGIMiddleware,
     CaracalConfig,
     ResourceBinding,
 )
-from caracalai_sdk.advanced import (
+from caracalai.advanced import (
     CoordinatorClient,
     DelegationConstraints,
     HEADER_AUTHORIZATION,
@@ -94,36 +94,44 @@ class FromEnvTests(unittest.TestCase):
 
     def test_rejects_expired_jwt_subject_token(self) -> None:
         header = base64.urlsafe_b64encode(b'{"alg":"ES256"}').rstrip(b"=").decode()
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"exp": 1_000_000}).encode()
-        ).rstrip(b"=").decode()
+        payload = (
+            base64.urlsafe_b64encode(json.dumps({"exp": 1_000_000}).encode())
+            .rstrip(b"=")
+            .decode()
+        )
         token = f"{header}.{payload}.sig"
         with self.assertRaises(RuntimeError) as cm:
-            Caracal.from_env({
-                "CARACAL_COORDINATOR_URL": "http://x",
-                "CARACAL_ZONE_ID": "z1",
-                "CARACAL_APPLICATION_ID": "a1",
-                "CARACAL_SUBJECT_TOKEN": token,
-            })
+            Caracal.from_env(
+                {
+                    "CARACAL_COORDINATOR_URL": "http://x",
+                    "CARACAL_ZONE_ID": "z1",
+                    "CARACAL_APPLICATION_ID": "a1",
+                    "CARACAL_SUBJECT_TOKEN": token,
+                }
+            )
         self.assertIn("expired", str(cm.exception))
 
     def test_production_requires_service_urls(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "CARACAL_COORDINATOR_URL"):
-            Caracal.from_env({
-                "NODE_ENV": "production",
-                "CARACAL_ZONE_ID": "z",
-                "CARACAL_APPLICATION_ID": "app",
-                "CARACAL_SUBJECT_TOKEN": "tok",
-            })
+            Caracal.from_env(
+                {
+                    "NODE_ENV": "production",
+                    "CARACAL_ZONE_ID": "z",
+                    "CARACAL_APPLICATION_ID": "app",
+                    "CARACAL_SUBJECT_TOKEN": "tok",
+                }
+            )
 
     def test_client_secret_env_rejects_conflicting_sources(self) -> None:
         with self.assertRaisesRegex(RuntimeError, "only one"):
-            Caracal.from_env({
-                "CARACAL_ZONE_ID": "z",
-                "CARACAL_APPLICATION_ID": "app",
-                "CARACAL_APP_CLIENT_SECRET": "secret",
-                "CARACAL_APP_CLIENT_SECRET_FILE": "/tmp/secret",
-            })
+            Caracal.from_env(
+                {
+                    "CARACAL_ZONE_ID": "z",
+                    "CARACAL_APPLICATION_ID": "app",
+                    "CARACAL_APP_CLIENT_SECRET": "secret",
+                    "CARACAL_APP_CLIENT_SECRET_FILE": "/tmp/secret",
+                }
+            )
 
     def test_credential_manifest_rejects_conflicts_and_bad_shapes(self) -> None:
         base = {
@@ -132,11 +140,13 @@ class FromEnvTests(unittest.TestCase):
             "CARACAL_APP_CLIENT_SECRET": "secret",
         }
         with self.assertRaisesRegex(RuntimeError, "only one"):
-            Caracal.from_env({
-                **base,
-                "CARACAL_RUN_CREDENTIALS": "[]",
-                "CARACAL_RUN_CREDENTIALS_FILE": "/tmp/credentials.json",
-            })
+            Caracal.from_env(
+                {
+                    **base,
+                    "CARACAL_RUN_CREDENTIALS": "[]",
+                    "CARACAL_RUN_CREDENTIALS_FILE": "/tmp/credentials.json",
+                }
+            )
         with self.assertRaisesRegex(RuntimeError, "must be an array or object"):
             Caracal.from_env({**base, "CARACAL_RUN_CREDENTIALS": '"bad"'})
         with self.assertRaisesRegex(RuntimeError, "credentials\\[0\\]\\.resource"):
@@ -184,17 +194,20 @@ class AutoDetectTests(unittest.TestCase):
                 'app_client_secret = "secret"\n'
                 'sts_url = "https://sts.example.com"\n'
                 'coordinator_url = "https://coord.example.com"\n'
-                '[[credentials]]\n'
+                "[[credentials]]\n"
                 'resource = "calendar"\n'
                 'upstream_prefix = "https://api.example.com/v1"\n'
             )
             cfg_path = fh.name
 
-        c = Caracal(config_path=cfg_path, env={
-            "CARACAL_ZONE_ID": "other",
-            "CARACAL_APPLICATION_ID": "other",
-            "CARACAL_SUBJECT_TOKEN": "tok",
-        })
+        c = Caracal(
+            config_path=cfg_path,
+            env={
+                "CARACAL_ZONE_ID": "other",
+                "CARACAL_APPLICATION_ID": "other",
+                "CARACAL_SUBJECT_TOKEN": "tok",
+            },
+        )
         self.assertEqual(c.config.zone_id, "z")
 
 
@@ -211,7 +224,9 @@ class ResourceBindingSortTests(unittest.TestCase):
                 ResourceBinding("mid", "https://api.example.com/v1/accounts"),
             ],
         )
-        self.assertEqual([b.resource_id for b in cfg.resources], ["long", "mid", "short"])
+        self.assertEqual(
+            [b.resource_id for b in cfg.resources], ["long", "mid", "short"]
+        )
 
 
 class FromClientSecretTests(unittest.TestCase):
@@ -226,7 +241,9 @@ class FromClientSecretTests(unittest.TestCase):
                 resources=[],
             )
 
-    def test_accepts_resource_bindings_as_gateway_bindings_and_sts_resources(self) -> None:
+    def test_accepts_resource_bindings_as_gateway_bindings_and_sts_resources(
+        self,
+    ) -> None:
         c = Caracal.from_client_secret(
             coordinator_url="http://coord",
             sts_url="http://sts",
@@ -269,7 +286,9 @@ class HeadersTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(parse_traceparent(h[HEADER_TRACEPARENT]))
         self.assertEqual(parse_baggage(h.get(HEADER_BAGGAGE)).get(BAGGAGE_HOP), "0")
 
-    async def test_bind_from_headers_allows_trusted_root_and_resets_context(self) -> None:
+    async def test_bind_from_headers_allows_trusted_root_and_resets_context(
+        self,
+    ) -> None:
         c = _build_caracal()
         async with c.bind_from_headers({}, allow_root=True) as ctx:
             self.assertEqual(ctx.subject_token, "tok")
@@ -306,12 +325,16 @@ class GatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
         )
 
         async def handler(request):
-            self.assertEqual(str(request.url), "https://gateway.example.com/proxy/events?limit=10")
+            self.assertEqual(
+                str(request.url), "https://gateway.example.com/proxy/events?limit=10"
+            )
             self.assertEqual(request.headers["X-Caracal-Resource"], "calendar")
             self.assertEqual(request.headers[HEADER_AUTHORIZATION], "Bearer tok")
             return httpx.Response(204)
 
-        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+        async with c.transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
             response = await client.get("https://api.example.com/v1/events?limit=10")
 
         self.assertEqual(response.status_code, 204)
@@ -326,7 +349,9 @@ class GatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
                 gateway_url="https://gateway.example.com/proxy",
                 resources=[
                     ResourceBinding("broad", "https://api.example.com/v1"),
-                    ResourceBinding("treasury", "https://api.example.com/v1/accounts/treasury"),
+                    ResourceBinding(
+                        "treasury", "https://api.example.com/v1/accounts/treasury"
+                    ),
                     ResourceBinding("accounts", "https://api.example.com/v1/accounts"),
                 ],
             )
@@ -338,7 +363,9 @@ class GatewayRoutingTests(unittest.IsolatedAsyncioTestCase):
             seen.append(request.headers["X-Caracal-Resource"])
             return httpx.Response(204)
 
-        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+        async with c.transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
             await client.get("https://api.example.com/v1/accounts/treasury/balance")
             await client.get("https://api.example.com/v1/accounts/payable")
             await client.get("https://api.example.com/v1/markets/spot")
@@ -363,7 +390,9 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         c = Caracal(
             CaracalConfig(
-                coordinator=CoordinatorClient(base_url="https://coordinator.example.com", _client=client),
+                coordinator=CoordinatorClient(
+                    base_url="https://coordinator.example.com", _client=client
+                ),
                 zone_id="z",
                 application_id="app",
                 subject_token="tok",
@@ -397,27 +426,35 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         await client.aclose()
         self.assertEqual(events, ["start:agent-1", "end:agent-1"])
         self.assertEqual([r.method for r in requests], ["POST", "POST", "DELETE"])
-        self.assertEqual(json.loads(requests[0].content), {
-            "application_id": "app",
-            "ttl_seconds": 60,
-            "metadata": {"purpose": "test"},
-        })
-        self.assertEqual(json.loads(requests[1].content), {
-            "issuer_application_id": "app",
-            "source_session_id": "agent-1",
-            "target_session_id": "agent-2",
-            "receiver_application_id": "app-2",
-            "scopes": ["tool:call"],
-            "constraints": {"resources": ["calendar"], "max_depth": 2},
-            "ttl_seconds": 30,
-        })
+        self.assertEqual(
+            json.loads(requests[0].content),
+            {
+                "application_id": "app",
+                "ttl_seconds": 60,
+                "metadata": {"purpose": "test"},
+            },
+        )
+        self.assertEqual(
+            json.loads(requests[1].content),
+            {
+                "issuer_application_id": "app",
+                "source_session_id": "agent-1",
+                "target_session_id": "agent-2",
+                "receiver_application_id": "app-2",
+                "scopes": ["tool:call"],
+                "constraints": {"resources": ["calendar"], "max_depth": 2},
+                "ttl_seconds": 30,
+            },
+        )
         self.assertIsNone(current())
 
     async def test_delegate_requires_active_agent_context(self) -> None:
         c = _build_caracal()
 
         with self.assertRaises(RuntimeError):
-            async with c.delegate(to="agent-2", to_application_id="app-2", scopes=["tool:call"]):
+            async with c.delegate(
+                to="agent-2", to_application_id="app-2", scopes=["tool:call"]
+            ):
                 pass
 
     async def test_service_heartbeats_and_does_not_auto_terminate(self) -> None:
@@ -436,23 +473,30 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
         c = Caracal(
             CaracalConfig(
-                coordinator=CoordinatorClient(base_url="https://coordinator.example.com", _client=client),
+                coordinator=CoordinatorClient(
+                    base_url="https://coordinator.example.com", _client=client
+                ),
                 zone_id="z",
                 application_id="app",
                 subject_token="tok",
             )
         )
 
-        svc = await c.service(labels=["billing-worker"])
+        svc = await c.spawn_service(labels=["billing-worker"])
         self.assertEqual(svc.agent_session_id, "svc-1")
-        self.assertEqual(json.loads(requests[0].content), {
-            "application_id": "app",
-            "lifecycle": "service",
-            "labels": ["billing-worker"],
-        })
+        self.assertEqual(
+            json.loads(requests[0].content),
+            {
+                "application_id": "app",
+                "lifecycle": "service",
+                "labels": ["billing-worker"],
+            },
+        )
 
         await svc.heartbeat()
-        self.assertTrue(str(requests[1].url).endswith("/zones/z/agents/svc-1/heartbeat"))
+        self.assertTrue(
+            str(requests[1].url).endswith("/zones/z/agents/svc-1/heartbeat")
+        )
 
         await svc.aclose()
         await client.aclose()
@@ -470,7 +514,7 @@ class AsgiMiddlewareTests(unittest.IsolatedAsyncioTestCase):
             captured["agent"] = ctx.agent_session_id or ""
             captured["hop"] = str(ctx.hop)
 
-        mw = CaracalContextASGIMiddleware(app, c)
+        mw = CaracalASGIMiddleware(app, c)
         scope = {
             "type": "http",
             "headers": [
@@ -503,7 +547,7 @@ class AsgiMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         async def app(scope, receive, send):
             raise AssertionError("app should not run")
 
-        mw = CaracalContextASGIMiddleware(app, c)
+        mw = CaracalASGIMiddleware(app, c)
         scope = {"type": "http", "headers": []}
 
         async def receive() -> dict[str, Any]:
@@ -555,7 +599,9 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             seen["auth"] = request.headers[HEADER_AUTHORIZATION]
             return httpx.Response(204)
 
-        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+        async with c.transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
             await client.get("https://api.example.com/v1/events")
         self.assertEqual(seen["auth"], "Bearer tok")
 
@@ -578,10 +624,14 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             seen["auth"] = http_request.headers[HEADER_AUTHORIZATION]
             return httpx.Response(204)
 
-        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+        async with c.transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
             await client.get(request.url, headers=request.headers)
 
-        self.assertEqual(seen["url"], "https://gateway.example.com/proxy/events?limit=10")
+        self.assertEqual(
+            seen["url"], "https://gateway.example.com/proxy/events?limit=10"
+        )
         self.assertEqual(seen["resource"], "resource://calendar")
         self.assertEqual(seen["auth"], "Bearer tok")
 
@@ -615,7 +665,9 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(resp.status_code, 204)
-        self.assertEqual(seen["url"], "https://gateway.example.com/proxy/events?limit=10")
+        self.assertEqual(
+            seen["url"], "https://gateway.example.com/proxy/events?limit=10"
+        )
         self.assertEqual(seen["method"], "POST")
         self.assertEqual(seen["resource"], "resource://calendar")
         self.assertEqual(seen["content_type"], "application/json")
@@ -656,9 +708,13 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             seen["resource"] = request.headers.get("X-Caracal-Resource")
             return httpx.Response(204)
 
-        async with c.transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
+        async with c.transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
             await client.get("https://other.example.com/v1/events")
-        self.assertEqual(seen, {"url": "https://other.example.com/v1/events", "resource": None})
+        self.assertEqual(
+            seen, {"url": "https://other.example.com/v1/events", "resource": None}
+        )
 
     async def test_explicit_unbound_resource_routes_to_gateway(self) -> None:
         c = Caracal(
@@ -672,11 +728,20 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             )
         )
         self.assertEqual(
-            c._route_through_gateway("https://api.example.com/v1/events?limit=1", "resource://calendar"),
-            ("https://gateway.example.com/proxy/v1/events?limit=1", "resource://calendar"),
+            c._route_through_gateway(
+                "https://api.example.com/v1/events?limit=1", "resource://calendar"
+            ),
+            (
+                "https://gateway.example.com/proxy/v1/events?limit=1",
+                "resource://calendar",
+            ),
         )
         self.assertIsNone(c._route_through_gateway("not a url", None))
-        self.assertIsNone(c._route_through_gateway("https://gateway.example.com/proxy/v1/events", None))
+        self.assertIsNone(
+            c._route_through_gateway(
+                "https://gateway.example.com/proxy/v1/events", None
+            )
+        )
 
     async def test_sync_transport_routes_and_enforces_root_guard(self) -> None:
         c = Caracal(
@@ -697,13 +762,20 @@ class TransportRootGuardTests(unittest.IsolatedAsyncioTestCase):
             seen["resource"] = request.headers["X-Caracal-Resource"]
             return httpx.Response(204)
 
-        with c.sync_transport(transport=httpx.MockTransport(handler), allow_root=True) as client:
-            self.assertEqual(client.get("https://api.example.com/v1/events").status_code, 204)
-        self.assertEqual(seen, {
-            "url": "https://gateway.example.com/proxy/events",
-            "auth": "Bearer tok",
-            "resource": "calendar",
-        })
+        with c.sync_transport(
+            transport=httpx.MockTransport(handler), allow_root=True
+        ) as client:
+            self.assertEqual(
+                client.get("https://api.example.com/v1/events").status_code, 204
+            )
+        self.assertEqual(
+            seen,
+            {
+                "url": "https://gateway.example.com/proxy/events",
+                "auth": "Bearer tok",
+                "resource": "calendar",
+            },
+        )
 
         with c.sync_transport(transport=httpx.MockTransport(handler)) as client:
             with self.assertRaises(RuntimeError):
@@ -765,7 +837,7 @@ class FromConfigBindingsTests(unittest.TestCase):
             f'app_client_secret_file = "{secret_file.name}"\n'
             'sts_url = "https://sts.example.com"\n'
             'coordinator_url = "https://coord.example.com"\n'
-            '[[credentials]]\n'
+            "[[credentials]]\n"
             'resource = "calendar"\n'
             'upstream_prefix = "https://api.example.com/v1"\n'
         )
@@ -783,7 +855,7 @@ class FromConfigBindingsTests(unittest.TestCase):
             'app_client_secret = "s"\n'
             'sts_url = "https://sts.example.com"\n'
             'coordinator_url = "https://coord.example.com"\n'
-            '[[credentials]]\n'
+            "[[credentials]]\n"
             'resource = "calendar"\n'
             'upstream_prefix = "https://api.example.com/v1"\n'
         )
@@ -824,7 +896,7 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         return fh.name
 
     def test_dict_shape_loads(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         bindings = _load_resource_bindings_file(
             self._write('{"calendar":"https://api.example.com/v1"}')
@@ -833,7 +905,7 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         self.assertEqual(bindings[0].resource_id, "calendar")
 
     def test_list_shape_loads(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         bindings = _load_resource_bindings_file(
             self._write(
@@ -843,7 +915,7 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         self.assertEqual(len(bindings), 1)
 
     def test_typo_field_raises(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         path = self._write(
             '[{"resource_id":"calendar","upstreamprefix":"https://api.example.com/v1"}]'
@@ -853,7 +925,7 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         self.assertIn("upstreamprefix", str(cm.exception))
 
     def test_missing_field_raises(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         path = self._write('[{"resource_id":"calendar"}]')
         with self.assertRaises(ValueError) as cm:
@@ -861,14 +933,14 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         self.assertIn("upstream_prefix", str(cm.exception))
 
     def test_empty_value_raises(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         path = self._write('{"calendar":""}')
         with self.assertRaises(ValueError):
             _load_resource_bindings_file(path)
 
     def test_invalid_url_raises(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         path = self._write('{"calendar":"not-a-url"}')
         with self.assertRaises(ValueError) as cm:
@@ -876,7 +948,7 @@ class ResourceBindingsValidationTests(unittest.TestCase):
         self.assertIn("absolute URL", str(cm.exception))
 
     def test_unsupported_top_level_raises(self) -> None:
-        from caracalai_sdk.client import _load_resource_bindings_file
+        from caracalai.client import _load_resource_bindings_file
 
         with self.assertRaises(ValueError):
             _load_resource_bindings_file(self._write('"not-a-binding"'))
@@ -891,7 +963,9 @@ class ClientSecretCustomHTTPClientTests(unittest.IsolatedAsyncioTestCase):
         def handler(request: httpx.Request) -> httpx.Response:
             nonlocal called
             called = True
-            return httpx.Response(200, json={"access_token": "abc.def.ghi", "expires_in": 3600})
+            return httpx.Response(
+                200, json={"access_token": "abc.def.ghi", "expires_in": 3600}
+            )
 
         custom_transport = httpx.MockTransport(handler)
         custom_client = httpx.Client(transport=custom_transport)
@@ -911,7 +985,7 @@ class ClientSecretCustomHTTPClientTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(headers[HEADER_AUTHORIZATION], "Bearer abc.def.ghi")
             self.assertTrue(called)
         finally:
-            await c.close()
+            await c.aclose()
             self.assertFalse(custom_client.is_closed)
             custom_client.close()
 

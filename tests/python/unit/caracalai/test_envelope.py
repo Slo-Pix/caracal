@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unittest
 
-from caracalai_sdk.advanced import (
+from caracalai.advanced import (
     BAGGAGE_AGENT_SESSION,
     BAGGAGE_DELEGATION_EDGE,
     BAGGAGE_HOP,
