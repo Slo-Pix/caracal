@@ -26,7 +26,7 @@ const (
 )
 
 // Grant is the authority handed to a spawned child. The zero value (and
-// GrantInherit) runs the child under its parent's effective authority: a child
+// GrantInherit) runs the child under its parent's effective session: a child
 // of a narrowed parent inherits that same narrowing (the server mirrors the
 // parent's edge onto the child), so least-privilege is transitive by default,
 // while a child of a root parent runs under full application authority.
@@ -88,7 +88,7 @@ func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error)
 
 	var inheritParentEdgeID string
 	if grant.Mode == GrantModeInherit && parent.AgentSessionID != "" &&
-		parent.DelegationEdgeID != "" && opts.ApplicationID == parent.ClientID {
+		parent.DelegationEdgeID != "" && opts.ApplicationID == parent.ApplicationID {
 		inheritParentEdgeID = parent.DelegationEdgeID
 	}
 
@@ -120,7 +120,7 @@ func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error)
 		}
 		delRes, derr := CreateDelegation(ctx, opts.Coordinator, parent.SubjectToken, DelegationRequest{
 			ZoneID:                opts.ZoneID,
-			IssuerApplicationID:   parent.ClientID,
+			IssuerApplicationID:   parent.ApplicationID,
 			SourceSessionID:       parent.AgentSessionID,
 			TargetSessionID:       res.AgentSessionID,
 			ReceiverApplicationID: opts.ApplicationID,
@@ -149,7 +149,7 @@ func Spawn(ctx context.Context, opts SpawnInput, fn func(context.Context) error)
 	c := CaracalContext{
 		SubjectToken:     opts.SubjectToken,
 		ZoneID:           opts.ZoneID,
-		ClientID:         opts.ApplicationID,
+		ApplicationID:    opts.ApplicationID,
 		AgentSessionID:   res.AgentSessionID,
 		DelegationEdgeID: delegationEdgeID,
 		ParentEdgeID:     parent.DelegationEdgeID,
@@ -193,7 +193,7 @@ func Delegate(ctx context.Context, opts DelegateInput, fn func(context.Context) 
 
 	res, err := CreateDelegation(ctx, opts.Coordinator, c.SubjectToken, DelegationRequest{
 		ZoneID:                c.ZoneID,
-		IssuerApplicationID:   c.ClientID,
+		IssuerApplicationID:   c.ApplicationID,
 		SourceSessionID:       c.AgentSessionID,
 		TargetSessionID:       opts.ToAgentSessionID,
 		ReceiverApplicationID: opts.ToApplicationID,
@@ -320,7 +320,7 @@ func SpawnService(ctx context.Context, opts SpawnServiceInput) (*ServiceAgent, e
 	c := CaracalContext{
 		SubjectToken:   opts.SubjectToken,
 		ZoneID:         opts.ZoneID,
-		ClientID:       opts.ApplicationID,
+		ApplicationID:  opts.ApplicationID,
 		AgentSessionID: res.AgentSessionID,
 		ParentEdgeID:   parent.DelegationEdgeID,
 		SessionID:      sessionID,
