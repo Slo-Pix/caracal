@@ -245,9 +245,11 @@ class ProviderStore:
         for rec in self.data[field]:
             if rec[id_key] == identifier and not rec["revoked"]:
                 if kind == "client":
-                    fresh = self._new_client(rec["name"], list(rec["redirectUris"]), list(rec["scopes"]))
-                else:
-                    fresh = maker(rec["label"])
+                    rec["clientSecret"] = f"cs_{secrets.token_urlsafe(28)}"
+                    rec["secretRotatedAt"] = _now()
+                    self._save()
+                    return rec
+                fresh = maker(rec["label"])
                 fresh["rotatedFrom"] = identifier
                 rec["revoked"] = True
                 rec["revokedAt"] = _now()
@@ -305,16 +307,23 @@ class ProviderStore:
             self._save()
 
     # ---- validators ----
+    def find_api_key(self, presented: str) -> dict | None:
+        for rec in self.data["apiKeys"]:
+            if rec["apiKey"] == presented and not rec["revoked"]:
+                return rec
+        return None
+
     def valid_api_key(self, presented: str) -> bool:
-        return any(
-            r["apiKey"] == presented and not r["revoked"]
-            for r in self.data["apiKeys"]
-        )
+        return self.find_api_key(presented) is not None
+
+    def find_bearer(self, presented: str) -> dict | None:
+        for rec in self.data["bearerTokens"]:
+            if rec["accessToken"] == presented and not rec["revoked"]:
+                return rec
+        return None
 
     def valid_bearer(self, presented: str) -> bool:
-        if any(r["accessToken"] == presented and not r["revoked"] for r in self.data["bearerTokens"]):
-            return True
-        return self.valid_access_token(presented) is not None
+        return self.find_bearer(presented) is not None
 
     def find_client(self, client_id: str) -> dict | None:
         for rec in self.data["clients"]:

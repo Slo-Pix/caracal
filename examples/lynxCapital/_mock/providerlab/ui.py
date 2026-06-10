@@ -111,99 +111,101 @@ def _config_rows(provider: catalog.Provider) -> list[tuple[str, str]]:
 
 _STYLE = """
   * { box-sizing: border-box; }
-  body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0;
-         background: #0d1117; color: #e6edf3; font-size: 13px; }
-  header { display: flex; align-items: center; gap: 10px; padding: 0 24px; height: 52px;
-           border-bottom: 1px solid #21262d; background: #010409; }
-  header h1 { font-size: 14px; font-weight: 600; margin: 0; white-space: nowrap; }
-  header .tag { color: #7d8590; font-size: 12px; overflow: hidden;
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; margin: 0;
+         background: #0a0a0a; color: #ededed; font-size: 13px; line-height: 1.5;
+         -webkit-font-smoothing: antialiased; }
+  header { display: flex; align-items: baseline; gap: 10px; padding: 14px 24px 0; }
+  header h1 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
+  header .tag { color: #8f8f8f; font-size: 12px; overflow: hidden;
                 text-overflow: ellipsis; white-space: nowrap; }
   header .host { margin-left: auto; font-family: ui-monospace, monospace; font-size: 11px;
-                 color: #7d8590; white-space: nowrap; }
-  .badge { display: inline-flex; font-size: 11px; font-weight: 500; padding: 1px 7px;
-           border-radius: 3px; background: #21262d; color: #9fb4d0;
-           border: 1px solid #30363d; white-space: nowrap; }
-  nav { display: flex; gap: 2px; padding: 0 16px; background: #010409;
-        border-bottom: 1px solid #21262d; }
-  nav a { padding: 8px 12px; color: #7d8590; text-decoration: none; font-size: 13px;
+                 color: #8f8f8f; white-space: nowrap; }
+  .badge { display: inline-flex; font-size: 11px; padding: 0 7px; line-height: 18px;
+           border-radius: 4px; background: #1f1f1f; color: #a1a1a1; white-space: nowrap; }
+  nav { display: flex; gap: 4px; padding: 6px 16px 0; border-bottom: 1px solid #1f1f1f; }
+  nav a { padding: 7px 10px 9px; color: #8f8f8f; text-decoration: none; font-size: 13px;
           border-bottom: 2px solid transparent; margin-bottom: -1px; }
-  nav a:hover { color: #e6edf3; }
-  nav a.active { color: #e6edf3; border-bottom-color: #f78166; font-weight: 500; }
-  main { padding: 20px 24px 40px; max-width: 980px; margin: 0 auto; }
-  h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; color: #e6edf3; }
-  .statbar { display: flex; gap: 0; border: 1px solid #21262d; border-radius: 6px;
-             background: #161b22; margin-bottom: 16px; overflow-x: auto; }
-  .stat { display: flex; flex-direction: column; gap: 1px; padding: 10px 16px;
-          border-right: 1px solid #21262d; min-width: 96px; flex-shrink: 0; }
-  .stat:last-child { border-right: none; }
-  .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
-             color: #7d8590; white-space: nowrap; }
-  .stat .v { font-size: 13px; font-weight: 600; font-family: ui-monospace, monospace;
-             white-space: nowrap; }
-  .statusdot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-               background: #3fb950; margin-right: 6px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #21262d;
+  nav a:hover { color: #ededed; }
+  nav a.active { color: #ededed; border-bottom-color: #ededed; }
+  main { padding: 24px 24px 48px; max-width: 960px; margin: 0 auto; }
+  section { margin-bottom: 28px; }
+  h2 { font-size: 13px; font-weight: 500; margin: 0 0 8px; color: #ededed;
+       display: flex; align-items: center; gap: 8px; }
+  h2 .count { color: #8f8f8f; font-weight: 400; }
+  .statbar { display: flex; gap: 36px; margin-bottom: 28px; overflow-x: auto;
+             padding-bottom: 2px; }
+  .stat { display: flex; flex-direction: column; flex-shrink: 0; }
+  .stat .k { font-size: 11px; color: #8f8f8f; white-space: nowrap; }
+  .stat .v { font-size: 15px; font-weight: 600; white-space: nowrap; }
+  .statusdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+               background: #3fb950; margin: 0 6px 1px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #1a1a1a;
            vertical-align: top; }
-  th { color: #7d8590; font-weight: 600; font-size: 11px; text-transform: uppercase;
-       letter-spacing: 0.04em; background: #161b22; }
+  th { color: #8f8f8f; font-weight: 500; font-size: 12px; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
-  code { font-family: ui-monospace, monospace; font-size: 11px; background: #161b22;
-         border: 1px solid #21262d; padding: 1px 5px; border-radius: 3px;
-         color: #c9d1d9; word-break: break-all; }
-  th code, td code { background: #0d1117; }
-  .panel { background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
-           margin-bottom: 16px; overflow: hidden; }
-  .panel > h2 { padding: 9px 12px; margin: 0; border-bottom: 1px solid #21262d;
-                background: #161b22; display: flex; align-items: center; gap: 8px; }
-  .panel > .panel-body { padding: 12px; }
-  .panel > table { border: none; }
-  .panel-foot { padding: 8px 12px; border-top: 1px solid #21262d; color: #7d8590;
-                font-size: 11px; background: #0d1117; }
-  .panel-foot a { color: #58a6ff; }
+  code { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px;
+         color: #ededed; word-break: break-all; }
+  .panel { border: 1px solid #1f1f1f; border-radius: 6px; overflow-x: auto; }
+  .panel-body { padding: 12px; }
+  .panel-foot { padding: 9px 12px; border-top: 1px solid #1a1a1a; color: #8f8f8f;
+                font-size: 12px; }
+  .hint { color: #8f8f8f; font-size: 12px; margin: 8px 2px 0; }
   form.inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-                padding: 10px 12px; border-top: 1px solid #21262d; }
-  input, select { background: #0d1117; border: 1px solid #30363d; color: #e6edf3;
-                  padding: 5px 8px; border-radius: 4px; font-size: 12px; }
-  input:focus { outline: none; border-color: #58a6ff; }
-  button { background: #21262d; color: #e6edf3; border: 1px solid #30363d;
-           padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 500;
+                padding: 10px 12px; border-top: 1px solid #1a1a1a; }
+  input, select { background: transparent; border: 1px solid #2e2e2e; color: #ededed;
+                  padding: 5px 9px; border-radius: 5px; font-size: 12.5px; }
+  input::placeholder { color: #707070; }
+  input:focus { outline: none; border-color: #707070; }
+  button { background: transparent; color: #ededed; border: 1px solid #2e2e2e;
+           padding: 5px 12px; border-radius: 5px; font-size: 12.5px;
            cursor: pointer; white-space: nowrap; }
-  button:hover { background: #30363d; }
-  button.primary { background: #238636; border-color: #2ea043; }
-  button.primary:hover { background: #2ea043; }
-  button.danger { background: transparent; color: #f85149; border-color: #30363d; }
-  button.danger:hover { background: #f8514922; border-color: #f85149; }
-  .icon-btn { padding: 1px 6px; font-size: 10px; color: #7d8590; background: transparent;
-              border: 1px solid #30363d; }
-  .icon-btn:hover { color: #e6edf3; }
-  .muted { color: #7d8590; font-size: 12px; }
-  .pill { display: inline-flex; font-size: 11px; font-weight: 500; padding: 1px 7px;
-          border-radius: 10px; white-space: nowrap; }
-  .ok { background: #12261e; color: #3fb950; border: 1px solid #1f4430; }
-  .gone { background: #2d1418; color: #f85149; border: 1px solid #58262b; }
-  .neutral { background: #21262d; color: #7d8590; border: 1px solid #30363d; }
-  .secret-wrap { display: inline-flex; align-items: center; gap: 5px; }
-  .secret { cursor: pointer; user-select: none; }
-  .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 12px; }
-  .chips code { padding: 2px 7px; }
-  .row-actions { display: flex; gap: 6px; }
+  button:hover { border-color: #707070; }
+  button.primary { background: #ededed; color: #0a0a0a; border-color: #ededed;
+                   font-weight: 500; }
+  button.primary:hover { background: #cfcfcf; border-color: #cfcfcf; }
+  button.danger { color: #f85149; }
+  button.danger:hover { border-color: #f85149; }
+  .icon-btn { padding: 0 6px; font-size: 11px; line-height: 18px; color: #8f8f8f;
+              border: none; }
+  .icon-btn:hover { color: #ededed; }
+  .muted { color: #8f8f8f; font-size: 12px; }
+  .pill { font-size: 12px; white-space: nowrap; }
+  .pill::before { content: "\\25CF\\00A0"; font-size: 9px; vertical-align: 1px; }
+  .ok { color: #3fb950; }
+  .gone { color: #f85149; }
+  .neutral { color: #8f8f8f; }
+  .secret-wrap { display: inline-flex; align-items: center; gap: 4px; }
+  .secret { cursor: pointer; user-select: none; color: #a1a1a1; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .chips code { color: #c0c0c0; }
+  .row-actions { display: flex; gap: 4px; justify-content: flex-end; }
   .row-actions form { margin: 0; }
-  .empty { padding: 16px 12px; color: #7d8590; font-size: 12px; }
-  .kv-grid { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px;
-             padding: 12px; font-size: 12px; }
-  .kv-grid .k { color: #7d8590; white-space: nowrap; }
+  .row-actions button { padding: 2px 9px; font-size: 12px; color: #a1a1a1; }
+  .row-actions button:hover { color: #ededed; }
+  .row-actions button.danger:hover { color: #f85149; }
+  .empty { padding: 20px 12px; color: #8f8f8f; font-size: 12.5px; text-align: center; }
+  .kv-grid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px;
+             padding: 12px; font-size: 12.5px; }
+  .kv-grid .k { color: #8f8f8f; white-space: nowrap; }
+  details.sample summary { cursor: pointer; color: #8f8f8f; font-size: 12px;
+                           padding: 8px 12px; border-top: 1px solid #1a1a1a;
+                           user-select: none; }
+  details.sample summary:hover { color: #ededed; }
   pre.sample { margin: 0; padding: 10px 12px; font-family: ui-monospace, monospace;
-               font-size: 11px; line-height: 1.5; color: #c9d1d9; background: #161b22;
-               overflow-x: auto; white-space: pre-wrap; word-break: break-word;
-               max-height: 220px; overflow-y: auto; }
-  a { color: #58a6ff; }
+               font-size: 11.5px; line-height: 1.55; color: #c0c0c0;
+               border-top: 1px solid #1a1a1a; overflow-x: auto; white-space: pre;
+               max-height: 280px; overflow-y: auto; }
+  a { color: #52a8ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
   @media (max-width: 760px) {
-    main { padding: 16px 12px; }
-    header { padding: 0 12px; }
+    main { padding: 16px 12px 40px; }
+    header { padding: 14px 12px 0; flex-wrap: wrap; }
     header .tag { display: none; }
+    nav { padding: 6px 4px 0; overflow-x: auto; }
+    .statbar { gap: 24px; }
     .kv-grid { grid-template-columns: 1fr; gap: 0; }
-    .kv-grid .k { margin-top: 6px; }
+    .kv-grid .k { margin-top: 8px; }
   }
 """
 
@@ -294,22 +296,21 @@ def overview(provider: catalog.Provider) -> str:
   <div class="stat"><span class="k">Operations</span><span class="v">{len(provider.operations)}</span></div>
   <div class="stat"><span class="k">Industry</span><span class="v">{_esc(provider.industry)}</span></div>
 </div>
-<div class="panel">
+<section>
   <h2>Configuration</h2>
-  <table>{config}</table>
-  <div class="panel-foot">{_auth_summary(provider)}</div>
-</div>
-<div class="panel">
-  <h2>Seed credential <span class="badge">verification flows</span></h2>
-  <table>{seed_rows}</table>
-  <div class="panel-foot">Persisted under <code>_store/{_esc(provider.id)}.json</code>
-  and indexed in <code>_store/_seed_index.json</code>.</div>
-</div>
-<div class="panel">
-  <h2>Operations <span class="badge">{len(provider.operations)}</span></h2>
-  <div class="chips">{ops}</div>
-  <div class="panel-foot">{ops_hint}</div>
-</div>{_grpc_panel(provider)}{_mcp_panel(provider)}"""
+  <div class="panel"><table>{config}</table></div>
+  <p class="hint">{_auth_summary(provider)}</p>
+</section>
+<section>
+  <h2>Seed credential</h2>
+  <div class="panel"><table>{seed_rows}</table></div>
+  <p class="hint">Used by verification flows. Persisted under <code>_store/{_esc(provider.id)}.json</code>.</p>
+</section>
+<section>
+  <h2>Operations <span class="count">{len(provider.operations)}</span></h2>
+  <div class="panel"><div class="panel-body chips">{ops}</div></div>
+  <p class="hint">{ops_hint}</p>
+</section>{_grpc_panel(provider)}{_mcp_panel(provider)}"""
     return layout(provider, "home", body)
 
 
@@ -330,10 +331,10 @@ def _grpc_panel(provider: catalog.Provider) -> str:
                 f"<tr><td><code>{_esc(rpc['name'])}</code>{badge}</td>"
                 f"<td><code>({_esc(rpc['request'])}) returns ({_esc(response)})</code></td></tr>")
         blocks.append(
-            f'<div class="panel"><h2>{_esc(descriptor["package"])}.{_esc(service["name"])}</h2>'
-            f"<table><tr><th>rpc</th><th>signature</th></tr>{''.join(rpc_rows)}</table></div>")
+            f'<section><h2>{_esc(descriptor["package"])}.{_esc(service["name"])}</h2>'
+            f'<div class="panel"><table><tr><th>rpc</th><th>signature</th></tr>{"".join(rpc_rows)}</table></div></section>')
     return ("".join(blocks) +
-            '<p class="muted">Methods are discoverable through server reflection and '
+            '<p class="hint">Methods are discoverable through server reflection and '
             'authenticated with the <code>x-api-key</code> call metadata.</p>')
 
 
@@ -358,10 +359,10 @@ def _mcp_panel(provider: catalog.Provider) -> str:
         badge = f' <span class="badge">{" · ".join(flags)}</span>' if flags else ""
         rows.append(f"<tr><td><code>{_esc(op)}</code></td><td>{_esc(title)}{badge}<br>"
                     f'<span class="muted">{_esc(desc)}</span></td></tr>')
-    tools = (f'<div class="panel"><h2>MCP tools <span class="badge">{len(rows)}</span></h2>'
-             f"<table><tr><th>tool</th><th>description</th></tr>{''.join(rows)}</table>"
-             '<div class="panel-foot">Discoverable via JSON-RPC <code>tools/list</code>; '
-             'invoked with <code>tools/call</code>.</div></div>')
+    tools = (f'<section><h2>MCP tools <span class="count">{len(rows)}</span></h2>'
+             f'<div class="panel"><table><tr><th>tool</th><th>description</th></tr>{"".join(rows)}</table></div>'
+             '<p class="hint">Discoverable via JSON-RPC <code>tools/list</code>; '
+             'invoked with <code>tools/call</code>.</p></section>')
     resources = base.RESOURCES.get(provider.id, [])
     if not resources:
         return tools
@@ -369,10 +370,10 @@ def _mcp_panel(provider: catalog.Provider) -> str:
         f"<tr><td><code>{_esc(r['uri'])}</code></td><td>{_esc(r['name'])}<br>"
         f'<span class="muted">{_esc(r["description"])}</span></td></tr>'
         for r in resources)
-    res = (f'<div class="panel"><h2>MCP resources <span class="badge">{len(resources)}</span></h2>'
-           f"<table><tr><th>uri</th><th>resource</th></tr>{res_rows}</table>"
-           '<div class="panel-foot">Discoverable via <code>resources/list</code>; '
-           'fetched with <code>resources/read</code>.</div></div>')
+    res = (f'<section><h2>MCP resources <span class="count">{len(resources)}</span></h2>'
+           f'<div class="panel"><table><tr><th>uri</th><th>resource</th></tr>{res_rows}</table></div>'
+           '<p class="hint">Discoverable via <code>resources/list</code>; '
+           'fetched with <code>resources/read</code>.</p></section>')
     return tools + res
 
 
@@ -425,9 +426,9 @@ def _cred_panel(title: str, headers: list[str], rows: list[str],
                 forms: str = "", empty: str = "none issued yet") -> str:
     head = "".join(f"<th>{_esc(h)}</th>" for h in headers)
     body = "".join(rows) or f'<tr><td colspan="{len(headers)}" class="empty">{_esc(empty)}</td></tr>'
-    count = f' <span class="badge">{len(rows)}</span>' if rows else ""
-    return (f'<div class="panel"><h2>{_esc(title)}{count}</h2>'
-            f"<table><tr>{head}</tr>{body}</table>{forms}</div>")
+    count = f' <span class="count">{len(rows)}</span>' if rows else ""
+    return (f"<section><h2>{_esc(title)}{count}</h2>"
+            f'<div class="panel"><table><tr>{head}</tr>{body}</table>{forms}</div></section>')
 
 
 def _status_pill(revoked: bool) -> str:
@@ -477,7 +478,7 @@ def credentials_page(provider: catalog.Provider) -> str:
         sections.append(_cred_panel(
             "OAuth client secrets",
             ["clientId", "clientSecret", "scopes", "created", "usage", "status"], rows, forms))
-        sections.append('<p class="muted">Register, rotate, and revoke clients on the '
+        sections.append('<p class="hint">Register, rotate, and revoke clients on the '
                         '<a href="/__lab/clients">Clients</a> page.</p>')
 
     if cat == "caracal_mandate" or (cat == "mcp" and provider.mcp_auth == "mandate"):
@@ -489,15 +490,15 @@ def credentials_page(provider: catalog.Provider) -> str:
   <button class="danger" type="submit">Revoke anchor</button>
 </form>"""
         sections.append(f"""
-<div class="panel">
+<section>
   <h2>Zone signing key</h2>
-  <table><tr><th>zone</th><th>signing key (HS256)</th></tr>
-  <tr><td><code>{_esc(store.data['zone'])}</code></td><td>{_secret(store.data['signing_key'])}</td></tr></table>
-</div>
-<div class="panel">
+  <div class="panel"><table><tr><th>zone</th><th>signing key (HS256)</th></tr>
+  <tr><td><code>{_esc(store.data['zone'])}</code></td><td>{_secret(store.data['signing_key'])}</td></tr></table></div>
+</section>
+<section>
   <h2>Seed mandate</h2>
-  <div class="panel-body">{_secret(seed)}</div>
-</div>""")
+  <div class="panel"><div class="panel-body">{_secret(seed)}</div></div>
+</section>""")
         sections.append(_cred_panel("Revoked anchors", ["anchor"], revoked_rows,
                                     revoke_form, empty="no anchors revoked"))
 
@@ -513,7 +514,7 @@ def _usage(rec: dict) -> str:
     count = rec.get("useCount", 0)
     if not count:
         return '<span class="muted">unused</span>'
-    return f"{count} call(s)<br><span class=\"muted\">last {_ts(rec.get('lastUsedAt'))}</span>"
+    return f"{count} calls<br><span class=\"muted\">{_ts(rec.get('lastUsedAt'))}</span>"
 
 
 def _revoked_history(store) -> str:
@@ -559,20 +560,22 @@ def resource_explorer_page(provider: catalog.Provider, state) -> str:
         fields = "".join(f"<code>{_esc(k)}</code>" for k in sample.keys()) if isinstance(sample, dict) else ""
         if sample is not None:
             try:
-                sample_block = f'<pre class="sample">{_esc(json.dumps(sample, indent=2, default=str))}</pre>'
+                pretty = json.dumps(sample, indent=2, default=str)
             except (TypeError, ValueError):
-                sample_block = f'<pre class="sample">{_esc(sample)}</pre>'
+                pretty = str(sample)
+            sample_block = (f'<details class="sample"><summary>Sample record</summary>'
+                            f'<pre class="sample">{_esc(pretty)}</pre></details>')
         else:
             sample_block = '<div class="empty">no rows yet</div>'
-        field_row = f'<div class="chips">{fields}</div>' if fields else ""
+        field_row = f'<div class="panel-body chips">{fields}</div>' if fields else ""
         panels.append(f"""
-<div class="panel">
-  <h2>{_esc(resource)} <span class="badge">{len(rows)} record(s)</span></h2>
-  {field_row}{sample_block}
-</div>""")
+<section>
+  <h2>{_esc(resource)} <span class="count">{len(rows)}</span></h2>
+  <div class="panel">{field_row}{sample_block}</div>
+</section>""")
     if not panels:
         panels.append('<div class="panel"><div class="empty">This provider exposes no stored resources.</div></div>')
-    intro = (f'<p class="muted">Live data served by {_esc(provider.brand)} on this port. '
+    intro = (f'<p class="hint" style="margin:0 0 20px">Live data served by {_esc(provider.brand)} on this port. '
              f'Records evolve as operations run against <code>/api/&lt;operation&gt;</code>.</p>')
     return layout(provider, "resources", intro + "".join(panels))
 
@@ -609,7 +612,7 @@ def clients_page(provider: catalog.Provider) -> str:
 
 def api_clients_page(provider: catalog.Provider, activity: list[dict]) -> str:
     rows = [
-        f"<tr><td>{_esc(a['principal'])}</td><td><span class=\"badge\">{_esc(a['auth'])}</span></td>"
+        f"<tr><td><code>{_esc(a['principal'])}</code></td><td>{_esc(a['auth'])}</td>"
         f"<td>{a['calls']}</td><td><code>{_esc(a['last_op'])}</code></td>"
         f"<td>{_call_status(a['last_status'])}</td></tr>"
         for a in activity
@@ -617,7 +620,7 @@ def api_clients_page(provider: catalog.Provider, activity: list[dict]) -> str:
     panel = _cred_panel(
         "Live API clients", ["principal", "auth", "calls", "last operation", "last status"],
         rows, empty="no authenticated calls observed yet")
-    note = ('<p class="muted">API clients are derived from authenticated calls observed on this provider port. '
+    note = ('<p class="hint">API clients are derived from authenticated calls observed on this provider port. '
             'Issue credentials on the <a href="/__lab/credentials">Credentials</a> page, then call '
             '<code>/api/&lt;operation&gt;</code>.</p>')
     return layout(provider, "api-clients", panel + note)
@@ -661,18 +664,20 @@ def consent_page(provider: catalog.Provider, params: dict) -> str:
         for k in ("client_id", "redirect_uri", "scope", "state", "code_challenge", "code_challenge_method")
     )
     body = f"""
-<div class="panel" style="max-width:480px;margin:48px auto">
+<section style="max-width:440px;margin:48px auto 0">
   <h2>Authorize application</h2>
-  <div class="kv-grid">
-    <span class="k">Application</span><span><code>{_esc(params.get('client_id', ''))}</code></span>
-    <span class="k">Requested scopes</span><span class="chips" style="padding:0">{scopes}</span>
-    <span class="k">Redirects to</span><span><code>{_esc(params.get('redirect_uri', ''))}</code></span>
+  <div class="panel">
+    <div class="kv-grid">
+      <span class="k">Application</span><span><code>{_esc(params.get('client_id', ''))}</code></span>
+      <span class="k">Scopes</span><span class="chips">{scopes}</span>
+      <span class="k">Redirects to</span><span><code>{_esc(params.get('redirect_uri', ''))}</code></span>
+    </div>
+    <form class="inline" method="post" action="/oauth/authorize">
+      {hidden}
+      <button class="primary" type="submit">Approve</button>
+    </form>
   </div>
-  <form class="inline" method="post" action="/oauth/authorize">
-    {hidden}
-    <button class="primary" type="submit">Approve</button>
-  </form>
-</div>"""
+</section>"""
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>{_esc(provider.brand)} · authorize</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">

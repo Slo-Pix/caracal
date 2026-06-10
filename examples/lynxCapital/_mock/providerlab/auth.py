@@ -43,19 +43,21 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
             presented = request.headers.get(provider.apikey_field, "")
         if not presented:
             raise AuthError(401, "missing_api_key", f"provide {provider.apikey_field}")
-        if not store.valid_api_key(presented):
+        rec = store.find_api_key(presented)
+        if rec is None:
             raise AuthError(401, "invalid_api_key", "unknown or revoked API key")
         store.touch("apiKey", presented)
-        return {"principal": "api_key", "auth": "api_key"}
+        return {"principal": rec["keyId"], "auth": "api_key"}
 
     if catalog.bearer_auth(provider):
         presented = _bearer_from(request, provider.auth_header, provider.auth_scheme)
         if not presented:
             raise AuthError(401, "missing_token", f"provide {provider.auth_header}")
-        if not store.valid_bearer(presented):
+        rec = store.find_bearer(presented)
+        if rec is None:
             raise AuthError(401, "invalid_token", "unknown or revoked bearer token")
         store.touch("bearer", presented)
-        return {"principal": "bearer", "auth": "bearer_token"}
+        return {"principal": rec["tokenId"], "auth": "bearer_token"}
 
     if cat in ("oauth2_client_credentials", "oauth2_authorization_code"):
         presented = _bearer_from(request, provider.auth_header, provider.auth_scheme)
@@ -98,8 +100,10 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
 
     if cat == "mcp" and provider.mcp_auth == "bearer":
         presented = _bearer_from(request, provider.auth_header, provider.auth_scheme)
-        if not presented or not store.valid_bearer(presented):
+        rec = store.find_bearer(presented) if presented else None
+        if rec is None:
             raise AuthError(401, "invalid_token", "missing or invalid bearer token")
-        return {"principal": "bearer", "auth": "bearer_token"}
+        store.touch("bearer", presented)
+        return {"principal": rec["tokenId"], "auth": "bearer_token"}
 
     raise AuthError(500, "unsupported", f"no authenticator for category {cat}")
