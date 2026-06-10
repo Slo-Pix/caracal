@@ -1,80 +1,94 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Base decision document that aggregates the Lynx Capital scenario policies into the
-# Caracal token-exchange result and enforces per-customer subject scoping.
+# Decision contract, shared rule helpers, and the application bootstrap rule for the
+# Lynx Capital policy library.
 package caracal.authz
 
 import rego.v1
 
-# The token-exchange result the STS evaluates. decision, determining_policies, and
-# diagnostics are computed below from the scenario policies in this package.
-result := {
-	"decision": decision,
+default result := {
+	"decision": "deny",
 	"evaluation_status": "complete",
-	"determining_policies": determining_policies,
-	"diagnostics": diagnostics,
+	"determining_policies": [],
+	"diagnostics": [{"reason": "no_rule_matched"}],
 }
 
-# An exchange is allowed when it is a token exchange, requests at least one scope, and
-# every requested scope is permitted by a scenario policy for this principal, resource,
-# and customer. allowed_scopes is a partial set contributed by the scenario policies.
-default decision := "deny"
+allow_result(policy) := {
+	"decision": "allow",
+	"evaluation_status": "complete",
+	"determining_policies": [{"policy": policy}],
+	"diagnostics": [],
+}
 
-decision := "allow" if {
-	input.action.id == "TokenExchange"
+# The grants entry for the resource under evaluation: its owning application key and
+# the scope set each role may hold on it (see the generated 02-grants document).
+resource_grant := grants[input.resource.identifier]
+
+# The application key bound to the acting principal (see the 01-bindings document).
+principal_app := key if {
+	some key, id in app_ids
+	id == input.principal.id
+}
+
+principal_owns_resource if {
+	resource_grant.application == principal_app
+}
+
+# An application bootstrapping its session mandate with its client secret: the only
+# permitted scope is agent:lifecycle and no agent, delegation, or subject context may
+# be attached. The session mandate authorizes coordinator spawns, not resource calls.
+bootstrap_exchange if {
+	{scope | some scope in input.context.requested_scopes} == {"agent:lifecycle"}
+	not input.context.subject_claims
+	not input.delegation_edge
+	not input.context.agent_session_id
+}
+
+result := allow_result("lynx-base-bootstrap") if {
+	bootstrap_exchange
+	principal_owns_resource
+}
+
+# A spawned agent minting its resource mandate: the exchange must reference the
+# agent session and its delegation edge, must not carry a subject token, and every
+# requested scope must sit inside the edge's narrowed grant.
+worker_mint if {
+	input.delegation_edge.id
+	input.context.agent_session_id
+	not input.context.subject_claims
 	count(input.context.requested_scopes) > 0
+	not "agent:lifecycle" in input.context.requested_scopes
 	every scope in input.context.requested_scopes {
-		scope in allowed_scopes
+		scope in input.delegation_edge.scopes
 	}
 }
 
-# Name the scenario policies that determined an allow; empty on deny.
-default determining_policies := []
-
-determining_policies := [{"policy": name} | some name in determining] if {
-	decision == "allow"
-}
-
-# Diagnostics raised by scenario policies (for example a required step-up challenge).
-diagnostics := [entry | some entry in diagnostic]
-
-# The customer the request acts for. Every Lynx agent runs on behalf of an identified
-# customer subject; the policy set reads the customer from the subject claims, never from
-# a label or a scope name.
-customer_id := id if {
-	id := input.context.subject_claims.customer_id
-	id != ""
-}
-
-# Customer scoping: a request against a customer-scoped resource must carry a customer
-# subject. The shared managed-application credential, with no customer subject, can never
-# read customer data — it can only spawn the agents that act for a customer.
-customer_scoped if customer_id
-
-# The customer's plan entitlement, a subject claim that premium capabilities key on.
-customer_plan := plan if {
-	plan := input.context.subject_claims.plan
-}
-
-# Administrative and break-glass capabilities are only available to customers on a premium
-# plan. A lower tier may carry the same capability label but is denied by this gate, so the
-# same role definition yields different authority per customer.
-premium_plan if {
-	customer_plan in {"scale", "enterprise"}
-}
-
-# A capability label set on the agent session at spawn time, e.g. "portfolio-write".
-has_capability(capability) if {
-	some label in input.principal.labels
-	label == capability
-}
-
-# A Lynx Capital domain resource.
-lynx_resource if {
-	input.resource.identifier in {
-		"resource://portfolio",
-		"resource://research",
-		"resource://compliance",
+# The agent's role label must allow every requested scope on this resource.
+mint_role_allowed if {
+	some role in input.principal.labels
+	scopes := resource_grant.roles[role]
+	every scope in input.context.requested_scopes {
+		scope in scopes
 	}
+}
+
+# A spawned agent presenting its minted mandate at the Gateway: the mandate must be
+# delegation-bound and name this resource in its target audience. The Gateway
+# exchange requests no scopes; authority rides in the mandate claims.
+mandate_use if {
+	input.context.subject_claims.delegation_edge_id != ""
+	some target in input.context.subject_claims.target
+	target == input.resource.identifier
+	not requested_scopes_present
+}
+
+requested_scopes_present if {
+	count(input.context.requested_scopes) > 0
+}
+
+# The presenting agent session must carry a role label granted on this resource.
+use_role_allowed if {
+	some role in input.principal.labels
+	resource_grant.roles[role]
 }
