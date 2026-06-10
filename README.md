@@ -51,11 +51,31 @@ More coming soon
 </td>
 </tr>
 </table>
-</div>
 
-</div>
+<br>
 
-<div align="center">
+<table>
+<tr>
+<td align="center" width="50%">
+<a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">
+<img src="public/programs/lfx-mentorship.png" alt="LFX Mentorship 2026" width="90" />
+</a>
+</td>
+<td align="center" width="50%">
+<a href="https://www.microsoft.com/startups" target="_blank" rel="noopener">
+<img src="public/programs/microsoftStartup.png" alt="Microsoft for Startups" width="170" />
+</a>
+</td>
+</tr>
+<tr>
+<td align="center" width="50%">
+This project is part of the <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">LFX Mentorship 2026</a> program under the <a href="https://www.lfdecentralizedtrust.org" target="_blank" rel="noopener">LF Decentralized Trust</a>.
+</td>
+<td align="center" width="50%">
+This project is part of the <a href="https://www.microsoft.com/en-us/startups" target="_blank" rel="noopener">Microsoft for Startups</a> program.
+</td>
+</tr>
+</table>
 </div>
 
 -----
@@ -197,35 +217,6 @@ See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for clone, setup, testing, and 
 ## Contributing
 
 See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
-
------
-
-## Programs
-
-<div align="center">
-  <table>
-    <tr>
-      <td align="center" width="50%">
-        <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">
-          <img src="public/programs/lfx-mentorship.png" alt="LFX Mentorship 2026" width="90" />
-        </a>
-      </td>
-      <td align="center" width="50%">
-        <a href="https://www.microsoft.com/startups" target="_blank" rel="noopener">
-          <img src="public/programs/microsoftStartup.png" alt="Microsoft for Startups" width="170" />
-        </a>
-      </td>
-    </tr>
-    <tr>
-      <td align="center" width="50%">
-        This project is part of the <a href="https://mentorship.lfx.linuxfoundation.org/project/9cfe285b-7006-4610-84a8-1a52b0dff662" target="_blank" rel="noopener">LFX Mentorship 2026</a> program under the <a href="https://www.lfdecentralizedtrust.org" target="_blank" rel="noopener">LF Decentralized Trust</a>.
-      </td>
-      <td align="center" width="50%">
-        This project is part of the <a href="https://www.microsoft.com/en-us/startups" target="_blank" rel="noopener">Microsoft for Startups</a> program.
-      </td>
-    </tr>
-  </table>
-</div>
 
 -----
 
