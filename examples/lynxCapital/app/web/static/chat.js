@@ -509,19 +509,29 @@ function registerAgent(payload) {
 }
 
 // SECURITY APPROVAL HANDLER
-async function handleApprovalAction(approvalId, approved, cardNode) {
-  setStreamingStatus('streaming')
+const approvalCards = new Map()
+
+async function handleApprovalAction(requestId, approved, cardNode) {
   const actionsContainer = cardNode.querySelector('.msg-approval-actions')
   if (actionsContainer) {
-    actionsContainer.innerHTML = approved
-      ? `<span class="badge status-completed">Approved Transaction</span>`
-      : `<span class="badge status-failed">Rejected Request</span>`
+    actionsContainer.innerHTML = `<span class="badge">Submitting decision…</span>`
   }
-
-  renderMessage('system', {
-    kicker: 'APPROVAL',
-    text: `User dual-sign security decision: ${approved ? 'APPROVED' : 'REJECTED'}`,
-  })
+  try {
+    const res = await fetch(`/api/run/${AppState.runId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, approved }),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  } catch (error) {
+    if (actionsContainer) {
+      actionsContainer.innerHTML = `<span class="badge status-failed">Submission failed</span>`
+    }
+    renderMessage('system', {
+      kicker: 'APPROVAL',
+      text: `Failed to submit approval decision: ${error.message}`,
+    })
+  }
 }
 
 // CENTRAL DRIVING STATE MACHINE
@@ -810,15 +820,36 @@ function handleEvent(event) {
         reason: record.reason || 'Verification passed.',
         details: record,
       })
+      break
+    }
 
-      // If dual-sign exception is raised, trigger awaiting approval state
-      if (action === 'exception' || action === 'approval_required' || record.reason?.includes('Dual-sign')) {
-        setStreamingStatus('awaiting_approval')
-        renderMessage('approval', {
-          approvalId: payload.worker_id || 'tx-1',
-          context: `Dual-sign transaction authorization required: Transfer of <b>$250,000.00</b> external wire.`,
-        })
+    case 'approval_required': {
+      setStreamingStatus('awaiting_approval')
+      const card = renderMessage('approval', { approvalId: payload.request_id })
+      if (card) {
+        const contextEl = card.querySelector('.msg-approval-context')
+        if (contextEl) {
+          contextEl.textContent = `${payload.action} requires a human decision: ${renderJson(payload.detail || {})}`
+        }
+        approvalCards.set(payload.request_id, card)
       }
+      break
+    }
+
+    case 'approval_resolved': {
+      const card = approvalCards.get(payload.request_id)
+      if (card) {
+        const actions = card.querySelector('.msg-approval-actions')
+        if (actions) {
+          actions.innerHTML = payload.approved
+            ? `<span class="badge status-completed">Approved</span>`
+            : `<span class="badge status-failed">Rejected</span>`
+        }
+        const timeoutEl = card.querySelector('.msg-approval-timeout')
+        if (timeoutEl) timeoutEl.textContent = payload.approved ? 'Approved' : 'Rejected'
+        approvalCards.delete(payload.request_id)
+      }
+      setStreamingStatus('streaming')
       break
     }
 
@@ -1279,7 +1310,7 @@ function loadMockSession(sessionId) {
       const actionsDiv = stream.querySelector('.msg-approval-actions')
 
       if (approveBtn && actionsDiv) {
-        approveBtn.addEventListener('click', () => {
+        approveBtn.onclick = () => {
           actionsDiv.innerHTML = `
             <span class="badge badge-success" style="color: var(--accent-green); background: var(--accent-green-surface); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-weight: 700; font-family: var(--font-mono); font-size: 11px; border: 1px solid rgba(62,207,142,0.18);">
               ✓ Approved Transaction (User Decision)
@@ -1287,11 +1318,11 @@ function loadMockSession(sessionId) {
           `
           AppState.streamingStatus = 'idle'
           renderMessage('system', { kicker: 'SUCCESS', text: 'Mercury wire payout approved and submitted successfully.' })
-        })
+        }
       }
 
       if (rejectBtn && actionsDiv) {
-        rejectBtn.addEventListener('click', () => {
+        rejectBtn.onclick = () => {
           actionsDiv.innerHTML = `
             <span class="badge badge-error" style="color: var(--accent-red); background: var(--accent-red-surface); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-weight: 700; font-family: var(--font-mono); font-size: 11px; border: 1px solid rgba(240,96,85,0.18);">
               ✗ Rejected Request (User Decision)
@@ -1299,7 +1330,7 @@ function loadMockSession(sessionId) {
           `
           AppState.streamingStatus = 'idle'
           renderMessage('system', { kicker: 'ABORTED', text: 'Mercury wire transaction rejected. Halting workflow execution.' })
-        })
+        }
       }
     }, 100)
   }

@@ -97,9 +97,6 @@ def test_notice_page_requires_acknowledgement_before_setup():
         body = allowed.text
         assert "Setup" in body
         assert "Connect Lynx Capital to Caracal" in body
-        body = allowed.text
-        assert "Setup" in body
-        assert "Connect Lynx Capital to Caracal" in body
 
 
 def test_protected_pages_redirect_without_acceptance_even_if_setup_cookie_exists():
@@ -131,6 +128,9 @@ def test_setup_requires_final_overview_acknowledgement():
         client.post("/api/session/accept")
         allowed = client.get("/setup", follow_redirects=False)
         assert allowed.status_code == 200
+        body = allowed.text
+        assert "Setup" in body
+        assert "Connect Lynx Capital to Caracal" in body
 
 
 def test_setup_page_is_guided_and_provider_backed():
