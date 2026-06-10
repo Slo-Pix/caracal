@@ -53,6 +53,7 @@ function parseArgs(argv) {
         'oci-registry',
         'github-release-base',
         'suffix',
+        'package-suffix',
         'ref',
         'from',
         'to',
@@ -190,14 +191,24 @@ function helmChartVersion(value) {
 function makeManifest(options = {}) {
   const sha = shortSha()
   const suffix = rcSuffix(options)
+  // Package versions are SemVer and independent of the date-based release tag.
+  // A package rc number only resets when its base version advances after a
+  // stable publish, so the package suffix may differ from the tag suffix.
+  const packageSuffix = options['package-suffix'] ?? process.env.CARACAL_PACKAGE_SUFFIX ?? suffix
   const baseVersion = cleanBase(options['base-version'] ?? process.env.CARACAL_BASE_VERSION ?? currentCalVer())
   const version = `${baseVersion}-${suffix}`
   const tag = `v${version}`
   const npm = Object.fromEntries(
-    Object.entries(readPackageVersions(npmPaths, suffix)).map(([name, base]) => [name, npmRcVersion(base, suffix)]),
+    Object.entries(readPackageVersions(npmPaths, packageSuffix)).map(([name, base]) => [
+      name,
+      npmRcVersion(base, packageSuffix),
+    ]),
   )
   const pypi = Object.fromEntries(
-    Object.entries(readPythonVersions(pyPaths, suffix)).map(([name, base]) => [name, pythonRcVersion(base, suffix)]),
+    Object.entries(readPythonVersions(pyPaths, packageSuffix)).map(([name, base]) => [
+      name,
+      pythonRcVersion(base, packageSuffix),
+    ]),
   )
   const reg = registries(options)
   return {
@@ -699,6 +710,7 @@ Options:
   --from TAG              Source rc tag for promote.
   --to TAG                Override target stable tag for promote.
   --suffix VALUE          rc suffix. Default: rc.sha<gitsha>.
+  --package-suffix VALUE  Package rc suffix when it differs from the tag suffix. Default: --suffix.
   --ref REF               Dry-run ref. Default: current branch.
   --manifest PATH|TAG     rc manifest path or tag.
   --npm-registry URL      npm registry.
