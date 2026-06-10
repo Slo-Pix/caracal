@@ -6,6 +6,7 @@ Long-lived worker pool that lets an orchestrator keep some agents alive across m
 """
 from __future__ import annotations
 
+from app.agents.roles import ROLES
 from app.agents.runner import AgentHandle, AgentRunner
 from app.events import types as ev
 from app.events.bus import bus
@@ -23,6 +24,8 @@ class WorkerPool:
         self._active: dict[str, AgentHandle] = {}
 
     def acquire(self, role: str, scope: str) -> AgentHandle:
+        if role not in ROLES:
+            raise ValueError(f"unknown role {role!r}; valid roles: {', '.join(sorted(ROLES))}")
         w = self._runner.spawn(
             role=role, scope=scope, parent=self._parent,
             layer=role, region=self._parent.region,

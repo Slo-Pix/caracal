@@ -16,7 +16,7 @@ from pathlib import Path
 from app.api.session import COOKIE, SETUP_COOKIE
 from app.config import get_config
 from app.services import setup_catalog
-from app import tenancy
+from app import caracal, tenancy
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -214,6 +214,8 @@ def _overview_ctx(request: Request, key: str) -> dict:
 
 
 CONTROL_SCOPES = [
+    "control:app:read",
+    "control:app:write",
     "control:identity-provider:read",
     "control:identity-provider:write",
     "control:resource:read",
@@ -229,33 +231,16 @@ def _env(name: str) -> str:
     return os.environ.get(name, "").strip()
 
 
-def _resource_upstream(resource: "tenancy.ResourceSpec", index: int) -> str:
-    """The upstream URL a domain resource is served at for this environment: the value of its
-    upstreamEnv when set, otherwise the canonical local demo port (9500, 9501, 9502)."""
-    return resource.upstream_url() or f"http://127.0.0.1:{9500 + index}"
-
-
-def _resource_bindings() -> list[dict[str, str]]:
-    """The domain resources paired with their upstream URLs, in model order — the source for
-    both the CARACAL_RESOURCES workload line and the LYNX_RESOURCE_*_URL provisioning lines."""
-    model = tenancy.load_model()
-    bindings: list[dict[str, str]] = []
-    for index, app in enumerate(model.applications):
-        resource = app.resource
-        bindings.append({
-            "slug": resource.resourceId,
-            "upstream": _resource_upstream(resource, index),
-            "env": resource.upstreamEnv,
-        })
-    return bindings
+def _app_env_id(app_key: str) -> str:
+    return app_key.upper().replace("-", "_")
 
 
 def _caracal_steps() -> list[dict[str, object]]:
     cfg = get_config()
     model = tenancy.load_model()
     zone = _env("CARACAL_ZONE_ID") or "<zone-id>"
-    application = _env("CARACAL_APPLICATION_ID") or "<managed-application-id>"
     app_names = ", ".join(f"\"{a.applicationName}\"" for a in model.applications)
+    role_names = ", ".join(r.name for r in model.roles if not r.dynamic)
     return [
         {
             "step": "01",
@@ -265,108 +250,102 @@ def _caracal_steps() -> list[dict[str, object]]:
                 {"label": "Name", "value": f"\"{cfg.company}\""},
                 {"label": "Zone ID", "value": zone},
             ],
-            "why": "The zone is the isolation boundary that owns the managed applications, the domain resources, and the policy set. One zone backs the whole Lynx Capital platform.",
+            "why": "The zone is the isolation boundary that owns the managed applications, the credential providers, the resource views, and the policy set. One zone backs the whole Lynx Capital platform.",
             "field": "CARACAL_ZONE_ID",
             "value": zone,
         },
         {
             "step": "02",
-            "title": "Create one managed application per service",
+            "title": "Create one managed application per permission boundary",
             "path": f"Go to Applications > New in the \"{cfg.company}\" zone",
             "consoleFields": [
                 {"label": "Names", "value": app_names},
                 {"label": "Registration method", "value": "managed"},
-                {"label": "Resource each may reach", "value": ", ".join(f"{a.applicationName} → {a.resource.identifier}" for a in model.applications)},
             ],
-            "why": "Each domain service runs as its own durable managed application — its own trust boundary that can reach only its own resource. A customer's agents are spawned as least-privilege sessions under the relevant service application. Download each caracal.toml profile (or copy the Application ID and one-time secret into CARACAL_APPLICATION_ID and CARACAL_APP_CLIENT_SECRET for that service); the secret is shown once.",
-            "field": "CARACAL_APPLICATION_ID",
-            "value": application,
+            "why": "Each application is a credential and trust boundary holding only its own partner authority — orchestration, intake, ledger, compliance, treasury, payments, and audit. Every agent in the swarm runs as a labeled agent session under its role's application. Copy each Application ID and one-time client secret into the LYNX_CARACAL_<APP>_* variables; each secret is shown once.",
         },
         {
             "step": "03",
-            "title": "Register the credential providers and domain resources",
-            "path": "Control key > identity-provider create, then resource create",
+            "title": "Register the partner credential providers",
+            "path": "Control key > identity-provider create (scripts/provision.py)",
             "consoleFields": [
-                {"label": "Providers", "value": ", ".join(a.provider.identifier for a in model.applications)},
-                {"label": "Resources", "value": ", ".join(a.resource.identifier for a in model.applications)},
-                {"label": "Upstreams", "value": ", ".join(f"{b['slug']}={b['upstream']}" for b in _resource_bindings())},
+                {"label": "Providers", "value": f"{len(model.providers)} partners, identifier provider://<slug>"},
+                {"label": "Kinds", "value": "api_key, bearer_token, oauth2_client_credentials, oauth2_authorization_code, caracal_mandate, none"},
             ],
-            "why": "Each domain service is a Caracal resource the Gateway protects, bound to a credential provider that forwards the agent's mandate upstream and to the one application allowed to select it. scripts/provision.py creates these idempotently from config/tenancy.yaml and the LYNX_RESOURCE_*_URL values in .env.provision.",
+            "why": "Each partner is registered in the exact config shape its provider kind supports — header or query API keys, static bearer tokens, OAuth client credentials or authorization-code with PKCE and refresh, mandate-verifying providers, and the credential-free internal directory. The Gateway holds these credentials; agents never do.",
         },
         {
             "step": "04",
-            "title": "Import the policy library and activate the policy set",
-            "path": "Go to Policies > Import, then Policy sets > Activate",
+            "title": "Create the per-application resource views",
+            "path": "Control key > resource create (scripts/provision.py)",
             "consoleFields": [
-                {"label": "Library", "value": "examples/lynxCapital/policies"},
-                {"label": "Policy set", "value": f"\"{model.policySet.name}\""},
-                {"label": "Activate", "value": "latest version"},
+                {"label": "Views", "value": f"{len(model.resources)} resources, identifier resource://<app>-<provider>"},
+                {"label": "Gateway binding", "value": "each view binds to exactly one application"},
             ],
-            "why": "The library's 00-base policy plus eleven scenario policies enforce per-customer subject scoping, role capabilities, plan entitlements, delegation, and step-up. The active policy set is evaluated on every token exchange and gateway call.",
+            "why": "The Gateway binds every resource to exactly one application, so a shared partner gets one view per boundary that needs it, each carrying only the scopes that boundary may hold. A payments agent and an audit agent reach the same partner through different views with different authority.",
         },
         {
             "step": "05",
-            "title": "Serve customers as subjects",
-            "path": "Application code — caracal.spawn_customer_agent(customer_id, role, application_id=...)",
+            "title": "Author the policy library and activate the policy set",
+            "path": "Control key > policy create, policy-set activate (scripts/provision.py)",
             "consoleFields": [
-                {"label": "Customers", "value": ", ".join(f"{c.id} ({c.plan})" for c in model.customers)},
-                {"label": "Identity", "value": "subject + spawn metadata"},
-                {"label": "Applications", "value": ", ".join(a.applicationName for a in model.applications)},
+                {"label": "Library", "value": "examples/lynxCapital/policies"},
+                {"label": "Policy set", "value": f"\"{model.policySet.name}\""},
+                {"label": "Bindings", "value": "01-bindings.rego is rendered from the created application ids"},
             ],
-            "why": "Each customer is a Caracal subject, not a separate application. Each service application spawns least-privilege agents narrowed to its own resource scopes, correlating the customer in the subject and spawn metadata. The policy set differentiates customers by their subject claims, so isolation never depends on a forgeable label or scope name.",
+            "why": "The base policy default-denies, then one policy per application allows exactly its roles' mandate mints and gateway calls: the delegation edge must carry the scope, the agent's role label must be granted it, and the resource view must belong to the calling application. The active set is evaluated on every token exchange and gateway call.",
+        },
+        {
+            "step": "06",
+            "title": "Run agents as labeled Caracal sessions",
+            "path": "Application code — AgentRunner.spawn(role, ...) per agent",
+            "consoleFields": [
+                {"label": "Roles", "value": role_names},
+                {"label": "Identity", "value": "labels [role, lynx-swarm] + run/agent metadata"},
+                {"label": "Grants", "value": "Grant.narrow(role scopes, views, max_hops=1, run TTL)"},
+            ],
+            "why": "Every spawned agent — orchestrators and the thousands of ephemeral workers — gets its own agent session under its role's application, narrowed by a delegation edge to its role's scopes and views. Logs and policy decisions identify exactly which agent did what.",
         },
     ]
-
-
-def _automate_plan() -> dict[str, object]:
-    return {
-        "scopes": CONTROL_SCOPES,
-    }
 
 
 def _setup_ctx(request: Request) -> dict:
     ctx = _ctx(request)
     providers = setup_catalog.provider_entries(get_config().providers)
-    resources = setup_catalog.resource_bindings()
     external = [p for p in providers if p["external"]]
-    mapped = [p for p in external if p["id"] in resources]
+    provisioned = [p for p in providers if p["status"] == "Provisioned"]
+    model = tenancy.load_model()
+    credentialed = [
+        app.id for app in model.applications
+        if caracal.application_credentials(app.id) == (True, True)
+    ]
     configured = {
         "zone": bool(_env("CARACAL_ZONE_ID")),
-        "application": bool(_env("CARACAL_APPLICATION_ID")),
-        "auth": bool(_env("CARACAL_APP_CLIENT_SECRET") or _env("CARACAL_SUBJECT_TOKEN")),
-        "providers": bool(external) and len(mapped) == len(external),
+        "applications": len(credentialed) == len(model.applications),
+        "providers": len(provisioned) == len(providers),
+        "openai": bool(_env("OPENAI_API_KEY")),
     }
     ready = sum(1 for value in configured.values() if value)
-    model = tenancy.load_model()
-    bindings = _resource_bindings()
-    resources_line = ",".join(f"{b['slug']}={b['upstream']}" for b in bindings)
     applications = [
         {
             "id": app.id,
             "name": app.applicationName,
-            "applicationId": (
-                _env("CARACAL_APPLICATION_ID")
-                if app.id == "portfolio" and _env("CARACAL_APPLICATION_ID")
-                else f"<{app.applicationName}-application-id>"
-            ),
-            "secret": f"<{app.applicationName}-secret>",
-            "resource": f"{app.resource.resourceId}={_resource_upstream(app.resource, idx)}",
+            "envId": f"LYNX_CARACAL_{_app_env_id(app.id)}_APPLICATION_ID",
+            "envSecret": f"LYNX_CARACAL_{_app_env_id(app.id)}_CLIENT_SECRET",
+            "applicationId": f"<{app.applicationName}-application-id>",
+            "secret": f"<{app.applicationName}-client-secret>",
         }
-        for idx, app in enumerate(model.applications)
+        for app in model.applications
     ]
     ctx.update({
         "setup_providers": providers,
         "setup_external_count": len(external),
-        "setup_mapped_count": len(mapped),
+        "setup_mapped_count": len(provisioned),
         "setup_caracal_steps": _caracal_steps(),
-        "setup_automate": _automate_plan(),
+        "setup_automate": {"scopes": CONTROL_SCOPES},
         "setup_env": {
             "zone": _env("CARACAL_ZONE_ID") or "<zone-id>",
-            "application": _env("CARACAL_APPLICATION_ID") or "<managed-application-id>",
-            "applicationSecret": "<managed-application-secret>",
             "applications": applications,
-            "resources": _env("CARACAL_RESOURCES") or resources_line,
-            "resourceLines": [{"env": b["env"], "url": b["upstream"]} for b in bindings],
             "openaiKey": "sk-...",
             "controlClient": "<control-key-client-id>",
             "controlSecret": "<one-time-control-key-secret>",

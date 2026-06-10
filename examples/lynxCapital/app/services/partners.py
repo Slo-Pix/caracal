@@ -27,22 +27,12 @@ class PartnerError(Exception):
         self.message = message
 
 
-class PartnerPendingCaracal(Exception):
-    """Raised when a provider requires a Caracal-issued mandate that is wired in the Phase-2 integration."""
-
-    def __init__(self, provider_id: str):
-        super().__init__(
-            f"{provider_id} requires a Caracal mandate; this provider activates in the Caracal SDK integration phase"
-        )
-        self.provider_id = provider_id
-
-
 @dataclass(frozen=True)
 class PartnerSpec:
     """Integration contract for one external provider, mirroring its real auth and routing surface."""
 
     id: str
-    auth: str                                  # api_key | bearer | oauth_cc | oauth_ac | none | mcp_bearer | mandate
+    auth: str                                  # api_key | bearer | oauth_cc | oauth_ac | none | mcp_bearer | mandate | mcp_mandate
     port: int
     operations: tuple[str, ...]
     apikey_location: str = "header"            # header | query
@@ -201,7 +191,7 @@ _SPECS: dict[str, PartnerSpec] = {
          "open_collection_case", "list_collections",
          "get_ar_aging", "get_ar_summary", "get_audit_trail")),
     "relay-automation": PartnerSpec(
-        "relay-automation", "mandate", 9417,
+        "relay-automation", "mcp_mandate", 9417,
         ("list_workflows", "get_workflow",
          "start_execution", "get_execution", "list_executions",
          "get_execution_logs", "get_execution_result",
@@ -427,33 +417,53 @@ def _call_oauth(spec: PartnerSpec, operation: str, payload: dict) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# MCP (JSON-RPC tools/call over a bearer-guarded endpoint)
+# caracal mandate (simulation lab verifies the seeded mandate JWT directly)
 # --------------------------------------------------------------------------- #
-def _call_mcp(spec: PartnerSpec, operation: str, payload: dict) -> dict:
-    token = _required(spec.id, f"LYNX_PARTNER_{_env_id(spec.id)}_TOKEN")
+def _call_mandate(spec: PartnerSpec, operation: str, payload: dict) -> dict:
+    token = _required(spec.id, f"LYNX_PARTNER_{_env_id(spec.id)}_MANDATE")
     sess = _session(spec)
     headers = {spec.auth_header: f"{spec.auth_scheme} {token}".strip()}
-    message = {"jsonrpc": "2.0", "id": secrets.token_hex(6),
-               "method": "tools/call", "params": {"name": operation, "arguments": payload}}
-    resp = sess.client.post("/mcp", json=message, headers=headers)
+    resp = sess.client.post(f"/api/{operation}", json=payload, headers=headers)
+    return _result(spec.id, operation, resp)
+
+
+# --------------------------------------------------------------------------- #
+# MCP (JSON-RPC tools/call over a guarded endpoint)
+# --------------------------------------------------------------------------- #
+def _mcp_envelope(operation: str, payload: dict) -> dict:
+    return {"jsonrpc": "2.0", "id": secrets.token_hex(6),
+            "method": "tools/call", "params": {"name": operation, "arguments": payload}}
+
+
+def _mcp_result(provider_id: str, operation: str, resp: httpx.Response) -> dict:
     if resp.status_code != 200:
-        raise PartnerError(spec.id, f"mcp transport error ({resp.status_code})")
+        raise PartnerError(provider_id, f"mcp transport error ({resp.status_code})")
     body = resp.json()
     if "error" in body:
-        return {"provider": spec.id, "operation": operation, "status": body["error"].get("code"),
+        return {"provider": provider_id, "operation": operation, "status": body["error"].get("code"),
                 "error": body["error"].get("message"), "data": None}
     result = body.get("result") or {}
     if result.get("isError"):
         content = result.get("content") or []
         text = content[0].get("text") if content else "tool execution error"
-        return {"provider": spec.id, "operation": operation, "status": 422,
+        return {"provider": provider_id, "operation": operation, "status": 422,
                 "error": text, "data": None}
     if "structuredContent" in result:
         data = result["structuredContent"]
     else:
         content = result.get("content") or []
         data = content[0].get("data") if content else result
-    return {"provider": spec.id, "operation": operation, "status": 200, "data": data}
+    return {"provider": provider_id, "operation": operation, "status": 200, "data": data}
+
+
+def _call_mcp(spec: PartnerSpec, operation: str, payload: dict) -> dict:
+    eid = _env_id(spec.id)
+    env = f"LYNX_PARTNER_{eid}_MANDATE" if spec.auth == "mcp_mandate" else f"LYNX_PARTNER_{eid}_TOKEN"
+    token = _required(spec.id, env)
+    sess = _session(spec)
+    headers = {spec.auth_header: f"{spec.auth_scheme} {token}".strip()}
+    resp = sess.client.post("/mcp", json=_mcp_envelope(operation, payload), headers=headers)
+    return _mcp_result(spec.id, operation, resp)
 
 
 _DISPATCH = {
@@ -463,7 +473,11 @@ _DISPATCH = {
     "oauth_cc": _call_oauth,
     "oauth_ac": _call_oauth,
     "mcp_bearer": _call_mcp,
+    "mandate": _call_mandate,
+    "mcp_mandate": _call_mcp,
 }
+
+_MCP_AUTHS = ("mcp_bearer", "mcp_mandate")
 
 
 def spec(provider_id: str) -> PartnerSpec:
@@ -476,27 +490,30 @@ def catalog() -> dict[str, PartnerSpec]:
     return dict(_SPECS)
 
 
-def _caracal_external(s: PartnerSpec, operation: str, payload: dict) -> dict:
-    """Route an external provider through the Caracal upstream gateway. The gateway
-    holds the provider credential and injects it; the app sends only its envelope."""
-    from app import caracal
+def _gateway_call(s: PartnerSpec, operation: str, payload: dict, authority) -> dict:
+    """Route one provider operation through the Caracal Gateway under the calling
+    agent's authority. The agent's mandate must carry the scope that owns the
+    operation, on its application's view of the provider; the Gateway re-evaluates
+    policy, injects the provider credential, and forwards the request."""
+    from app import tenancy
 
-    resp = caracal.gateway_call(s.id, operation, payload, timeout_s=s.timeout_s)
+    scope = tenancy.operation_scope(s.id, operation)
+    if scope is None:
+        raise PartnerError(s.id, f"operation {operation!r} maps to no governed scope")
+    if not authority.allows(scope):
+        raise PartnerError(
+            s.id, f"agent role {authority.role!r} lacks scope {scope!r} for {operation!r}")
+    view = tenancy.load_model().view_for(authority.application, s.id, scope)
+    if view is None:
+        raise PartnerError(
+            s.id, f"application {authority.application!r} has no view of {s.id} exposing {scope!r}")
+    if s.auth in _MCP_AUTHS:
+        resp = authority.gateway_post(view.identifier, "/mcp", _mcp_envelope(operation, payload),
+                                      [scope], timeout_s=s.timeout_s)
+        return _mcp_result(s.id, operation, resp)
+    resp = authority.gateway_post(view.identifier, f"/api/{operation}", payload,
+                                  [scope], timeout_s=s.timeout_s)
     return _result(s.id, operation, resp)
-
-
-def _caracal_internal(s: PartnerSpec, operation: str, payload: dict) -> dict:
-    """Serve an internal provider after verifying the caller's delegated authority
-    with the Caracal verifier. Internal providers are never network-exposed, so the
-    trust boundary is enforced in-process here rather than at the gateway."""
-    from app import caracal
-
-    zone_id = os.environ.get("CARACAL_ZONE_ID", "")
-    try:
-        caracal.verify_internal(zone_id=zone_id, audience=s.id, required_scopes=list(s.scopes))
-    except caracal.VerifyErrors as exc:
-        raise PartnerError(s.id, f"internal authority rejected: {exc.__class__.__name__}") from exc
-    return _call_none(s, operation, payload)
 
 
 def _simulation_enabled() -> bool:
@@ -507,13 +524,14 @@ def _simulation_enabled() -> bool:
     return os.environ.get("LYNX_SIMULATION", "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def call(provider_id: str, operation: str, payload: dict) -> dict:
-    """Authenticate to one partner and run a single business operation.
+def call(provider_id: str, operation: str, payload: dict, authority=None) -> dict:
+    """Run a single business operation against one partner.
 
-    No provider is reachable without Caracal. When Caracal is configured, external and mandate
-    providers route through the upstream gateway and internal providers are guarded by the
-    verifier. Otherwise the call fails closed, except in explicit LYNX_SIMULATION mode where the
-    bundled simulated provider surface is served directly for the offline demo and tests."""
+    No provider is reachable without Caracal. When Caracal is configured, every call routes
+    through the Gateway under the calling agent's WorkerAuthority — its mandate, its
+    application's resource view, and the operation's scope. Otherwise the call fails closed,
+    except in explicit LYNX_SIMULATION mode where the bundled simulated provider surface is
+    served directly for the offline demo and tests."""
     s = spec(provider_id)
     if operation not in s.operations:
         raise KeyError(f"unknown operation {operation!r} for partner {provider_id!r}")
@@ -521,12 +539,12 @@ def call(provider_id: str, operation: str, payload: dict) -> dict:
     from app import caracal
 
     if caracal.enabled():
-        if s.auth == "none":
-            return _caracal_internal(s, operation, payload or {})
-        return _caracal_external(s, operation, payload or {})
+        if authority is None:
+            raise PartnerError(provider_id, "no agent authority resolved for governed call")
+        return _gateway_call(s, operation, payload or {}, authority)
 
-    if s.auth == "mandate" or not _simulation_enabled():
-        raise PartnerPendingCaracal(provider_id)
+    if not _simulation_enabled():
+        raise PartnerError(provider_id, "Caracal is not configured and simulation mode is off")
     return _DISPATCH[s.auth](s, operation, payload or {})
 
 
