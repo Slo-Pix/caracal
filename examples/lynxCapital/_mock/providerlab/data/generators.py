@@ -473,7 +473,6 @@ def bank_statements(seed: str, accounts_index: dict[str, dict],
         closing = account["balances"]["booked"]
         for p in range(periods):
             serial += 1
-            rng = _rng(seed, "statement", account_id, p)
             end = _EPOCH - timedelta(days=30 * p)
             start = end - timedelta(days=30)
             window = [

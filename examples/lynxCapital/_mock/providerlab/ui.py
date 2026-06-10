@@ -495,7 +495,7 @@ def api_clients_page(provider: catalog.Provider, activity: list[dict]) -> str:
     table = _cred_table("Live API clients", ["principal", "auth", "calls", "last operation", "last status"], rows)
     note = ('<p class="muted">API clients are derived from authenticated calls observed on this provider port. '
             'Issue credentials on the <a href="/__lab/credentials">Credentials</a> page, then call '
-            f'<code>/api/&lt;operation&gt;</code>.</p>')
+            '<code>/api/&lt;operation&gt;</code>.</p>')
     return layout(provider, "api-clients", table + note)
 
 

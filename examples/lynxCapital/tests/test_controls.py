@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 
-import pytest
 
 from app.core.approvals import ApprovalGate
 from app.core.session_memory import RunRecord, SessionMemory
