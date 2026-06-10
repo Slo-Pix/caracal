@@ -1396,6 +1396,7 @@ async def run_swarm(run_id: str, prompt: str) -> None:
                     run_id, fc.id, r["job_id"], r["status"], payload or {},
                     kind=r.get("kind", ""), target=r.get("target", ""),
                 ))
+        await jobs.cancel_pending()
         pool.drain("completed")
         fc.end({"status": "completed"})
         fc.terminate("completed")
@@ -1406,6 +1407,7 @@ async def run_swarm(run_id: str, prompt: str) -> None:
         log.info("run_swarm cancelled run_id=%s", run_id)
         bus.publish(ev.run_cancelled(run_id))
         await jobs.drain(timeout_s=5.0)
+        await jobs.cancel_pending()
         pool.drain("cancelled")
         if not fc._terminated:
             fc.terminate("cancelled")
@@ -1416,6 +1418,7 @@ async def run_swarm(run_id: str, prompt: str) -> None:
         log.exception("run_swarm failed run_id=%s", run_id)
         bus.publish(ev.error(run_id, str(exc), fc.id))
         await jobs.drain(timeout_s=5.0)
+        await jobs.cancel_pending()
         pool.drain("failed")
         if not fc._terminated:
             fc.terminate("failed")
