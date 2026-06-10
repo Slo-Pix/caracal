@@ -22,6 +22,7 @@ You are a release engineering agent responsible for safely preparing, validating
 - Review CHANGELOG.md, RELEASE_NOTES.md, or equivalent files for completeness
 - Verify that version references throughout the codebase match the target release version
 - Check documentation, README files, and example code for version consistency
+- Apply package RC versioning policy: release tags are date-based, but package versions are SemVer. A package's base version advances only when a stable (non-RC) version is published. If a package's current version is an RC whose base has no published stable release, the next RC keeps the same base and increments the RC number (`0.1.5-rc.1` → `0.1.5-rc.2`, PyPI `0.1.5rc1` → `0.1.5rc2`). Never jump from `X.Y.Z-rc.N` to `X.Y.(Z+1)-rc.1` while stable `X.Y.Z` is unpublished; verify registry state before choosing the RC number
 
 ## Phase 3: Release Readiness Review
 - Run production readiness checks: tests, linting, type checking, build verification

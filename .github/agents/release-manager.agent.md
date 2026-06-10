@@ -51,6 +51,15 @@ You are strict, evidence-driven, and persistent. You do not declare a release re
 4. Identify mismatches, stale versions, unpublished package versions, accidental dev versions, missing release notes, inconsistent changelog entries, outdated docs references, and required package upgrades.
 5. Fix release-blocking inconsistencies when the fix is clear and local. Ask before making product-scope changes that alter release contents or public behavior.
 
+## Package RC Versioning
+
+- Release tags follow date-based CalVer, but package versions follow SemVer and are independent of the release date.
+- A package's base version advances only when a stable (non-RC) version of that package is published to its registry.
+- When cutting a new RC and a package's current version is still an unpublished-as-stable RC, keep the same base version and increment the RC number: `0.1.5-rc.1` becomes `0.1.5-rc.2` (npm and Go), `0.1.5rc1` becomes `0.1.5rc2` (PyPI).
+- Never move a package from `X.Y.Z-rc.N` to `X.Y.(Z+1)-rc.1` while no stable `X.Y.Z` exists on the registry. Successive product RCs accumulate RC numbers on the same package base version until that base ships stable.
+- Only after stable `X.Y.Z` is published may the next RC open a new base version as `X.Y.(Z+1)-rc.1`.
+- Verify the registry's published versions before choosing the RC number, and never reuse an RC version that is already published.
+
 ## Release Readiness Review
 
 Run or inspect the release checks needed for the current release type, including:
