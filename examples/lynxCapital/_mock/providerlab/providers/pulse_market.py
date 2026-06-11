@@ -34,9 +34,14 @@ def seed(state: base.State) -> None:
 
 
 def _instrument(ctx: Ctx, symbol: str) -> dict:
-    inst = ctx.state.table("instruments").get(symbol)
+    table = ctx.state.table("instruments")
+    inst = table.get(symbol)
     if inst is None:
-        raise DomainError(404, "instrument_not_found", f"unknown instrument {symbol!r}")
+        sample = ", ".join(sorted(table)[:8])
+        raise DomainError(
+            404, "instrument_not_found",
+            f"unknown instrument {symbol!r}; symbols use BASE/QUOTE format (e.g. {sample})",
+        )
     return inst
 
 

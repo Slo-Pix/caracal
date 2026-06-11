@@ -362,7 +362,7 @@ def _build_agent_builtins(
     return out
 
 
-def _build_regional_domain_tools(run_id, runner, parent, region):
+def _build_regional_domain_tools(run_id, runner, parent, region, board):
     """Dynamically-spawned worker tools for a region."""
     region_invoices = [inv for inv in INVOICES if inv.region == region]
     region_vendors = {v.id: v for v in VENDORS.values() if v.region == region}
@@ -530,6 +530,7 @@ def _build_regional_domain_tools(run_id, runner, parent, region):
         record = {"region": region, "summary": summary}
         try:
             bus.publish(ev.audit_record(run_id, w.id, record))
+            board.post(parent.id, region, "audit", summary[:1000])
             return json.dumps({"ok": True})
         finally:
             _finish(w, record)
@@ -739,13 +740,16 @@ def _final_assistant_text(mem) -> str:
 
 
 def _orchestrator_summary(mem, board, agent_id) -> str:
-    """Prefer the orchestrator's final message; fall back to its stage findings
-    so the dispatcher always receives substantive results."""
+    """Prefer the orchestrator's final message; fall back to its stage and audit
+    findings so the dispatcher always receives substantive results."""
     text = _final_assistant_text(mem)
     if text:
         return text
-    stages = [f.content for f in board.all() if f.agent_id == agent_id and f.kind == "stage"]
-    return " | ".join(stages[-5:])
+    findings = [
+        f.content for f in board.all()
+        if f.agent_id == agent_id and f.kind in ("stage", "audit")
+    ]
+    return " | ".join(findings[-5:])
 
 
 async def _run_regional_orchestrator(
@@ -790,7 +794,7 @@ async def _run_regional_orchestrator(
                 stage_state=stage_state,
                 worker_pool=pool,
             ),
-            *_build_regional_domain_tools(run_id, runner, ro, region),
+            *_build_regional_domain_tools(run_id, runner, ro, region, board),
         ]
         tool_map = {t.name: t for t in tools}
 
@@ -849,7 +853,7 @@ async def _run_regional_orchestrator(
     return result
 
 
-def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
+def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
     """Tools available to a Workflow Orchestrator. Each domain action spawns a
     short-lived worker so events carry per-action attribution."""
 
@@ -1554,6 +1558,7 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
         record = {"workflow_id": workflow_id, "summary": summary}
         try:
             bus.publish(ev.audit_record(run_id, w.id, record))
+            board.post(parent.id, None, "audit", summary[:1000])
             return json.dumps({"ok": True})
         finally:
             _finish(w, record)
@@ -1701,7 +1706,7 @@ async def _run_workflow_orchestrator(
                 stage_state=stage_state,
                 worker_pool=pool,
             ),
-            *_build_workflow_domain_tools(run_id, runner, wo, workflow_id),
+            *_build_workflow_domain_tools(run_id, runner, wo, workflow_id, board),
         ]
         tool_map = {t.name: t for t in tools}
 

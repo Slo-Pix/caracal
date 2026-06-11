@@ -1077,48 +1077,112 @@ class Caracal:
         return factory
 
     def transport(
-        self, *, allow_root: bool = False, **kwargs: Any
+        self,
+        *,
+        allow_root: bool = False,
+        ctx: CaracalContext | None = None,
+        scopes: list[str] | None = None,
+        **kwargs: Any,
     ) -> httpx.AsyncClient:
         """Returns an httpx.AsyncClient that auto-injects the envelope on every request
         and rewrites resource-bound calls through the configured Caracal gateway. Pass
         to any provider SDK that accepts a custom httpx client.
 
-        Per-request identity is taken from the bound :class:`CaracalContext`. If a
-        request fires with no context bound, the call raises ``RuntimeError`` unless
-        the transport was created with ``allow_root=True`` (service-level identity).
+        Per-request identity is taken from the bound :class:`CaracalContext`, or from
+        ``ctx`` when the caller owns the context on another task or thread. If a
+        request fires with no context available, the call raises ``RuntimeError``
+        unless the transport was created with ``allow_root=True`` (service-level
+        identity).
+
+        Pass ``scopes`` to send a scoped resource mandate instead of the raw subject
+        token on gateway-routed requests: the SDK mints (and caches) a mandate
+        audienced to the target resource and narrowed to those scopes, carrying the
+        context's agent session and delegation edge. Requires client-secret
+        credentials.
         """
+        return httpx.AsyncClient(
+            auth=self._gateway_auth(
+                allow_root=allow_root, ctx=ctx, scopes=scopes, label="transport"
+            ),
+            **kwargs,
+        )
+
+    def _gateway_auth(
+        self,
+        *,
+        allow_root: bool,
+        ctx: CaracalContext | None,
+        scopes: list[str] | None,
+        label: str,
+    ) -> httpx.Auth:
         outer = self
-        root_allowed = allow_root
 
         class _CaracalAuth(httpx.Auth):
             requires_request_body = False
 
-            def auth_flow(self, request: httpx.Request):
+            def _begin(
+                self, request: httpx.Request
+            ) -> tuple[CaracalContext | None, str | None]:
                 rewritten = outer._route_through_gateway(
                     request.url, request.headers.get("X-Caracal-Resource")
                 )
-                ctx = current()
+                bound = ctx if ctx is not None else current()
+                resource = None
                 if rewritten is not None:
                     request.url = httpx.URL(rewritten[0])
                     request.headers["host"] = request.url.host
                     request.headers["X-Caracal-Resource"] = rewritten[1]
-                    if ctx is not None:
-                        token = ctx.subject_token
-                    elif root_allowed:
-                        token = outer.config.subject_token
-                    else:
+                    resource = rewritten[1]
+                    if bound is None and not allow_root:
                         raise RuntimeError(
-                            "Caracal.transport(): gateway-routed request fired with "
-                            "no CaracalContext bound. Bind a child context before "
-                            "fan-out or build the transport with `allow_root=True`."
+                            f"Caracal.{label}(): gateway-routed request fired with "
+                            "no CaracalContext bound. Bind a child context, pass "
+                            "`ctx=`, or opt in with `allow_root=True`."
+                        )
+                return bound, resource
+
+            def _finish(
+                self,
+                request: httpx.Request,
+                bound: CaracalContext | None,
+                resource: str | None,
+                token: str | None,
+            ) -> None:
+                if resource is not None:
+                    if token is None:
+                        token = (
+                            bound.subject_token
+                            if bound is not None
+                            else outer.config.subject_token
                         )
                     request.headers["Authorization"] = f"Bearer {token}"
-                for k, v in outer.headers(allow_root=root_allowed).items():
+                for k, v in outer.headers(allow_root=allow_root, ctx=bound).items():
                     if k not in request.headers:
                         request.headers[k] = v
+
+            def sync_auth_flow(self, request: httpx.Request):
+                bound, resource = self._begin(request)
+                token = (
+                    outer.mint_mandate(resource, scopes, ctx=bound)
+                    if resource is not None and scopes
+                    else None
+                )
+                self._finish(request, bound, resource, token)
                 yield request
 
-        return httpx.AsyncClient(auth=_CaracalAuth(), **kwargs)
+            async def async_auth_flow(self, request: httpx.Request):
+                bound, resource = self._begin(request)
+                token = (
+                    await asyncio.to_thread(
+                        outer.mint_mandate, resource, scopes, ctx=bound
+                    )
+                    if resource is not None and scopes
+                    else None
+                )
+                self._finish(request, bound, resource, token)
+                yield request
+
+        return _CaracalAuth()
 
     def gateway_request(self, resource_id: str, path: str = "/") -> GatewayRequest:
         if not self.config.gateway_url:
@@ -1173,6 +1237,8 @@ class Caracal:
         method: str = "GET",
         headers: Mapping[str, str] | None = None,
         allow_root: bool = False,
+        ctx: CaracalContext | None = None,
+        scopes: list[str] | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         **request_kwargs: Any,
     ) -> httpx.Response:
@@ -1181,58 +1247,45 @@ class Caracal:
         arguments (``json``, ``content``, ``params``, ``timeout``, ...) pass through
         to the underlying httpx request. The resource header always wins over any
         caller-supplied ``X-Caracal-Resource``.
+
+        Pass ``ctx`` to call with an explicitly owned context (thread pools,
+        executors, background tasks) instead of the bound contextvar. Pass ``scopes``
+        to authorize with a scoped resource mandate minted for ``resource_id``
+        instead of the raw subject token; requires client-secret credentials.
         """
         request = self.gateway_request(resource_id, path)
         merged = {**(headers or {}), **request.headers}
         client_kwargs: dict[str, Any] = (
             {} if transport is None else {"transport": transport}
         )
-        async with self.transport(allow_root=allow_root, **client_kwargs) as client:
+        async with self.transport(
+            allow_root=allow_root, ctx=ctx, scopes=scopes, **client_kwargs
+        ) as client:
             return await client.request(
                 method, request.url, headers=merged, **request_kwargs
             )
 
     def sync_transport(
-        self, *, allow_root: bool = False, **kwargs: Any
+        self,
+        *,
+        allow_root: bool = False,
+        ctx: CaracalContext | None = None,
+        scopes: list[str] | None = None,
+        **kwargs: Any,
     ) -> httpx.Client:
         """Sync counterpart to transport(): returns an httpx.Client that auto-injects
         the envelope on every request and rewrites resource-bound calls through the
         configured Caracal gateway. Use with sync httpx-based SDKs.
 
-        See :meth:`transport` for the ``allow_root`` semantics.
+        See :meth:`transport` for the ``allow_root``, ``ctx``, and ``scopes``
+        semantics.
         """
-        outer = self
-        root_allowed = allow_root
-
-        class _CaracalSyncAuth(httpx.Auth):
-            requires_request_body = False
-
-            def sync_auth_flow(self, request: httpx.Request):
-                rewritten = outer._route_through_gateway(
-                    request.url, request.headers.get("X-Caracal-Resource")
-                )
-                ctx = current()
-                if rewritten is not None:
-                    request.url = httpx.URL(rewritten[0])
-                    request.headers["host"] = request.url.host
-                    request.headers["X-Caracal-Resource"] = rewritten[1]
-                    if ctx is not None:
-                        token = ctx.subject_token
-                    elif root_allowed:
-                        token = outer.config.subject_token
-                    else:
-                        raise RuntimeError(
-                            "Caracal.sync_transport(): gateway-routed request fired "
-                            "with no CaracalContext bound. Bind a child context "
-                            "before fan-out or build the transport with `allow_root=True`."
-                        )
-                    request.headers["Authorization"] = f"Bearer {token}"
-                for k, v in outer.headers(allow_root=root_allowed).items():
-                    if k not in request.headers:
-                        request.headers[k] = v
-                yield request
-
-        return httpx.Client(auth=_CaracalSyncAuth(), **kwargs)
+        return httpx.Client(
+            auth=self._gateway_auth(
+                allow_root=allow_root, ctx=ctx, scopes=scopes, label="sync_transport"
+            ),
+            **kwargs,
+        )
 
     def _route_through_gateway(
         self,
