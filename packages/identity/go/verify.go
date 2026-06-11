@@ -158,12 +158,35 @@ func requiredInt64(claims jwt.MapClaims, name string) (int64, bool) {
 	return int64(value), true
 }
 
+// fetchZone resolves the zone whose JWKS keyset can verify the token: the
+// configured zone wins; otherwise the unverified zone_id claim routes the key
+// lookup, which is safe because the signature check against that zone's keys
+// then proves the claim.
+func fetchZone(tokenStr string, cfg Config) (string, error) {
+	if cfg.ZoneID != "" {
+		return cfg.ZoneID, nil
+	}
+	unverified := jwt.MapClaims{}
+	if _, _, err := jwt.NewParser().ParseUnverified(tokenStr, unverified); err != nil {
+		return "", ErrTokenInvalid
+	}
+	zoneID, _ := unverified["zone_id"].(string)
+	if zoneID == "" {
+		return "", ErrZoneInvalid
+	}
+	return zoneID, nil
+}
+
 // Verify parses and validates a JWT, returning typed Claims on success.
 func Verify(tokenStr string, cfg Config) (Claims, error) {
+	zone, err := fetchZone(tokenStr, cfg)
+	if err != nil {
+		return Claims{}, err
+	}
 	mapClaims := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(tokenStr, mapClaims, func(t *jwt.Token) (any, error) {
+	_, err = jwt.ParseWithClaims(tokenStr, mapClaims, func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
-		keys, err := GetJWKS(cfg.Issuer)
+		keys, err := GetJWKS(cfg.Issuer, zone)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +207,7 @@ func Verify(tokenStr string, cfg Config) (Claims, error) {
 		return Claims{}, ErrTokenInvalid
 	}
 	zoneID, _ := mapClaims["zone_id"].(string)
-	if zoneID == "" || (cfg.ZoneID != "" && zoneID != cfg.ZoneID) {
+	if zoneID == "" || zoneID != zone || (cfg.ZoneID != "" && zoneID != cfg.ZoneID) {
 		return Claims{}, ErrZoneInvalid
 	}
 	jti, ok := requiredString(mapClaims, "jti")

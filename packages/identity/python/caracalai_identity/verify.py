@@ -145,12 +145,26 @@ async def verify_token(
     expected_zone_id: str | None = None,
     required_use: str | None = None,
 ) -> dict[str, JsonValue]:
-    keys = await _cache.get_keys(issuer)
-
     try:
         header = jwt.get_unverified_header(token)
     except Exception as e:
         raise TokenInvalidError(f"Token validation failed: {e}") from e
+
+    # STS serves one signing keyset per zone, so the JWKS fetch needs a zone.
+    # The configured zone wins; otherwise the unverified zone_id claim selects
+    # the keyset, which is safe because it only routes the key lookup — the
+    # signature check against that zone's keys then proves the claim.
+    fetch_zone = expected_zone_id
+    if not fetch_zone:
+        try:
+            unverified = jwt.decode(token, options={"verify_signature": False})
+        except Exception as e:
+            raise TokenInvalidError(f"Token validation failed: {e}") from e
+        claimed_zone = unverified.get("zone_id")
+        if not isinstance(claimed_zone, str) or not claimed_zone:
+            raise ZoneInvalidError("Token zone validation failed")
+        fetch_zone = claimed_zone
+    keys = await _cache.get_keys(issuer, fetch_zone)
 
     token_kid = header.get("kid")
     candidates: list[dict[str, JsonValue]]
@@ -199,7 +213,12 @@ async def verify_token(
     if not isinstance(scope, str):
         raise TokenInvalidError("Token claim scope must be a string")
     zone_id = decoded.get("zone_id")
-    if not isinstance(zone_id, str) or not zone_id or (expected_zone_id and zone_id != expected_zone_id):
+    if (
+        not isinstance(zone_id, str)
+        or not zone_id
+        or zone_id != fetch_zone
+        or (expected_zone_id and zone_id != expected_zone_id)
+    ):
         raise ZoneInvalidError("Token zone validation failed")
     for required in required_scopes or []:
         if not has_scope(scope, required):
@@ -208,8 +227,8 @@ async def verify_token(
     return decoded
 
 
-async def warm_jwks(issuer: str) -> None:
-    await _cache.get_keys(issuer)
+async def warm_jwks(issuer: str, zone_id: str) -> None:
+    await _cache.get_keys(issuer, zone_id)
 
 
 async def verify_config(token: str, config: JwtConfig) -> Claims:

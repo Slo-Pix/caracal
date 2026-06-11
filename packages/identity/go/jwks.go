@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// JWKS fetcher with 5-min in-memory cache.
+// JWKS fetcher with zone-scoped, 5-min in-memory cache.
 
 package identity
 
@@ -37,26 +37,32 @@ var (
 	jwksClient = &http.Client{Timeout: jwksFetchTimeout}
 )
 
-// GetJWKS returns the cached key set for issuer, fetching if missing or stale.
-func GetJWKS(issuer string) (map[string]*ecdsa.PublicKey, error) {
-	return GetJWKSContext(context.Background(), issuer)
+// GetJWKS returns the cached key set for one zone of the issuer, fetching if
+// missing or stale. STS serves one signing keyset per zone, so zoneID is
+// required.
+func GetJWKS(issuer, zoneID string) (map[string]*ecdsa.PublicKey, error) {
+	return GetJWKSContext(context.Background(), issuer, zoneID)
 }
 
 // GetJWKSContext is GetJWKS with caller-supplied cancellation.
-func GetJWKSContext(ctx context.Context, issuer string) (map[string]*ecdsa.PublicKey, error) {
+func GetJWKSContext(ctx context.Context, issuer, zoneID string) (map[string]*ecdsa.PublicKey, error) {
 	if err := assertSecureIssuer(issuer); err != nil {
 		return nil, err
 	}
-	url := issuer + "/.well-known/jwks.json"
+	if zoneID == "" {
+		return nil, fmt.Errorf("zone_id required: STS serves one signing keyset per zone")
+	}
+	fetchURL := issuer + "/.well-known/jwks.json?" + url.Values{"zone_id": {zoneID}}.Encode()
+	cacheKey := issuer + "\x00" + zoneID
 
 	jwksMu.RLock()
-	entry, ok := jwksCache[issuer]
+	entry, ok := jwksCache[cacheKey]
 	jwksMu.RUnlock()
 	if ok && time.Since(entry.fetchedAt) < jwksTTL {
 		return entry.keys, nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +92,7 @@ func GetJWKSContext(ctx context.Context, issuer string) (map[string]*ecdsa.Publi
 	}
 
 	jwksMu.Lock()
-	jwksCache[issuer] = &jwksEntry{keys: keys, fetchedAt: time.Now()}
+	jwksCache[cacheKey] = &jwksEntry{keys: keys, fetchedAt: time.Now()}
 	jwksMu.Unlock()
 	return keys, nil
 }
