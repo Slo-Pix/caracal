@@ -18,6 +18,7 @@ services:
       PROVIDERLAB_FAST: "${PROVIDERLAB_FAST:-0}"
       CARACAL_STS_URL: "http://sts:8080"
       CARACAL_ZONE_ID: "${CARACAL_ZONE_ID:-}"
+      LYNX_CARACAL_PARTNERSHIP: "${LYNX_CARACAL_PARTNERSHIP:-}"
     # Internal providers (lumen-identity 9409, core-billing 9416) are reachable
     # only over the providers network, never published to the Docker host.
     ports:
