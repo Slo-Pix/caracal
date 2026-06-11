@@ -110,6 +110,12 @@ export const ENV_SCHEMA = {
     secret: true,
     file: 'caracalCoordinatorToken',
   },
+  METRICS_BEARER: {
+    kind: 'secret',
+    description: 'Operator bearer token protecting /metrics and /metrics.json on STS, Gateway, Audit, API, and Coordinator.',
+    secret: true,
+    file: 'metricsBearer',
+  },
   ZONE_KEK: {
     kind: 'secret',
     description: '32-byte zone key-encryption-key. Rotating destroys existing zones.',

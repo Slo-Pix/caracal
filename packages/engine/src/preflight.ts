@@ -26,6 +26,7 @@ const SECRET_FILES: Record<string, string> = {
   POSTGRES_PASSWORD: 'postgresPassword',
   REDIS_PASSWORD: 'redisPassword',
   CARACAL_COORDINATOR_TOKEN: 'caracalCoordinatorToken',
+  METRICS_BEARER: 'metricsBearer',
   DATABASE_URL: 'databaseUrl',
   REDIS_URL: 'redisUrl',
 }

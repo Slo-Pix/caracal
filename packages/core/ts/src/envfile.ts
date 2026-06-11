@@ -133,3 +133,25 @@ export function discoverCoordinatorToken(explicit?: string, opts: DiscoverTokenO
   }
   return undefined;
 }
+
+export function discoverMetricsBearer(explicit?: string, opts: DiscoverTokenOptions = {}): string | undefined {
+  if (explicit) return explicit;
+  if (opts.preferGenerated) {
+    const generated = readGeneratedSecret('metricsBearer');
+    if (generated) return generated;
+  }
+  if (process.env.METRICS_BEARER) return process.env.METRICS_BEARER;
+  if (process.env.METRICS_BEARER_FILE) {
+    const value = readSecretFile(process.env.METRICS_BEARER_FILE);
+    if (value) return value;
+  }
+  if (!opts.preferGenerated) {
+    const generated = readGeneratedSecret('metricsBearer');
+    if (generated) return generated;
+  }
+  if (process.env.CARACAL_ENV_FILE) {
+    const env = readEnvFile(process.env.CARACAL_ENV_FILE);
+    if (env.METRICS_BEARER) return env.METRICS_BEARER;
+  }
+  return undefined;
+}
