@@ -40,6 +40,19 @@ def encode(claims: dict, key: str, *, kid: str | None = None) -> str:
     return ".".join(segments)
 
 
+def peek(token: str) -> tuple[dict, dict]:
+    """The decoded header and payload without signature verification."""
+    try:
+        header_b64, payload_b64, _ = token.split(".")
+        header = json.loads(_b64url_decode(header_b64))
+        payload = json.loads(_b64url_decode(payload_b64))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise JwtError("malformed token") from exc
+    if not isinstance(header, dict) or not isinstance(payload, dict):
+        raise JwtError("malformed token")
+    return header, payload
+
+
 def decode(token: str, key: str, *, verify_exp: bool = True) -> dict:
     try:
         header_b64, payload_b64, signature_b64 = token.split(".")

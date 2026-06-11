@@ -83,12 +83,21 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
                 require_delegation=provider.require_delegation,
             )
         except mandate.VerifyError as exc:
-            status = 403 if exc.code in ("insufficient_scope", "delegation_required", "session_revoked", "invalid_zone") else 401
+            if exc.code == "verifier_unavailable":
+                status = 503
+            elif exc.code in ("insufficient_scope", "delegation_required", "session_revoked", "invalid_zone"):
+                status = 403
+            else:
+                status = 401
             raise AuthError(status, exc.code, exc.message) from exc
+        # Lab-minted seed mandates carry the lab scope vocabulary directly; for
+        # Caracal-issued mandates the zone policy already authorized the call at
+        # mint and use time, so the verified mandate grants the provider surface.
+        granted = claims.get("scopes") if claims.get("iss") == mandate.ISSUER else list(provider.scopes)
         return {
             "principal": claims.get("sub"),
             "auth": "caracal_mandate",
-            "scope": claims.get("scopes"),
+            "scope": granted,
             "subjectType": claims.get("sub_type"),
             "zone": claims.get("zone"),
             "sessionId": claims.get("sid"),
