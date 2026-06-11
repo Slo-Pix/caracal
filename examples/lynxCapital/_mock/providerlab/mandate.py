@@ -119,7 +119,12 @@ def _verify_caracal(token: str, claims: dict, kid: str, require_delegation: bool
     if not targets or not all(t.startswith("resource://") for t in targets):
         raise VerifyError("invalid_token", "mandate names no resource view target")
     scopes = [s for s in str(claims.get("scope", "")).split() if s]
-    if require_delegation and not claims.get("delegation_edge_id"):
+    # The zone policy validates the delegation edge at exchange time; the
+    # re-issued upstream mandate carries the spawned agent session as the
+    # delegation evidence.
+    if require_delegation and not (
+        claims.get("delegation_edge_id") or claims.get("agent_session_id")
+    ):
         raise VerifyError("delegation_required", "resource requires a delegated mandate")
     return {
         "iss": claims.get("iss"),
