@@ -19,12 +19,12 @@ vi.mock('../../../../packages/engine/src/shared.js', async (orig) => {
 
 vi.mock('@caracalai/core', async (orig) => {
   const actual = (await orig()) as Record<string, unknown>
-  return { ...actual, discoverCoordinatorToken: vi.fn(() => undefined) }
+  return { ...actual, discoverCoordinatorToken: vi.fn(() => undefined), discoverMetricsBearer: vi.fn(() => undefined) }
 })
 
 import { runDoctorDiagnostics, doctorShouldFail } from '../../../../packages/engine/src/doctor.js'
 import { buildAdminClient } from '../../../../packages/engine/src/shared.js'
-import { discoverCoordinatorToken } from '@caracalai/core'
+import { discoverCoordinatorToken, discoverMetricsBearer } from '@caracalai/core'
 
 const SAVED = { ...process.env }
 
@@ -138,6 +138,49 @@ describe('runDoctorDiagnostics — full system run', () => {
     const coordMetrics = report.checks.find((c) => c.check === 'coordinator metrics')
     expect(coordMetrics?.status).toBe('warn')
     expect(report.checks.some((c) => c.check === 'zone inventory' && c.status === 'warn')).toBe(true)
+    fetchSpy.mockRestore()
+  })
+
+  it('warns when service metrics are protected and no managed metrics token is found', async () => {
+    vi.mocked(buildAdminClient).mockReturnValue(fakeAdminContext() as never)
+    vi.mocked(discoverMetricsBearer).mockReturnValue(undefined)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/health') || url.endsWith('/ready')) return jsonResponse({}, true)
+      if (url.endsWith('/metrics.json')) return textResponse('{"reason":"unauthorized"}', false, 401)
+      if (url.endsWith('/stats')) return jsonResponse({ outbox: { pending: 0, dead: 0 }, invocations: { running: 0 } })
+      return jsonResponse({}, true)
+    })
+
+    const report = await runDoctorDiagnostics({})
+    for (const name of ['sts metrics', 'gateway metrics', 'audit metrics']) {
+      const check = report.checks.find((c) => c.check === name)
+      expect(check?.status).toBe('warn')
+      expect(check?.advice).toMatch(/caracal up/)
+    }
+    expect(report.ready).toBe(true)
+    fetchSpy.mockRestore()
+  })
+
+  it('sends the managed metrics bearer when probing protected service metrics', async () => {
+    vi.mocked(buildAdminClient).mockReturnValue(fakeAdminContext() as never)
+    vi.mocked(discoverMetricsBearer).mockReturnValue('metrics-token')
+    const seen: Record<string, string | undefined> = {}
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.endsWith('/metrics.json')) {
+        seen[url] = (init?.headers as Record<string, string> | undefined)?.Authorization
+        return jsonResponse({ opa: { compile_errors: 0 }, bindings_loaded: 1, consumer_lag: 0 })
+      }
+      if (url.endsWith('/stats')) return jsonResponse({ outbox: { pending: 0, dead: 0 }, invocations: { running: 0 } })
+      return jsonResponse({}, true)
+    })
+
+    const report = await runDoctorDiagnostics({})
+    for (const name of ['sts metrics', 'gateway metrics', 'audit metrics']) {
+      expect(report.checks.find((c) => c.check === name)?.status).toBe('ok')
+    }
+    expect(Object.values(seen)).toContain('Bearer metrics-token')
     fetchSpy.mockRestore()
   })
 
