@@ -1,0 +1,220 @@
+---
+/*
+ * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+ * Caracal, a product of Garudex Labs
+ *
+ * Editorial blog index with category tabs, inline search, a dated post list, and a Discord submission dialog.
+ */
+
+import community from "../data/community.json";
+
+interface Blog {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  href: string;
+  author?: string;
+  date?: string;
+  readingTime?: string;
+  tags?: string[];
+  featured?: boolean;
+}
+
+const blogs = (community.blogs as Blog[]).slice().sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+const discord = community.discordInvite;
+const categories = community.blogCategories.filter((name) => blogs.some((b) => b.category === name));
+const featured = blogs.find((b) => b.featured);
+const rest = blogs.filter((b) => b !== featured);
+const hasPosts = blogs.length > 0;
+
+const formatDate = (iso?: string) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : undefined;
+---
+
+<section class="media-page" aria-labelledby="blogs-heading">
+  <div class="media-page__inner">
+
+    <header class="media-head">
+      <div class="media-head__row">
+        <h1 id="blogs-heading" class="media-head__title">Blog</h1>
+        <button class="media-head__submit" type="button" data-submit-open>
+          Write for Caracal
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+          </svg>
+        </button>
+      </div>
+      <p class="media-head__lede">
+        Notes from the Caracal team and community on securing agents in production: policy design,
+        delegation patterns, identity, and audit.
+      </p>
+    </header>
+
+    {hasPosts ? (
+      <>
+        <div class="media-bar">
+          <nav class="media-tabs" role="group" aria-label="Filter posts by category">
+            <button class="media-tab isActive" type="button" data-media-filter="all">All posts</button>
+            {categories.map((category) => (
+              <button class="media-tab" type="button" data-media-filter={category}>{category}</button>
+            ))}
+          </nav>
+          <label class="media-search">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="search" placeholder="Search" aria-label="Search blog posts" data-media-search />
+          </label>
+        </div>
+
+        {featured && (
+          <a
+            class="post-feature"
+            href={featured.href}
+            data-media-item
+            data-media-category={featured.category}
+            data-media-text={`${featured.title} ${featured.description} ${featured.category} ${featured.author ?? ""} ${(featured.tags ?? []).join(" ")}`.toLowerCase()}
+          >
+            <p class="post-feature__kicker">
+              <span class="post-feature__badge">Featured</span>
+              <span>{featured.category}</span>
+            </p>
+            <h2 class="post-feature__title">{featured.title}</h2>
+            <p class="post-feature__desc">{featured.description}</p>
+            <p class="post-meta">
+              {featured.author && <span>{featured.author}</span>}
+              {formatDate(featured.date) && <span>{formatDate(featured.date)}</span>}
+              {featured.readingTime && <span>{featured.readingTime}</span>}
+            </p>
+          </a>
+        )}
+
+        <div class="post-list" data-media-list>
+          {rest.map((blog) => (
+            <a
+              class="post-row"
+              href={blog.href}
+              data-media-item
+              data-media-category={blog.category}
+              data-media-text={`${blog.title} ${blog.description} ${blog.category} ${blog.author ?? ""} ${(blog.tags ?? []).join(" ")}`.toLowerCase()}
+            >
+              <time class="post-row__date" datetime={blog.date}>{formatDate(blog.date) ?? ""}</time>
+              <span class="post-row__main">
+                <span class="post-row__title">{blog.title}</span>
+                <span class="post-row__desc">{blog.description}</span>
+                <span class="post-meta">
+                  {blog.author && <span>{blog.author}</span>}
+                  <span>{blog.category}</span>
+                  {blog.readingTime && <span>{blog.readingTime}</span>}
+                </span>
+              </span>
+              <svg class="post-row__arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="7" y1="17" x2="17" y2="7" /><polyline points="7 7 17 7 17 17" />
+              </svg>
+            </a>
+          ))}
+        </div>
+        <p class="media-empty" data-media-noresults hidden>Nothing matches that search.</p>
+      </>
+    ) : (
+      <div class="media-launch">
+        <p class="media-launch__title">First posts are in the works</p>
+        <p class="media-launch__body">
+          The blog opens with deep dives on pre-execution authorization, mandate design, and multi-agent
+          delegation. Want to write one of the first posts? Hit "Write for Caracal" above. Until then,
+          the <a href="/concepts/model-overview/">One-Minute Model</a> covers the same ground in depth.
+        </p>
+      </div>
+    )}
+
+  </div>
+</section>
+
+<dialog class="media-dialog" data-submit-dialog aria-labelledby="blogs-submit-title">
+  <div class="media-dialog__head">
+    <h2 id="blogs-submit-title" class="media-dialog__title">Write for Caracal</h2>
+    <button class="media-dialog__close" type="button" data-submit-close aria-label="Close">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  </div>
+  <ol class="media-dialog__steps" role="list">
+    <li class="submit-step">
+      <span class="submit-step__num" aria-hidden="true">1</span>
+      <div>
+        <h3 class="submit-step__title">Join the Discord server</h3>
+        <p class="submit-step__body">Submissions go through the Caracal community Discord, where maintainers review content.</p>
+      </div>
+    </li>
+    <li class="submit-step">
+      <span class="submit-step__num" aria-hidden="true">2</span>
+      <div>
+        <h3 class="submit-step__title">Pitch your post</h3>
+        <p class="submit-step__body">Share a short pitch or a draft link: topic, audience, and what readers take away.</p>
+      </div>
+    </li>
+    <li class="submit-step">
+      <span class="submit-step__num" aria-hidden="true">3</span>
+      <div>
+        <h3 class="submit-step__title">Get reviewed and featured</h3>
+        <p class="submit-step__body">Accepted posts are listed here, and standout posts are featured on the docs home page.</p>
+      </div>
+    </li>
+  </ol>
+  <div class="media-dialog__criteria">
+    <h3 class="media-dialog__criteria-title">What we look for</h3>
+    <ul class="media-dialog__checklist">
+      <li>Real implementations and honest trade-offs</li>
+      <li>Agent security, authority, identity, or audit themes</li>
+      <li>Reproducible examples over abstract claims</li>
+      <li>Your voice. We edit lightly and credit fully</li>
+    </ul>
+  </div>
+  <a class="landing-button landing-button--primary" href={discord} target="_blank" rel="noopener noreferrer">
+    Open Discord
+  </a>
+</dialog>
+
+<script>
+  const dialog = document.querySelector<HTMLDialogElement>("[data-submit-dialog]");
+  document.querySelector<HTMLButtonElement>("[data-submit-open]")?.addEventListener("click", () => dialog?.showModal());
+  document.querySelector<HTMLButtonElement>("[data-submit-close]")?.addEventListener("click", () => dialog?.close());
+  dialog?.addEventListener("click", (event) => {
+    if (event.target === dialog) dialog.close();
+  });
+
+  const search = document.querySelector<HTMLInputElement>("[data-media-search]");
+  const filters = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-media-filter]"));
+  const items = Array.from(document.querySelectorAll<HTMLElement>("[data-media-item]"));
+  const noResults = document.querySelector<HTMLElement>("[data-media-noresults]");
+
+  let category = "all";
+  let query = "";
+
+  const apply = () => {
+    let visible = 0;
+    for (const item of items) {
+      const matchesCategory = category === "all" || item.dataset.mediaCategory === category;
+      const matchesQuery = !query || (item.dataset.mediaText ?? "").includes(query);
+      const show = matchesCategory && matchesQuery;
+      item.hidden = !show;
+      if (show) visible += 1;
+    }
+    if (noResults) noResults.hidden = visible > 0;
+  };
+
+  search?.addEventListener("input", () => {
+    query = search.value.trim().toLowerCase();
+    apply();
+  });
+
+  for (const button of filters) {
+    button.addEventListener("click", () => {
+      category = button.dataset.mediaFilter ?? "all";
+      for (const other of filters) other.classList.toggle("isActive", other === button);
+      apply();
+    });
+  }
+</script>
