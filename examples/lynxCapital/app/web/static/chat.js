@@ -18,7 +18,8 @@ const AppState = {
   promptRendered: false,
   agents: {},
   turns: {},
-  lastTurnByAgent: {},
+  blocks: {},
+  lastBlock: null,
   pendingTools: {},
   agentMem: {},
   compactions: [],
@@ -69,11 +70,11 @@ const sessionDot = $('session-dot')
 
 const tplUserMessage = $('tpl-user-message')
 const tplAssistantMessage = $('tpl-assistant-message')
+const tplStepGroup = $('tpl-step-group')
 const tplToolCard = $('tpl-tool-card')
 const tplSystemRow = $('tpl-system-row')
 const tplSecurityCard = $('tpl-security-card')
 const tplApprovalCard = $('tpl-approval-card')
-const tplProviderCard = $('tpl-provider-card')
 const tplPlanItem = $('tpl-plan-item')
 const tplEventBlock = $('tpl-event-block')
 
@@ -550,8 +551,8 @@ function appendRuntimeEvent(event) {
 }
 
 // MESSAGE RENDER ENGINE
-function renderMessage(type, data = {}) {
-  detachEmpty()
+function renderMessage(type, data = {}, parent = null) {
+  if (!parent) detachEmpty()
 
   const templates = {
     user: tplUserMessage,
@@ -560,7 +561,6 @@ function renderMessage(type, data = {}) {
     system: tplSystemRow,
     security: tplSecurityCard,
     approval: tplApprovalCard,
-    provider: tplProviderCard,
   }
   const node = cloneTemplate(templates[type])
 
@@ -576,12 +576,8 @@ function renderMessage(type, data = {}) {
     node.classList.add(toneClass(agent))
     node.querySelector('.msg-avatar').textContent = agentInitials(agent)
     node.querySelector('.msg-author').textContent = agentLabel(agent)
-    node.querySelector('.msg-model-tag').textContent = data.model || (modelSelect && modelSelect.value) || ''
-    node.querySelector('.msg-status-indicator').textContent = data.status || 'Streaming'
-    const prev = AppState.messages[AppState.messages.length - 1]
-    if (prev && prev.type === 'assistant' && prev.data.agentId === data.agentId) {
-      node.classList.add('is-grouped')
-    }
+    node.querySelector('.msg-model-tag').textContent = data.model || ''
+    node.querySelector('.msg-status-indicator').textContent = data.status || 'Working'
   }
 
   if (type === 'tool') {
@@ -623,13 +619,13 @@ function renderMessage(type, data = {}) {
     node.querySelector('.btn-reject').onclick = () => handleApprovalAction(data.approvalId, false, node)
   }
 
-  if (type === 'provider') {
-    node.querySelector('.msg-provider-name').textContent = data.model || 'model'
-    node.querySelector('.msg-provider-tokens').textContent = `${fmtTok(data.tokens || 0)} tok`
-    node.querySelector('.msg-provider-latency').textContent = `${data.latency || 0}ms`
-    node.querySelector('.msg-json-block').textContent = renderJson(data.details || {})
+  if (parent) {
+    parent.append(node)
+    requestScroll()
+    return node
   }
 
+  if (type !== 'assistant') AppState.lastBlock = null
   stream.append(node)
   requestScroll({ smooth: type === 'user' })
 
@@ -642,24 +638,91 @@ function renderMessage(type, data = {}) {
   return node
 }
 
+// AGENT BLOCKS — one chat block per contiguous span of agent activity
+function ensureBlock(agentId, ts) {
+  const existing = AppState.blocks[agentId]
+  if (existing && AppState.lastBlock === existing) return existing
+
+  const node = renderMessage('assistant', { agentId, ts, status: 'Working' })
+  const block = {
+    agentId,
+    node,
+    flowEl: node.querySelector('.msg-flow'),
+    statusEl: node.querySelector('.msg-status-indicator'),
+    modelEl: node.querySelector('.msg-model-tag'),
+    steps: null,
+    runningSteps: 0,
+    streamingTurns: 0,
+  }
+  AppState.blocks[agentId] = block
+  AppState.lastBlock = block
+  return block
+}
+
+function refreshBlockStatus(block) {
+  const busy = block.streamingTurns > 0 || block.runningSteps > 0
+  block.statusEl.textContent = busy ? 'Working' : 'Done'
+  block.node.classList.toggle('is-complete', !busy)
+}
+
+function ensureSteps(block) {
+  if (block.steps && block.steps.node === block.flowEl.lastElementChild) return block.steps
+
+  const node = cloneTemplate(tplStepGroup)
+  const steps = {
+    node,
+    bodyEl: node.querySelector('.msg-steps-body'),
+    titleEl: node.querySelector('.msg-steps-title'),
+    running: 0,
+    total: 0,
+  }
+  block.flowEl.append(node)
+  block.steps = steps
+  return steps
+}
+
+function stepStarted(block, steps, label) {
+  steps.running += 1
+  steps.total += 1
+  block.runningSteps += 1
+  steps.node.classList.add('is-running')
+  steps.titleEl.textContent = `Running ${label}`
+  refreshBlockStatus(block)
+}
+
+function stepSettled(block, steps) {
+  steps.running = Math.max(0, steps.running - 1)
+  block.runningSteps = Math.max(0, block.runningSteps - 1)
+  if (steps.running === 0) {
+    steps.node.classList.remove('is-running')
+    steps.titleEl.textContent = steps.total === 1 ? '1 step' : `${steps.total} steps`
+  }
+  refreshBlockStatus(block)
+}
+
 // STREAMED ASSISTANT TURNS
-function ensureTurn(agentId, messageId) {
+function ensureTurn(agentId, messageId, ts) {
   const key = `${agentId}:${messageId}`
   if (AppState.turns[key]) return AppState.turns[key]
 
-  const node = renderMessage('assistant', { agentId, status: 'Streaming', content: '' })
+  const block = ensureBlock(agentId, ts)
+  const contentEl = document.createElement('div')
+  contentEl.className = 'msg-content'
+  block.flowEl.append(contentEl)
+  block.streamingTurns += 1
+  refreshBlockStatus(block)
+
   const turn = {
     key,
-    node,
-    contentEl: node.querySelector('.msg-content'),
-    statusEl: node.querySelector('.msg-status-indicator'),
+    block,
+    contentEl,
     pendingText: '',
     text: '',
     finalText: '',
     streaming: true,
+    settled: false,
   }
   AppState.turns[key] = turn
-  AppState.lastTurnByAgent[agentId] = key
   return turn
 }
 
@@ -682,21 +745,25 @@ function flushDirtyTurns() {
     } else {
       turn.contentEl.classList.add('md')
       turn.contentEl.innerHTML = renderMarkdown(turn.text)
+      if (!turn.text.trim()) turn.contentEl.remove()
+      if (!turn.settled) {
+        turn.settled = true
+        turn.block.streamingTurns = Math.max(0, turn.block.streamingTurns - 1)
+        refreshBlockStatus(turn.block)
+      }
     }
     turn.contentEl.classList.toggle('is-streaming', turn.streaming)
-    turn.statusEl.textContent = turn.streaming ? 'Streaming' : 'Done'
-    turn.node.classList.toggle('is-complete', !turn.streaming)
   }
   AppState.dirtyTurns.clear()
 }
 
 // TOOL CALL PAIRING
-function trackToolCall(payload, node, serviceCall = false) {
+function trackToolCall(payload, node, { serviceCall = false, block = null, steps = null } = {}) {
   const key = serviceCall
     ? `svc:${payload.agent_id}:${payload.service_id}:${payload.action}`
     : `tool:${payload.agent_id}:${payload.tool_name}`
   if (!AppState.pendingTools[key]) AppState.pendingTools[key] = []
-  AppState.pendingTools[key].push({ node, startTs: performance.now() })
+  AppState.pendingTools[key].push({ node, startTs: performance.now(), block, steps })
 }
 
 function resolveToolCall(payload, result, status, serviceCall = false) {
@@ -707,13 +774,15 @@ function resolveToolCall(payload, result, status, serviceCall = false) {
   const entry = queue && queue.shift()
   if (!entry) return
 
-  const { node, startTs } = entry
+  const { node, startTs, block, steps } = entry
   const badge = node.querySelector('.msg-tool-status-badge')
   badge.textContent = status
   badge.className = `msg-tool-status-badge status-${status}`
 
   const duration = node.querySelector('.msg-tool-duration')
   duration.textContent = `${Math.max(1, Math.round(performance.now() - startTs))}ms`
+
+  if (block && steps) stepSettled(block, steps)
 
   if (result !== undefined) {
     const outputBlock = node.querySelector('.msg-tool-output')
@@ -789,24 +858,22 @@ function handleEvent(event) {
 
     case 'agent_spawn':
       registerAgent(payload)
-      renderMessage('system', {
-        ts: event.ts,
-        kicker: 'SPAWN',
-        text: `${agentLabel(AppState.agents[payload.agent_id])} joined the run.`,
-      })
       refreshMemoryBar()
       break
 
-    case 'delegation':
-      renderMessage('system', {
-        ts: event.ts,
-        kicker: 'DELEGATE',
-        text: `${agentLabel(AppState.agents[payload.parent_id])} delegated ${payload.scope || 'work'} to ${agentLabel(AppState.agents[payload.child_id])}.`,
-      })
+    case 'agent_end':
+    case 'agent_terminate': {
+      const block = AppState.blocks[payload.agent_id]
+      if (block) {
+        block.streamingTurns = 0
+        block.runningSteps = 0
+        refreshBlockStatus(block)
+      }
       break
+    }
 
     case 'chat_token': {
-      const turn = ensureTurn(payload.agent_id, payload.message_id)
+      const turn = ensureTurn(payload.agent_id, payload.message_id, event.ts)
       turn.streaming = true
       turn.pendingText += payload.token
       markTurnDirty(turn)
@@ -815,22 +882,20 @@ function handleEvent(event) {
     }
 
     case 'chat_message': {
-      const turn = ensureTurn(payload.agent_id, payload.message_id)
+      const text = payload.text || ''
+      if (!text.trim() && !AppState.turns[`${payload.agent_id}:${payload.message_id}`]) break
+      const turn = ensureTurn(payload.agent_id, payload.message_id, event.ts)
       turn.streaming = false
-      turn.finalText = payload.text || ''
+      turn.finalText = text
       markTurnDirty(turn)
       break
     }
 
-    case 'llm_call':
-      renderMessage('provider', {
-        ts: event.ts,
-        model: payload.model,
-        tokens: (payload.input_tokens || 0) + (payload.output_tokens || 0),
-        latency: payload.latency_ms || 0,
-        details: payload,
-      })
+    case 'llm_call': {
+      const block = AppState.blocks[payload.agent_id]
+      if (block && payload.model) block.modelEl.textContent = payload.model
       break
+    }
 
     case 'tool_call': {
       if (PLAN_TOOLS.has(payload.tool_name)) {
@@ -841,14 +906,17 @@ function handleEvent(event) {
         break
       }
       setStreamingStatus('tool_executing')
+      const block = ensureBlock(payload.agent_id, event.ts)
+      const steps = ensureSteps(block)
       const node = renderMessage('tool', {
         ts: event.ts,
         name: payload.tool_name,
         summary: summarizeArgs(payload.args),
         args: payload.args,
         status: 'executing',
-      })
-      trackToolCall(payload, node)
+      }, steps.bodyEl)
+      stepStarted(block, steps, payload.tool_name)
+      trackToolCall(payload, node, { block, steps })
       break
     }
 
@@ -860,15 +928,11 @@ function handleEvent(event) {
 
     case 'tool_retry':
       resolveToolCall(payload, { error: payload.error, attempt: payload.attempt }, 'retrying')
-      renderMessage('system', {
-        ts: event.ts,
-        kicker: 'RETRY',
-        variant: 'warn',
-        text: `${payload.tool_name} failed (attempt ${payload.attempt}): ${truncate(payload.error, 120)}`,
-      })
       break
 
     case 'service_call': {
+      const block = ensureBlock(payload.agent_id, event.ts)
+      const steps = ensureSteps(block)
       const node = renderMessage('tool', {
         ts: event.ts,
         name: `${payload.service_id}.${payload.action}`,
@@ -876,8 +940,9 @@ function handleEvent(event) {
         args: payload.payload,
         status: 'executing',
         serviceCall: true,
-      })
-      trackToolCall(payload, node, true)
+      }, steps.bodyEl)
+      stepStarted(block, steps, payload.service_id)
+      trackToolCall(payload, node, { serviceCall: true, block, steps })
       break
     }
 
@@ -887,6 +952,11 @@ function handleEvent(event) {
 
     case 'audit_record': {
       const record = payload.record || {}
+      const decision = String(record.decision || '').toLowerCase()
+      const denied = /denied|blocked|reject/.test(decision)
+      const sink = !denied && AppState.lastBlock
+        ? ensureSteps(AppState.lastBlock).bodyEl
+        : null
       renderMessage('security', {
         ts: event.ts,
         rule: record.rule_id || 'Policy check',
@@ -894,7 +964,7 @@ function handleEvent(event) {
         policy: record.policy_id || '',
         reason: record.reason || '',
         details: record,
-      })
+      }, sink)
       break
     }
 
@@ -939,11 +1009,7 @@ function handleEvent(event) {
       break
 
     case 'stage_start':
-      renderMessage('system', { ts: event.ts, kicker: 'STAGE', text: `${payload.stage} — ${truncate(payload.intent, 120)}` })
-      break
-
     case 'stage_end':
-      renderMessage('system', { ts: event.ts, kicker: 'STAGE', text: `${payload.stage} done — ${truncate(payload.summary, 120)}` })
       break
 
     case 'memory_update':
@@ -1031,7 +1097,8 @@ function resetState() {
   AppState.promptRendered = false
   AppState.agents = {}
   AppState.turns = {}
-  AppState.lastTurnByAgent = {}
+  AppState.blocks = {}
+  AppState.lastBlock = null
   AppState.pendingTools = {}
   AppState.agentMem = {}
   AppState.compactions = []
