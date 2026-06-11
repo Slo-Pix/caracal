@@ -1413,6 +1413,46 @@ async function loadModelList() {
   }
 }
 
+const approvalToggle = $('approval-toggle')
+
+async function loadApprovalSetting() {
+  try {
+    const response = await fetch('/api/system/approvals')
+    const data = await response.json()
+    approvalToggle.checked = !!data.required
+  } catch {
+    approvalToggle.disabled = true
+  }
+}
+
+approvalToggle.addEventListener('change', async () => {
+  const requested = approvalToggle.checked
+  approvalToggle.disabled = true
+  try {
+    const response = await fetch('/api/system/approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ required: requested }),
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const data = await response.json()
+    approvalToggle.checked = !!data.required
+    if (!AppState.active) {
+      renderMessage('system', {
+        kicker: 'APPROVALS',
+        text: data.required
+          ? 'Sensitive operations now pause for your approval.'
+          : 'Sensitive operations proceed without approval.',
+      })
+    }
+  } catch (error) {
+    approvalToggle.checked = !requested
+    renderMessage('system', { kicker: 'APPROVALS', variant: 'error', text: `Could not update approval setting: ${error.message}` })
+  } finally {
+    approvalToggle.disabled = false
+  }
+})
+
 function autoResizeInput() {
   promptInput.style.height = '0px'
   promptInput.style.height = `${Math.min(promptInput.scrollHeight, 180)}px`
@@ -1505,6 +1545,7 @@ stream.addEventListener('scroll', () => {
 })
 
 loadModelList()
+loadApprovalSetting()
 setStreamingStatus('idle')
 refreshMemoryBar()
 refreshMetrics()

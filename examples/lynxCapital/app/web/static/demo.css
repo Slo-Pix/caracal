@@ -1245,6 +1245,37 @@ body.is-resizing {
   color: var(--text-primary);
 }
 
+.approval-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 99px;
+  background: var(--surface-raised);
+  padding: 2px var(--space-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.approval-toggle:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+
+.approval-toggle input {
+  accent-color: var(--accent-blue);
+  margin: 0;
+  cursor: pointer;
+}
+
+.approval-toggle:has(input:checked) {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
 .composer-hint {
   font-size: 10px;
   color: var(--text-muted);
