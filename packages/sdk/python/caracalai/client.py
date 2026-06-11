@@ -1133,12 +1133,14 @@ class Caracal:
                     request.headers["host"] = request.url.host
                     request.headers["X-Caracal-Resource"] = rewritten[1]
                     resource = rewritten[1]
-                    if bound is None and not allow_root:
-                        raise RuntimeError(
-                            f"Caracal.{label}(): gateway-routed request fired with "
-                            "no CaracalContext bound. Bind a child context, pass "
-                            "`ctx=`, or opt in with `allow_root=True`."
-                        )
+                elif outer._targets_gateway(request.url):
+                    resource = request.headers.get("X-Caracal-Resource")
+                if resource is not None and bound is None and not allow_root:
+                    raise RuntimeError(
+                        f"Caracal.{label}(): gateway-routed request fired with "
+                        "no CaracalContext bound. Bind a child context, pass "
+                        "`ctx=`, or opt in with `allow_root=True`."
+                    )
                 return bound, resource
 
             def _finish(
@@ -1183,6 +1185,14 @@ class Caracal:
                 yield request
 
         return _CaracalAuth()
+
+    def _targets_gateway(self, url: httpx.URL) -> bool:
+        gw = self.config.gateway_url
+        if not gw:
+            return False
+        g = urlparse(gw)
+        parsed = urlparse(str(url))
+        return parsed.scheme == g.scheme and parsed.netloc == g.netloc
 
     def gateway_request(self, resource_id: str, path: str = "/") -> GatewayRequest:
         if not self.config.gateway_url:

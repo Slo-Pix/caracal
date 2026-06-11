@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 import logging
 import os
@@ -50,6 +51,11 @@ if not log.handlers:
 REGION_IDS = ("US", "IN", "DE", "SG", "BR")
 STAGE_BUDGET = 12
 TOTAL_BUDGET = 60
+
+ANNOUNCED_INTENT = re.compile(
+    r"(?i)\b(dispatching|will dispatch|going to|about to|let me|i(?:'|\u2019)ll)\b"
+)
+INTENT_NUDGES = 2
 
 # Bound concurrent in-flight LLM streams so a wide swarm cannot open an
 # unbounded number of simultaneous model connections.
@@ -621,6 +627,22 @@ async def _turn_loop(
         _emit_memory_snapshot(run_id, mem)
         state["total_used"] += 1
         if not ai_msg.tool_calls:
+            text = ai_msg.content if isinstance(ai_msg.content, str) else str(ai_msg.content)
+            if (
+                ANNOUNCED_INTENT.search(text)
+                and state.get("intent_nudges", 0) < INTENT_NUDGES
+            ):
+                state["intent_nudges"] = state.get("intent_nudges", 0) + 1
+                mem.append(
+                    HumanMessage(
+                        content=(
+                            "You announced an action but did not call any tool. "
+                            "Call the tool now, or give your final answer without "
+                            "promising further actions."
+                        )
+                    )
+                )
+                continue
             break
 
         async def _exec(tc):

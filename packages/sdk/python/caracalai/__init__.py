@@ -9,7 +9,10 @@ from .client import Caracal, CaracalConfig, GatewayRequest, ResourceBinding
 from .context import (
     AuthoritySummary,
     CaracalContext,
+    abind,
+    bind,
     capture_context,
+    current,
     describe_authority,
 )
 from .coordinator import CoordinatorClient, DelegationConstraints
@@ -23,7 +26,10 @@ __all__ = [
     "CaracalConfig",
     "CaracalContext",
     "AuthoritySummary",
+    "abind",
+    "bind",
     "capture_context",
+    "current",
     "describe_authority",
     "CaracalASGIMiddleware",
     "TokenVerifier",
