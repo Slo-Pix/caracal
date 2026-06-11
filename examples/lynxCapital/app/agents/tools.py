@@ -12,6 +12,7 @@ from app.agents.runner import get_runner
 from app.events import types as ev
 from app.events.bus import bus
 from app.services.partners import call as _partner
+from app.services.partners import spec as _partner_spec
 
 _REGION_CCY = {"US": "USD", "IN": "USD", "DE": "EUR", "SG": "SGD", "BR": "BRL", "GLOBAL": "USD"}
 _REGION_TAX = {"US": "US", "IN": "IN", "DE": "DE", "SG": "SG", "BR": "BR", "GLOBAL": "US"}
@@ -884,6 +885,17 @@ def partner_operation(run_id: str, agent_id: str, provider_id: str, operation: s
                       payload: dict[str, object] | None = None) -> dict[str, object]:
     args = {"provider_id": provider_id, "operation": operation, "payload": payload or {}}
     bus.publish(ev.tool_call(run_id, agent_id, "partner_operation", args))
+    try:
+        s = _partner_spec(provider_id)
+        if operation not in s.operations:
+            raise KeyError(
+                f"unknown operation {operation!r} for partner {provider_id!r}; "
+                f"valid operations: {', '.join(sorted(s.operations))}"
+            )
+    except KeyError as exc:
+        result = {"provider": provider_id, "operation": operation, "error": str(exc).strip('"\'')}
+        bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", result))
+        return result
     authority = _authority(run_id, agent_id)
     key = _denyKey(authority, provider_id, operation)
     cached = _denyMemo.get(run_id, {}).get(key)

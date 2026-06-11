@@ -727,6 +727,17 @@ async def _drive_stages(
     return state["tool_calls"]
 
 
+def _final_assistant_text(mem) -> str:
+    """Return the orchestrator's closing status message so job results carry
+    real outcomes back to the dispatching agent."""
+    for msg in reversed(mem.messages):
+        if isinstance(msg, AIMessage) and not getattr(msg, "tool_calls", None):
+            text = msg.content if isinstance(msg.content, str) else str(msg.content)
+            if text.strip():
+                return text.strip()
+    return ""
+
+
 async def _run_regional_orchestrator(
     run_id,
     runner,
@@ -818,7 +829,11 @@ async def _run_regional_orchestrator(
     finally:
         pool.drain("cancelled")
 
-    result = {"region": region, "toolCalls": tool_calls}
+    result = {
+        "region": region,
+        "toolCalls": tool_calls,
+        "summary": _final_assistant_text(mem),
+    }
     ro.end(result)
     ro.terminate("completed")
     return result
@@ -1533,6 +1548,47 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
         finally:
             _finish(w, record)
 
+    @tool
+    def call_partner(provider_id: str, operation: str, payload_json: str = "{}") -> str:
+        """Call an external partner provider over its real auth surface.
+
+        Use for partner operations beyond the dedicated tools: cordoba-fx (fx quotes/
+        conversions/settlement payments), ironbark-erp/tallyhall-books (vendors/bills),
+        pulse-market (quotes, OHLC bars, end-of-day reference fixings), inkwell-ocr
+        (document extraction), slate-ledger (journals), vela-notify (notifications),
+        meridian-pay/quetzal-payouts/halcyon-bank (payments, payouts, open banking),
+        beacon-crm (CRM), core-billing (internal AR), lumen-identity (directory),
+        atlas-vendor (vendor MDM over MCP), sabre-tax, junction-procure (procure-to-pay),
+        relay-automation, aegis-screening, and verafin-monitor.
+        Every call routes through the Caracal Gateway under the worker's own narrowed mandate.
+        `payload_json` is a JSON object string of operation arguments. Spawns a partner-integration worker.
+        """
+        try:
+            payload = json.loads(payload_json) if payload_json else {}
+        except json.JSONDecodeError:
+            return json.dumps(
+                {
+                    "error": "invalid_payload",
+                    "message": "payload_json must be a JSON object",
+                }
+            )
+        if not isinstance(payload, dict):
+            return json.dumps(
+                {
+                    "error": "invalid_payload",
+                    "message": "payload_json must be a JSON object",
+                }
+            )
+        w = _worker("partner-integration", f"partner:{provider_id}:{operation}")
+        try:
+            return json.dumps(
+                tool_fns.partner_operation(
+                    run_id, w.id, provider_id, operation, payload
+                )
+            )
+        finally:
+            _finish(w, {"provider_id": provider_id, "operation": operation})
+
     return [
         kyb_screen_vendor,
         register_vendor,
@@ -1591,6 +1647,7 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id):
         resolve_approver_chain,
         check_user_access,
         record_audit,
+        call_partner,
     ]
 
 
@@ -1681,7 +1738,11 @@ async def _run_workflow_orchestrator(
     finally:
         pool.drain("cancelled")
 
-    result = {"workflow_id": workflow_id, "toolCalls": tool_calls}
+    result = {
+        "workflow_id": workflow_id,
+        "toolCalls": tool_calls,
+        "summary": _final_assistant_text(mem),
+    }
     wo.end(result)
     wo.terminate("completed")
     return result

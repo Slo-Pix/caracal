@@ -534,7 +534,10 @@ def call(provider_id: str, operation: str, payload: dict, authority=None) -> dic
     served directly for the offline demo and tests."""
     s = spec(provider_id)
     if operation not in s.operations:
-        raise KeyError(f"unknown operation {operation!r} for partner {provider_id!r}")
+        raise KeyError(
+            f"unknown operation {operation!r} for partner {provider_id!r}; "
+            f"valid operations: {', '.join(sorted(s.operations))}"
+        )
 
     from app import caracal
 
