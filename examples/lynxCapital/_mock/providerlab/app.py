@@ -149,7 +149,7 @@ def build_app(provider: catalog.Provider) -> FastAPI:
         @app.post("/mcp")
         async def mcp_endpoint(request: Request):
             try:
-                principal = auth.authenticate(provider, request)
+                principal = await auth.authenticate(provider, request)
             except auth.AuthError as exc:
                 activity.record("anonymous", "rejected", "mcp", exc.status)
                 return _auth_error_response(exc, provider)
@@ -175,7 +175,7 @@ def build_app(provider: catalog.Provider) -> FastAPI:
         if operation not in provider.operations:
             return JSONResponse(status_code=404, content={"error": "unknown_operation", "message": operation})
         try:
-            principal = auth.authenticate(provider, request)
+            principal = await auth.authenticate(provider, request)
         except auth.AuthError as exc:
             activity.record("anonymous", "rejected", operation, exc.status)
             return _auth_error_response(exc, provider)
@@ -208,7 +208,7 @@ def _install_sse(app: FastAPI, provider: catalog.Provider, state) -> None:
     @app.get("/stream")
     async def stream(request: Request):
         try:
-            principal = auth.authenticate(provider, request)
+            principal = await auth.authenticate(provider, request)
         except auth.AuthError as exc:
             return _auth_error_response(exc, provider)
         symbol = request.query_params.get("symbol", "USD/EUR")

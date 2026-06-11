@@ -28,7 +28,7 @@ def _bearer_from(request: Request, header: str, scheme: str) -> str:
     return raw.strip()
 
 
-def authenticate(provider: catalog.Provider, request: Request) -> dict:
+async def authenticate(provider: catalog.Provider, request: Request) -> dict:
     """Validate the inbound credential for a domain call. Returns a principal context."""
     store = credentials.load(provider.id)
     cat = provider.category
@@ -79,7 +79,7 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
     if cat == "caracal_mandate" or (cat == "mcp" and provider.mcp_auth == "mandate"):
         presented = _bearer_from(request, provider.auth_header, provider.auth_scheme)
         try:
-            claims = mandate.verify(
+            claims = await mandate.verify(
                 presented,
                 store.data["signing_key"],
                 zone=store.data["zone"],
@@ -89,21 +89,18 @@ def authenticate(provider: catalog.Provider, request: Request) -> dict:
                 require_delegation=provider.require_delegation,
             )
         except mandate.VerifyError as exc:
-            if exc.code == "verifier_unavailable":
+            if exc.code in ("verifier_unavailable", "partnership_unconfigured"):
                 status = 503
             elif exc.code in ("insufficient_scope", "delegation_required", "session_revoked", "invalid_zone"):
                 status = 403
             else:
                 status = 401
             raise AuthError(status, exc.code, exc.message) from exc
-        # Lab-minted seed mandates carry the lab scope vocabulary directly; for
-        # Caracal-issued mandates the zone policy already authorized the call at
-        # mint and use time, so the verified mandate grants the provider surface.
-        granted = claims.get("scopes") if claims.get("iss") == mandate.ISSUER else list(provider.scopes)
         return {
             "principal": claims.get("sub"),
             "auth": "caracal_mandate",
-            "scope": granted,
+            "issuedBy": claims.get("issued_by", "lab"),
+            "scope": list(claims.get("scopes", [])),
             "subjectType": claims.get("sub_type"),
             "zone": claims.get("zone"),
             "sessionId": claims.get("sid"),
