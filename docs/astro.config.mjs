@@ -182,6 +182,7 @@ export default defineConfig({
               items: [
                 { label: 'Protect a Gateway-Routed HTTP API', link: '/guides/protect-gateway-http/' },
                 { label: 'Protect an Express App', link: '/guides/protect-express/' },
+                { label: 'Protect a FastAPI App', link: '/guides/protect-fastapi/' },
                 { label: 'Protect a FastMCP App', link: '/guides/protect-fastmcp/' },
                 { label: 'Protect a Go net/http Service', link: '/guides/protect-nethttp/' },
                 { label: 'Protect an MCP Server', link: '/guides/protect-mcp/' },
@@ -219,6 +220,7 @@ export default defineConfig({
                 { label: 'Verification Layer Overview', link: '/sdks/verification-layer/' },
                 { label: 'Framework Connectors', link: '/sdks/connectors/' },
                 { label: 'Express Connector', link: '/sdks/connectors/express/' },
+                { label: 'ASGI Connector', link: '/sdks/connectors/asgi/' },
                 { label: 'FastMCP Connector', link: '/sdks/connectors/fastmcp/' },
                 { label: 'Go net/http Connector', link: '/sdks/connectors/nethttp/' },
                 { label: 'MCP Auth Transport', link: '/sdks/transport-mcp/' },

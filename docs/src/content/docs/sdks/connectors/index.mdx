@@ -10,6 +10,7 @@ Framework connectors adapt the lower-level identity and MCP auth transport packa
 | Connector | Package | Use it for |
 | --- | --- | --- |
 | [Express](/sdks/connectors/express/) | `@caracalai/mcp-express` | Protecting Express 5 routes with Caracal mandate verification. |
+| [ASGI](/sdks/connectors/asgi/) | `caracalai-asgi` | Protecting FastAPI, Starlette, and other Python ASGI apps with Caracal mandate verification. |
 | [FastMCP](/sdks/connectors/fastmcp/) | `@caracalai/mcp-fastmcp`, `caracalai-mcp-fastmcp` | Verifying FastMCP bearer tokens before tool execution. |
 | [Go net/http](/sdks/connectors/nethttp/) | `github.com/garudex-labs/caracal/packages/connectors/nethttp/go` | Protecting Go HTTP handlers. |
 
@@ -19,6 +20,7 @@ Framework connectors adapt the lower-level identity and MCP auth transport packa
 | --- | --- |
 | Framework-neutral verification | [MCP Auth Transport](/sdks/transport-mcp/) |
 | Express route middleware | [Express Connector](/sdks/connectors/express/) |
+| FastAPI/Starlette (ASGI) middleware | [ASGI Connector](/sdks/connectors/asgi/) |
 | FastMCP tool/server authentication | [FastMCP Connector](/sdks/connectors/fastmcp/) |
 | Go HTTP middleware | [Go net/http Connector](/sdks/connectors/nethttp/) |
 | Shared revocation store | [Redis Revocation Store](/sdks/connectors/redis/) |
@@ -42,5 +44,6 @@ Connectors never re-derive these status codes; they consume the shared mapping.
 - [Verification Layer Overview](/sdks/verification-layer/)
 - [Protect an MCP Server](/guides/protect-mcp/)
 - [Protect an Express App](/guides/protect-express/)
+- [Protect a FastAPI App](/guides/protect-fastapi/)
 - [Protect a FastMCP App](/guides/protect-fastmcp/)
 - [Protect a Go net/http Service](/guides/protect-nethttp/)
