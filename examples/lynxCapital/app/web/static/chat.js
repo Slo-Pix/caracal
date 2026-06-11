@@ -341,7 +341,7 @@ function setStreamingStatus(status) {
   const locked = status === 'connecting'
   promptInput.disabled = locked
   startBtn.disabled = locked
-  startBtn.textContent = locked ? '…' : 'Send'
+  startBtn.classList.toggle('is-busy', locked)
 }
 
 // SESSION METER
@@ -578,6 +578,10 @@ function renderMessage(type, data = {}) {
     node.querySelector('.msg-author').textContent = agentLabel(agent)
     node.querySelector('.msg-model-tag').textContent = data.model || (modelSelect && modelSelect.value) || ''
     node.querySelector('.msg-status-indicator').textContent = data.status || 'Streaming'
+    const prev = AppState.messages[AppState.messages.length - 1]
+    if (prev && prev.type === 'assistant' && prev.data.agentId === data.agentId) {
+      node.classList.add('is-grouped')
+    }
   }
 
   if (type === 'tool') {
@@ -1078,7 +1082,7 @@ function finishRun() {
   AppState.active = false
   startBtn.hidden = false
   startBtn.disabled = false
-  startBtn.textContent = 'Send'
+  startBtn.classList.remove('is-busy')
   stopBtn.hidden = true
   stopBtn.disabled = false
   stopBtn.textContent = 'Cancel'

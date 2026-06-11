@@ -7,7 +7,7 @@ Demo page template for the Lynx Capital runtime workspace.
 {% extends "layout.html" %}
 {% block title %}{{ company }} - Demo{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/demo.css?v=16">
+<link rel="stylesheet" href="/static/demo.css?v=18">
 
 <div class="app-shell">
   <aside class="left-sidebar" aria-label="Runtime session">
@@ -54,6 +54,9 @@ Demo page template for the Lynx Capital runtime workspace.
   <section class="main-viewport" aria-label="Conversation and orchestration workspace">
     <header class="viewport-header">
       <div class="viewport-header-left">
+        <button id="toggle-left-panel" class="panel-toggle" type="button" title="Toggle session panel" aria-expanded="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="5.5" y1="2.5" x2="5.5" y2="13.5"/></svg>
+        </button>
         <h1 class="viewport-title">{{ shortName }} workspace</h1>
         <span id="run-status-chip" class="run-status-chip state-idle">Idle</span>
       </div>
@@ -61,6 +64,9 @@ Demo page template for the Lynx Capital runtime workspace.
         <button id="clear-chat-btn" class="btn" type="button" title="Clear the visible conversation">Clear view</button>
         <button id="new-chat-btn" class="btn" type="button" title="Start a new session">New chat</button>
         <button type="button" class="btn responsive-toggle-btn" id="toggle-graph-btn">Graph</button>
+        <button id="toggle-right-panel" class="panel-toggle" type="button" title="Toggle details panel" aria-expanded="true">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><line x1="10.5" y1="2.5" x2="10.5" y2="13.5"/></svg>
+        </button>
       </div>
     </header>
 
@@ -78,6 +84,8 @@ Demo page template for the Lynx Capital runtime workspace.
 
         {% include "components/demo/input_component.html" %}
       </section>
+
+      <div id="split-divider" class="split-divider" role="separator" aria-orientation="vertical" aria-label="Resize chat and graph" title="Drag to resize · double-click to reset"></div>
 
       <section class="graph-column" aria-label="Workflow map">
         <header class="viewport-header">
@@ -198,6 +206,84 @@ Demo page template for the Lynx Capital runtime workspace.
 {% include "components/demo/message_component.html" %}
 {% include "components/demo/event_block.html" %}
 
-<script src="/static/chat.js?v=17" type="module"></script>
+<script>
+  (() => {
+    const shell = document.querySelector(".app-shell");
+    const split = document.querySelector(".viewport-split-container");
+    const divider = document.getElementById("split-divider");
+    const leftBtn = document.getElementById("toggle-left-panel");
+    const rightBtn = document.getElementById("toggle-right-panel");
+    const MIN_CHAT = 380;
+    const MIN_GRAPH = 320;
+    const DIVIDER_W = 6;
+
+    function applyPanelState(btn, cls, collapsed) {
+      shell.classList.toggle(cls, collapsed);
+      btn.classList.toggle("is-collapsed", collapsed);
+      btn.setAttribute("aria-expanded", String(!collapsed));
+    }
+
+    function bindPanel(btn, cls, storageKey) {
+      applyPanelState(btn, cls, localStorage.getItem(storageKey) === "1");
+      btn.addEventListener("click", () => {
+        const collapsed = !shell.classList.contains(cls);
+        applyPanelState(btn, cls, collapsed);
+        localStorage.setItem(storageKey, collapsed ? "1" : "0");
+      });
+    }
+
+    bindPanel(leftBtn, "leftCollapsed", "lynxLeftCollapsed");
+    bindPanel(rightBtn, "rightCollapsed", "lynxRightCollapsed");
+
+    function clampChatWidth(px) {
+      const max = split.clientWidth - MIN_GRAPH - DIVIDER_W;
+      return Math.min(Math.max(px, MIN_CHAT), Math.max(max, MIN_CHAT));
+    }
+
+    function setChatWidth(px) {
+      split.style.setProperty("--chatW", `${clampChatWidth(px)}px`);
+    }
+
+    const storedRatio = parseFloat(localStorage.getItem("lynxChatSplit"));
+    if (Number.isFinite(storedRatio) && storedRatio > 0 && storedRatio < 1) {
+      setChatWidth(split.clientWidth * storedRatio);
+    }
+
+    divider.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      divider.setPointerCapture(event.pointerId);
+      divider.classList.add("is-dragging");
+      document.body.classList.add("is-resizing");
+
+      const onMove = (move) => {
+        setChatWidth(move.clientX - split.getBoundingClientRect().left);
+      };
+      const onUp = () => {
+        divider.classList.remove("is-dragging");
+        document.body.classList.remove("is-resizing");
+        divider.removeEventListener("pointermove", onMove);
+        divider.removeEventListener("pointerup", onUp);
+        const width = split.style.getPropertyValue("--chatW");
+        if (width && split.clientWidth > 0) {
+          localStorage.setItem("lynxChatSplit", String(parseFloat(width) / split.clientWidth));
+        }
+      };
+      divider.addEventListener("pointermove", onMove);
+      divider.addEventListener("pointerup", onUp);
+    });
+
+    divider.addEventListener("dblclick", () => {
+      split.style.removeProperty("--chatW");
+      localStorage.removeItem("lynxChatSplit");
+    });
+
+    window.addEventListener("resize", () => {
+      const width = split.style.getPropertyValue("--chatW");
+      if (width) setChatWidth(parseFloat(width));
+    });
+  })();
+</script>
+
+<script src="/static/chat.js?v=18" type="module"></script>
 <script src="/static/graph.js?v=15" type="module"></script>
 {% endblock %}
