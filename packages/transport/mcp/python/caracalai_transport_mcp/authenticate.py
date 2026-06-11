@@ -185,6 +185,18 @@ def auth_error(code: ErrorCode, description: str | None = None) -> AuthError:
     return AuthError(code, description or default_description(code), default_hint(code))
 
 
+def http_status_for_auth_error(code: ErrorCode) -> int:
+    if code in (
+        "insufficient_scope",
+        "agent_required",
+        "delegation_required",
+        "chain_mismatch",
+        "hop_count_exceeded",
+    ):
+        return 403
+    return 401
+
+
 def default_description(code: ErrorCode) -> str:
     if code == "missing_token":
         return "Missing bearer token"
