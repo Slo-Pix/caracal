@@ -88,9 +88,15 @@ async def _require_approval(
     run_id: str, agent_id: str, action: str, detail: dict
 ) -> dict | None:
     """Block an irreversible action on a human decision when approvals are
-    enabled. Returns None to proceed, or a denial result to return instead."""
+    enabled. Returns None to proceed, or a denial result to return instead.
+    Identical requests within one run reuse the first decision instead of
+    re-prompting the operator."""
     if not approvals.required():
         return None
+    key = (action, json.dumps(detail, sort_keys=True, default=str))
+    memo = _approvalMemo.setdefault(run_id, {})
+    if key in memo:
+        return memo[key]
     request_id, pending = await approvals.request(run_id, action)
     bus.publish(ev.approval_required(run_id, agent_id, request_id, action, detail))
     decision = await approvals.wait(run_id, request_id, pending)
@@ -100,8 +106,22 @@ async def _require_approval(
         )
     )
     if decision.approved:
-        return None
-    return {"status": "denied", "action": action, "reason": decision.reason, **detail}
+        outcome = None
+    else:
+        outcome = {
+            "status": "denied",
+            "action": action,
+            "reason": decision.reason,
+            "guidance": "This action was rejected by the operator. Do not retry it in this run.",
+            **detail,
+        }
+    memo[key] = outcome
+    while len(_approvalMemo) > 16:
+        _approvalMemo.pop(next(iter(_approvalMemo)))
+    return outcome
+
+
+_approvalMemo: dict[str, dict[tuple[str, str], dict | None]] = {}
 
 
 def _emit_memory_snapshot(run_id: str, mem: AgentMemory) -> None:

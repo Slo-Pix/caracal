@@ -1032,7 +1032,6 @@ function handleEvent(event) {
       if (PLAN_TOOLS.has(payload.tool_name)) break
       setStreamingStatus('streaming')
       const denied = resultDenied(payload.result, { strict: true })
-      if (denied) AppState.metrics.denied += 1
       resolveToolCall(payload, payload.result, denied ? 'blocked' : 'completed')
       break
     }
@@ -1070,7 +1069,6 @@ function handleEvent(event) {
       const record = payload.record || {}
       const decision = String(record.decision || '').toLowerCase()
       const denied = /denied|blocked|reject/.test(decision)
-      if (denied) AppState.metrics.denied += 1
       const sink = !denied && payload.agent_id
         ? ensureSteps(containerFor(payload.agent_id, event.ts)).bodyEl
         : null

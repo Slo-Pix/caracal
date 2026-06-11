@@ -31,13 +31,48 @@ def _authority(run_id: str, agent_id: str):
 def _run(run_id: str, agent_id: str, tool_name: str, provider_id: str,
          operation: str, payload: dict) -> dict[str, object]:
     """Emit the tool/service event pairs and execute one provider operation under the
-    calling agent's authority."""
+    calling agent's authority. Operations denied by Caracal policy are memoized per
+    run so agents cannot hammer a blocked provider with retries."""
     bus.publish(ev.tool_call(run_id, agent_id, tool_name, payload))
+    authority = _authority(run_id, agent_id)
+    key = _denyKey(authority, provider_id, operation)
+    cached = _denyMemo.get(run_id, {}).get(key)
+    if cached is not None:
+        bus.publish(ev.tool_result(run_id, agent_id, tool_name, cached))
+        return cached
     bus.publish(ev.service_call(run_id, agent_id, provider_id, operation, payload))
-    result = _partner(provider_id, operation, payload, authority=_authority(run_id, agent_id))
+    result = _partner(provider_id, operation, payload, authority=authority)
+    _memoize_denial(run_id, key, result)
     bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
     bus.publish(ev.tool_result(run_id, agent_id, tool_name, result))
     return result
+
+
+_denyMemo: dict[str, dict[tuple, dict]] = {}
+
+
+def _denyKey(authority, provider_id: str, operation: str) -> tuple:
+    """Denials are a function of the calling authority: a worker with a different
+    role or application boundary may legitimately succeed on the same operation."""
+    if authority is None:
+        return (None, None, provider_id, operation)
+    return (authority.application, authority.role, provider_id, operation)
+
+
+def _memoize_denial(run_id: str, key: tuple, result: dict) -> None:
+    status = result.get("status")
+    if not isinstance(status, int) or status not in (401, 403):
+        return
+    memo = _denyMemo.setdefault(run_id, {})
+    memo[key] = {
+        **result,
+        "guidance": (
+            "Caracal denied this operation for the current agent's authority. "
+            "Do not retry it in this run; report the denial and continue."
+        ),
+    }
+    while len(_denyMemo) > 16:
+        _denyMemo.pop(next(iter(_denyMemo)))
 
 
 # -- invoice-intake tools --
@@ -843,8 +878,15 @@ def partner_operation(run_id: str, agent_id: str, provider_id: str, operation: s
                       payload: dict[str, object] | None = None) -> dict[str, object]:
     args = {"provider_id": provider_id, "operation": operation, "payload": payload or {}}
     bus.publish(ev.tool_call(run_id, agent_id, "partner_operation", args))
+    authority = _authority(run_id, agent_id)
+    key = _denyKey(authority, provider_id, operation)
+    cached = _denyMemo.get(run_id, {}).get(key)
+    if cached is not None:
+        bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", cached))
+        return cached
     bus.publish(ev.service_call(run_id, agent_id, provider_id, operation, args["payload"]))
-    result = _partner(provider_id, operation, payload or {}, authority=_authority(run_id, agent_id))
+    result = _partner(provider_id, operation, payload or {}, authority=authority)
+    _memoize_denial(run_id, key, result)
     bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
     bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", result))
     return result
