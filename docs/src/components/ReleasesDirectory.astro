@@ -3,7 +3,7 @@
  * Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
  * Caracal, a product of Garudex Labs
  *
- * Releases page listing every Caracal version with validation status, artifact versions, and downloads.
+ * Changelog-style release timeline with per-version validation status, artifact versions, and downloads.
  */
 
 interface ValidationArea {
@@ -52,6 +52,14 @@ const releaseUrl = (tag: string) => `${repo}/releases/tag/${tag}`;
 const formatDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 
+const componentLabels: Record<string, string> = {
+  "caracal-runtime": "Runtime",
+  "caracal-console": "Console",
+  "caracal-shell": "Shell",
+  "caracal-cli": "CLI",
+  "caracal-tui": "TUI",
+};
+
 const platformLabel = (name: string) => {
   const os = name.includes("darwin") ? "macOS" : name.includes("windows") ? "Windows" : "Linux";
   const arch = name.includes("arm64") ? "arm64" : "amd64";
@@ -60,474 +68,633 @@ const platformLabel = (name: string) => {
 
 const groupAssets = (record: ReleaseRecord) => {
   const archives = record.assets.filter((a) => a.endsWith(".tar.gz") || a.endsWith(".zip"));
-  const binaryGroups = new Map<string, { name: string; label: string }[]>();
+  const components = new Map<string, { name: string; label: string }[]>();
   for (const name of archives) {
-    const kind = name.split("-").slice(0, 2).join("-");
-    const list = binaryGroups.get(kind) ?? [];
+    const prefix = name.split("-").slice(0, 2).join("-");
+    const label = componentLabels[prefix] ?? prefix;
+    const list = components.get(label) ?? [];
     list.push({ name, label: platformLabel(name) });
-    binaryGroups.set(kind, list);
+    components.set(label, list);
   }
   const extras = record.assets.filter((a) => !archives.includes(a));
-  return { binaryGroups, extras };
+  return { components, extras };
 };
 
-const packageSummary = (record: ReleaseRecord) => {
+const artifactRows = (record: ReleaseRecord) => {
   const first = (entries: Record<string, string>) => Object.values(entries)[0];
-  const items: { label: string; value: string }[] = [];
-  if (record.binaries.runtime ?? record.binaries.cli) {
-    items.push({ label: "Runtime", value: record.binaries.runtime ?? record.binaries.cli });
+  const rows: { label: string; value: string }[] = [];
+  const binary = record.binaries.runtime ?? record.binaries.cli ?? record.binaries.shell;
+  if (binary) rows.push({ label: "Binaries", value: binary });
+  if (Object.keys(record.images).length) {
+    const ref = first(record.images);
+    rows.push({ label: "Containers", value: ref.includes(":") ? ref.slice(ref.lastIndexOf(":") + 1) : ref });
   }
-  if (Object.keys(record.npm).length) items.push({ label: "npm", value: first(record.npm) });
-  if (Object.keys(record.pypi).length) items.push({ label: "PyPI", value: first(record.pypi) });
-  if (record.helm) items.push({ label: "Helm", value: record.helm });
-  return items;
+  if (Object.keys(record.npm).length) rows.push({ label: "npm", value: first(record.npm) });
+  if (Object.keys(record.pypi).length) rows.push({ label: "PyPI", value: first(record.pypi) });
+  if (record.helm) rows.push({ label: "Helm", value: record.helm });
+  return rows;
+};
+
+const grade = (v: Validation) => (v.fail > 0 ? "fail" : v.warn > 0 ? "warn" : "pass");
+const areaGrade = (a: ValidationArea) => (a.fail > 0 ? "fail" : a.warn > 0 ? "warn" : "pass");
+const barWidths = (v: Validation) => {
+  const total = Math.max(v.pass + v.warn + v.fail, 1);
+  return {
+    pass: (v.pass / total) * 100,
+    warn: (v.warn / total) * 100,
+    fail: (v.fail / total) * 100,
+  };
 };
 ---
 
-<section class="releases-page" aria-labelledby="releases-heading">
-  <div class="releases-page__inner">
-    <header class="releases-hero">
-      <p class="docs-section__eyebrow">Caracal Releases</p>
-      <h1 id="releases-heading" class="releases-hero__title">Every version, verified</h1>
-      <p class="releases-hero__lede">
-        Each Caracal release ships binaries, container images, SDK packages, and a Helm chart, then runs a
-        post-release validation matrix across registries, installs, installers, containers, and provenance.
-        Browse any version below and download exactly what it published.
+<section class="media-page releases-page not-content" aria-labelledby="releases-heading">
+  <div class="media-page__inner releases-page__inner">
+    <header class="media-head">
+      <div class="media-head__row">
+        <h1 id="releases-heading" class="media-head__title">Releases</h1>
+        {latest && (
+          <a class="media-head__submit" href={releaseUrl(latest.release)}>
+            Latest: {latest.release}
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+            </svg>
+          </a>
+        )}
+      </div>
+      <p class="media-head__lede">
+        Every Caracal release ships binaries, container images, SDK packages, and a Helm chart, then
+        runs a post-release validation matrix across registries, installs, containers, and provenance.
       </p>
-      {latest && (
-        <div class="releases-hero__latest">
-          <span class="release-badge" data-channel={latest.channel}>
-            {latest.channel === "rc" ? "Release candidate" : "Stable"}
-          </span>
-          <a class="releases-hero__tag" href={releaseUrl(latest.release)}>{latest.release}</a>
-          <span class="releases-hero__date">{formatDate(latest.date)}</span>
-        </div>
-      )}
     </header>
 
-    <ol class="release-list">
+    <ol class="rel-timeline">
       {releases.map((record) => {
-        const { binaryGroups, extras } = groupAssets(record);
+        const { components, extras } = groupAssets(record);
         const v = record.validation;
+        const w = v ? barWidths(v) : null;
         return (
-          <li class="release-card">
-            <div class="release-card__head">
-              <div class="release-card__id">
-                <a class="release-card__tag" href={releaseUrl(record.release)}>{record.release}</a>
-                <span class="release-badge" data-channel={record.channel}>
-                  {record.channel === "rc" ? "RC" : "Stable"}
-                </span>
-              </div>
-              <div class="release-card__facts">
-                <span>{formatDate(record.date)}</span>
-                {record.sha && <span class="release-card__sha">{record.sha}</span>}
+          <li class="rel-entry">
+            <div class="rel-rail">
+              <span class="rel-rail__dot" data-channel={record.channel} aria-hidden="true"></span>
+              <time class="rel-rail__date" datetime={record.date}>{formatDate(record.date)}</time>
+              <span class="rel-badge" data-channel={record.channel}>
+                {record.channel === "rc" ? "Release candidate" : "Stable"}
+              </span>
+            </div>
+
+            <article class="rel-body">
+              <header class="rel-head">
+                <a class="rel-head__version" href={releaseUrl(record.release)}>
+                  {record.release}
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
                 {v ? (
-                  <span class="release-score" data-grade={v.fail > 0 ? "fail" : v.warn > 0 ? "warn" : "pass"}>
+                  <span class="rel-verdict" data-grade={grade(v)}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      {grade(v) === "pass" ? (
+                        <polyline points="20 6 9 17 4 12" />
+                      ) : (
+                        <><path d="M12 9v4" /><path d="M12 17h.01" /><circle cx="12" cy="12" r="10" /></>
+                      )}
+                    </svg>
                     {v.score}% verified
                   </span>
                 ) : (
-                  <span class="release-score" data-grade="none">validation pending</span>
+                  <span class="rel-verdict" data-grade="none">Validation pending</span>
                 )}
-              </div>
-            </div>
+              </header>
 
-            <div class="release-card__versions">
-              {packageSummary(record).map((item) => (
-                <span class="release-chip">
-                  <span class="release-chip__label">{item.label}</span>
-                  <code>{item.value}</code>
-                </span>
-              ))}
-            </div>
+              <dl class="rel-artifacts">
+                {artifactRows(record).map((row) => (
+                  <div class="rel-artifacts__cell">
+                    <dt>{row.label}</dt>
+                    <dd>{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
 
-            {v && (
-              <details class="release-fold">
-                <summary>
-                  Validation
-                  <span class="release-fold__hint">
-                    {v.pass} pass · {v.warn} warn · {v.fail} fail
-                  </span>
-                </summary>
-                <div class="release-areas">
-                  {v.areas.map((area) => (
-                    <div class="release-area" data-grade={area.fail > 0 ? "fail" : area.warn > 0 ? "warn" : "pass"}>
-                      <span class="release-area__label">{area.label}</span>
-                      <span class="release-area__count">
-                        {area.pass}/{area.pass + area.warn + area.fail}
+              {v && w && (
+                <div class="rel-validation">
+                  <div class="rel-validation__bar" role="img" aria-label={`${v.pass} passed, ${v.warn} warnings, ${v.fail} failed`}>
+                    {w.pass > 0 && <span class="isPass" style={`width:${w.pass}%`}></span>}
+                    {w.warn > 0 && <span class="isWarn" style={`width:${w.warn}%`}></span>}
+                    {w.fail > 0 && <span class="isFail" style={`width:${w.fail}%`}></span>}
+                  </div>
+                  <p class="rel-validation__count">
+                    {v.pass + v.warn + v.fail} checks · {v.pass} passed
+                    {v.warn > 0 && ` · ${v.warn} warnings`}
+                    {v.fail > 0 && ` · ${v.fail} failed`}
+                  </p>
+                  <div class="rel-validation__areas">
+                    {v.areas.map((area) => (
+                      <span class="rel-area" data-grade={areaGrade(area)}>
+                        <span class="rel-area__dot" aria-hidden="true"></span>
+                        {area.label}
                       </span>
-                    </div>
-                  ))}
-                </div>
-                {v.notes.length > 0 && (
-                  <ul class="release-notes">
-                    {v.notes.map((note) => <li>{note}</li>)}
-                  </ul>
-                )}
-              </details>
-            )}
-
-            {record.assets.length > 0 && (
-              <details class="release-fold">
-                <summary>
-                  Downloads
-                  <span class="release-fold__hint">{record.assets.length} assets</span>
-                </summary>
-                <div class="release-downloads">
-                  {[...binaryGroups.entries()].map(([kind, files]) => (
-                    <div class="release-downloads__group">
-                      <span class="release-downloads__kind">{kind}</span>
-                      <div class="release-downloads__links">
-                        {files.map((file) => (
-                          <a href={assetUrl(record.release, file.name)} download>{file.label}</a>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                  {extras.length > 0 && (
-                    <div class="release-downloads__group">
-                      <span class="release-downloads__kind">metadata &amp; installers</span>
-                      <div class="release-downloads__links">
-                        {extras.map((name) => (
-                          <a href={assetUrl(record.release, name)} download>{name}</a>
-                        ))}
-                      </div>
-                    </div>
+                    ))}
+                  </div>
+                  {v.notes.length > 0 && v.notes.length <= 3 && (
+                    <ul class="rel-validation__notes">
+                      {v.notes.map((note) => <li>{note}</li>)}
+                    </ul>
+                  )}
+                  {v.notes.length > 3 && (
+                    <details class="rel-notesFold">
+                      <summary>
+                        <svg class="rel-notesFold__chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                        {v.notes.length} validation notes
+                      </summary>
+                      <ul class="rel-validation__notes">
+                        {v.notes.map((note) => <li>{note}</li>)}
+                      </ul>
+                    </details>
                   )}
                 </div>
-              </details>
-            )}
+              )}
+
+              {record.assets.length > 0 && (
+                <details class="rel-downloads">
+                  <summary>
+                    <svg class="rel-downloads__chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    Downloads
+                    <span class="rel-downloads__count">{record.assets.length} assets</span>
+                  </summary>
+                  <div class="rel-downloads__grid">
+                    {[...components.entries()].map(([label, files]) => (
+                      <div class="rel-downloads__row">
+                        <span class="rel-downloads__label">{label}</span>
+                        <span class="rel-downloads__links">
+                          {files.map((file) => (
+                            <a href={assetUrl(record.release, file.name)} download>
+                              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              {file.label}
+                            </a>
+                          ))}
+                        </span>
+                      </div>
+                    ))}
+                    {extras.length > 0 && (
+                      <div class="rel-downloads__row">
+                        <span class="rel-downloads__label">Installers &amp; metadata</span>
+                        <span class="rel-downloads__links">
+                          {extras.map((name) => (
+                            <a href={assetUrl(record.release, name)} download>{name}</a>
+                          ))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              )}
+            </article>
           </li>
         );
       })}
     </ol>
 
-    <footer class="releases-footer">
+    <footer class="rel-footer">
       <p>
-        Container images are published to <code>ghcr.io/garudex-labs</code>. Verify any download against the
-        release <code>SHA256SUMS</code> — see <a href="/security/verify-releases/">Verify a Release</a>.
+        Container images are published to <code>ghcr.io/garudex-labs</code>. Verify any download against
+        the release <code>SHA256SUMS</code> — see <a href="/security/verify-releases/">Verify a Release</a>.
       </p>
     </footer>
   </div>
 </section>
 
 <style>
-  .releases-page {
-    padding: clamp(5.5rem, 9vw, 7rem) 1.25rem 4rem;
-  }
-
   .releases-page__inner {
-    max-width: 56rem;
-    margin: 0 auto;
-    display: grid;
-    gap: clamp(2rem, 4vw, 3rem);
+    max-width: 54rem;
   }
 
-  .releases-hero__title {
-    margin: 0;
-    font-family: "Space Grotesk", var(--sl-font);
-    font-size: clamp(2.1rem, 4.5vw, 2.8rem);
-    font-weight: 780;
-    letter-spacing: -0.03em;
-    line-height: 1.05;
-    color: var(--sl-color-text);
-  }
-
-  .releases-hero__lede {
-    margin: 0.75rem 0 0;
-    max-width: 38rem;
-    font-size: 1rem;
-    line-height: 1.6;
-    color: color-mix(in srgb, var(--sl-color-text) 72%, transparent);
-  }
-
-  .releases-hero__latest {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.6rem;
-    margin-top: 1.4rem;
-  }
-
-  .releases-hero__tag {
-    font-family: var(--sl-font-mono, monospace);
-    font-size: 1.05rem;
-    font-weight: 640;
-    color: var(--sl-color-text);
-    text-decoration: none;
-  }
-
-  .releases-hero__tag:hover {
-    color: var(--sl-color-text-accent);
-  }
-
-  .releases-hero__date {
-    font-size: 0.85rem;
-    color: var(--sl-color-gray-3);
-  }
-
-  .release-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.14rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    font-weight: 680;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .release-badge[data-channel="stable"] {
-    background: color-mix(in srgb, var(--sl-color-green) 16%, transparent);
-    color: var(--sl-color-green-high, var(--sl-color-green));
-  }
-
-  .release-badge[data-channel="rc"] {
-    background: color-mix(in srgb, var(--sl-color-orange) 16%, transparent);
-    color: var(--sl-color-orange-high, var(--sl-color-orange));
-  }
-
-  .release-list {
+  /* Timeline */
+  .rel-timeline {
     list-style: none;
     margin: 0;
     padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rel-entry {
+    position: relative;
     display: grid;
-    gap: 1rem;
+    grid-template-columns: 11rem 1fr;
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    padding-bottom: clamp(2.25rem, 4vw, 3.25rem);
   }
 
-  .release-card {
-    border: 1px solid var(--sl-color-hairline);
-    border-radius: 14px;
-    padding: 1.1rem 1.25rem;
-    background: color-mix(in srgb, var(--sl-color-bg-nav) 55%, transparent);
-    display: grid;
-    gap: 0.85rem;
+  .rel-entry::before {
+    content: "";
+    position: absolute;
+    top: 0.55rem;
+    bottom: -0.55rem;
+    left: calc(11rem + clamp(1.25rem, 3vw, 2.5rem) / 2 - 0.5px);
+    width: 1px;
+    background: var(--sl-color-hairline);
   }
 
-  .release-card__head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .release-card__id {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .release-card__tag {
-    font-family: var(--sl-font-mono, monospace);
-    font-size: 1.08rem;
-    font-weight: 660;
-    color: var(--sl-color-text);
-    text-decoration: none;
-  }
-
-  .release-card__tag:hover {
-    color: var(--sl-color-text-accent);
-  }
-
-  .release-card__facts {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-    font-size: 0.82rem;
-    color: var(--sl-color-gray-3);
-  }
-
-  .release-card__sha {
-    font-family: var(--sl-font-mono, monospace);
-  }
-
-  .release-score {
-    padding: 0.12rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.74rem;
-    font-weight: 650;
-  }
-
-  .release-score[data-grade="pass"] {
-    background: color-mix(in srgb, var(--sl-color-green) 14%, transparent);
-    color: var(--sl-color-green-high, var(--sl-color-green));
-  }
-
-  .release-score[data-grade="warn"] {
-    background: color-mix(in srgb, var(--sl-color-orange) 14%, transparent);
-    color: var(--sl-color-orange-high, var(--sl-color-orange));
-  }
-
-  .release-score[data-grade="fail"] {
-    background: color-mix(in srgb, var(--sl-color-red) 14%, transparent);
-    color: var(--sl-color-red-high, var(--sl-color-red));
-  }
-
-  .release-score[data-grade="none"] {
-    background: color-mix(in srgb, var(--sl-color-gray-4) 14%, transparent);
-    color: var(--sl-color-gray-3);
-  }
-
-  .release-card__versions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .release-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.22rem 0.6rem;
-    border: 1px solid var(--sl-color-hairline);
-    border-radius: 8px;
-    font-size: 0.78rem;
-  }
-
-  .release-chip__label {
-    color: var(--sl-color-gray-3);
-    font-weight: 620;
-  }
-
-  .release-chip code {
-    background: none;
-    padding: 0;
-    font-size: 0.78rem;
-    color: var(--sl-color-text);
-  }
-
-  .release-fold {
-    border-top: 1px solid var(--sl-color-hairline);
-    padding-top: 0.7rem;
-  }
-
-  .release-fold summary {
-    display: flex;
-    align-items: baseline;
-    gap: 0.7rem;
-    font-size: 0.86rem;
-    font-weight: 640;
-    color: var(--sl-color-text);
-    cursor: var(--caracal-cursor-pointer, pointer);
-    list-style: none;
-  }
-
-  .release-fold summary::-webkit-details-marker {
+  .rel-entry:last-child::before {
     display: none;
   }
 
-  .release-fold summary::before {
-    content: "+";
-    font-weight: 600;
-    color: var(--sl-color-gray-3);
-  }
-
-  .release-fold[open] summary::before {
-    content: "–";
-  }
-
-  .release-fold__hint {
-    font-size: 0.78rem;
-    font-weight: 480;
-    color: var(--sl-color-gray-3);
-  }
-
-  .release-areas {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  .rel-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 0.45rem;
-    margin-top: 0.8rem;
+    text-align: right;
   }
 
-  .release-area {
+  .rel-rail__dot {
+    position: absolute;
+    top: 0.32rem;
+    left: calc(11rem + clamp(1.25rem, 3vw, 2.5rem) / 2 - 4.5px);
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--sl-color-green);
+    box-shadow: 0 0 0 4px var(--sl-color-bg);
+  }
+
+  .rel-rail__dot[data-channel="rc"] {
+    background: var(--sl-color-orange);
+  }
+
+  .rel-rail__date {
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    color: var(--sl-color-gray-3);
+  }
+
+  .rel-badge {
+    font-size: 0.7rem;
+    font-weight: 660;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-4);
+  }
+
+  .rel-badge[data-channel="stable"] {
+    color: var(--sl-color-green-high, var(--sl-color-green));
+  }
+
+  .rel-badge[data-channel="rc"] {
+    color: var(--sl-color-orange-high, var(--sl-color-orange));
+  }
+
+  /* Entry body */
+  .rel-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .rel-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.4rem 0.6rem;
-    border-radius: 8px;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+
+  .rel-head__version {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: "Space Grotesk", var(--sl-font);
+    font-size: clamp(1.25rem, 2.6vw, 1.55rem);
+    font-weight: 740;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--sl-color-text);
+    text-decoration: none;
+    transition: color 140ms ease;
+  }
+
+  .rel-head__version svg {
+    color: var(--sl-color-gray-4);
+    opacity: 0;
+    transform: translate(-3px, 3px);
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+
+  .rel-head__version:hover {
+    color: var(--sl-color-text-accent);
+  }
+
+  .rel-head__version:hover svg {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+
+  .rel-verdict {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 650;
+  }
+
+  .rel-verdict[data-grade="pass"] {
+    background: color-mix(in srgb, var(--sl-color-green) 13%, transparent);
+    color: var(--sl-color-green-high, var(--sl-color-green));
+  }
+
+  .rel-verdict[data-grade="warn"] {
+    background: color-mix(in srgb, var(--sl-color-orange) 13%, transparent);
+    color: var(--sl-color-orange-high, var(--sl-color-orange));
+  }
+
+  .rel-verdict[data-grade="fail"] {
+    background: color-mix(in srgb, var(--sl-color-red) 13%, transparent);
+    color: var(--sl-color-red-high, var(--sl-color-red));
+  }
+
+  .rel-verdict[data-grade="none"] {
+    background: color-mix(in srgb, var(--sl-color-gray-4) 12%, transparent);
+    color: var(--sl-color-gray-3);
+  }
+
+  /* Artifact versions */
+  .rel-artifacts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(7.5rem, max-content));
+    gap: 0.5rem 2rem;
+    margin: 0;
+    padding: 0.8rem 1rem;
     border: 1px solid var(--sl-color-hairline);
-    font-size: 0.78rem;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--sl-color-bg-nav) 45%, transparent);
   }
 
-  .release-area[data-grade="warn"] {
-    border-color: color-mix(in srgb, var(--sl-color-orange) 45%, transparent);
+  .rel-artifacts__cell dt {
+    font-size: 0.68rem;
+    font-weight: 660;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--sl-color-gray-4);
   }
 
-  .release-area[data-grade="fail"] {
-    border-color: color-mix(in srgb, var(--sl-color-red) 55%, transparent);
-  }
-
-  .release-area__label {
+  .rel-artifacts__cell dd {
+    margin: 0.15rem 0 0;
+    font-family: var(--sl-font-mono);
+    font-size: 0.8rem;
     color: var(--sl-color-text);
   }
 
-  .release-area__count {
-    font-family: var(--sl-font-mono, monospace);
+  /* Validation */
+  .rel-validation {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .rel-validation__bar {
+    display: flex;
+    height: 5px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--sl-color-gray-5) 50%, transparent);
+  }
+
+  .rel-validation__bar .isPass {
+    background: var(--sl-color-green);
+  }
+
+  .rel-validation__bar .isWarn {
+    background: var(--sl-color-orange);
+  }
+
+  .rel-validation__bar .isFail {
+    background: var(--sl-color-red);
+  }
+
+  .rel-validation__count {
+    margin: 0;
+    font-size: 0.78rem;
     color: var(--sl-color-gray-3);
   }
 
-  .release-notes {
-    margin: 0.7rem 0 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.3rem;
-    font-size: 0.78rem;
-    line-height: 1.5;
-    color: var(--sl-color-gray-2);
-  }
-
-  .release-downloads {
-    display: grid;
-    gap: 0.7rem;
-    margin-top: 0.8rem;
-  }
-
-  .release-downloads__group {
-    display: grid;
+  .rel-validation__areas {
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.35rem;
   }
 
-  .release-downloads__kind {
-    font-family: var(--sl-font-mono, monospace);
+  .rel-area {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.18rem 0.6rem;
+    border: 1px solid var(--sl-color-hairline);
+    border-radius: 999px;
     font-size: 0.74rem;
+    color: var(--sl-color-gray-2);
+  }
+
+  .rel-area__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--sl-color-green);
+  }
+
+  .rel-area[data-grade="warn"] .rel-area__dot {
+    background: var(--sl-color-orange);
+  }
+
+  .rel-area[data-grade="fail"] .rel-area__dot {
+    background: var(--sl-color-red);
+  }
+
+  .rel-validation__notes {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+    line-height: 1.5;
     color: var(--sl-color-gray-3);
   }
 
-  .release-downloads__links {
+  .rel-notesFold summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 620;
+    color: var(--sl-color-gray-3);
+    cursor: var(--caracal-cursor-pointer, pointer);
+    list-style: none;
+    user-select: none;
+  }
+
+  .rel-notesFold summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rel-notesFold__chevron {
+    transition: transform 140ms ease;
+  }
+
+  .rel-notesFold[open] .rel-notesFold__chevron {
+    transform: rotate(90deg);
+  }
+
+  .rel-notesFold .rel-validation__notes {
+    margin-top: 0.5rem;
+  }
+
+  /* Downloads */
+  .rel-downloads {
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .rel-downloads summary::marker {
+    content: none;
+  }
+
+  .rel-downloads summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.85rem;
+    font-weight: 650;
+    color: var(--sl-color-text);
+    cursor: var(--caracal-cursor-pointer, pointer);
+    list-style: none;
+    user-select: none;
+  }
+
+  .rel-downloads summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .rel-downloads__chevron {
+    color: var(--sl-color-gray-4);
+    transition: transform 140ms ease;
+  }
+
+  .rel-downloads[open] .rel-downloads__chevron {
+    transform: rotate(90deg);
+  }
+
+  .rel-downloads__count {
+    font-size: 0.76rem;
+    font-weight: 480;
+    color: var(--sl-color-gray-4);
+  }
+
+  .rel-downloads__grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin-top: 0.85rem;
+  }
+
+  .rel-downloads__row {
+    display: grid;
+    grid-template-columns: 9rem 1fr;
+    gap: 0.6rem;
+    align-items: start;
+  }
+
+  .rel-downloads__label {
+    padding-top: 0.3rem;
+    font-size: 0.76rem;
+    font-weight: 640;
+    color: var(--sl-color-gray-3);
+  }
+
+  .rel-downloads__links {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
   }
 
-  .release-downloads__links a {
+  .rel-downloads__links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.26rem 0.65rem;
     border: 1px solid var(--sl-color-hairline);
     border-radius: 8px;
-    font-size: 0.78rem;
+    font-size: 0.77rem;
     color: var(--sl-color-text);
     text-decoration: none;
-    transition: border-color 140ms ease, color 140ms ease;
+    transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
   }
 
-  .release-downloads__links a:hover {
+  .rel-downloads__links a svg {
+    color: var(--sl-color-gray-4);
+  }
+
+  .rel-downloads__links a:hover {
     border-color: var(--sl-color-text-accent);
     color: var(--sl-color-text-accent);
+    background: color-mix(in srgb, var(--sl-color-text-accent) 6%, transparent);
   }
 
-  .releases-footer {
-    font-size: 0.85rem;
+  .rel-downloads__links a:hover svg {
+    color: currentColor;
+  }
+
+  /* Footer note */
+  .rel-footer {
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--sl-color-hairline);
+    font-size: 0.82rem;
+    line-height: 1.6;
     color: var(--sl-color-gray-3);
   }
 
-  .releases-footer p {
+  .rel-footer p {
     margin: 0;
   }
 
-  @media (max-width: 40rem) {
-    .release-card__facts {
-      width: 100%;
-      justify-content: flex-start;
+  @media (max-width: 48rem) {
+    .rel-entry {
+      grid-template-columns: 1fr;
+      gap: 0.7rem;
+      padding-left: 1.4rem;
+    }
+
+    .rel-entry::before {
+      left: 3.5px;
+    }
+
+    .rel-rail {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.7rem;
+      text-align: left;
+    }
+
+    .rel-rail__dot {
+      left: 0;
+      top: 0.45rem;
+    }
+
+    .rel-downloads__row {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
+    }
+
+    .rel-downloads__label {
+      padding-top: 0;
     }
   }
 </style>
