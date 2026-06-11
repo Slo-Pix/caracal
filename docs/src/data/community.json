@@ -1,20 +1,17 @@
 {
-  "blogCategories": ["Engineering", "Security", "Tutorials", "Community", "Releases"],
-  "blogs": [
-    {
-      "id": "caracal-joins-lfx-mentorship",
-      "title": "Caracal Joins LFX Mentorship",
-      "description": "Open source grows when people contribute, learn, and help others build with confidence. Why Caracal is taking part in the Linux Foundation's LFX Mentorship program, and what mentees and the project get out of it.",
-      "category": "Community",
-      "href": "/blog/caracal-joins-lfx-mentorship/",
-      "author": "Caracal Team",
-      "date": "2026-06-11",
-      "readingTime": "3 min read",
-      "tags": ["lfx", "mentorship", "open source", "community"],
-      "featured": true
-    }
+  "blogCategories": [
+    { "name": "Engineering", "tint": "#60a5fa" },
+    { "name": "Security", "tint": "#f87171" },
+    { "name": "Tutorials", "tint": "#34d399" },
+    { "name": "Community", "tint": "#a78bfa" },
+    { "name": "Releases", "tint": "#fbbf24" }
   ],
-  "vlogCategories": ["Community Talks", "Conference Presentations", "Tutorials & Walkthroughs", "Project Updates"],
+  "vlogCategories": [
+    { "name": "Community Talks", "tint": "#a78bfa" },
+    { "name": "Conference Presentations", "tint": "#60a5fa" },
+    { "name": "Tutorials & Walkthroughs", "tint": "#34d399" },
+    { "name": "Project Updates", "tint": "#fbbf24" }
+  ],
   "vlogs": [
     {
       "id": "open-source-friday",
