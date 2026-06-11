@@ -198,6 +198,117 @@ function agentLabel(agent) {
   return agent.region ? `${base} · ${agent.region}` : base
 }
 
+function agentInitials(agent) {
+  const words = layerLabel(agent).split(/\s+/).filter(Boolean)
+  if (!words.length) return 'A'
+  return words
+    .slice(0, 2)
+    .map((word) => word.charAt(0).toUpperCase())
+    .join('')
+}
+
+// MARKDOWN
+function escapeHtml(text) {
+  return String(text)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
+function inlineMarkdown(text) {
+  return text
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
+}
+
+function renderMarkdown(raw) {
+  const lines = escapeHtml(raw).split('\n')
+  const out = []
+  let list = null
+  let table = false
+  let code = false
+
+  const closeList = () => {
+    if (list) {
+      out.push(list.tag === 'ol' ? '</ol>' : '</ul>')
+      list = null
+    }
+  }
+  const closeTable = () => {
+    if (table) {
+      out.push('</tbody></table>')
+      table = false
+    }
+  }
+
+  for (const line of lines) {
+    if (code) {
+      if (/^```/.test(line.trim())) {
+        out.push('</code></pre>')
+        code = false
+      } else {
+        out.push(line)
+      }
+      continue
+    }
+    const trimmed = line.trim()
+    if (/^```/.test(trimmed)) {
+      closeList()
+      closeTable()
+      code = true
+      out.push('<pre class="md-code"><code>')
+      continue
+    }
+    if (/^\|.*\|$/.test(trimmed)) {
+      closeList()
+      const cells = trimmed.slice(1, -1).split('|').map((cell) => inlineMarkdown(cell.trim()))
+      if (cells.every((cell) => /^:?-{3,}:?$/.test(cell))) continue
+      if (!table) {
+        table = true
+        out.push('<table class="md-table"><thead><tr>')
+        out.push(cells.map((cell) => `<th>${cell}</th>`).join(''))
+        out.push('</tr></thead><tbody>')
+        continue
+      }
+      out.push(`<tr>${cells.map((cell) => `<td>${cell}</td>`).join('')}</tr>`)
+      continue
+    }
+    closeTable()
+    const heading = trimmed.match(/^(#{1,4})\s+(.*)$/)
+    if (heading) {
+      closeList()
+      const depth = Math.min(6, heading[1].length + 2)
+      out.push(`<h${depth}>${inlineMarkdown(heading[2])}</h${depth}>`)
+      continue
+    }
+    const bullet = trimmed.match(/^[-*]\s+(.*)$/)
+    const numbered = trimmed.match(/^\d+[.)]\s+(.*)$/)
+    if (bullet || numbered) {
+      const tag = numbered ? 'ol' : 'ul'
+      if (!list || list.tag !== tag) {
+        closeList()
+        list = { tag }
+        out.push(tag === 'ol' ? '<ol>' : '<ul>')
+      }
+      out.push(`<li>${inlineMarkdown((bullet || numbered)[1])}</li>`)
+      continue
+    }
+    closeList()
+    if (/^(-{3,}|\*{3,})$/.test(trimmed)) {
+      out.push('<hr>')
+      continue
+    }
+    if (!trimmed) continue
+    out.push(`<p>${inlineMarkdown(trimmed)}</p>`)
+  }
+  closeList()
+  closeTable()
+  if (code) out.push('</code></pre>')
+  return out.join('\n')
+}
+
 function toneClass(agent) {
   if (!agent) return 'tone-worker'
   if (agent.layer === 'finance-control') return 'tone-fc'
@@ -463,6 +574,7 @@ function renderMessage(type, data = {}) {
     const agent = AppState.agents[data.agentId]
     node.classList.remove('tone-worker', 'tone-ro', 'tone-fc')
     node.classList.add(toneClass(agent))
+    node.querySelector('.msg-avatar').textContent = agentInitials(agent)
     node.querySelector('.msg-author').textContent = agentLabel(agent)
     node.querySelector('.msg-model-tag').textContent = data.model || (modelSelect && modelSelect.value) || ''
     node.querySelector('.msg-status-indicator').textContent = data.status || 'Streaming'
@@ -560,7 +672,13 @@ function flushDirtyTurns() {
     if (turn.finalText && turn.finalText.length >= turn.text.length) {
       turn.text = turn.finalText
     }
-    turn.contentEl.textContent = turn.text
+    if (turn.streaming) {
+      turn.contentEl.classList.remove('md')
+      turn.contentEl.textContent = turn.text
+    } else {
+      turn.contentEl.classList.add('md')
+      turn.contentEl.innerHTML = renderMarkdown(turn.text)
+    }
     turn.contentEl.classList.toggle('is-streaming', turn.streaming)
     turn.statusEl.textContent = turn.streaming ? 'Streaming' : 'Done'
     turn.node.classList.toggle('is-complete', !turn.streaming)

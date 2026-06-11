@@ -262,9 +262,10 @@ function revealSvg() {
   if (svg) svg.style.display = ''
 }
 
-function applyTransform() {
+function applyTransform(smooth = false) {
   if (!scene) return
-  scene.setAttribute('transform', `matrix(${transform.scale} 0 0 ${transform.scale} ${transform.x} ${transform.y})`)
+  scene.style.transition = smooth ? 'transform 0.22s ease' : ''
+  scene.style.transform = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`
   if (zoomResetBtn) zoomResetBtn.textContent = `${Math.round(transform.scale * 100)}%`
 }
 
@@ -374,6 +375,19 @@ function stageStats(stageId) {
   return stats
 }
 
+function gradient(id, from, to) {
+  const node = svgEl('linearGradient', { id, x1: '0', y1: '0', x2: '0', y2: '1' })
+  node.appendChild(svgEl('stop', { offset: '0%', 'stop-color': from }))
+  node.appendChild(svgEl('stop', { offset: '100%', 'stop-color': to }))
+  return node
+}
+
+function glowFilter(id, color) {
+  const node = svgEl('filter', { id, x: '-60%', y: '-60%', width: '220%', height: '220%' })
+  node.appendChild(svgEl('feDropShadow', { dx: '0', dy: '0', stdDeviation: '7', 'flood-color': color, 'flood-opacity': '0.45' }))
+  return node
+}
+
 function resetSvg() {
   svg.setAttribute('viewBox', `0 0 ${VIEW_W} ${viewH}`)
   svg.innerHTML = ''
@@ -384,6 +398,10 @@ function resetSvg() {
     marker('arrow-completed', COLORS.completed),
     marker('arrow-failed', COLORS.failed),
     marker('arrow-pending', COLORS.pending),
+    gradient('node-fill', '#FFFFFF', '#F4F8FF'),
+    gradient('service-fill', '#FFFFFF', '#F2FAFA'),
+    glowFilter('glow-running', COLORS.running),
+    glowFilter('glow-failed', COLORS.failed),
   )
 
   scene = svgEl('g', { id: 'graph-scene' })
@@ -767,6 +785,7 @@ function drawFlows() {
         'vector-effect': 'non-scaling-stroke',
       })
 
+      let particle = null
       if (state === 'running') {
         path.appendChild(
           svgEl('animate', {
@@ -777,9 +796,12 @@ function drawFlows() {
             repeatCount: 'indefinite',
           }),
         )
+        particle = svgEl('circle', { r: 3.4, fill: color, opacity: 0.95 })
+        particle.appendChild(svgEl('animateMotion', { dur: '1.8s', repeatCount: 'indefinite', path: d }))
       }
 
       group.appendChild(path)
+      if (particle) group.appendChild(particle)
       group.appendChild(
         svgEl('path', {
           d,
@@ -847,10 +869,16 @@ function drawAgentNodes() {
         width: NODE_W,
         height: NODE_H,
         rx: 14,
-        fill: '#fff',
-        stroke: selectedNode ? 'var(--accent)' : 'rgba(11, 61, 145, 0.12)',
-        'stroke-width': selectedNode ? 2.4 : 1,
-        filter: selectedNode ? 'drop-shadow(0 16px 22px rgba(30, 91, 216, 0.16))' : 'drop-shadow(0 10px 18px rgba(11, 61, 145, 0.06))',
+        fill: 'url(#node-fill)',
+        stroke: selectedNode ? 'var(--accent)' : node.status === 'running' ? 'rgba(30, 91, 216, 0.45)' : 'rgba(11, 61, 145, 0.12)',
+        'stroke-width': selectedNode ? 2.4 : node.status === 'running' ? 1.6 : 1,
+        filter: node.status === 'running'
+          ? 'url(#glow-running)'
+          : node.status === 'failed'
+            ? 'url(#glow-failed)'
+            : selectedNode
+              ? 'drop-shadow(0 16px 22px rgba(30, 91, 216, 0.16))'
+              : 'drop-shadow(0 10px 18px rgba(11, 61, 145, 0.06))',
         'vector-effect': 'non-scaling-stroke',
       }),
     )
@@ -952,10 +980,14 @@ function drawServices() {
         width: SERVICE_W,
         height: SERVICE_H,
         rx: 16,
-        fill: '#fff',
-        stroke: selectedService ? 'var(--teal)' : 'rgba(13, 110, 114, 0.16)',
-        'stroke-width': selectedService ? 2.3 : 1,
-        filter: selectedService ? 'drop-shadow(0 16px 22px rgba(13, 110, 114, 0.16))' : 'drop-shadow(0 10px 18px rgba(11, 61, 145, 0.05))',
+        fill: 'url(#service-fill)',
+        stroke: selectedService ? 'var(--teal)' : state === 'running' ? 'rgba(13, 110, 114, 0.5)' : 'rgba(13, 110, 114, 0.16)',
+        'stroke-width': selectedService ? 2.3 : state === 'running' ? 1.6 : 1,
+        filter: state === 'running'
+          ? 'url(#glow-running)'
+          : selectedService
+            ? 'drop-shadow(0 16px 22px rgba(13, 110, 114, 0.16))'
+            : 'drop-shadow(0 10px 18px rgba(11, 61, 145, 0.05))',
         'vector-effect': 'non-scaling-stroke',
       }),
     )
@@ -1476,7 +1508,7 @@ function attachStream(nextRunId) {
   }
 }
 
-function zoomAt(nextScale, clientX, clientY) {
+function zoomAt(nextScale, clientX, clientY, smooth = false) {
   const rect = svg.getBoundingClientRect()
   const x = ((clientX - rect.left) / rect.width) * VIEW_W
   const y = ((clientY - rect.top) / rect.height) * viewH
@@ -1485,12 +1517,12 @@ function zoomAt(nextScale, clientX, clientY) {
   transform.x = x - (x - transform.x) * ratio
   transform.y = y - (y - transform.y) * ratio
   transform.scale = scale
-  applyTransform()
+  applyTransform(smooth)
 }
 
 function resetZoom() {
   transform = { scale: 1, x: 0, y: 0 }
-  applyTransform()
+  applyTransform(true)
 }
 
 function fitGraph() {
@@ -1562,8 +1594,8 @@ if (canvas) {
   })
 }
 
-if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => zoomAt(transform.scale * 0.88, window.innerWidth / 2, window.innerHeight / 2))
-if (zoomInBtn) zoomInBtn.addEventListener('click', () => zoomAt(transform.scale * 1.12, window.innerWidth / 2, window.innerHeight / 2))
+if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => zoomAt(transform.scale * 0.88, window.innerWidth / 2, window.innerHeight / 2, true))
+if (zoomInBtn) zoomInBtn.addEventListener('click', () => zoomAt(transform.scale * 1.12, window.innerWidth / 2, window.innerHeight / 2, true))
 if (zoomResetBtn) zoomResetBtn.addEventListener('click', resetZoom)
 if (fitBtn) fitBtn.addEventListener('click', fitGraph)
 
