@@ -17,19 +17,62 @@ import (
 func TestGetJWKSFetchesFromWellKnownEndpoint(t *testing.T) {
 	identity.ResetJWKSCache()
 	var gotPath string
+	var gotZone string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath = r.URL.Path
+		gotZone = r.URL.Query().Get("zone_id")
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{}})
 	}))
 	defer server.Close()
 
-	_, err := identity.GetJWKS(server.URL)
+	_, err := identity.GetJWKS(server.URL, "zone1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotPath != "/.well-known/jwks.json" {
 		t.Fatalf("expected /.well-known/jwks.json, got %q", gotPath)
+	}
+	if gotZone != "zone1" {
+		t.Fatalf("expected zone_id=zone1, got %q", gotZone)
+	}
+}
+
+func TestGetJWKSRequiresZone(t *testing.T) {
+	identity.ResetJWKSCache()
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+	}))
+	defer server.Close()
+
+	if _, err := identity.GetJWKS(server.URL, ""); err == nil {
+		t.Fatal("expected error for missing zone_id")
+	}
+	if calls != 0 {
+		t.Fatalf("expected no fetch without zone_id, got %d", calls)
+	}
+}
+
+func TestGetJWKSCachesPerZone(t *testing.T) {
+	identity.ResetJWKSCache()
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{}})
+	}))
+	defer server.Close()
+
+	if _, err := identity.GetJWKS(server.URL, "zone1"); err != nil {
+		t.Fatalf("zone1 fetch failed: %v", err)
+	}
+	if _, err := identity.GetJWKS(server.URL, "zone2"); err != nil {
+		t.Fatalf("zone2 fetch failed: %v", err)
+	}
+
+	if calls != 2 {
+		t.Fatalf("expected separate fetches per zone, got %d", calls)
 	}
 }
 
@@ -43,10 +86,10 @@ func TestGetJWKSCachesResultAndSkipsRefetch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := identity.GetJWKS(server.URL); err != nil {
+	if _, err := identity.GetJWKS(server.URL, "zone1"); err != nil {
 		t.Fatalf("first fetch failed: %v", err)
 	}
-	if _, err := identity.GetJWKS(server.URL); err != nil {
+	if _, err := identity.GetJWKS(server.URL, "zone1"); err != nil {
 		t.Fatalf("second fetch failed: %v", err)
 	}
 
@@ -65,11 +108,11 @@ func TestResetJWKSCacheForcesRefetch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := identity.GetJWKS(server.URL); err != nil {
+	if _, err := identity.GetJWKS(server.URL, "zone1"); err != nil {
 		t.Fatalf("first fetch failed: %v", err)
 	}
 	identity.ResetJWKSCache()
-	if _, err := identity.GetJWKS(server.URL); err != nil {
+	if _, err := identity.GetJWKS(server.URL, "zone1"); err != nil {
 		t.Fatalf("second fetch failed: %v", err)
 	}
 
@@ -85,7 +128,7 @@ func TestGetJWKSRejectsNonOKStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := identity.GetJWKS(server.URL)
+	_, err := identity.GetJWKS(server.URL, "zone1")
 	if err == nil {
 		t.Fatal("expected error for 503 response")
 	}
@@ -99,7 +142,7 @@ func TestGetJWKSRejectsInvalidJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := identity.GetJWKS(server.URL)
+	_, err := identity.GetJWKS(server.URL, "zone1")
 	if err == nil {
 		t.Fatal("expected error for malformed JSON response")
 	}

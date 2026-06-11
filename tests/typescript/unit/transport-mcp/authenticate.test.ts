@@ -19,7 +19,7 @@ const jwksByIssuer = new Map<string, JsonWebKey>()
 beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    const issuer = url.replace(/\/\.well-known\/jwks\.json$/, '')
+    const issuer = url.replace(/\/\.well-known\/jwks\.json(\?.*)?$/, '')
     const jwk = jwksByIssuer.get(issuer)
     if (!jwk) {
       return new Response(JSON.stringify({ keys: [] }), {
@@ -345,15 +345,28 @@ describe('transport-mcp authentication', () => {
     const cached = createMandateVerifier({
       issuer: 'https://issuer-cache.example.com',
       audience: 'resource://api',
+      zoneId: 'zone-1',
       revocations,
       jwksCache: cache as never,
     })
     await cached.warmup()
-    expect(cache.warm).toHaveBeenCalledWith('https://issuer-cache.example.com')
+    expect(cache.warm).toHaveBeenCalledWith('https://issuer-cache.example.com', 'zone-1')
 
     const { issuer, audience } = await mintToken()
-    const verifier = createMandateVerifier({ issuer, audience, revocations })
+    const verifier = createMandateVerifier({ issuer, audience, zoneId: 'zone-1', revocations })
     await expect(verifier.warmup()).resolves.toBeUndefined()
-    expect(fetch).toHaveBeenCalledWith(`${issuer}/.well-known/jwks.json`, expect.anything())
+    expect(fetch).toHaveBeenCalledWith(`${issuer}/.well-known/jwks.json?zone_id=zone-1`, expect.anything())
+  })
+
+  it('skips warmup when no zone is configured', async () => {
+    const cache = { warm: vi.fn(async () => undefined) }
+    const verifier = createMandateVerifier({
+      issuer: 'https://issuer-cache.example.com',
+      audience: 'resource://api',
+      revocations,
+      jwksCache: cache as never,
+    })
+    await verifier.warmup()
+    expect(cache.warm).not.toHaveBeenCalled()
   })
 })
