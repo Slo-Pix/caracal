@@ -66,7 +66,7 @@ async def _verify_caracal(
     audience = next((a for a in candidates if a in terms.audiences), None)
     if audience is None:
         raise VerifyError("invalid_token", "mandate audience is not a partnered resource view")
-    issuer = os.environ.get("CARACAL_STS_URL", "http://127.0.0.1:8080").rstrip("/")
+    issuer = os.environ.get("CARACAL_STS_ISSUER", "http://localhost:8080").rstrip("/")
     expected_zone = os.environ.get("CARACAL_ZONE_ID", "").strip() or None
     config = identity.JwtConfig(
         issuer=issuer,
