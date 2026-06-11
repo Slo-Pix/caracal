@@ -468,6 +468,15 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 	if ttl, ttlErr = effectiveTokenTTL(ttl, delegation, now); ttlErr != nil {
 		return nil, nil, http.StatusForbidden, sharederr.New(sharederr.AccessDenied, ttlErr.Error())
 	}
+	// A Control key's max-ttl trait caps the issued token lifetime rather than
+	// disqualifying the exchange, matching the documented contract.
+	if controlKeyExchange {
+		if maxTTL := controlMaxTTL(app); maxTTL > 0 {
+			if capTTL := time.Duration(maxTTL) * time.Second; ttl > capTTL {
+				ttl = capTTL
+			}
+		}
+	}
 	subjectID := app.ID
 	sessionType := "application"
 	if sub := claimString(subjectClaims, "sub"); sub != "" {
@@ -1212,14 +1221,6 @@ func isControlKeyExchange(app *Application, req TokenExchangeRequest, resource *
 		if _, ok := allowed[scope]; !ok {
 			return false
 		}
-	}
-	maxTTL := controlMaxTTL(app)
-	requestedTTL := req.TTLSeconds
-	if requestedTTL == 0 {
-		requestedTTL = int(ttlResourceMandate.Seconds())
-	}
-	if maxTTL > 0 && requestedTTL > maxTTL {
-		return false
 	}
 	return true
 }

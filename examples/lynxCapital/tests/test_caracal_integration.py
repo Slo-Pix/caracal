@@ -16,7 +16,8 @@ from app.agents.runner import AgentRunner, create_runner, get_runner
 from app.services import partners
 
 
-def test_disabled_without_env():
+def test_disabled_without_env(monkeypatch):
+    monkeypatch.setattr(tenancy, "load_provisioned", lambda: {})
     assert caracal.enabled() is False
     assert caracal.application_credentials("operations") == (False, False)
     with pytest.raises(RuntimeError):

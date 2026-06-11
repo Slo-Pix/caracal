@@ -103,11 +103,9 @@ class ControlClient:
 
     def __init__(self, config: ControlConfig):
         self._config = config
-        self._token: str | None = None
 
     def token(self) -> str:
-        if self._token:
-            return self._token
+        # Control tokens are replay-protected (single-use JTI); mint one per invoke.
         form = {
             "grant_type": "client_credentials",
             "application_id": self._config.client_id,
@@ -125,7 +123,6 @@ class ControlClient:
         access = result.get("access_token")
         if not access:
             raise ControlError("token exchange returned no access_token")
-        self._token = access
         return access
 
     def invoke(self, command: str, subcommand: str, flags: dict | None = None) -> object:
