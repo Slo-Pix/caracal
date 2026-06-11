@@ -4,7 +4,7 @@
 // Integration-style tests for SDK primitives: spawn (with grant) and delegate drive the coordinator client end-to-end.
 
 import { describe, it, expect, vi } from 'vitest'
-import { spawn, delegate, Grant } from '../../../../packages/sdk/ts/src/primitives.js'
+import { spawn, spawnService, delegate, Grant } from '../../../../packages/sdk/ts/src/primitives.js'
 import { type CoordinatorClient } from '../../../../packages/sdk/ts/src/coordinator.js'
 import { bind, current, type CaracalContext } from '../../../../packages/sdk/ts/src/context.js'
 
@@ -155,6 +155,65 @@ describe('spawn', () => {
     })
     expect(bodies[0]?.inherit_parent_edge_id).toBeUndefined()
     expect(childEdge).toBeUndefined()
+  })
+})
+
+describe('spawnService with grant', () => {
+  it('issues a narrowed delegation edge for the service handle', async () => {
+    const { client, calls } = recorder('svc-1', 'edge-svc')
+    await bind(baseCtx({ delegationEdgeId: 'edge-parent', hop: 1 }), async () => {
+      const svc = await spawnService({
+        coordinator: client,
+        zoneId: 'zone-1',
+        applicationId: 'app-2',
+        subjectToken: 'tok',
+        grant: Grant.narrow(['ledger:read'], { resourceId: 'resource://ledger' }),
+      })
+      expect(svc.context.delegationEdgeId).toBe('edge-svc')
+      expect(svc.context.parentEdgeId).toBe('edge-parent')
+      expect(svc.context.hop).toBe(2)
+      await svc.close()
+    })
+    expect(calls.some((c) => c.path.endsWith('/delegations'))).toBe(true)
+  })
+
+  it('requires an active parent session for a narrow grant', async () => {
+    const { client } = recorder()
+    await expect(
+      spawnService({
+        coordinator: client,
+        zoneId: 'zone-1',
+        applicationId: 'app-2',
+        subjectToken: 'tok',
+        grant: Grant.narrow(['read']),
+      }),
+    ).rejects.toThrow(/active parent agent session/)
+  })
+
+  it('terminates the service agent when delegation creation fails', async () => {
+    const calls: { method: string; path: string }[] = []
+    const fetchImpl = (async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? 'GET'
+      const path = new URL(url).pathname
+      calls.push({ method, path })
+      if (method === 'DELETE') return new Response(null, { status: 204 })
+      if (path.endsWith('/delegations')) return new Response('denied', { status: 403 })
+      return new Response(JSON.stringify({ agent_session_id: 'svc-orphan' }), { status: 200 })
+    }) as unknown as typeof fetch
+    const client: CoordinatorClient = { baseUrl: 'http://coord', fetchImpl }
+
+    await bind(baseCtx(), async () => {
+      await expect(
+        spawnService({
+          coordinator: client,
+          zoneId: 'zone-1',
+          applicationId: 'app-2',
+          subjectToken: 'tok',
+          grant: Grant.narrow(['read']),
+        }),
+      ).rejects.toThrow()
+    })
+    expect(calls.some((c) => c.method === 'DELETE' && c.path.endsWith('/svc-orphan'))).toBe(true)
   })
 })
 

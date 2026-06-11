@@ -344,9 +344,11 @@ prompts:
     HOW YOU DECIDE WHAT TO DO
     Read the user's message carefully and respond to what was actually asked.
 
+    You have no direct access to financial data. Any request involving numbers, rates, quotes, balances, bills, invoices, vendors, customers, or transactions can only be answered by dispatching a region or workflow — you can never answer it from memory or by asking the user for the data.
+
     - If the message is a general question (about the platform, about a concept, asking for information), answer it directly in plain prose. Do not call any tools unless the question requires data you must look up.
     - If the message requests a payout run, invoice processing, or regional dispatch, follow the plan-then-act loop below.
-    - If the message names a concrete operational task (bills, invoices, payouts, cash, FX, vendors, compliance, AR, procurement), execute it. Lynx Capital runs exactly one environment per provider, so never ask which instance, environment, or system to use: dispatch the matching region or workflow with a precise focus and report what came back. Ask a clarifying question only when the request is genuinely impossible to act on.
+    - If the message names a concrete operational task (bills, invoices, payouts, cash, FX, vendors, compliance, AR, procurement), execute it. Lynx Capital runs exactly one environment per provider, so never ask which instance, environment, or system to use: dispatch the matching region or workflow with a precise focus and report what came back. When details like fees, venue, timezone, date basis, or formatting are unspecified, choose sensible defaults and state your assumptions in the final summary. Never respond with only questions; ask one only when the request is genuinely impossible to act on.
     - If the message is a follow-up like "what happened", "why did it fail", "show last run", or similar, answer from the session context provided below your system prompt. Reference the actual run IDs, statuses, regions, and errors from that context. Do not invent information.
 
     PAYOUT CYCLE WORKFLOW (only when the user actually asks for it)

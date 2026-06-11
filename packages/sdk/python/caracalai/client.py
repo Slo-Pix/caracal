@@ -7,6 +7,7 @@ Caracal: drop-in bound client wrapping zone, application, subject token, and coo
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -955,10 +956,17 @@ class Caracal:
         finally:
             _ctx_var.reset(token)
 
-    def headers(self, *, allow_root: bool = False) -> dict[str, str]:
-        """Project the current Caracal context into outbound HTTP headers.
+    def headers(
+        self,
+        *,
+        allow_root: bool = False,
+        ctx: CaracalContext | None = None,
+    ) -> dict[str, str]:
+        """Project a Caracal context into outbound HTTP headers: the bound
+        contextvar by default, or ``ctx`` when the caller owns the context on
+        another task or thread.
 
-        When no context is bound to the current task this would return the
+        When no context is available this would return the
         bootstrap application subject token. Doing so silently leaks root
         identity from background tasks that escape the contextvar (asyncio
         task groups, thread pools, framework background runners). Callers
@@ -967,7 +975,8 @@ class Caracal:
         explicitly with :meth:`bind` before fan-out to keep delegation
         semantics intact.
         """
-        ctx = current()
+        if ctx is None:
+            ctx = current()
         if ctx is None:
             if not allow_root:
                 raise RuntimeError(
