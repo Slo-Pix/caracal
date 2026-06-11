@@ -61,6 +61,15 @@ finally:
     await svc.aclose()
 ```
 
+Service handles take the same `grant=` as `spawn()`: pass `Grant.narrow(...)` to issue a delegation edge that bounds the service's authority for its whole lifetime, exactly as a narrowed task child. The handle's context carries the edge, and closing the handle retires the session.
+
+```python
+svc = await caracal.spawn_service(
+    labels=["billing-worker"],
+    grant=Grant.narrow(["ledger:read"], resource_id="resource://ledger"),
+)
+```
+
 When the main coroutine spends long stretches awaiting a provider (a streaming response, a slow tool), renewing the lease from the same loop can starve. Pass `heartbeat_interval` to renew the lease from an independent background task, so the lease stays current even while your code is blocked on a long `await`:
 
 ```python

@@ -33,13 +33,14 @@ caracal = Caracal()
 | Method | Purpose |
 | --- | --- |
 | `async with caracal.spawn(...)` | Create and bind an agent session; pass `grant=Grant.narrow(...)` to bound the child's authority. |
-| `await caracal.spawn_service(...)` | Start a long-lived service agent; returns a handle with `heartbeat()` and `aclose()`. |
+| `await caracal.spawn_service(...)` | Start a long-lived service agent; returns a handle with `heartbeat()` and `aclose()`. Pass `grant=Grant.narrow(...)` to bound the handle's authority. |
 | `async with caracal.delegate(...)` | Create and bind a delegation edge to an existing agent session. |
-| `caracal.headers(allow_root=False)` | Project the current context into HTTP headers. |
+| `caracal.headers(allow_root=False, ctx=None)` | Project the bound context (or an explicit `ctx`) into HTTP headers. |
 | `async with caracal.bind(ctx)` | Rebind a captured context into a new async task. |
 | `async with caracal.bind_from_headers(headers, allow_root=False)` | Bind inbound Caracal envelope headers. |
-| `caracal.transport(allow_root=False, **kwargs)` | Return an `httpx.AsyncClient` that injects Caracal headers and Gateway routing. |
-| `caracal.sync_transport(allow_root=False, **kwargs)` | Synchronous `httpx.Client` counterpart. |
+| `caracal.transport(allow_root=False, ctx=None, scopes=None, **kwargs)` | Return an `httpx.AsyncClient` that injects Caracal headers and Gateway routing. Pass `ctx=` from thread pools or executors; pass `scopes=` to authorize gateway calls with a scoped resource mandate instead of the raw subject token. |
+| `caracal.sync_transport(allow_root=False, ctx=None, scopes=None, **kwargs)` | Synchronous `httpx.Client` counterpart. |
+| `await caracal.fetch(resource_id, path, ctx=None, scopes=None, ...)` | One-call Gateway request to a resource with context and authority injected. |
 | `caracal.context_middleware(verifier=None)` | ASGI middleware factory: propagates context, and enforces at the boundary when a `verifier` is passed. |
 | `caracal.gateway_request(resource_id, path="/")` | Build a Gateway URL and `X-Caracal-Resource` header. |
 | `caracal.mint_mandate(resource_id, scopes, ctx=None, ttl_seconds=None)` | Mint a cached resource mandate carrying the bound agent session and delegation edge; requires client-secret credentials. |
