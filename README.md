@@ -175,8 +175,6 @@ See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for setup, workflow, tests, and
 
 ## Community & Partnerships
 
-Caracal has been part of the following programs and communities, in chronological order.
-
 <div align="center">
 
 | Program | Timeline |
