@@ -8,7 +8,7 @@
 
 <div align="center">
 
-**Security-first authority and delegation system for AI agents**
+**Security-first authority and delegation layer for AI agents**
 </div>
 
 <div align="center">
