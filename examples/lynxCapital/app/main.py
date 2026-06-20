@@ -15,7 +15,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import load_config
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+# Workload configuration: hand-authored .env first, then the provisioner-managed file of
+# application ids and client secrets (config/provisioned.env), which overrides so freshly
+# provisioned credentials always take effect without a manual merge.
+_ROOT = Path(__file__).parent.parent
+load_dotenv(_ROOT / ".env")
+load_dotenv(_ROOT / "config" / "provisioned.env", override=True)
 
 
 @asynccontextmanager

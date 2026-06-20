@@ -13,6 +13,7 @@ from app.events import types as ev
 from app.events.bus import bus
 from app.services.partners import call as _partner
 from app.services.partners import spec as _partner_spec
+from app import tenancy
 
 _REGION_CCY = {"US": "USD", "IN": "USD", "DE": "EUR", "SG": "SGD", "BR": "BRL", "GLOBAL": "USD"}
 _REGION_TAX = {"US": "US", "IN": "IN", "DE": "DE", "SG": "SG", "BR": "BR", "GLOBAL": "US"}
@@ -29,6 +30,63 @@ def _authority(run_id: str, agent_id: str):
     return handle.authority if handle else None
 
 
+def _decision_for(status: object) -> str:
+    """Map a governed call's outcome to a Caracal authority decision. Only a gateway authority
+    rejection (403) is a denial; 2xx is an authorization that succeeded; anything else is an
+    upstream or infrastructure error, not an authority decision, and is shown neutrally."""
+    if isinstance(status, int) and 200 <= status < 300:
+        return "allow"
+    if status == 403:
+        return "deny"
+    return "error"
+
+
+def _emit_decision(run_id: str, agent_id: str, authority, provider_id: str,
+                   operation: str, result: dict) -> None:
+    """Publish the Caracal authority decision behind a governed partner call so the UI can show
+    enforcement directly instead of inferring it from raw service results."""
+    if authority is None:
+        return
+    status = result.get("status")
+    scope = view = None
+    try:
+        scope = tenancy.operation_scope(provider_id, operation)
+        if scope is not None:
+            resolved = tenancy.load_model().view_for(authority.application, provider_id, scope)
+            view = resolved.identifier if resolved else None
+    except Exception:
+        scope = None
+    bus.publish(ev.caracal_decision(
+        run_id, agent_id,
+        _decision_for(status),
+        authority.application, authority.role, authority.agent_session_id,
+        provider_id, operation, scope, view,
+        status if isinstance(status, int) else None,
+    ))
+
+
+def _emit_authority_denial(run_id: str, agent_id: str, authority, provider_id: str,
+                           operation: str, message: str) -> None:
+    """Surface a Caracal authority denial that is raised before the gateway is reached: the
+    calling agent's mandate does not carry the scope or resource view the operation requires."""
+    if authority is None:
+        return
+    scope = None
+    try:
+        scope = tenancy.operation_scope(provider_id, operation)
+    except Exception:
+        scope = None
+    bus.publish(ev.caracal_decision(
+        run_id, agent_id, "deny",
+        authority.application, authority.role, authority.agent_session_id,
+        provider_id, operation, scope, None, None,
+    ))
+
+
+_AUTHORITY_DENIAL_MARKERS = ("lacks scope", "no view of", "maps to no governed scope",
+                             "no agent authority resolved")
+
+
 def _run(run_id: str, agent_id: str, tool_name: str, provider_id: str,
          operation: str, payload: dict) -> dict[str, object]:
     """Emit the tool/service event pairs and execute one provider operation under the
@@ -39,17 +97,21 @@ def _run(run_id: str, agent_id: str, tool_name: str, provider_id: str,
     key = _denyKey(authority, provider_id, operation)
     cached = _denyMemo.get(run_id, {}).get(key)
     if cached is not None:
+        _emit_decision(run_id, agent_id, authority, provider_id, operation, cached)
         bus.publish(ev.tool_result(run_id, agent_id, tool_name, cached))
         return cached
     bus.publish(ev.service_call(run_id, agent_id, provider_id, operation, payload))
     try:
         result = _partner(provider_id, operation, payload, authority=authority)
     except Exception as exc:
+        if any(m in str(exc) for m in _AUTHORITY_DENIAL_MARKERS):
+            _emit_authority_denial(run_id, agent_id, authority, provider_id, operation, str(exc))
         result = {"provider": provider_id, "operation": operation, "error": str(exc)}
         bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
         bus.publish(ev.tool_result(run_id, agent_id, tool_name, result))
         raise
     _memoize_denial(run_id, key, result)
+    _emit_decision(run_id, agent_id, authority, provider_id, operation, result)
     bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
     bus.publish(ev.tool_result(run_id, agent_id, tool_name, result))
     return result
@@ -900,17 +962,21 @@ def partner_operation(run_id: str, agent_id: str, provider_id: str, operation: s
     key = _denyKey(authority, provider_id, operation)
     cached = _denyMemo.get(run_id, {}).get(key)
     if cached is not None:
+        _emit_decision(run_id, agent_id, authority, provider_id, operation, cached)
         bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", cached))
         return cached
     bus.publish(ev.service_call(run_id, agent_id, provider_id, operation, args["payload"]))
     try:
         result = _partner(provider_id, operation, payload or {}, authority=authority)
     except Exception as exc:
+        if any(m in str(exc) for m in _AUTHORITY_DENIAL_MARKERS):
+            _emit_authority_denial(run_id, agent_id, authority, provider_id, operation, str(exc))
         result = {"provider": provider_id, "operation": operation, "error": str(exc)}
         bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
         bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", result))
         raise
     _memoize_denial(run_id, key, result)
+    _emit_decision(run_id, agent_id, authority, provider_id, operation, result)
     bus.publish(ev.service_result(run_id, agent_id, provider_id, operation, result))
     bus.publish(ev.tool_result(run_id, agent_id, "partner_operation", result))
     return result

@@ -128,6 +128,36 @@ async def _require_approval(
     return outcome
 
 
+_PARTNER_READ_PREFIXES = (
+    "get", "list", "search", "lookup", "fetch", "read", "view",
+    "describe", "quote", "preview", "validate", "check", "status",
+    "find", "show", "resolve",
+)
+_PARTNER_MONEY_PREFIXES = (
+    "pay", "payout", "transfer", "settle", "disburse", "disbursal",
+    "remit", "remittance", "refund", "withdraw", "wire", "capture",
+    "chargeback", "debit", "topup",
+)
+_PARTNER_SENSITIVE_OPS = frozenset({
+    "inter_account_transfer_usd",
+})
+
+
+def _partner_requires_approval(operation: str) -> bool:
+    """Sensitive partner operations move money or create binding obligations, so they must pass
+    the same human approval gate as the internal money tools. Without this the partner surface
+    could be used to route a transfer around that gate. Read-style operations are never gated."""
+    op = operation.strip().lower()
+    if not op:
+        return False
+    tokens = [t for t in re.split(r"[^a-z0-9]+", op) if t]
+    if op in _PARTNER_SENSITIVE_OPS:
+        return True
+    if tokens and tokens[0] in _PARTNER_READ_PREFIXES:
+        return False
+    return any(tok.startswith(prefix) for tok in tokens for prefix in _PARTNER_MONEY_PREFIXES)
+
+
 _approvalMemo: dict[str, dict[tuple[str, str], dict | None]] = {}
 
 
@@ -542,7 +572,7 @@ def _build_regional_domain_tools(run_id, runner, parent, region, board):
             _finish(w, record)
 
     @tool
-    def call_partner(provider_id: str, operation: str, payload_json: str = "{}") -> str:
+    async def call_partner(provider_id: str, operation: str, payload_json: str = "{}") -> str:
         """Call an external partner provider over its real auth surface.
 
         Use for third-party services beyond the core flow: meridian-pay/quetzal-payouts/halcyon-bank
@@ -571,11 +601,20 @@ def _build_regional_domain_tools(run_id, runner, parent, region, board):
                     "message": "payload_json must be a JSON object",
                 }
             )
-        w = _worker("partner-integration", f"partner:{provider_id}:{operation}")
+        if _partner_requires_approval(operation):
+            denied = await _require_approval(
+                run_id,
+                parent.id,
+                f"partner:{operation}",
+                {"provider_id": provider_id, "operation": operation, "payload": payload},
+            )
+            if denied:
+                return json.dumps(denied)
+        w = await _aworker("partner-integration", f"partner:{provider_id}:{operation}")
         try:
             return json.dumps(
-                tool_fns.partner_operation(
-                    run_id, w.id, provider_id, operation, payload
+                await asyncio.to_thread(
+                    tool_fns.partner_operation, run_id, w.id, provider_id, operation, payload
                 )
             )
         finally:
@@ -881,6 +920,18 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
 
     def _worker(role: str, scope: str, customer_id: str | None = None) -> AgentHandle:
         w = runner.spawn(
+            role=role,
+            scope=scope,
+            parent=parent,
+            layer=role,
+            region=None,
+            customer_id=customer_id,
+        )
+        w.start()
+        return w
+
+    async def _aworker(role: str, scope: str, customer_id: str | None = None) -> AgentHandle:
+        w = await runner.aspawn(
             role=role,
             scope=scope,
             parent=parent,
@@ -1586,7 +1637,7 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
             _finish(w, record)
 
     @tool
-    def call_partner(provider_id: str, operation: str, payload_json: str = "{}") -> str:
+    async def call_partner(provider_id: str, operation: str, payload_json: str = "{}") -> str:
         """Call an external partner provider over its real auth surface.
 
         Use for partner operations beyond the dedicated tools: cordoba-fx (fx quotes/
@@ -1616,11 +1667,20 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
                     "message": "payload_json must be a JSON object",
                 }
             )
-        w = _worker("partner-integration", f"partner:{provider_id}:{operation}")
+        if _partner_requires_approval(operation):
+            denied = await _require_approval(
+                run_id,
+                parent.id,
+                f"partner:{operation}",
+                {"provider_id": provider_id, "operation": operation, "payload": payload},
+            )
+            if denied:
+                return json.dumps(denied)
+        w = await _aworker("partner-integration", f"partner:{provider_id}:{operation}")
         try:
             return json.dumps(
-                tool_fns.partner_operation(
-                    run_id, w.id, provider_id, operation, payload
+                await asyncio.to_thread(
+                    tool_fns.partner_operation, run_id, w.id, provider_id, operation, payload
                 )
             )
         finally:
