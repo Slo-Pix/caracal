@@ -39,7 +39,7 @@ const AppState = {
   pendingScrollSmooth: false,
   autoScroll: true,
 
-  metrics: { events: 0, tools: 0, services: 0, audits: 0, approvals: 0, denied: 0 },
+  metrics: { events: 0, tools: 0, services: 0, audits: 0, approvals: 0, denied: 0, decisions: 0, decisionsDenied: 0 },
 
   reconnectTimer: null,
 }
@@ -392,6 +392,8 @@ function refreshMetrics() {
   $('tool-count').textContent = String(AppState.metrics.tools)
   $('service-count').textContent = String(AppState.metrics.services)
   $('audit-count').textContent = String(AppState.metrics.audits)
+  const dEl = $('decision-count')
+  if (dEl) dEl.textContent = `${AppState.metrics.decisions} (${AppState.metrics.decisionsDenied} deny)`
   $('security-count').textContent = String(AppState.metrics.approvals)
   $('agent-count').textContent = String(Object.keys(AppState.agents).length)
 }
@@ -549,6 +551,11 @@ const FEED_META = {
   tool_retry: (p) => ({ kind: 'error', kicker: 'retry', title: `${p.tool_name} attempt ${p.attempt}` }),
   service_call: (p) => ({ kind: 'tool', kicker: 'service', title: `${p.service_id} · ${p.action}` }),
   service_result: (p) => ({ kind: 'result', kicker: 'service done', title: `${p.service_id} · ${p.action}` }),
+  caracal_decision: (p) => ({
+    kind: p.decision === 'deny' ? 'error' : (p.decision === 'allow' ? 'audit' : 'system'),
+    kicker: p.decision === 'deny' ? 'caracal deny' : (p.decision === 'allow' ? 'caracal allow' : 'caracal'),
+    title: `${p.application} · ${p.role} → ${p.operation}`,
+  }),
   audit_record: (p) => ({
     kind: 'audit',
     kicker: 'policy',
@@ -923,10 +930,12 @@ function resultDenied(result, { strict = false } = {}) {
 
 function renderGovernanceSummary(ts) {
   const m = AppState.metrics
-  if (!m.services && !m.audits && !m.approvals) return
+  if (!m.services && !m.audits && !m.approvals && !m.decisions) return
   const parts = [
     `${m.services} provider call${m.services === 1 ? '' : 's'}`,
-    m.denied ? `${m.denied} blocked by Caracal` : 'all allowed',
+    m.decisions
+      ? `${m.decisions} authority decision${m.decisions === 1 ? '' : 's'} (${m.decisionsDenied} denied)`
+      : (m.denied ? `${m.denied} blocked by Caracal` : 'all allowed'),
     `${m.audits} policy check${m.audits === 1 ? '' : 's'}`,
     m.approvals ? `${m.approvals} approval${m.approvals === 1 ? '' : 's'} requested` : 'no approvals required',
   ]
@@ -1072,6 +1081,44 @@ function handleEvent(event) {
       const denied = resultDenied(payload.result)
       if (denied) AppState.metrics.denied += 1
       resolveToolCall(payload, payload.result, denied ? 'blocked' : 'completed', true)
+      break
+    }
+
+    case 'caracal_decision': {
+      const deny = payload.decision === 'deny'
+      const allow = payload.decision === 'allow'
+      AppState.metrics.decisions += 1
+      if (deny) AppState.metrics.decisionsDenied += 1
+      const sessionTag = payload.session_id ? shortId(payload.session_id) : 'no session'
+      const reason = `${payload.application} acting as ${payload.role} (session ${sessionTag})`
+        + ` → ${payload.provider_id}.${payload.operation}`
+        + (payload.status != null ? ` [${payload.status}]` : '')
+      const action = deny ? 'denied' : (allow ? 'allowed' : 'checked')
+      const rule = deny ? 'Caracal denied authority'
+        : (allow ? 'Caracal authorized' : 'Caracal mediated (upstream error)')
+      const sink = !deny && payload.agent_id
+        ? ensureSteps(containerFor(payload.agent_id, event.ts)).bodyEl
+        : null
+      renderMessage('security', {
+        ts: event.ts,
+        rule,
+        action,
+        policy: payload.scope || '',
+        reason,
+        details: {
+          decision: payload.decision,
+          application: payload.application,
+          role: payload.role,
+          session_id: payload.session_id,
+          scope: payload.scope,
+          view: payload.view,
+          provider: payload.provider_id,
+          operation: payload.operation,
+          status: payload.status,
+        },
+      }, sink)
+      if (deny) requestScroll({ force: true })
+      refreshMetrics()
       break
     }
 
@@ -1244,7 +1291,7 @@ function resetState() {
   AppState.queue = []
   AppState.pendingEvents = []
   AppState.dirtyTurns.clear()
-  AppState.metrics = { events: 0, tools: 0, services: 0, audits: 0, approvals: 0, denied: 0 }
+  AppState.metrics = { events: 0, tools: 0, services: 0, audits: 0, approvals: 0, denied: 0, decisions: 0, decisionsDenied: 0 }
   approvalCards.clear()
   feedTotal = 0
 
