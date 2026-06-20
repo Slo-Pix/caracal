@@ -8,5 +8,5 @@ httpx
 grpcio
 protobuf>=6.33,<7
 python-dotenv
-caracalai-identity==0.1.5rc2
+caracalai-identity==0.1.5rc3
 cryptography

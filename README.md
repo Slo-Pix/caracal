@@ -48,7 +48,7 @@ Read the full documentation at [docs.caracal.run](https://docs.caracal.run).
 
 The installer provides the thin `caracal` runtime CLI and the `caracal-console` management interface.
 
-> Version examples below pin `v2026.06.10-rc.1`. Check [GitHub Releases](https://github.com/Garudex-Labs/caracal/releases) for the latest available tag. Unpinned installs follow GitHub's latest stable release.
+> Version examples below pin `v2026.06.20-rc.1`. Check [GitHub Releases](https://github.com/Garudex-Labs/caracal/releases) for the latest available tag. Unpinned installs follow GitHub's latest stable release.
 > Pin a version: `--version vYYYY.MM.DD` on Unix or `-Version vYYYY.MM.DD` in PowerShell.  
 > Change install directory: `--install-dir /path` on Unix or `-InstallDir C:\path` in PowerShell. Unix installers also honor `PREFIX`/`CARACAL_PREFIX` and `DESTDIR` for staged installs.
 > Uninstall: rerun the installer with `--uninstall` on Unix or `-Uninstall` in PowerShell.
@@ -60,7 +60,7 @@ The installer provides the thin `caracal` runtime CLI and the `caracal-console` 
 ```bash
 # Console
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.06.10-rc.1
+  sh -s -- --version v2026.06.20-rc.1
 ```
 
 Installs to `~/.local/bin` and verifies release provenance by default. Override with `--install-dir /usr/local/bin` (may need `sudo`) or use packaging-style roots such as `PREFIX=/usr DESTDIR=/tmp/pkg`.
@@ -73,7 +73,7 @@ Installs to `~/.local/bin` and verifies release provenance by default. Override 
 ```bash
 # Console
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.06.10-rc.1
+  sh -s -- --version v2026.06.20-rc.1
 ```
 
 If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
@@ -87,7 +87,7 @@ If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/car
 # Console
 $installer = "$env:TEMP\install-console.ps1"
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.ps1 -OutFile $installer
-powershell -ExecutionPolicy Bypass -File $installer -Version v2026.06.10-rc.1
+powershell -ExecutionPolicy Bypass -File $installer -Version v2026.06.20-rc.1
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\caracal` and verifies release provenance by default. Remove installed binaries and the user `Path` entry with `-Uninstall`. Requires Docker Desktop with WSL2.

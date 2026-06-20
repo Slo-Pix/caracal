@@ -27,28 +27,28 @@ bracex==2.6 \
     --hash=sha256:0b0049264e7340b3ec782b5cb99beb325f36c3782a32e36e876452fd49a09952 \
     --hash=sha256:98f1347cd77e22ee8d967a30ad4e310b233f7754dbf31ff3fceb76145ba47dc7
     # via wcmatch
-caracalai-core==0.1.5rc2 \
+caracalai-core==0.1.5rc3 \
     --hash=sha256:9b0009532fb07f205677b171d5100770d15083dc487fcec792d4db65a2ef99f2 \
     --hash=sha256:f9a9324520f86999f65499d6ba007320f23f26ddad713fb9f6974483977abf0b
     # via
     #   caracalai-identity
     #   lynx-capital
-caracalai-identity==0.1.5rc2 \
+caracalai-identity==0.1.5rc3 \
     --hash=sha256:b5ea8f29bcda008160efdf39b8347d53f7e573fdddaf8c40f2fa9d7e253865f8 \
     --hash=sha256:d86ea32fd245ed14a473e56f63e809c50ee1c68a4e979fc53239dd321426fdbe
     # via
     #   caracalai-sdk
     #   caracalai-transport-mcp
     #   lynx-capital
-caracalai-mcp-fastmcp==0.1.5rc2 \
+caracalai-mcp-fastmcp==0.1.5rc3 \
     --hash=sha256:1909106e918b6844eea8259ec5b6a6efaf367c73b25ff9342a5565215aeff6e5 \
     --hash=sha256:866f7455f152744902b772ff84539a3364bc1a6099d97eac1f273d2167680ea9
     # via lynx-capital
-caracalai-oauth==0.1.5rc2 \
+caracalai-oauth==0.1.5rc3 \
     --hash=sha256:0b50dbd0d540d4d46971a64a397c1e13f9ae51f88a3b4a84395c9a6067a6f278 \
     --hash=sha256:5f4adf60bb08af8a067065838b8a72020be753ed7017e573a7700cc373962b2e
     # via lynx-capital
-caracalai-revocation==0.1.5rc2 \
+caracalai-revocation==0.1.5rc3 \
     --hash=sha256:9366dbfc59278b28f7d4ef2863070e2802be3ff59e712ff4b2963efb314adeb2 \
     --hash=sha256:9db07472c7192b873a777a71f03f1c2291e05791de5ae07786201ff577f9284e
     # via
@@ -56,15 +56,15 @@ caracalai-revocation==0.1.5rc2 \
     #   caracalai-revocation-redis
     #   caracalai-transport-mcp
     #   lynx-capital
-caracalai-revocation-redis==0.1.5rc2 \
+caracalai-revocation-redis==0.1.5rc3 \
     --hash=sha256:c03ac1e01e97dcce6d85b93afc6de7ea2dd0b353c94bfec10230d319fdbc9f47 \
     --hash=sha256:e593ea951c85c26f5c64b7a47da493ff661a302f6f60bb7a7ce5adc9f8ccc385
     # via lynx-capital
-caracalai-sdk==0.1.5rc2 \
+caracalai-sdk==0.1.5rc3 \
     --hash=sha256:38af4fe63de1c45213ca7025bc01769c5c11259d309d556aa34fe5500e6b3610 \
     --hash=sha256:4d526b8d1c3975ba45efb5ecc148a85e65311ec473e81b873d1b172293398d37
     # via lynx-capital
-caracalai-transport-mcp==0.1.5rc2 \
+caracalai-transport-mcp==0.1.5rc3 \
     --hash=sha256:79316ba266cd98af9f91eb4a049c64158d9dd0c72c5048f9ef031edd37b50fad \
     --hash=sha256:b76cbfd44b534723e7cdce30d5bc4fc112e98deff74c5e0261f459d4e1d497ed
     # via

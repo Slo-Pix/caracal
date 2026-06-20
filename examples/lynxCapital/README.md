@@ -32,7 +32,7 @@ pip install -e ".[dev]"
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.06.10-rc.1
+  sh -s -- --version v2026.06.20-rc.1
 ```
 
 ```bash

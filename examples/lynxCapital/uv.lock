@@ -75,16 +75,16 @@ wheels = [
 
 [[package]]
 name = "caracalai-core"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d3/ec/3c7df9b9da676865637646d57930ba06fda151ee541abcbbb14900429583/caracalai_core-0.1.5rc2.tar.gz", hash = "sha256:9b0009532fb07f205677b171d5100770d15083dc487fcec792d4db65a2ef99f2", size = 13786, upload-time = "2026-06-10T17:29:29.551Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d3/ec/3c7df9b9da676865637646d57930ba06fda151ee541abcbbb14900429583/caracalai_core-0.1.5rc3.tar.gz", hash = "sha256:9b0009532fb07f205677b171d5100770d15083dc487fcec792d4db65a2ef99f2", size = 13786, upload-time = "2026-06-10T17:29:29.551Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/40/fb/78f56f23101969dec1bce8f02a44723c2751f128bd9a3e7cf14276eecba7/caracalai_core-0.1.5rc2-py3-none-any.whl", hash = "sha256:f9a9324520f86999f65499d6ba007320f23f26ddad713fb9f6974483977abf0b", size = 15434, upload-time = "2026-06-10T17:29:28.431Z" },
+    { url = "https://files.pythonhosted.org/packages/40/fb/78f56f23101969dec1bce8f02a44723c2751f128bd9a3e7cf14276eecba7/caracalai_core-0.1.5rc3-py3-none-any.whl", hash = "sha256:f9a9324520f86999f65499d6ba007320f23f26ddad713fb9f6974483977abf0b", size = 15434, upload-time = "2026-06-10T17:29:28.431Z" },
 ]
 
 [[package]]
 name = "caracalai-identity"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "caracalai-core" },
@@ -92,84 +92,84 @@ dependencies = [
     { name = "idna" },
     { name = "pyjwt" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/ae/d141b59f121e13985f0a4714e6c0142f23a57d1e6e65cc55e662586bcfe1/caracalai_identity-0.1.5rc2.tar.gz", hash = "sha256:d86ea32fd245ed14a473e56f63e809c50ee1c68a4e979fc53239dd321426fdbe", size = 9967, upload-time = "2026-06-10T17:29:28.785Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/ae/d141b59f121e13985f0a4714e6c0142f23a57d1e6e65cc55e662586bcfe1/caracalai_identity-0.1.5rc3.tar.gz", hash = "sha256:d86ea32fd245ed14a473e56f63e809c50ee1c68a4e979fc53239dd321426fdbe", size = 9967, upload-time = "2026-06-10T17:29:28.785Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/15/17/f2ff18ef98e163f0ccc0a3af9469328d5d68bfbc1c488a715a85e4a581f5/caracalai_identity-0.1.5rc2-py3-none-any.whl", hash = "sha256:b5ea8f29bcda008160efdf39b8347d53f7e573fdddaf8c40f2fa9d7e253865f8", size = 11265, upload-time = "2026-06-10T17:29:27.63Z" },
+    { url = "https://files.pythonhosted.org/packages/15/17/f2ff18ef98e163f0ccc0a3af9469328d5d68bfbc1c488a715a85e4a581f5/caracalai_identity-0.1.5rc3-py3-none-any.whl", hash = "sha256:b5ea8f29bcda008160efdf39b8347d53f7e573fdddaf8c40f2fa9d7e253865f8", size = 11265, upload-time = "2026-06-10T17:29:27.63Z" },
 ]
 
 [[package]]
 name = "caracalai-mcp-fastmcp"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "caracalai-revocation" },
     { name = "caracalai-transport-mcp" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/07/2c51a5dc508ae14f85610fee11e2171980ef9d450caf517f8d4c3b91a3d8/caracalai_mcp_fastmcp-0.1.5rc2.tar.gz", hash = "sha256:866f7455f152744902b772ff84539a3364bc1a6099d97eac1f273d2167680ea9", size = 6492, upload-time = "2026-06-10T17:29:31.005Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6e/07/2c51a5dc508ae14f85610fee11e2171980ef9d450caf517f8d4c3b91a3d8/caracalai_mcp_fastmcp-0.1.5rc3.tar.gz", hash = "sha256:866f7455f152744902b772ff84539a3364bc1a6099d97eac1f273d2167680ea9", size = 6492, upload-time = "2026-06-10T17:29:31.005Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/7f/220a6104a96b70e55ced95043571c9fdc14bc1cd07eecfe62e8d58b5ae5c/caracalai_mcp_fastmcp-0.1.5rc2-py3-none-any.whl", hash = "sha256:1909106e918b6844eea8259ec5b6a6efaf367c73b25ff9342a5565215aeff6e5", size = 6674, upload-time = "2026-06-10T17:29:29.932Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/7f/220a6104a96b70e55ced95043571c9fdc14bc1cd07eecfe62e8d58b5ae5c/caracalai_mcp_fastmcp-0.1.5rc3-py3-none-any.whl", hash = "sha256:1909106e918b6844eea8259ec5b6a6efaf367c73b25ff9342a5565215aeff6e5", size = 6674, upload-time = "2026-06-10T17:29:29.932Z" },
 ]
 
 [[package]]
 name = "caracalai-oauth"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "idna" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/63/d6baa6854e4df4d94a291473e30522108fab2de4c0eb090b713d5a7808e1/caracalai_oauth-0.1.5rc2.tar.gz", hash = "sha256:5f4adf60bb08af8a067065838b8a72020be753ed7017e573a7700cc373962b2e", size = 9241, upload-time = "2026-06-10T17:29:30.316Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/63/d6baa6854e4df4d94a291473e30522108fab2de4c0eb090b713d5a7808e1/caracalai_oauth-0.1.5rc3.tar.gz", hash = "sha256:5f4adf60bb08af8a067065838b8a72020be753ed7017e573a7700cc373962b2e", size = 9241, upload-time = "2026-06-10T17:29:30.316Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/5e/ed02c3ebd16319bc15038c1c37af60c63fc8bdfb257ac64d4d7da968c485/caracalai_oauth-0.1.5rc2-py3-none-any.whl", hash = "sha256:0b50dbd0d540d4d46971a64a397c1e13f9ae51f88a3b4a84395c9a6067a6f278", size = 10340, upload-time = "2026-06-10T17:29:29.222Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/5e/ed02c3ebd16319bc15038c1c37af60c63fc8bdfb257ac64d4d7da968c485/caracalai_oauth-0.1.5rc3-py3-none-any.whl", hash = "sha256:0b50dbd0d540d4d46971a64a397c1e13f9ae51f88a3b4a84395c9a6067a6f278", size = 10340, upload-time = "2026-06-10T17:29:29.222Z" },
 ]
 
 [[package]]
 name = "caracalai-revocation"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7a/4e/77cf97a027d0954f6883f18f7c93db9a6debb86aa8829d45532509d34ff2/caracalai_revocation-0.1.5rc2.tar.gz", hash = "sha256:9366dbfc59278b28f7d4ef2863070e2802be3ff59e712ff4b2963efb314adeb2", size = 6317, upload-time = "2026-06-10T17:29:31.787Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/4e/77cf97a027d0954f6883f18f7c93db9a6debb86aa8829d45532509d34ff2/caracalai_revocation-0.1.5rc3.tar.gz", hash = "sha256:9366dbfc59278b28f7d4ef2863070e2802be3ff59e712ff4b2963efb314adeb2", size = 6317, upload-time = "2026-06-10T17:29:31.787Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/01/cb/ee999c3467bc09ff19a6ff11d76a1f4d40c01275e5102814b5c777e25dc0/caracalai_revocation-0.1.5rc2-py3-none-any.whl", hash = "sha256:9db07472c7192b873a777a71f03f1c2291e05791de5ae07786201ff577f9284e", size = 6924, upload-time = "2026-06-10T17:29:30.817Z" },
+    { url = "https://files.pythonhosted.org/packages/01/cb/ee999c3467bc09ff19a6ff11d76a1f4d40c01275e5102814b5c777e25dc0/caracalai_revocation-0.1.5rc3-py3-none-any.whl", hash = "sha256:9db07472c7192b873a777a71f03f1c2291e05791de5ae07786201ff577f9284e", size = 6924, upload-time = "2026-06-10T17:29:30.817Z" },
 ]
 
 [[package]]
 name = "caracalai-revocation-redis"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "caracalai-revocation" },
     { name = "redis" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d6/cf/5d7a93e4b57873a304b1926237b73b3ecfbda2627e800e0d91c340af32be/caracalai_revocation_redis-0.1.5rc2.tar.gz", hash = "sha256:c03ac1e01e97dcce6d85b93afc6de7ea2dd0b353c94bfec10230d319fdbc9f47", size = 7813, upload-time = "2026-06-10T17:29:32.582Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/cf/5d7a93e4b57873a304b1926237b73b3ecfbda2627e800e0d91c340af32be/caracalai_revocation_redis-0.1.5rc3.tar.gz", hash = "sha256:c03ac1e01e97dcce6d85b93afc6de7ea2dd0b353c94bfec10230d319fdbc9f47", size = 7813, upload-time = "2026-06-10T17:29:32.582Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/28/f6/7b666fb7ad3aa9dd89bad6d4d884874682019b96fde3b62b92de80ff2866/caracalai_revocation_redis-0.1.5rc2-py3-none-any.whl", hash = "sha256:e593ea951c85c26f5c64b7a47da493ff661a302f6f60bb7a7ce5adc9f8ccc385", size = 8101, upload-time = "2026-06-10T17:29:31.609Z" },
+    { url = "https://files.pythonhosted.org/packages/28/f6/7b666fb7ad3aa9dd89bad6d4d884874682019b96fde3b62b92de80ff2866/caracalai_revocation_redis-0.1.5rc3-py3-none-any.whl", hash = "sha256:e593ea951c85c26f5c64b7a47da493ff661a302f6f60bb7a7ce5adc9f8ccc385", size = 8101, upload-time = "2026-06-10T17:29:31.609Z" },
 ]
 
 [[package]]
 name = "caracalai-sdk"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "caracalai-identity" },
     { name = "httpx" },
     { name = "idna" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/98/df/9640f61b7bcfe3ef7eedf61302487b6274bdedc3db5d91736f531de46297/caracalai_sdk-0.1.5rc2.tar.gz", hash = "sha256:38af4fe63de1c45213ca7025bc01769c5c11259d309d556aa34fe5500e6b3610", size = 25921, upload-time = "2026-06-10T17:29:30.454Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/98/df/9640f61b7bcfe3ef7eedf61302487b6274bdedc3db5d91736f531de46297/caracalai_sdk-0.1.5rc3.tar.gz", hash = "sha256:38af4fe63de1c45213ca7025bc01769c5c11259d309d556aa34fe5500e6b3610", size = 25921, upload-time = "2026-06-10T17:29:30.454Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bc/7d/94c3d96548a5a1d659cf971f903b3cb8ef7c15bfe11ecd0e8d24c354c945/caracalai_sdk-0.1.5rc2-py3-none-any.whl", hash = "sha256:4d526b8d1c3975ba45efb5ecc148a85e65311ec473e81b873d1b172293398d37", size = 30158, upload-time = "2026-06-10T17:29:29.206Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/7d/94c3d96548a5a1d659cf971f903b3cb8ef7c15bfe11ecd0e8d24c354c945/caracalai_sdk-0.1.5rc3-py3-none-any.whl", hash = "sha256:4d526b8d1c3975ba45efb5ecc148a85e65311ec473e81b873d1b172293398d37", size = 30158, upload-time = "2026-06-10T17:29:29.206Z" },
 ]
 
 [[package]]
 name = "caracalai-transport-mcp"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "caracalai-identity" },
     { name = "caracalai-revocation" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e1/a0/9aacdec66fdd487d76830349788c1c65bbea95fea88ae1f4a350c6207341/caracalai_transport_mcp-0.1.5rc2.tar.gz", hash = "sha256:b76cbfd44b534723e7cdce30d5bc4fc112e98deff74c5e0261f459d4e1d497ed", size = 8371, upload-time = "2026-06-10T17:29:30.592Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/e1/a0/9aacdec66fdd487d76830349788c1c65bbea95fea88ae1f4a350c6207341/caracalai_transport_mcp-0.1.5rc3.tar.gz", hash = "sha256:b76cbfd44b534723e7cdce30d5bc4fc112e98deff74c5e0261f459d4e1d497ed", size = 8371, upload-time = "2026-06-10T17:29:30.592Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/a7/69ac3e1f8d2a1f549372bc5bdc387843eac9f7c1ed0a7552ef4f49eb793b/caracalai_transport_mcp-0.1.5rc2-py3-none-any.whl", hash = "sha256:79316ba266cd98af9f91eb4a049c64158d9dd0c72c5048f9ef031edd37b50fad", size = 9223, upload-time = "2026-06-10T17:29:29.604Z" },
+    { url = "https://files.pythonhosted.org/packages/d0/a7/69ac3e1f8d2a1f549372bc5bdc387843eac9f7c1ed0a7552ef4f49eb793b/caracalai_transport_mcp-0.1.5rc3-py3-none-any.whl", hash = "sha256:79316ba266cd98af9f91eb4a049c64158d9dd0c72c5048f9ef031edd37b50fad", size = 9223, upload-time = "2026-06-10T17:29:29.604Z" },
 ]
 
 [[package]]
@@ -925,7 +925,7 @@ wheels = [
 
 [[package]]
 name = "lynx-capital"
-version = "0.1.5rc2"
+version = "0.1.5rc3"
 source = { editable = "." }
 dependencies = [
     { name = "caracalai-core" },
@@ -965,14 +965,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "caracalai-core", specifier = "==0.1.5rc2" },
-    { name = "caracalai-identity", specifier = "==0.1.5rc2" },
-    { name = "caracalai-mcp-fastmcp", specifier = "==0.1.5rc2" },
-    { name = "caracalai-oauth", specifier = "==0.1.5rc2" },
-    { name = "caracalai-revocation", specifier = "==0.1.5rc2" },
-    { name = "caracalai-revocation-redis", specifier = "==0.1.5rc2" },
-    { name = "caracalai-sdk", specifier = "==0.1.5rc2" },
-    { name = "caracalai-transport-mcp", specifier = "==0.1.5rc2" },
+    { name = "caracalai-core", specifier = "==0.1.5rc3" },
+    { name = "caracalai-identity", specifier = "==0.1.5rc3" },
+    { name = "caracalai-mcp-fastmcp", specifier = "==0.1.5rc3" },
+    { name = "caracalai-oauth", specifier = "==0.1.5rc3" },
+    { name = "caracalai-revocation", specifier = "==0.1.5rc3" },
+    { name = "caracalai-revocation-redis", specifier = "==0.1.5rc3" },
+    { name = "caracalai-sdk", specifier = "==0.1.5rc3" },
+    { name = "caracalai-transport-mcp", specifier = "==0.1.5rc3" },
     { name = "deepagents", specifier = ">=0.6" },
     { name = "fastapi", specifier = ">=0.136" },
     { name = "grpcio", specifier = ">=1.80" },

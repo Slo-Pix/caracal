@@ -240,7 +240,7 @@ importers:
         version: 3.7.3
       '@astrojs/starlight':
         specifier: 0.40.0
-        version: 0.40.0(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0))(typescript@6.0.3)
+        version: 0.40.0(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0))(typescript@6.0.3)
       '@react-three/drei':
         specifier: ^10.7.7
         version: 10.7.7(@react-three/fiber@9.6.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(three@0.184.0))(@types/react@19.2.17)(@types/three@0.184.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(three@0.184.0)
@@ -249,7 +249,7 @@ importers:
         version: 9.6.1(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(three@0.184.0)
       astro:
         specifier: ^6.4.8
-        version: 6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0)
+        version: 6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0)
       mermaid:
         specifier: ^11.15.0
         version: 11.15.0
@@ -276,7 +276,7 @@ importers:
   packages/admin/ts:
     dependencies:
       '@caracalai/core':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../core/ts
     devDependencies:
       '@types/node':
@@ -305,13 +305,13 @@ importers:
   packages/connectors/express/ts:
     dependencies:
       '@caracalai/identity':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../identity/ts
       '@caracalai/sdk':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../sdk/ts
       '@caracalai/transport-mcp':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../transport/mcp/ts
       express:
         specifier: ^5.0.0
@@ -333,10 +333,10 @@ importers:
   packages/connectors/fastmcp/ts:
     dependencies:
       '@caracalai/core':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../core/ts
       '@caracalai/transport-mcp':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../transport/mcp/ts
     devDependencies:
       '@types/node':
@@ -371,10 +371,10 @@ importers:
   packages/connectors/redis/ts:
     dependencies:
       '@caracalai/core':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../core/ts
       '@caracalai/revocation':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../revocation/ts
     devDependencies:
       '@types/node':
@@ -440,7 +440,7 @@ importers:
   packages/identity/ts:
     dependencies:
       '@caracalai/core':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../core/ts
       jose:
         specifier: ^6.2.3
@@ -459,7 +459,7 @@ importers:
   packages/oauth/ts:
     dependencies:
       '@caracalai/core':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../core/ts
     devDependencies:
       '@types/node':
@@ -487,7 +487,7 @@ importers:
   packages/sdk/ts:
     dependencies:
       '@caracalai/oauth':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../oauth/ts
       smol-toml:
         specifier: ^1.4.2
@@ -506,10 +506,10 @@ importers:
   packages/transport/a2a/ts:
     dependencies:
       '@caracalai/oauth':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../oauth/ts
       '@caracalai/sdk':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../sdk/ts
     devDependencies:
       '@types/node':
@@ -525,10 +525,10 @@ importers:
   packages/transport/mcp/ts:
     dependencies:
       '@caracalai/identity':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../identity/ts
       '@caracalai/revocation':
-        specifier: 0.1.5-rc.2
+        specifier: 0.1.5-rc.3
         version: link:../../../revocation/ts
     devDependencies:
       '@types/node':
@@ -4875,13 +4875,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@astrojs/mdx@6.0.3(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0))':
+  '@astrojs/mdx@6.0.3(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0))':
     dependencies:
       '@astrojs/internal-helpers': 0.10.0
       '@astrojs/markdown-remark': 7.2.0
       '@mdx-js/mdx': 3.1.1
       acorn: 8.17.0
-      astro: 6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0)
+      astro: 6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0)
       es-module-lexer: 2.1.0
       estree-util-visit: 2.0.0
       hast-util-to-html: 9.0.5
@@ -4930,17 +4930,17 @@ snapshots:
       stream-replace-string: 2.0.0
       zod: 4.4.3
 
-  '@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0))(typescript@6.0.3)':
+  '@astrojs/starlight@0.40.0(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0))(typescript@6.0.3)':
     dependencies:
       '@astrojs/markdown-remark': 7.2.0
-      '@astrojs/mdx': 6.0.3(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0))
+      '@astrojs/mdx': 6.0.3(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0))
       '@astrojs/sitemap': 3.7.3
       '@pagefind/default-ui': 1.5.2
       '@types/hast': 3.0.4
       '@types/js-yaml': 4.0.9
       '@types/mdast': 4.0.4
-      astro: 6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0)
-      astro-expressive-code: 0.43.1(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0))
+      astro: 6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0)
+      astro-expressive-code: 0.43.1(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0))
       bcp-47: 2.1.0
       hast-util-from-html: 2.0.3
       hast-util-select: 6.0.4
@@ -6663,12 +6663,12 @@ snapshots:
 
   astring@1.9.0: {}
 
-  astro-expressive-code@0.43.1(astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0)):
+  astro-expressive-code@0.43.1(astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0)):
     dependencies:
-      astro: 6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0)
+      astro: 6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0)
       rehype-expressive-code: 0.43.1
 
-  astro@6.4.8(@types/node@24.12.2)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.21.0)(yaml@2.9.0):
+  astro@6.4.8(@types/node@26.0.0)(ioredis@5.11.1)(jiti@2.7.0)(rollup@4.60.3)(tsx@4.22.4)(yaml@2.9.0):
     dependencies:
       '@astrojs/compiler': 4.0.0
       '@astrojs/internal-helpers': 0.10.0
