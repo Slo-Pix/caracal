@@ -19,13 +19,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Run AI inference
         id: inference
         if: ${{ vars.CARACAL_ENABLE_ISSUE_AI_SUMMARY == 'true' }}
         continue-on-error: true
-        uses: actions/ai-inference@b81b2afb8390ee6839b494a404766bef6493c7d9 # v1.2.8
+        uses: actions/ai-inference@a7805884c80886efc241e94a5351df715968a0ad # v2.1.1
         with:
           prompt: |
             You are summarizing a new issue for Caracal, an open-source platform for authorization, delegation,
