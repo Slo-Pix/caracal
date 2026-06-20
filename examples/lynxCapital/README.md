@@ -28,14 +28,22 @@ pip install -e ".[dev]"
 
 ## 2. Run
 
+`caracal up` needs the released Caracal CLI on your PATH. Install it first:
+
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
+  sh -s -- --version v2026.06.10-rc.1
+```
+
+```bash
+caracal up                                                        # start the Caracal platform
 docker compose -f _mock/docker-compose.yml up -d --build --wait   # start mock providers
 python -m uvicorn app.main:app --reload --port 8000               # run the app
 ```
 
-The mock providers join the Caracal platform's `caracalData` Docker network so
-mandate-aware providers can verify Caracal mandates against the zone JWKS — start the
-Caracal platform first.
+
+It must run before the mock providers: `caracal up` creates the `caracalData` Docker network
+they join so mandate-aware providers can verify Caracal mandates against the zone JWKS.
 
 Open `http://localhost:8000`.
 

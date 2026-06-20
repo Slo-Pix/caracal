@@ -34,9 +34,16 @@ def _id_of(result: object) -> str:
 
 
 def _version_id(result: object) -> str:
-    if not isinstance(result, dict) or not result.get("version_id"):
-        raise ControlError(f"control response missing version_id: {result!r}")
-    return str(result["version_id"])
+    if isinstance(result, dict):
+        direct = result.get("version_id")
+        if direct:
+            return str(direct)
+        version = result.get("version")
+        if isinstance(version, dict) and version.get("id"):
+            return str(version["id"])
+        if not isinstance(version, dict) and result.get("id"):
+            return str(result["id"])
+    raise ControlError(f"control response missing version_id: {result!r}")
 
 
 def ensure_applications(client: ControlClient, model: tenancy.TenancyModel) -> dict[str, str]:

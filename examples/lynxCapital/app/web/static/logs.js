@@ -45,8 +45,9 @@ const CAT_CSS = {
   chat:       'cat-chat',
 };
 
-function ts(isoStr) {
-  const d = new Date(isoStr);
+function ts(value) {
+  const ms = typeof value === 'number' && value < 10_000_000_000 ? value * 1000 : value;
+  const d = new Date(ms);
   return d.toLocaleTimeString('en-US', {hour12: false, hour:'2-digit', minute:'2-digit', second:'2-digit'}) +
          '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
