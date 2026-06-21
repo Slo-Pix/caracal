@@ -21,12 +21,12 @@ anyio==4.13.0 \
     #   starlette
     #   watchfiles
 caracalai-core==0.1.5rc3 \
-    --hash=sha256:9b0009532fb07f205677b171d5100770d15083dc487fcec792d4db65a2ef99f2 \
-    --hash=sha256:f9a9324520f86999f65499d6ba007320f23f26ddad713fb9f6974483977abf0b
+    --hash=sha256:a001efaae969d8c6341f773fae964d852112fc457b1daf8705d10d39932e7485 \
+    --hash=sha256:d97c146152a38a188f4498bb431470b1aa2ea62536dd56c4ce64974167a48fb8
     # via caracalai-identity
 caracalai-identity==0.1.5rc3 \
-    --hash=sha256:b5ea8f29bcda008160efdf39b8347d53f7e573fdddaf8c40f2fa9d7e253865f8 \
-    --hash=sha256:d86ea32fd245ed14a473e56f63e809c50ee1c68a4e979fc53239dd321426fdbe
+    --hash=sha256:3ac2019c79dfc97208cc4a25fbb9345512a611db00cfacb149bb550a5e5ac33b \
+    --hash=sha256:c8d47347d0019506bc0e2e68acb7ab45120e04df9b22dfc0bc8f79071002f280
     # via -r requirements.in
 certifi==2026.4.22 \
     --hash=sha256:3cb2210c8f88ba2318d29b0388d1023c8492ff72ecdde4ebdaddbb13a31b1c4a \

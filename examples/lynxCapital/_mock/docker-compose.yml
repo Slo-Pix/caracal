@@ -13,6 +13,12 @@ services:
       dockerfile: examples/lynxCapital/_mock/Dockerfile
     image: lynx-mock:latest
     command: python -m _mock.providerlab.run
+    # The provider lab's seed credentials live in providerlab/_store. The image
+    # build context excludes that directory, so the store is bind-mounted at
+    # runtime: the lab and the host-side `seedenv` operator helper read one
+    # shared source of truth, and seeds survive container recreation.
+    volumes:
+      - ./providerlab/_store:/app/_mock/providerlab/_store
     environment:
       PROVIDERLAB_HOST: "0.0.0.0"
       PROVIDERLAB_FAST: "${PROVIDERLAB_FAST:-0}"
@@ -50,8 +56,31 @@ services:
           - pulse-market.mock
           - junction-procure.mock
       # Mandate-aware providers verify Caracal mandates against the zone JWKS,
-      # so the lab needs a route to the Caracal STS.
-      caracal: {}
+      # so the lab needs a route to the Caracal STS. The Gateway also proxies
+      # workload traffic to every provider over this network, so the provider
+      # hostnames must resolve here as well.
+      caracal:
+        aliases:
+          - halcyon-bank.mock
+          - meridian-pay.mock
+          - cordoba-fx.mock
+          - ironbark-erp.mock
+          - tallyhall-books.mock
+          - slate-ledger.mock
+          - inkwell-ocr.mock
+          - aegis-screening.mock
+          - verafin-monitor.mock
+          - lumen-identity.mock
+          - beacon-crm.mock
+          - atlas-vendor.mock
+          - keystone-treasury.mock
+          - sabre-tax.mock
+          - quetzal-payouts.mock
+          - vela-notify.mock
+          - core-billing.mock
+          - relay-automation.mock
+          - pulse-market.mock
+          - junction-procure.mock
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9400/healthz').read()"]
       interval: 5s

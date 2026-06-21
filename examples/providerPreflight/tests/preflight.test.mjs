@@ -27,6 +27,7 @@ const reachable = async () => ({ reachable: true, detail: "tcp ok" });
 const unreachable = async () => ({ reachable: false, detail: "ECONNREFUSED" });
 const publicDns = async () => ["93.184.216.34"];
 const privateDns = async () => ["10.1.2.3"];
+const metadataDns = async () => ["169.254.169.254"];
 
 test("isPrivateAddress classifies ranges", () => {
   assert.equal(isPrivateAddress("10.0.0.1"), true);
@@ -149,10 +150,12 @@ test("upstream reachability warns when no upstream is set", async () => {
   assert.equal((await checkUpstreamReachable({ upstream_url: "https://api.example.com" }, unreachable, publicDns)).status, "fail");
 });
 
-test("upstream reachability warns on private resolution", async () => {
-  const result = await checkUpstreamReachable({ upstream_url: "https://internal.example.com" }, reachable, privateDns);
-  assert.equal(result.status, "warn");
-  assert.match(result.remediation, /private/);
+test("upstream reachability allows private and blocks metadata", async () => {
+  const privateOk = await checkUpstreamReachable({ upstream_url: "https://internal.example.com" }, reachable, privateDns);
+  assert.equal(privateOk.status, "ok");
+  const blocked = await checkUpstreamReachable({ upstream_url: "https://metadata.example.com" }, reachable, metadataDns);
+  assert.equal(blocked.status, "fail");
+  assert.match(blocked.remediation, /metadata/);
 });
 
 test("runtime injection enforces the provider flag", () => {
