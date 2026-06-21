@@ -1,8 +1,10 @@
+# caracal:data-document
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
 # Generated grants data: resource views, owning applications, and role scope sets.
 # Rendered by app.tenancy.render_grants_rego from config/tenancy.yaml; do not edit.
+# Grants are data for the shared rules in 00-base; this document never decides.
 package caracal.authz
 
 import rego.v1
@@ -53,7 +55,7 @@ grants := {
 	"resource://compliance-sabre": {
 		"application": "compliance",
 		"roles": {
-			"partner-integration": ["sabre:tax"],
+			"partner-integration": ["sabre:read", "sabre:tax"],
 			"policy-check": ["sabre:tax"],
 		},
 	},
@@ -156,7 +158,7 @@ grants := {
 	"resource://payments-quetzal": {
 		"application": "payments",
 		"roles": {
-			"partner-integration": ["quetzal:payout"],
+			"partner-integration": ["quetzal:payout", "quetzal:read"],
 			"payment-execution": ["quetzal:payout"],
 		},
 	},
@@ -197,11 +199,4 @@ grants := {
 		"application": "treasury",
 		"roles": {"route-optimization": ["sabre:tax"]},
 	},
-}
-
-# Grants are data for the shared rules in 00-base; this document never decides on
-# its own. The inert rule below satisfies the platform's policy authoring contract,
-# which requires every authored policy to define a result rule.
-result := allow_result("lynx-grants") if {
-	false
 }
