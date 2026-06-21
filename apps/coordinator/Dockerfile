@@ -6,38 +6,6 @@
 # syntax=docker/dockerfile:1.7
 ARG PNPM_VERSION=11.1.1
 
-FROM golang:1.26-alpine@sha256:3ad57304ad93bbec8548a0437ad9e06a455660655d9af011d58b993f6f615648 AS go-builder
-ARG CGO_ENABLED=0
-ARG CC
-ARG CFLAGS
-ARG CXX
-ARG CXXFLAGS
-ARG LDFLAGS
-ARG GOFLAGS
-ARG GO_BUILDFLAGS
-ARG GO_LDFLAGS
-ENV CGO_ENABLED=${CGO_ENABLED} GOOS=linux
-WORKDIR /build
-COPY go.work go.work
-COPY packages/core/go/ packages/core/go/
-COPY packages/identity/go/ packages/identity/go/
-COPY packages/oauth/go/ packages/oauth/go/
-COPY packages/revocation/go/ packages/revocation/go/
-COPY packages/transport/mcp/go/ packages/transport/mcp/go/
-COPY packages/connectors/nethttp/go/ packages/connectors/nethttp/go/
-COPY packages/connectors/redis/go/ packages/connectors/redis/go/
-COPY packages/sdk/go/ packages/sdk/go/
-COPY services/sts/ services/sts/
-COPY services/audit/ services/audit/
-COPY services/gateway/ services/gateway/
-COPY services/coordinator-relay/ services/coordinator-relay/
-COPY tests/go/ tests/go/
-WORKDIR /build/services/coordinator-relay
-RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
-    --mount=type=cache,target=/go/pkg/mod,sharing=locked \
-    go mod download && \
-    go build -mod=readonly -trimpath ${GO_BUILDFLAGS} -ldflags="${GO_LDFLAGS}" -o /relay ./cmd/relay
-
 FROM node:26-alpine@sha256:a2dc166a387cc6ca1e62d0c8e265e49ca985d6e60abc9fe6e6c3d6ce8e63f606 AS node-builder
 ARG PNPM_VERSION
 ENV PNPM_HOME=/pnpm \
@@ -76,11 +44,9 @@ ENV NODE_ENV=production \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     PORT=4000
 WORKDIR /app
-COPY --from=go-builder --chown=node:node /relay /relay
 COPY --from=node-builder --chown=node:node /out ./
-COPY --chown=node:node --chmod=0755 apps/coordinator/start.sh /start.sh
 USER node
 EXPOSE 4000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
     CMD wget -qO- "http://127.0.0.1:${PORT:-4000}/ready" || exit 1
-ENTRYPOINT ["/start.sh"]
+ENTRYPOINT ["node", "/app/dist/main.js"]
