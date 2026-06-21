@@ -137,13 +137,6 @@ func TestConfigValidateRuntimeRejectsJTIFailOpen(t *testing.T) {
 	}
 }
 
-func TestConfigValidateRuntimePrivateUpstreamsRequireAllowlist(t *testing.T) {
-	c := Config{Mode: "runtime", Port: "8081", STSURL: "https://sts", MaxRequestBytes: 1, RedisURL: "redis://redis", StreamsHMACKey: "k", AllowPrivateUpstreams: true}
-	if err := c.validate(); err == nil || !strings.Contains(err.Error(), "UPSTREAM_HOST_ALLOWLIST") {
-		t.Errorf("expected private upstream allowlist requirement, got %v", err)
-	}
-}
-
 func TestIsInternalHost(t *testing.T) {
 	for _, h := range []string{"sts", "caracal-api", "localhost", "127.0.0.1", "::1"} {
 		if !isInternalHost(h) {

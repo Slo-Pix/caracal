@@ -80,7 +80,7 @@ func parseQuery(s string) (map[string]string, error) {
 }
 
 func TestUpstreamGuardRejectsScheme(t *testing.T) {
-	g := newUpstreamGuard(nil, true)
+	g := newUpstreamGuard(nil)
 	for _, raw := range []string{"file:///etc/passwd", "javascript:alert(1)", "ftp://x", "gopher://x", ""} {
 		if _, err := g.Check(raw); err == nil {
 			t.Errorf("guard accepted bad url %q", raw)
@@ -89,25 +89,20 @@ func TestUpstreamGuardRejectsScheme(t *testing.T) {
 }
 
 func TestUpstreamGuardRejectsUserinfo(t *testing.T) {
-	g := newUpstreamGuard(nil, true)
+	g := newUpstreamGuard(nil)
 	if _, err := g.Check("https://user:pass@example.com/x"); err == nil {
 		t.Error("guard accepted userinfo")
 	}
 }
 
-func TestUpstreamGuardBlocksPrivateRanges(t *testing.T) {
-	g := newUpstreamGuard(nil, false)
+func TestUpstreamGuardBlocksDangerousRanges(t *testing.T) {
+	g := newUpstreamGuard(nil)
 	g.resolve = func(string) ([]net.IP, error) { return nil, nil }
 	cases := map[string]string{
-		"loopback":       "http://127.0.0.1/",
-		"loopback-ipv6":  "http://[::1]/",
-		"rfc1918-10":     "http://10.0.0.1/",
-		"rfc1918-192":    "http://192.168.1.1/",
 		"link-local":     "http://169.254.169.254/",
-		"cgnat":          "http://100.64.0.1/",
 		"unspecified":    "http://0.0.0.0/",
+		"multicast":      "http://224.0.0.1/",
 		"nat64-metadata": "http://[64:ff9b::a9fe:a9fe]/",
-		"nat64-rfc1918":  "http://[64:ff9b::a00:1]/",
 	}
 	for name, raw := range cases {
 		if _, err := g.Check(raw); err == nil {
@@ -116,8 +111,28 @@ func TestUpstreamGuardBlocksPrivateRanges(t *testing.T) {
 	}
 }
 
+func TestUpstreamGuardAllowsPrivateByDefault(t *testing.T) {
+	cases := map[string]net.IP{
+		"loopback":       net.ParseIP("127.0.0.1"),
+		"loopback-ipv6":  net.ParseIP("::1"),
+		"rfc1918-10":     net.ParseIP("10.0.0.1"),
+		"rfc1918-172":    net.ParseIP("172.16.4.9"),
+		"rfc1918-192":    net.ParseIP("192.168.1.1"),
+		"unique-local-6": net.ParseIP("fd00::1"),
+		"cgnat":          net.ParseIP("100.64.0.1"),
+		"nat64-rfc1918":  net.ParseIP("64:ff9b::a00:1"),
+	}
+	for name, ip := range cases {
+		g := newUpstreamGuard(nil)
+		g.resolve = func(string) ([]net.IP, error) { return []net.IP{ip}, nil }
+		if _, err := g.Check("http://provider.internal/v1"); err != nil {
+			t.Errorf("%s should be permitted by default: %v", name, err)
+		}
+	}
+}
+
 func TestUpstreamGuardAllowsPublic(t *testing.T) {
-	g := newUpstreamGuard(nil, false)
+	g := newUpstreamGuard(nil)
 	g.resolve = func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("8.8.8.8")}, nil }
 	if _, err := g.Check("https://example.com/v1"); err != nil {
 		t.Errorf("public host blocked: %v", err)
@@ -125,7 +140,7 @@ func TestUpstreamGuardAllowsPublic(t *testing.T) {
 }
 
 func TestUpstreamGuardAllowsNAT64Public(t *testing.T) {
-	g := newUpstreamGuard(nil, false)
+	g := newUpstreamGuard(nil)
 	g.resolve = func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("64:ff9b::808:808")}, nil }
 	if _, err := g.Check("https://example.com/v1"); err != nil {
 		t.Errorf("NAT64-embedded public address blocked: %v", err)
@@ -133,7 +148,7 @@ func TestUpstreamGuardAllowsNAT64Public(t *testing.T) {
 }
 
 func TestUpstreamGuardAllowlistEnforced(t *testing.T) {
-	g := newUpstreamGuard([]string{"api.example.com"}, true)
+	g := newUpstreamGuard([]string{"api.example.com"})
 	g.resolve = func(string) ([]net.IP, error) { return []net.IP{net.ParseIP("8.8.8.8")}, nil }
 	if _, err := g.Check("https://api.example.com/x"); err != nil {
 		t.Errorf("allowlisted host blocked: %v", err)
@@ -143,15 +158,17 @@ func TestUpstreamGuardAllowlistEnforced(t *testing.T) {
 	}
 }
 
-func TestUpstreamGuardAllowPrivateBypass(t *testing.T) {
-	g := newUpstreamGuard(nil, true)
+func TestUpstreamGuardPermitsLoopback(t *testing.T) {
+	// Loopback is a valid operator-provisioned upstream (local MCP / tool on the
+	// same host); only client-uncontrollable dangerous ranges are blocked.
+	g := newUpstreamGuard(nil)
 	if _, err := g.Check("http://127.0.0.1:9000/x"); err != nil {
-		t.Errorf("AllowPrivateUpstreams should permit loopback for dev: %v", err)
+		t.Errorf("loopback upstream should be permitted: %v", err)
 	}
 }
 
 func TestUpstreamGuardClearsFragment(t *testing.T) {
-	g := newUpstreamGuard(nil, true)
+	g := newUpstreamGuard(nil)
 	u, err := g.Check("https://example.com/x#frag")
 	if err != nil {
 		t.Fatal(err)

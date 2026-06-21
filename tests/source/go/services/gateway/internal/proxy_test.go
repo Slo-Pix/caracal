@@ -193,15 +193,15 @@ func newFakeSTS(t *testing.T, upstream string, calls *int32) *httptest.Server {
 	}))
 }
 
-func newProxyForTest(_ *testing.T, sts *httptest.Server, allowPrivate bool) *proxy {
+func newProxyForTest(_ *testing.T, sts *httptest.Server) *proxy {
 	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
-	guard := newUpstreamGuard(nil, allowPrivate)
+	guard := newUpstreamGuard(nil)
 	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{}, nil)
 }
 
 func newProxyForTestWithRevocations(_ *testing.T, sts *httptest.Server, revocations revocationChecker) *proxy {
 	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
-	guard := newUpstreamGuard(nil, true)
+	guard := newUpstreamGuard(nil)
 	return newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, revocations, &GatewayMetrics{}, nil)
 }
 
@@ -250,7 +250,7 @@ func TestExtractBearer(t *testing.T) {
 func TestProxyMissingBearerReturns401(t *testing.T) {
 	sts := newFakeSTS(t, "http://127.0.0.1:1", nil)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, nil)
 	if resp.StatusCode != http.StatusUnauthorized {
@@ -265,7 +265,7 @@ func TestProxyMalformedBearerRejectedWithoutSTSCall(t *testing.T) {
 	var calls int32
 	sts := newFakeSTS(t, "http://127.0.0.1:1", &calls)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	hdr := http.Header{
 		"Authorization":      {"Bearer not.a.jwt.4parts"},
@@ -284,7 +284,7 @@ func TestProxyExpiringBearerPreflightRejected(t *testing.T) {
 	var calls int32
 	sts := newFakeSTS(t, "http://127.0.0.1:1", &calls)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, 5*time.Second)
 	hdr := http.Header{
@@ -307,7 +307,7 @@ func TestProxyExpiringBearerPreflightRejected(t *testing.T) {
 func TestProxyMissingRoutingHeaders(t *testing.T) {
 	sts := newFakeSTS(t, "http://127.0.0.1:1", nil)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	cases := []http.Header{
@@ -325,7 +325,7 @@ func TestProxyMissingRoutingHeaders(t *testing.T) {
 func TestProxyPathTraversalBlocked(t *testing.T) {
 	sts := newFakeSTS(t, "http://127.0.0.1:1", nil)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
@@ -376,16 +376,14 @@ func TestProxyRejectsRevokedRootSession(t *testing.T) {
 	}
 }
 
-func TestProxySSRFBlocksLoopback(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer upstream.Close()
-
-	sts := newFakeSTS(t, upstream.URL, nil)
+func TestProxySSRFBlocksMetadata(t *testing.T) {
+	// Cloud metadata / link-local is always blocked, even though the upstream is
+	// operator-provisioned, because it is never a legitimate provider and is the
+	// crown-jewel SSRF target under DNS rebinding.
+	sts := newFakeSTS(t, "http://169.254.169.254/latest/meta-data/", nil)
 	defer sts.Close()
 
-	p := newProxyForTest(t, sts, false) // disallow private upstreams
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
@@ -394,7 +392,7 @@ func TestProxySSRFBlocksLoopback(t *testing.T) {
 	}
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, hdr)
 	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("loopback upstream should be rejected as 502, got %d", resp.StatusCode)
+		t.Fatalf("metadata upstream should be rejected as 502, got %d", resp.StatusCode)
 	}
 }
 
@@ -409,7 +407,7 @@ func TestProxyHappyPathForwardsAndStripsHeaders(t *testing.T) {
 
 	sts := newFakeSTS(t, upstream.URL, nil)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
@@ -476,7 +474,7 @@ func TestProxyNoneAuthModeForwardsNoCredential(t *testing.T) {
 		})
 	}))
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	resp := doProxiedRequest(t, p, "GET", "/none", nil, http.Header{
@@ -522,7 +520,7 @@ func TestProxyProviderAPIKeyDoesNotLeakInboundAuthorizationOrIdentity(t *testing
 		})
 	}))
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
@@ -608,7 +606,7 @@ func TestProxyProviderAPIKeySupportsAuthorizationAndSchemes(t *testing.T) {
 				})
 			}))
 			defer sts.Close()
-			p := newProxyForTest(t, sts, true)
+			p := newProxyForTest(t, sts)
 
 			hdr := tc.inbound.Clone()
 			hdr.Set("Authorization", "Bearer "+makeJWT(t, time.Hour))
@@ -659,7 +657,7 @@ func TestProxyProviderAPIKeySupportsQueryParameterPlacement(t *testing.T) {
 		})
 	}))
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	resp := doProxiedRequest(t, p, "GET", "/x?key=caller-supplied&q=search", nil, http.Header{
 		"Authorization":      {"Bearer " + makeJWT(t, time.Hour)},
@@ -749,7 +747,7 @@ func TestProxyProviderBearerTokenSupportsHeadersSchemesAndIdentity(t *testing.T)
 				})
 			}))
 			defer sts.Close()
-			p := newProxyForTest(t, sts, true)
+			p := newProxyForTest(t, sts)
 
 			hdr := tc.inbound.Clone()
 			hdr.Set("Authorization", "Bearer "+makeJWT(t, time.Hour))
@@ -803,7 +801,7 @@ func TestProxyProviderBearerTokenRejectsNonAllowlistedUpstreamHost(t *testing.T)
 		})
 	}))
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
 		"Authorization":      {"Bearer " + makeJWT(t, time.Hour)},
@@ -866,7 +864,7 @@ func TestProxySignedExchangeBrokersProviderCredentialWithoutIdentityLeak(t *test
 	defer sts.Close()
 
 	stsClient := newSTSClient(sts.URL, 2*time.Second, key)
-	guard := newUpstreamGuard(nil, true)
+	guard := newUpstreamGuard(nil)
 	p := newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 1<<20, 5*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{}, nil)
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
 		"Authorization":      {"Bearer " + makeJWT(t, time.Hour)},
@@ -913,7 +911,7 @@ func TestProxyProviderAPIKeyForwardsIdentityWhenOptedIn(t *testing.T) {
 		})
 	}))
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	resp := doProxiedRequest(t, p, "GET", "/x", nil, http.Header{
@@ -941,7 +939,7 @@ func TestProxySTSExchangedExactlyOncePerRequest(t *testing.T) {
 	var stsCalls int32
 	sts := newFakeSTS(t, upstream.URL, &stsCalls)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
@@ -967,7 +965,7 @@ func TestProxyConcurrentRequestsEachExchange(t *testing.T) {
 	var stsCalls int32
 	sts := newFakeSTS(t, upstream.URL, &stsCalls)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	tok := makeJWT(t, time.Hour)
 	done := make(chan int, requests)
@@ -1008,7 +1006,7 @@ func TestProxyPathAndQueryComposition(t *testing.T) {
 	}))
 	defer sts.Close()
 
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
 		"Authorization":      {"Bearer " + tok},
@@ -1039,7 +1037,7 @@ func TestProxyBodySizeLimitEnforced(t *testing.T) {
 	defer sts.Close()
 
 	stsClient := newSTSClient(sts.URL, 2*time.Second, nil)
-	guard := newUpstreamGuard(nil, true)
+	guard := newUpstreamGuard(nil)
 	p := newProxy(stsClient, allowVerifier{}, guard, zerolog.New(io.Discard), 16, 2*time.Second, testBindings(), allowTracker{}, allowRevocations{}, &GatewayMetrics{}, nil)
 
 	tok := makeJWT(t, time.Hour)
@@ -1066,7 +1064,7 @@ func TestProxySTSDeniedSurfacesError(t *testing.T) {
 	}))
 	defer sts.Close()
 
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
 		"Authorization":      {"Bearer " + tok},
@@ -1111,7 +1109,7 @@ func TestProxyEmitsCredentialFreeActionAudit(t *testing.T) {
 	defer sts.Close()
 
 	rec := &recordAudit{}
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 	p.audit = rec
 
 	tok := makeJWT(t, time.Hour)
@@ -1158,7 +1156,7 @@ func TestProxyAuditsUpstreamTransportFailure(t *testing.T) {
 	sts := newFakeSTS(t, "http://127.0.0.1:1", nil)
 	defer sts.Close()
 	rec := &recordAudit{}
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 	p.audit = rec
 
 	tok := makeJWT(t, time.Hour)
@@ -1193,7 +1191,7 @@ func TestProxySTSUnavailableMappedSafely(t *testing.T) {
 	}))
 	defer sts.Close()
 
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 	tok := makeJWT(t, time.Hour)
 	hdr := http.Header{
 		"Authorization":      {"Bearer " + tok},
@@ -1223,7 +1221,7 @@ func TestProxySSEStreamsAndFlushes(t *testing.T) {
 	defer upstream.Close()
 	sts := newFakeSTS(t, upstream.URL, nil)
 	defer sts.Close()
-	p := newProxyForTest(t, sts, true)
+	p := newProxyForTest(t, sts)
 
 	server := httptest.NewServer(p)
 	defer server.Close()
