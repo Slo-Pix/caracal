@@ -1307,7 +1307,7 @@ func TestSTSClientTransportFailureSanitised(t *testing.T) {
 	c := newSTSClient("http://127.0.0.1:1", 100*time.Millisecond, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
-	outcome := c.Exchange(ctx, "tok", binding{}, "r", "rid")
+	outcome := c.Exchange(ctx, "tok", binding{}, "r", "GET", "/x", "rid")
 	if outcome.InternalErr == nil {
 		t.Fatal("expected transport error")
 	}

@@ -41,6 +41,8 @@ type TokenExchangeRequest struct {
 	SessionID                  string
 	AgentSessionID             string
 	DelegationEdgeID           string
+	RequestMethod              string // upstream HTTP method the gateway is authorizing, if any
+	RequestPath                string // upstream request path the gateway is authorizing, if any
 	TTLSeconds                 int
 	GatewayAuthenticated       bool
 	RuntimeCredentialInjection bool
@@ -83,7 +85,9 @@ type OPAResource struct {
 }
 
 type OPAAction struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	Method string `json:"method,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 type OPASession struct {

@@ -2182,3 +2182,29 @@ func TestValidateSubjectTokenGracePeriodAndRotation(t *testing.T) {
 		}
 	})
 }
+
+func TestGatewayActionInputSurfacesOperationOnlyForGatewayAuth(t *testing.T) {
+	withOp := gatewayActionInput(TokenExchangeRequest{
+		GatewayAuthenticated: true,
+		RequestMethod:        "post",
+		RequestPath:          " /api/initiate_payment ",
+	})
+	if withOp.ID != "TokenExchange" {
+		t.Fatalf("action id: got %q", withOp.ID)
+	}
+	if withOp.Method != "POST" {
+		t.Fatalf("method should be upper-cased and trimmed: got %q", withOp.Method)
+	}
+	if withOp.Path != "/api/initiate_payment" {
+		t.Fatalf("path should be trimmed: got %q", withOp.Path)
+	}
+
+	forged := gatewayActionInput(TokenExchangeRequest{
+		GatewayAuthenticated: false,
+		RequestMethod:        "POST",
+		RequestPath:          "/api/initiate_payment",
+	})
+	if forged.Method != "" || forged.Path != "" {
+		t.Fatalf("non-gateway exchange must not surface a forgeable operation: got %q %q", forged.Method, forged.Path)
+	}
+}
