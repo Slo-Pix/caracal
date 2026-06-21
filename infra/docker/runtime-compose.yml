@@ -189,7 +189,8 @@ services:
 
   sts:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-sts:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-go:v${CARACAL_VERSION}
+    command: ["/usr/local/bin/sts"]
     depends_on:
       replayVolumeInit:
         condition: service_completed_successfully
@@ -295,7 +296,8 @@ services:
 
   gateway:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-gateway:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-go:v${CARACAL_VERSION}
+    command: ["/usr/local/bin/gateway"]
     depends_on:
       replayVolumeInit:
         condition: service_completed_successfully
@@ -345,7 +347,8 @@ services:
 
   audit:
     <<: *appService
-    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-audit:v${CARACAL_VERSION}
+    image: ${CARACAL_REGISTRY:-ghcr.io/garudex-labs/}caracal-go:v${CARACAL_VERSION}
+    command: ["/usr/local/bin/audit"]
     depends_on:
       postgres:
         condition: service_healthy
