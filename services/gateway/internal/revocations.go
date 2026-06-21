@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/garudex-labs/caracal/packages/core/go/redisguard"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -35,6 +36,7 @@ const (
 
 type revocationRedis interface {
 	EnsureGroup(ctx context.Context, stream, group string) error
+	EvictionPolicy(ctx context.Context) (string, error)
 	XReadGroup(ctx context.Context, group, consumer, stream string, count int64) ([]redis.XMessage, error)
 	XAutoClaim(ctx context.Context, group, consumer, stream, start string, minIdle time.Duration, count int64) ([]redis.XMessage, string, error)
 	XAck(ctx context.Context, stream, group, id string) error
@@ -192,6 +194,9 @@ func startRevocationConsumer(ctx context.Context, redis revocationRedis, store *
 	if err := redis.EnsureGroup(ctx, streamRevoke, groupRevoke); err != nil {
 		return fmt.Errorf("revocation consumer ensure group: %w", err)
 	}
+	// Redis is reachable here. Warn if its eviction policy could silently drop
+	// revocation entries; never blocks startup.
+	redisguard.WarnIfUnsafeEviction(ctx, redis.EvictionPolicy, log)
 	consumer := fmt.Sprintf("gateway-%s-%d", hostname(), os.Getpid())
 	go runRevocationLoop(ctx, redis, store, consumer, metrics, log)
 	go runRevocationPendingReaper(ctx, redis, store, consumer, metrics, log)

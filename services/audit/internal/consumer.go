@@ -20,6 +20,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
+
+	"github.com/garudex-labs/caracal/packages/core/go/redisguard"
 )
 
 const (
@@ -58,6 +60,7 @@ type auditStreamClient interface {
 	XGroupCreateMkStream(context.Context, string, string, string) *redis.StatusCmd
 	XPendingExt(context.Context, *redis.XPendingExtArgs) *redis.XPendingExtCmd
 	XReadGroup(context.Context, *redis.XReadGroupArgs) *redis.XStreamSliceCmd
+	ConfigGet(context.Context, string) *redis.MapStringStringCmd
 }
 
 func newConsumer(db auditInserter, r auditStreamClient, log zerolog.Logger, cfg Config) *Consumer {
@@ -103,6 +106,16 @@ func (c *Consumer) Run(ctx context.Context) {
 		c.healthy.Store(true)
 		break
 	}
+
+	// Redis is reachable and the group is ready here. Warn if its eviction
+	// policy could silently drop audit stream entries; never blocks startup.
+	redisguard.WarnIfUnsafeEviction(ctx, func(ctx context.Context) (string, error) {
+		m, err := c.redis.ConfigGet(ctx, redisguard.EvictionPolicyParam).Result()
+		if err != nil {
+			return "", err
+		}
+		return m[redisguard.EvictionPolicyParam], nil
+	}, c.log)
 
 	go c.reapLoop(ctx)
 

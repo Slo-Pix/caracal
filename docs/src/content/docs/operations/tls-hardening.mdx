@@ -4,7 +4,7 @@ description: Harden network exposure, secrets, service processes, and upstream a
 pageType: workflow
 ---
 
-Production Caracal should run in `CARACAL_MODE=stable` or `rc`, use TLS at external boundaries, and keep stateful dependencies private.
+Production Caracal should run in published mode (`CARACAL_MODE=stable`, or `rc` for staging), use TLS at external boundaries, and keep stateful dependencies private. `rc` and `stable` enforce the same fail-closed trust boundary; `rc` is a release-candidate build that may be functionally unstable, so use `stable` for production.
 
 ## Hardening Checklist
 

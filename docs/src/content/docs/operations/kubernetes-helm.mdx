@@ -19,6 +19,18 @@ The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes reso
 | PDB/HPA | Availability and scaling controls per service. |
 | ServiceMonitor/PrometheusRule | Metrics scraping and built-in alert recipes. |
 
+## Profile Selection
+
+The chart ships three overlays on top of `values.yaml`. Pick one explicitly — `values.production.yaml` is the canonical enterprise install path:
+
+| Overlay | `global.mode` | Posture | Use for |
+| --- | --- | --- | --- |
+| `values.production.yaml` | `stable` | Fail-closed; replicas, PDBs, anti-affinity baked in | **Production (canonical)** |
+| `values.rc.yaml` | `rc` | Same fail-closed trust boundary; release-candidate build may be functionally unstable | Staging / pre-release validation |
+| `values.dev.yaml` | `dev` | Relaxed, single-host conveniences | Local evaluation only |
+
+Always pass the chosen overlay with `--values`; never install on bare `values.yaml`.
+
 ## Minimal Install Shape
 
 ```bash

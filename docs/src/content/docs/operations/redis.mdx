@@ -56,6 +56,18 @@ flowchart LR
 
 Stream messages are signed with `STREAMS_HMAC_KEY` in published modes.
 
+## Durability and Eviction
+
+Redis is a correctness-critical store, not a disposable cache: revocation entries and unacknowledged stream messages must survive memory pressure and restarts. Configure every Caracal Redis with:
+
+| Setting | Required value | Why |
+| --- | --- | --- |
+| `maxmemory-policy` | `noeviction` | Any `allkeys-*`/`volatile-*` policy can silently drop revocation entries and pending stream messages, weakening revocation correctness. |
+| `appendonly` | `yes` | Persists stream and revocation state across restarts. |
+| `appendfsync` | `everysec` | Bounds data loss on crash to roughly one second. |
+
+The bundled Redis image (`infra/redis/redis.conf`) already sets these. **External or managed Redis is your responsibility** — many managed tiers default to `allkeys-lru`. On startup each consumer service (STS, Gateway, Audit) reads the live `maxmemory-policy` and logs a warning when it is not `noeviction`, so a misconfigured store is visible in service logs immediately. The check never blocks startup and is skipped when the provider restricts `CONFIG GET`.
+
 ## Troubleshooting
 
 | Symptom | Check |

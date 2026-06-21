@@ -50,6 +50,7 @@ type Server struct {
 
 type gatewayRedis interface {
 	Ping(context.Context) error
+	EvictionPolicy(context.Context) (string, error)
 	EnsureGroup(context.Context, string, string) error
 	XReadGroup(context.Context, string, string, string, int64) ([]redis.XMessage, error)
 	XAutoClaim(context.Context, string, string, string, string, time.Duration, int64) ([]redis.XMessage, string, error)

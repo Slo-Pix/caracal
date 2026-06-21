@@ -53,6 +53,7 @@ type Server struct {
 
 type stsRedis interface {
 	Ping(context.Context) error
+	EvictionPolicy(context.Context) (string, error)
 	SetNXTTL(context.Context, string, string, time.Duration) (bool, error)
 	SetTTL(context.Context, string, any, time.Duration) error
 	Get(context.Context, string) (string, error)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/garudex-labs/caracal/packages/core/go/config"
 	"github.com/garudex-labs/caracal/packages/core/go/crypto"
+	"github.com/garudex-labs/caracal/packages/core/go/redisguard"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -47,6 +48,16 @@ func newRedis(dsn string) (*RedisClient, error) {
 // Ping checks Redis connectivity for readiness.
 func (r *RedisClient) Ping(ctx context.Context) error {
 	return r.c.Ping(ctx).Err()
+}
+
+// EvictionPolicy returns the connected Redis maxmemory-policy for the startup
+// eviction-safety guard.
+func (r *RedisClient) EvictionPolicy(ctx context.Context) (string, error) {
+	m, err := r.c.ConfigGet(ctx, redisguard.EvictionPolicyParam).Result()
+	if err != nil {
+		return "", err
+	}
+	return m[redisguard.EvictionPolicyParam], nil
 }
 
 // SetStreamSigning configures origin verification for Redis stream messages.

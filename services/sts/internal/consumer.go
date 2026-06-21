@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/garudex-labs/caracal/packages/core/go/redisguard"
 )
 
 const (
@@ -54,6 +56,10 @@ func (s *Server) startConsumers(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
+
+	// Redis is reachable here. Warn (once) if its eviction policy could silently
+	// drop revocation or stream entries; never blocks startup.
+	redisguard.WarnIfUnsafeEviction(ctx, s.redis.EvictionPolicy, s.log)
 
 	baseConsumer := uniqueConsumerID("sts")
 	go s.consumeRevocations(ctx, baseConsumer+"-revocations")
