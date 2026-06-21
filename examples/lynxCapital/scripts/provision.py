@@ -63,13 +63,48 @@ def _existing_secrets() -> dict[str, str]:
     return secrets_by_key
 
 
+def _rotation_opt_in() -> bool:
+    """Whether the operator has explicitly authorized rotating the client secret of an
+    application that already exists but whose secret is not known locally."""
+    return os.environ.get("LYNX_PROVISION_ALLOW_SECRET_ROTATION", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _guard_secret_rotation(
+    model: tenancy.TenancyModel, existing: object, known_secrets: dict[str, str]
+) -> None:
+    """Fail before touching any state when provisioning would rotate the live secret of an
+    application that already exists but is not represented in config/provisioned.env.
+    Rotating it would invalidate the credential every other running workload holds, so it
+    must be an explicit, opted-in action rather than a silent side effect of a routine run."""
+    if _rotation_opt_in():
+        return
+    at_risk = [
+        app.applicationName
+        for app in model.applications
+        if find_by_name(existing, app.applicationName)
+        and app.id.upper().replace("-", "_") not in known_secrets
+    ]
+    if at_risk:
+        raise ControlError(
+            "refusing to rotate client secrets for existing applications whose secrets are "
+            f"not in config/provisioned.env: {', '.join(at_risk)}. Rotating them would break "
+            "every other workload holding the current secret. Restore the existing secrets "
+            "into config/provisioned.env, or set LYNX_PROVISION_ALLOW_SECRET_ROTATION=1 to "
+            "explicitly rotate them (this invalidates all other holders)."
+        )
+
+
 def ensure_applications(client: ControlClient, model: tenancy.TenancyModel) -> dict[str, str]:
     """Create each managed application boundary and persist a working client secret for the
     local workload environment file. New applications capture their one-time secret; existing
-    applications reuse a secret already captured here, or rotate to a fresh one when none is
-    known, so provisioning always ends with credentials the workload can use."""
+    applications reuse a secret already captured here. An existing application whose secret is
+    not known locally is never rotated silently — rotation invalidates the credential every
+    other running workload holds, so it must be opted into explicitly."""
     existing = client.invoke("app", "list")
     known_secrets = _existing_secrets()
+    _guard_secret_rotation(model, existing, known_secrets)
     application_ids: dict[str, str] = {}
     fd = os.open(APPLICATION_ENV_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     os.fchmod(fd, 0o600)

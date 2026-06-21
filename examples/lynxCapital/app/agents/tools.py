@@ -129,8 +129,12 @@ def _denyKey(authority, provider_id: str, operation: str) -> tuple:
 
 
 def _memoize_denial(run_id: str, key: tuple, result: dict) -> None:
+    """Memoize only a genuine authority denial (gateway 403) so agents cannot retry a
+    policy-blocked operation in the same run. A 401 is an authentication or credential
+    failure, not an authorization decision, so it is surfaced neutrally and never cached
+    as a Caracal denial."""
     status = result.get("status")
-    if not isinstance(status, int) or status not in (401, 403):
+    if status != 403:
         return
     memo = _denyMemo.setdefault(run_id, {})
     memo[key] = {
