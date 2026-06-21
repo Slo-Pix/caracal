@@ -106,7 +106,7 @@ func New(ctx context.Context) (*Server, error) {
 		log:         log,
 		sts:         newSTSClient(cfg.STSURL, cfg.STSTimeout, cfg.STSExchangeHMACKey),
 		jwks:        newJWKSCache(cfg.STSURL, cfg.STSTimeout, log),
-		guard:       newUpstreamGuard(cfg.UpstreamHostAllowlist, cfg.AllowPrivateUpstreams),
+		guard:       newUpstreamGuard(cfg.UpstreamHostAllowlist),
 		tracker:     tracker,
 		bindings:    bindings,
 		redis:       rdb,

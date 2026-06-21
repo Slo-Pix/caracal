@@ -89,18 +89,22 @@ type hostResolver func(host string) ([]net.IP, error)
 func defaultResolver(host string) ([]net.IP, error) { return net.LookupIP(host) }
 
 // upstreamGuard validates URLs returned by STS before the gateway forwards to them.
+// Upstream hosts are operator-provisioned through the Control API, never client-supplied,
+// so loopback, private, and unique-local addresses are permitted: internal tools, local
+// MCPs, and on-prem providers are first-class upstreams. Ranges that are never a legitimate
+// upstream and dangerous regardless of intent (cloud metadata / link-local, multicast,
+// unspecified) are always blocked. An optional allowList pins egress to an explicit set.
 type upstreamGuard struct {
-	allowList    map[string]struct{}
-	allowPrivate bool
-	resolve      hostResolver
+	allowList map[string]struct{}
+	resolve   hostResolver
 }
 
-func newUpstreamGuard(allowList []string, allowPrivate bool) *upstreamGuard {
+func newUpstreamGuard(allowList []string) *upstreamGuard {
 	m := make(map[string]struct{}, len(allowList))
 	for _, h := range allowList {
 		m[strings.ToLower(h)] = struct{}{}
 	}
-	return &upstreamGuard{allowList: m, allowPrivate: allowPrivate, resolve: defaultResolver}
+	return &upstreamGuard{allowList: m, resolve: defaultResolver}
 }
 
 // Check parses the upstream URL and enforces scheme/host/network safety.
@@ -130,7 +134,7 @@ func (g *upstreamGuard) Check(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("upstream host resolution failed")
 	}
 	for _, ip := range ips {
-		if !g.allowPrivate && isUnsafeIP(ip) {
+		if isUnsafeIP(ip) {
 			return nil, fmt.Errorf("upstream host resolves to a restricted address")
 		}
 	}
@@ -154,7 +158,7 @@ func (g *upstreamGuard) SafeDialContext(timeout, keepAlive time.Duration) func(c
 		}
 		var lastErr error
 		for _, ip := range ips {
-			if !g.allowPrivate && isUnsafeIP(ip) {
+			if isUnsafeIP(ip) {
 				lastErr = fmt.Errorf("dial: %s resolves to restricted address", host)
 				continue
 			}
@@ -178,30 +182,24 @@ func (g *upstreamGuard) resolveHost(host string) ([]net.IP, error) {
 	return g.resolve(host)
 }
 
-// isUnsafeIP reports whether forwarding to ip would risk SSRF into private,
-// loopback, link-local, multicast, unspecified, or cloud-metadata ranges.
+// isUnsafeIP reports whether forwarding to ip would reach infrastructure that is
+// never a legitimate operator-provisioned upstream and is dangerous regardless of
+// operator intent: cloud metadata and link-local (169.254.0.0/16, fe80::/10),
+// multicast, and unspecified addresses. These stay blocked even under DNS rebinding.
+// Loopback, private (RFC1918), unique-local (fc00::/7), and carrier-grade NAT
+// addresses are permitted, because internal tools, local MCPs, and on-prem providers
+// live there; upstream hosts are operator-provisioned, never client-supplied.
 func isUnsafeIP(ip net.IP) bool {
 	if ip == nil {
 		return true
 	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() ||
-		ip.IsInterfaceLocalMulticast() {
+	if ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() || ip.IsInterfaceLocalMulticast() {
 		return true
 	}
-	if v4 := ip.To4(); v4 != nil {
-		// AWS / GCP / Azure metadata.
-		if v4[0] == 169 && v4[1] == 254 {
-			return true
-		}
-		// Carrier-grade NAT 100.64.0.0/10.
-		if v4[0] == 100 && v4[1]&0xc0 == 64 {
-			return true
-		}
-	}
 	// NAT64 well-known prefix (RFC 6052) embeds an IPv4 target in the low 32 bits;
-	// re-check the embedded address so 64:ff9b::<private-or-metadata-v4> cannot
-	// tunnel past the guard while genuine NAT64 to public addresses still resolves.
+	// re-check the embedded address so 64:ff9b::<metadata-v4> cannot tunnel past the
+	// guard while genuine NAT64 to permitted addresses still resolves.
 	if embedded := nat64Embedded(ip); embedded != nil {
 		return isUnsafeIP(embedded)
 	}

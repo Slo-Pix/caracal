@@ -45,7 +45,6 @@ type Config struct {
 	MaxRequestBytes       int64
 	TLSCertFile           string
 	TLSKeyFile            string
-	AllowPrivateUpstreams bool
 	UpstreamHostAllowlist []string
 	DatabaseURL           string
 	RedisURL              string
@@ -83,7 +82,6 @@ func loadConfig() (Config, error) {
 		MaxRequestBytes:       config.Int64Env("MAX_REQUEST_BYTES", defaultMaxRequestSize),
 		TLSCertFile:           config.Getenv("TLS_CERT_FILE", ""),
 		TLSKeyFile:            config.Getenv("TLS_KEY_FILE", ""),
-		AllowPrivateUpstreams: config.BoolEnv("ALLOW_PRIVATE_UPSTREAMS", false),
 		UpstreamHostAllowlist: config.CSVEnv("UPSTREAM_HOST_ALLOWLIST"),
 		DatabaseURL:           os.Getenv("DATABASE_URL"),
 		RedisURL:              os.Getenv("REDIS_URL"),
@@ -113,9 +111,6 @@ func (c Config) validate() error {
 	}
 	if published && c.JTIFailOpen {
 		return fmt.Errorf("JTI_FAIL_OPEN is forbidden when CARACAL_MODE=rc or CARACAL_MODE=stable")
-	}
-	if published && c.AllowPrivateUpstreams && len(c.UpstreamHostAllowlist) == 0 {
-		return fmt.Errorf("UPSTREAM_HOST_ALLOWLIST is required when ALLOW_PRIVATE_UPSTREAMS=true under CARACAL_MODE=rc or CARACAL_MODE=stable")
 	}
 	u, err := url.Parse(c.STSURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
