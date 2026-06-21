@@ -166,10 +166,43 @@ def load_model(path: str | os.PathLike[str] | None = None) -> TenancyModel:
     return model
 
 
+def _validate_operation_governance(model: TenancyModel) -> None:
+    """Fail closed when the partner operation surface and the governed scope vocabulary
+    drift apart. Every operation a partner exposes must map to exactly one scope, and
+    every governed operation must exist on its partner — so no operation can ever reach
+    a provider ungoverned, and no scope can grant authority over a non-existent call.
+    The check runs at config load, turning a latent runtime gap into a startup error."""
+    from app.services import partners
+
+    spec_ids = set(partners.catalog())
+    model_ids = {p.id for p in model.providers}
+    if spec_ids != model_ids:
+        missing = sorted(spec_ids - model_ids)
+        extra = sorted(model_ids - spec_ids)
+        raise ValueError(
+            f"partner/provider drift: specs without tenancy provider={missing}, "
+            f"tenancy providers without spec={extra}"
+        )
+    for provider in model.providers:
+        partner_ops = set(partners.spec(provider.id).operations)
+        governed = {op for ops in provider.scopes.values() for op in ops}
+        ungoverned = sorted(partner_ops - governed)
+        phantom = sorted(governed - partner_ops)
+        if ungoverned:
+            raise ValueError(
+                f"provider {provider.id}: operations map to no governed scope: {ungoverned}"
+            )
+        if phantom:
+            raise ValueError(
+                f"provider {provider.id}: scopes govern operations the partner does not expose: {phantom}"
+            )
+
+
 def _validate(model: TenancyModel) -> None:
     apps = {a.id for a in model.applications}
     providers = {p.id for p in model.providers}
     views = {r.id for r in model.resources}
+    _validate_operation_governance(model)
     for provider in model.providers:
         if provider.integrationView not in views:
             raise ValueError(f"provider {provider.id}: unknown integrationView {provider.integrationView!r}")
@@ -400,20 +433,16 @@ def render_grants_rego(model: TenancyModel | None = None) -> str:
             roles["partner-integration"] = sorted(resource.scopes)
         grants[resource.identifier] = {"application": resource.application, "roles": roles}
     return (
+        '# caracal:data-document\n'
         '# Copyright (C) 2026 Garudex Labs.  All Rights Reserved.\n'
         '# Caracal, a product of Garudex Labs\n'
         '#\n'
         '# Generated grants data: resource views, owning applications, and role scope sets.\n'
         '# Rendered by app.tenancy.render_grants_rego from config/tenancy.yaml; do not edit.\n'
+        '# Grants are data for the shared rules in 00-base; this document never decides.\n'
         'package caracal.authz\n\n'
         'import rego.v1\n\n'
-        f'{_rego_grants(grants)}\n\n'
-        '# Grants are data for the shared rules in 00-base; this document never decides on\n'
-        '# its own. The inert rule below satisfies the platform\'s policy authoring contract,\n'
-        '# which requires every authored policy to define a result rule.\n'
-        'result := allow_result("lynx-grants") if {\n'
-        '\tfalse\n'
-        '}\n'
+        f'{_rego_grants(grants)}\n'
     )
 
 
@@ -425,20 +454,16 @@ def render_bindings_rego(application_ids: dict[str, str]) -> str:
     )
     body = "{\n" + rows + "\n}"
     return (
+        '# caracal:data-document\n'
         '# Copyright (C) 2026 Garudex Labs.  All Rights Reserved.\n'
         '# Caracal, a product of Garudex Labs\n'
         '#\n'
         '# Application bindings: the control-plane application ids each policy keys on.\n'
         '# Rendered by scripts/provision.py from the created applications; do not edit.\n'
+        '# Bindings are data for the shared rules in 00-base; this document never decides.\n'
         'package caracal.authz\n\n'
         'import rego.v1\n\n'
-        f'app_ids := {body}\n\n'
-        '# Bindings are data for the shared rules in 00-base; this document never decides on\n'
-        '# its own. The inert rule below satisfies the platform\'s policy authoring contract,\n'
-        '# which requires every authored policy to define a result rule.\n'
-        'result := allow_result("lynx-bindings") if {\n'
-        '\tfalse\n'
-        '}\n'
+        f'app_ids := {body}\n'
     )
 
 

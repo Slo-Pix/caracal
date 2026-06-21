@@ -61,6 +61,14 @@ def test_every_policy_satisfies_the_authoring_contract():
     contents = {p.stem: p.read_text(encoding="utf-8") for p in POLICIES_DIR.glob("*.rego")}
     for name, content in contents.items():
         assert "package caracal.authz" in content, name
-        assert "result" in content, name
+        is_data_document = "# caracal:data-document" in content
+        if is_data_document:
+            assert "result :=" not in content, name
+        else:
+            assert "result" in content, name
+    decision_docs = [
+        name for name, content in contents.items() if "# caracal:data-document" not in content
+    ]
+    assert "00-base" in decision_docs, "the bundle must include a decision document"
     defaults = [name for name, content in contents.items() if "default result" in content]
     assert defaults == ["00-base"], "exactly one default result rule is allowed bundle-wide"

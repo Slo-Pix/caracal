@@ -107,6 +107,34 @@ schema version, balanced syntax, and forbidden built-ins. It also returns
 `warnings` for risky shapes — `default_result_allows_access`,
 `missing_default_result`, and `missing_requested_scope_check`.
 
+## Separate data from decisions
+
+A policy set often carries large, generated tables — grants, bindings, label
+maps — that the decision rules read through `data`. Authoring these as ordinary
+policies forces an inert always-false `result` rule just to satisfy the
+contract, and a single typo (`if { false }` → `if { true }`) silently turns a
+data file into an allow-all decision.
+
+Mark a data-only policy with the `# caracal:data-document` directive on its first
+line. A data document carries only `data` and is **forbidden from defining
+`result`**, so it can never decide an authorization:
+
+```text
+# caracal:data-document
+package caracal.authz
+
+grants := {
+  "agent-1": ["read"],
+}
+```
+
+Validation enforces the inverse contract for these files: a data document must
+define at least one data rule and must not define `result`. Every policy set must
+still contain at least one decision document that emits
+`data.caracal.authz.result`, so a set made only of data documents is rejected at
+activation. This keeps the decision surface small and explicit while large data
+tables stay inert by construction.
+
 ### Preview how the policy behaves
 
 A successful validation returns a `preview` describing exactly what the engine
