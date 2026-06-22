@@ -51,7 +51,7 @@ func TestPolicySimulationReturnsOPAErrorsAndSuccessfulResult(t *testing.T) {
 		t.Fatalf("opa error status=%d body=%s", w.Code, w.Body.String())
 	}
 
-	body = []byte(`{"policy_set_id":"ps-1","version_id":"pv-1","manifest_sha256":"sha","policies":[{"id":"pv-1","content":"package caracal.authz\n\nimport rego.v1\n\nresult := {\"decision\": \"allow\", \"evaluation_status\": \"complete\", \"determining_policies\": [{\"policy_version_id\": \"pv-1\"}], \"diagnostics\": []}"}],"input":{"schema_version":"2026-05-20","principal":{"zone_id":"zone-1","id":"app-1","type":"application"},"resource":{"id":"res-1","identifier":"resource://calendar","scopes":["calendar:read"]},"action":{"id":"token_exchange"},"context":{"requested_scopes":["calendar:read"]}}}`)
+	body = []byte(`{"policy_set_id":"ps-1","version_id":"pv-1","manifest_sha256":"sha","policies":[{"id":"pv-1","content":"package caracal.authz\n\nimport rego.v1\n\ngrants := {\"resource://calendar\": {\"application\": \"calendar\", \"roles\": {\"reader\": [\"calendar:read\"]}}}\napp_ids := {\"calendar\": \"app-1\"}"}],"input":{"schema_version":"2026-05-20","principal":{"zone_id":"zone-1","id":"app-1","type":"application"},"resource":{"id":"res-1","identifier":"resource://calendar","scopes":["calendar:read"]},"action":{"id":"token_exchange"},"context":{"requested_scopes":["agent:lifecycle"]}}}`)
 	w = httptest.NewRecorder()
 	server.handlePolicySimulation(w, signedSTSRequest(t, server, http.MethodPost, "/internal/policies/simulate", body, "req-opa-ok"))
 	if w.Code != http.StatusOK {

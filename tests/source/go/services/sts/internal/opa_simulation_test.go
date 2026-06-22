@@ -14,22 +14,18 @@ func TestOPASimulateEvaluatesSuppliedBundle(t *testing.T) {
 	engine := newOPAEngine(nil)
 	result, err := engine.Simulate(context.Background(), OPAInput{
 		SchemaVersion: "2026-05-20",
-		Principal:     OPAPrincipal{ZoneID: "z1", ID: "app-1", Type: "application"},
+		Principal:     OPAPrincipal{ZoneID: "z1", ID: "app-calendar", Type: "application"},
 		Resource:      OPAResource{ID: "res-1", Identifier: "resource://calendar", Scopes: []string{"calendar:read"}},
 		Action:        OPAAction{ID: "token_exchange"},
-		Context:       OPAContext{RequestedScopes: []string{"calendar:read"}, ActorClaims: map[string]any{}},
+		Context:       OPAContext{RequestedScopes: []string{"agent:lifecycle"}, ActorClaims: map[string]any{}},
 	}, []OPAPolicyModule{{
 		ID: "pv-1",
 		Content: `package caracal.authz
 
 import rego.v1
 
-result := {
-	"decision": "allow",
-	"evaluation_status": "complete",
-	"determining_policies": [{"policy_version_id": "pv-1"}],
-	"diagnostics": [],
-}`,
+grants := {"resource://calendar": {"application": "calendar", "roles": {"reader": ["calendar:read"]}}}
+app_ids := {"calendar": "app-calendar"}`,
 	}})
 	if err != nil {
 		t.Fatalf("simulate: %v", err)
