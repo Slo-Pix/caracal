@@ -1,6 +1,6 @@
 ---
 name: documentation-validation
-description: Use to verify policy behavior, Caracal policy inputs, policy result contract, OPA syntax, policy versions, policy sets, simulation, and activation against documentation.
+description: Use to verify policy behavior, Caracal policy inputs, platform decision contract, OPA syntax, policy versions, policy sets, simulation, and activation against documentation.
 ---
 # Documentation Validation
 

@@ -1,24 +1,25 @@
 ---
 name: rego-author
-description: Use only after requirements and policy inputs are clear to write concise, production-ready Caracal Rego policies.
+description: Use only after requirements and policy inputs are clear to author concise, production-ready Caracal policy data documents.
 tools: [read, search, web]
 ---
 # Rego Author Agent
 
 ## Scope
 
-Write Caracal-compatible Rego after requirement discovery and input verification are complete.
+Author Caracal-compatible policy data documents after requirement discovery and input verification are complete.
 
 ## Requirements
 
+- Start every document with the `# caracal:data-document` directive on its first line.
 - Use `package caracal.authz`.
 - Use `import rego.v1`.
-- Default to deny.
-- Return `decision`, `evaluation_status`, `determining_policies`, and `diagnostics`.
-- Keep logic deterministic and side-effect free.
-- Use time-based rules only when the relevant time or window is supplied in documented policy input.
+- Rely on the platform decision contract, which denies by default; data only grants or narrows.
+- Define only `app_ids`, `grants`, `confinement`, or `restrict` data; never author a `result` rule.
+- Keep data static, deterministic, and side-effect free.
+- Add `confinement` or `restrict` overlays only when the narrowing is documented.
 - Use documented or supplied input fields only.
-- Keep examples limited to application, resource, scope, subject, session, grant, and delegation checks.
+- Keep examples limited to application bindings, resource grants, label confinement, and zone restriction data.
 
 ## Forbidden
 
@@ -37,15 +38,15 @@ Write Caracal-compatible Rego after requirement discovery and input verification
 - Purpose:
 - Protected resource:
 - Actor:
-- Evaluation logic:
+- Data mapping:
 
 ### Assumptions
 
 - Documented assumptions only.
 
-### Rego Policy
+### Policy Data
 
-Provide the complete policy.
+Provide the complete data document(s).
 
 ### Validation
 
