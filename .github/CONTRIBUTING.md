@@ -199,7 +199,7 @@ Use the same flow for rc and stable: plan, dry-run, publish, validate. rc proves
 | Review | Commit the generated manifest and metadata. | Review the stable diff and generated version. |
 | Dry-run | `scripts/release.sh rc dry-run --base-version 2026.06.10 --suffix rc.1 --local` for local simulation; remote dry-run requires the rc commit on the selected ref. | `scripts/release.sh stable --dry-run` |
 | Publish | Tag and push `v2026.06.20-rc.1`. | `scripts/release.sh stable` |
-| Validate | `postReleaseValidation.yml` runs after release. | `postReleaseValidation.yml` gates stable promotion. |
+| Validate | Pre-publish gate proves artifacts before the tag is published. | Pre-publish gate proves artifacts before stable promotion. |
 
 ```bash
 # rc
@@ -216,16 +216,11 @@ scripts/release.sh stable
 
 Remote rc dry-runs dispatch `release.yml` without publishing. They only read the default branch or the exact release tag ref, and the working tree must be clean unless `--allow-dirty` is used deliberately.
 
-### Post-release validation
+### Release validation
 
-`postReleaseValidation.yml` checks registries, archives, installers, containers, and provenance. npm, PyPI, binary, and installer checks cover Ubuntu, macOS, and Windows.
+Validation happens before publishing. The `context` job verifies the release manifest, version stamps, and changeset state; `archives` proves reproducible builds, runs binary smoke tests, generates checksums, and attaches provenance; the npm and PyPI `preflight` jobs build and pack-check every package on Ubuntu, macOS, and Windows before any publish step runs. The publish jobs then self-verify that each version is live on its registry.
 
-Reproduce one area locally:
-
-```bash
-CARACAL_RELEASE=v2026.06.20-rc.1 FINDINGS_DIR=/tmp/findings \
-  bash scripts/postRelease/validateRegistryMetadata.sh
-```
+`scripts/release.sh rc prepare`, `stable`, and `promote` also write the docs Releases record (`docs/src/data/releases/<tag>.json`) from the manifest, so release evidence is committed with the release rather than generated afterward.
 
 ### Package publishing
 

@@ -25,10 +25,9 @@ The data Caracal handles, where encryption occurs, how keys and tokens are isola
 
 | Area | Control | Status |
 | --- | --- | --- |
-| Static analysis | CodeQL for Go, Python, TypeScript | Implemented |
-| Static analysis | Semgrep rules | Implemented |
+| Static analysis | CodeQL (security-extended) for Go, Python, TypeScript | Implemented |
 | Dependency vulnerabilities | OSV-Scanner sweep across npm, Go, Python | Implemented |
-| Dependency vulnerabilities | Scheduled dependency review of merged changes | Implemented |
+| Dependency vulnerabilities | Per-pull-request dependency review before merge | Implemented |
 | License compliance | Copyleft license deny-list on introduced dependencies | Implemented |
 | Dependency updates | Dependabot for actions, npm, Go, pip, Docker | Implemented |
 | Container CVEs | Trivy scan of published images (Critical/High) | Implemented |
@@ -69,7 +68,7 @@ For a source-level dependency inventory across all ecosystems, the weekly OSV-Sc
 ## How Vulnerabilities Are Handled
 
 - **Reporting.** Vulnerabilities are reported privately through GitHub Security Advisories or email, never as public issues. The full policy, required report format, and response timeline are in [Report a Vulnerability](/security/disclosure/).
-- **Detection.** CodeQL and Semgrep run on pull requests and on a schedule. OSV-Scanner runs weekly across every dependency ecosystem and reports into GitHub code scanning. Trivy scans published container images weekly for Critical and High CVEs.
+- **Detection.** CodeQL (security-extended) runs on pull requests and on a schedule. OSV-Scanner runs weekly across every dependency ecosystem and reports into GitHub code scanning. Trivy scans published container images weekly for Critical and High CVEs.
 - **Triage.** Findings surface in the repository's code scanning view as a single consolidated feed, so maintainers and evaluators review one source instead of disparate scan logs.
 - **Response.** Confirmed incidents follow the documented incident response process, and fixes ship through the standard signed release pipeline.
 
