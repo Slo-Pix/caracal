@@ -1,13 +1,12 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# Two-day dependency review of changes merged to main, covering vulnerabilities and license risk.
+# Per-pull-request dependency review covering vulnerabilities and license risk before merge.
 
 name: Dependency review
 
 on:
-  schedule:
-    - cron: '0 6 */2 * *'
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -21,34 +20,16 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Resolve review window
-        id: window
-        run: |
-          set -euo pipefail
-          head="$(git rev-parse HEAD)"
-          base="$(git rev-list -1 --before='2 days ago' "$head" || true)"
-          if [ -z "$base" ] || [ "$base" = "$head" ]; then
-            echo "::notice::No commits in the last two days; skipping dependency review."
-            echo "run=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::Reviewing dependency changes from ${base} to ${head}."
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "base=${base}" >> "$GITHUB_OUTPUT"
-            echo "head=${head}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Review dependencies
-        if: steps.window.outputs.run == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
-          base-ref: ${{ steps.window.outputs.base }}
-          head-ref: ${{ steps.window.outputs.head }}
+          comment-summary-in-pr: on-failure
           fail-on-severity: high
           deny-licenses: AGPL-1.0-only, AGPL-1.0-or-later, AGPL-3.0-only, AGPL-3.0-or-later, GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later, LGPL-2.0-only, LGPL-2.0-or-later, LGPL-2.1-only, LGPL-2.1-or-later, LGPL-3.0-only, LGPL-3.0-or-later

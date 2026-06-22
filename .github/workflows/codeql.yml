@@ -43,6 +43,7 @@ jobs:
       - uses: github/codeql-action/init@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
         with:
           languages: ${{ matrix.language }}
+          queries: security-extended
 
       - uses: github/codeql-action/autobuild@1a818fd5f97ed0ee9a823421bd5b171add01227f # v4.36.2
 
