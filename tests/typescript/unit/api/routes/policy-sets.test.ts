@@ -8,7 +8,7 @@ import { policySetsRoutes } from '../../../../../apps/api/src/routes/policy-sets
 import { buildRouteApp } from '../../../../shared/test-utils/typescript/fastify.js'
 
 describe('POST /v1/zones/:zoneId/policy-sets/:id/activate', () => {
-  it('rejects policies that do not emit result', async () => {
+  it('rejects policies that are not data documents', async () => {
     const { app, db } = buildRouteApp(policySetsRoutes)
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: [{ policy_version_id: 'pv-1' }], schema_version: '2026-05-20' }] })
@@ -23,23 +23,6 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/activate', () => {
 
     expect(res.statusCode).toBe(422)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_policy_contract' })
-  })
-
-  it('rejects a set composed only of data documents with no decision policy', async () => {
-    const { app, db } = buildRouteApp(policySetsRoutes)
-    db.query
-      .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: [{ policy_version_id: 'pv-1' }], schema_version: '2026-05-20' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: '# caracal:data-document\npackage caracal.authz\ngrants := { "agent-1": ["read"] }', zone_id: 'z1', schema_version: '2026-05-20' }] })
-
-    await app.ready()
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/zones/z1/policy-sets/ps-1/activate',
-      payload: { version_id: 'psv-1' },
-    })
-
-    expect(res.statusCode).toBe(422)
-    expect(JSON.parse(res.body).detail).toMatch(/at least one decision policy/)
   })
 
   it('rejects manifests that reference policies in another zone', async () => {
@@ -62,7 +45,7 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/activate', () => {
   it('activates valid version, enqueues outbox row in TX, returns 202', async () => {
     const { app, db } = buildRouteApp(policySetsRoutes)
     const manifest = [{ policy_version_id: 'pv-1' }]
-    const content = 'package caracal.authz\nresult := {"allow": true}'
+    const content = '# caracal:data-document\npackage caracal.authz\ngrants := {}'
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: manifest, schema_version: '2026-05-20' }] })
       .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content, zone_id: 'z1', schema_version: '2026-05-20' }] })
@@ -186,7 +169,7 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/simulate', () => {
     const manifest = [{ policy_version_id: 'pv-1' }]
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: manifest, manifest_sha256: 'sha-1', schema_version: '2026-05-20' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: 'package caracal.authz\nresult := {"decision": "deny", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}', zone_id: 'z1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: '# caracal:data-document\npackage caracal.authz\ngrants := {}', zone_id: 'z1', schema_version: '2026-05-20' }] })
       .mockResolvedValueOnce({ rows: [] })
 
     await app.ready()
@@ -224,7 +207,7 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/simulate', () => {
     const manifest = [{ policy_version_id: 'pv-1' }]
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: manifest, manifest_sha256: 'sha-1', schema_version: '2026-05-20' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: 'package caracal.authz\nresult := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}', zone_id: 'z1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: '# caracal:data-document\npackage caracal.authz\ngrants := {}', zone_id: 'z1', schema_version: '2026-05-20' }] })
       .mockResolvedValueOnce({ rows: [] })
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       policy_set_id: 'ps-1',
@@ -295,7 +278,7 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/simulate', () => {
     } as never)
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'psv-1', manifest_json: [{ policy_version_id: 'pv-1' }], manifest_sha256: 'sha-1', schema_version: '2026-05-20' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: 'package caracal.authz\nresult := {"allow": true}', zone_id: 'z1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: '# caracal:data-document\npackage caracal.authz\ngrants := {}', zone_id: 'z1', schema_version: '2026-05-20' }] })
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       error: 'simulation_failed',
       detail: 'OPA unavailable',
@@ -401,7 +384,7 @@ describe('POST /v1/zones/:zoneId/policy-sets/:id/versions', () => {
     setActor(app)
     db.query
       .mockResolvedValueOnce({ rows: [{ id: 'ps-1' }] })
-      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: 'package caracal.authz\nresult := {"allow": true}', zone_id: 'z1', schema_version: '2026-05-20' }] })
+      .mockResolvedValueOnce({ rows: [{ id: 'pv-1', content: '# caracal:data-document\npackage caracal.authz\ngrants := {}', zone_id: 'z1', schema_version: '2026-05-20' }] })
     const client = { query: vi.fn(), release: vi.fn() }
     client.query
       .mockResolvedValueOnce({ rows: [] })

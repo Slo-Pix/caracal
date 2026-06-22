@@ -30,13 +30,12 @@ function buildApp() {
   return { app, db, clientQuery, redis }
 }
 
-const validRego = `package caracal.authz
+const validRego = `# caracal:data-document
+package caracal.authz
 import rego.v1
 
-default result := {"decision": "deny", "evaluation_status": "complete", "determining_policies": [], "diagnostics": []}
-
-result := {"decision": "allow", "evaluation_status": "complete", "determining_policies": [{"policy": "test"}], "diagnostics": []} if {
-  "read" in input.context.requested_scopes
+grants := {
+  "resource://calendar": {"application": "agent-1", "roles": {"reader": ["read"]}},
 }`
 
 describe('POST /v1/zones/:zoneId/policies', () => {
@@ -53,7 +52,7 @@ describe('POST /v1/zones/:zoneId/policies', () => {
     expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_rego' })
   })
 
-  it('rejects policy without required authz result rule', async () => {
+  it('rejects a policy that is not a data document', async () => {
     const { app, db } = buildApp()
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
     await app.ready()
@@ -63,10 +62,10 @@ describe('POST /v1/zones/:zoneId/policies', () => {
       payload: { name: 'p1', content: 'package caracal.authz\ndefault allow = false' },
     })
     expect(res.statusCode).toBe(422)
-    expect(JSON.parse(res.body)).toMatchObject({ detail: 'must_define_result_rule' })
+    expect(JSON.parse(res.body)).toMatchObject({ detail: 'must_be_data_document' })
   })
 
-  it('accepts valid Rego with package declaration', async () => {
+  it('accepts a valid data document', async () => {
     const { app, db } = buildApp()
     db.query.mockResolvedValue({ rows: [{ '?column?': 1 }] })
     await app.ready()
@@ -84,26 +83,6 @@ describe('POST /v1/zones/:zoneId/policies', () => {
 })
 
 describe('POST /v1/policies/validate', () => {
-  it('returns warnings for accepted but risky policy shape', async () => {
-    const { app } = buildApp()
-    await app.ready()
-    const res = await app.inject({
-      method: 'POST',
-      url: '/v1/policies/validate',
-      payload: {
-        content: 'package caracal.authz\ndefault result := { "decision": "allow", "evaluation_status": "complete", "determining_policies": [], "diagnostics": [] }',
-      },
-    })
-    expect(res.statusCode).toBe(200)
-    expect(JSON.parse(res.body)).toMatchObject({
-      valid: true,
-      schema_version: '2026-05-20',
-      input_schema_version: '2026-05-20',
-      output_contract: { evaluation_status: ['complete'] },
-      warnings: expect.arrayContaining(['default_result_allows_access', 'missing_requested_scope_check']),
-    })
-  })
-
   it('returns a preview of the parsed policy', async () => {
     const { app } = buildApp()
     await app.ready()
@@ -117,10 +96,10 @@ describe('POST /v1/policies/validate', () => {
     expect(body.valid).toBe(true)
     expect(body.preview).toMatchObject({
       package: 'caracal.authz',
-      rules: ['result'],
-      default_result: true,
-      decisions: expect.arrayContaining(['allow', 'deny']),
-      inputs_referenced: ['input.context.requested_scopes'],
+      rules: ['grants'],
+      default_result: false,
+      decisions: [],
+      inputs_referenced: [],
     })
   })
 

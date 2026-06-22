@@ -164,7 +164,7 @@ export default defineConfig({
             {
               label: 'Authorization',
               items: [
-                { label: 'Author a Rego Policy', link: '/guides/author-policy/' },
+                { label: 'Author Policy Data', link: '/guides/author-policy/' },
                 { label: 'Activate a Policy Set', link: '/guides/activate-policy-set/' },
                 { label: 'Debug Authorization Decisions', link: '/guides/authorize-access/' },
               ],
