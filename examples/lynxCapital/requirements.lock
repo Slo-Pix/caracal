@@ -27,46 +27,46 @@ bracex==2.6 \
     --hash=sha256:0b0049264e7340b3ec782b5cb99beb325f36c3782a32e36e876452fd49a09952 \
     --hash=sha256:98f1347cd77e22ee8d967a30ad4e310b233f7754dbf31ff3fceb76145ba47dc7
     # via wcmatch
-caracalai-core==0.1.5rc3 \
-    --hash=sha256:9b0009532fb07f205677b171d5100770d15083dc487fcec792d4db65a2ef99f2 \
-    --hash=sha256:f9a9324520f86999f65499d6ba007320f23f26ddad713fb9f6974483977abf0b
+caracalai-core==0.1.6rc1 \
+    --hash=sha256:5ea86e7e1537588f1a57a6cf660694ab3a1e0bcb274bed114ff0fa81f4b51e5e \
+    --hash=sha256:ac0d446580c366a8516884f66cd81d56d174204a9983774d4353b0ea6f38b6f1
     # via
     #   caracalai-identity
     #   lynx-capital
-caracalai-identity==0.1.5rc3 \
-    --hash=sha256:b5ea8f29bcda008160efdf39b8347d53f7e573fdddaf8c40f2fa9d7e253865f8 \
-    --hash=sha256:d86ea32fd245ed14a473e56f63e809c50ee1c68a4e979fc53239dd321426fdbe
+caracalai-identity==0.1.6rc1 \
+    --hash=sha256:25db48b51f59a705d68f47684311fca424afb3d9ea35abde61a9b61d031401d8 \
+    --hash=sha256:8fd24bfe799542a81e3f8058f073abbac2ba73083173fad5f7c9400c39f5ad93
     # via
     #   caracalai-sdk
     #   caracalai-transport-mcp
     #   lynx-capital
-caracalai-mcp-fastmcp==0.1.5rc3 \
-    --hash=sha256:1909106e918b6844eea8259ec5b6a6efaf367c73b25ff9342a5565215aeff6e5 \
-    --hash=sha256:866f7455f152744902b772ff84539a3364bc1a6099d97eac1f273d2167680ea9
+caracalai-mcp-fastmcp==0.1.6rc1 \
+    --hash=sha256:07b8cd6a7c2a7951f75612b8e2e008d2d7756a161acdb79fc93c29b3ef8f28aa \
+    --hash=sha256:48b9ce5a0998dee0209db53f6fee5a7974b4175f4563ab0560985ae0073170e7
     # via lynx-capital
-caracalai-oauth==0.1.5rc3 \
-    --hash=sha256:0b50dbd0d540d4d46971a64a397c1e13f9ae51f88a3b4a84395c9a6067a6f278 \
-    --hash=sha256:5f4adf60bb08af8a067065838b8a72020be753ed7017e573a7700cc373962b2e
+caracalai-oauth==0.1.6rc1 \
+    --hash=sha256:53880ddea45607f870ddeb4f4f2af8c54ed175ba3bb11d872db0d4ef726a7d8d \
+    --hash=sha256:6eb7be1f8ddcfb39a06197087355d8ad3d28b30e9e13ea55300e3b3283e1eb20
     # via lynx-capital
-caracalai-revocation==0.1.5rc3 \
-    --hash=sha256:9366dbfc59278b28f7d4ef2863070e2802be3ff59e712ff4b2963efb314adeb2 \
-    --hash=sha256:9db07472c7192b873a777a71f03f1c2291e05791de5ae07786201ff577f9284e
+caracalai-revocation==0.1.6rc1 \
+    --hash=sha256:51b8fe8853e825e7daf595a8b60dd0add3e8aace59b65d1333b78e1906e2a161 \
+    --hash=sha256:c0fea7417e6f81dae3d4b0dad66f205f3a800ff9de867e416a0c1c51a866881e
     # via
     #   caracalai-mcp-fastmcp
     #   caracalai-revocation-redis
     #   caracalai-transport-mcp
     #   lynx-capital
-caracalai-revocation-redis==0.1.5rc3 \
-    --hash=sha256:c03ac1e01e97dcce6d85b93afc6de7ea2dd0b353c94bfec10230d319fdbc9f47 \
-    --hash=sha256:e593ea951c85c26f5c64b7a47da493ff661a302f6f60bb7a7ce5adc9f8ccc385
+caracalai-revocation-redis==0.1.6rc1 \
+    --hash=sha256:e9b6164eccb5daaf6713992d3f1309bc5ca4fcb7abb0884f340da5f3fef71858 \
+    --hash=sha256:ef2b14f4ce900a23c81f1c335a9207004862c4bde699ee7837291ad0548b322a
     # via lynx-capital
-caracalai-sdk==0.1.5rc3 \
-    --hash=sha256:38af4fe63de1c45213ca7025bc01769c5c11259d309d556aa34fe5500e6b3610 \
-    --hash=sha256:4d526b8d1c3975ba45efb5ecc148a85e65311ec473e81b873d1b172293398d37
+caracalai-sdk==0.1.6rc1 \
+    --hash=sha256:645ba45efc40d9213b4786dbbbb01e34143893f8a5dd3cb3c8db6171674917d1 \
+    --hash=sha256:fdf4596da12ecb7e42e178a47ff9a19d0cce29ec7ca2f9732801d50b5480a3c1
     # via lynx-capital
-caracalai-transport-mcp==0.1.5rc3 \
-    --hash=sha256:79316ba266cd98af9f91eb4a049c64158d9dd0c72c5048f9ef031edd37b50fad \
-    --hash=sha256:b76cbfd44b534723e7cdce30d5bc4fc112e98deff74c5e0261f459d4e1d497ed
+caracalai-transport-mcp==0.1.6rc1 \
+    --hash=sha256:fd7ea9a7a2120f973fc2739ca20084f20b1f2aa2a78ac7c38e0be315aa36f9ab \
+    --hash=sha256:ffa9d3e1a9791903fe4208ed0f1f845bb0e942f5a0dbe83365dfe21f11aa7d8e
     # via
     #   caracalai-mcp-fastmcp
     #   lynx-capital
@@ -246,7 +246,9 @@ cryptography==49.0.0 \
     --hash=sha256:f37d847238971164fdbc68ade6f6574aecc9c0af714190e2083429ff68f4ce9d \
     --hash=sha256:f78ff2c9ed8dc2d036b0f4d640e22522213d047c1b14e61205a7e55c80a494d4 \
     --hash=sha256:f89660a348f4f78a92366240a61404e337586ef7f5909a2fef59ca88ef505493
-    # via google-auth
+    # via
+    #   google-auth
+    #   pyjwt
 deepagents==0.6.1 \
     --hash=sha256:7799e195286728379183d16ab0f153247c92e4403101484729fa7977e5efb3d8 \
     --hash=sha256:d06d9b88a484b4dbc24f5f0b6f4de10df2fb847b2d2d8980c1c35d9021f28db4

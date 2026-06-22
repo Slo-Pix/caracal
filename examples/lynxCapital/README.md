@@ -19,7 +19,7 @@ is [`config/tenancy.yaml`](config/tenancy.yaml).
 ## 1. Install
 
 ```bash
-cd caracal/examples/lynxCapital
+cd examples/lynxCapital
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
@@ -32,7 +32,7 @@ pip install -e ".[dev]"
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
-  sh -s -- --version v2026.06.20-rc.1
+  sh -s -- --version v2026.06.22-rc.1
 ```
 
 ```bash
