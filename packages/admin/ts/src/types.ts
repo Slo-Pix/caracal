@@ -62,6 +62,14 @@ export interface DCRInput {
   expires_in?: number
 }
 
+export type ResourceOperationEnforcement = 'enforced' | 'transport_uniform'
+
+export interface ResourceOperation {
+  method: string
+  path: string
+  scope: string
+}
+
 export interface Resource {
   id: string
   zone_id: string
@@ -71,6 +79,8 @@ export interface Resource {
   gateway_application_id: string | null
   scopes: string[]
   credential_provider_id: string | null
+  operations: ResourceOperation[]
+  operation_enforcement: ResourceOperationEnforcement
   created_at: string
   updated_at: string
 }
@@ -85,6 +95,8 @@ export interface ResourceInput {
   gateway_application_id?: string | null
   scopes: string[]
   credential_provider_id?: string | null
+  operations?: ResourceOperation[]
+  operation_enforcement?: ResourceOperationEnforcement
 }
 
 export type ProviderKind = 'none' | 'caracal_mandate' | 'oauth2_authorization_code' | 'oauth2_client_credentials' | 'api_key' | 'bearer_token'

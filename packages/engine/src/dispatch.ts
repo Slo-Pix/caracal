@@ -158,6 +158,22 @@ function getDcrShutdown(flags: FlagMap | undefined): 'keep_live' | 'revoke_live'
   invalid('flag "dcr-shutdown" must be keep_live or revoke_live')
 }
 
+function getOperations(flags: FlagMap | undefined, key: string): { method: string; path: string; scope: string }[] | undefined {
+  const v = flags?.[key]
+  let parsed: unknown = v
+  if (typeof v === 'string') {
+    if (v.length === 0) return undefined
+    parsed = JSON.parse(v) as unknown
+  }
+  if (parsed === undefined) return undefined
+  if (!Array.isArray(parsed)) invalid(`flag "${key}" must be a JSON array`)
+  return (parsed as unknown[]).map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) invalid(`flag "${key}" entries must be objects`)
+    const op = entry as Record<string, unknown>
+    return { method: String(op.method ?? ''), path: String(op.path ?? ''), scope: String(op.scope ?? '') }
+  })
+}
+
 function getList(flags: FlagMap | undefined, key: string): string[] | undefined {
   const v = flags?.[key]
   if (typeof v === 'string')
@@ -240,6 +256,8 @@ const resourceHandler = bySubcommand({
       upstream_url: getStr(flags, 'upstream-url'),
       gateway_application_id: getStr(flags, 'gateway-application-id'),
       credential_provider_id: getStr(flags, 'credential-provider-id'),
+      operations: getOperations(flags, 'operations'),
+      operation_enforcement: getStr(flags, 'operation-enforcement'),
     } as never),
   patch: ({ principal, flags, ctx }) =>
     ctx.admin.resources.patch(requireZone(principal), mustStr(flags, 'id'), {
@@ -249,6 +267,8 @@ const resourceHandler = bySubcommand({
       upstream_url: getNullableStr(flags, 'upstream-url'),
       gateway_application_id: getNullableStr(flags, 'gateway-application-id'),
       credential_provider_id: getNullableStr(flags, 'credential-provider-id'),
+      operations: getOperations(flags, 'operations'),
+      operation_enforcement: getStr(flags, 'operation-enforcement'),
     } as never),
   delete: ({ principal, flags, ctx }) => ctx.admin.resources.delete(requireZone(principal), mustStr(flags, 'id')),
 })

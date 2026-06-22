@@ -108,6 +108,21 @@ function sameSet(left: unknown, right: unknown): boolean {
   return b.every((item) => have.has(item))
 }
 
+function operationKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.map((entry) => {
+    const op = entry as { method?: unknown; path?: unknown; scope?: unknown }
+    const method = String(op.method ?? '').trim().toUpperCase()
+    const path = String(op.path ?? '').trim()
+    const scope = String(op.scope ?? '')
+    return `${method} ${path} ${scope}`
+  })
+}
+
+function sameOperations(left: unknown, right: unknown): boolean {
+  return sameSet(operationKeys(left), operationKeys(right))
+}
+
 function reqStr(spec: Record<string, unknown>, key: string, kind: string): string {
   const value = spec[key]
   if (typeof value !== 'string' || value.length === 0) {
@@ -219,6 +234,9 @@ const RESOURCE_ADAPTER: Adapter = {
       drift.push('gateway_application_id')
     if ('credential_provider_id' in spec && live.credential_provider_id !== (spec.credential_provider_id ?? null))
       drift.push('credential_provider_id')
+    if ('operations' in spec && !sameOperations(live.operations, spec.operations)) drift.push('operations')
+    if ('operation_enforcement' in spec && live.operation_enforcement !== spec.operation_enforcement)
+      drift.push('operation_enforcement')
     return drift
   },
   create: (admin, zone, spec) =>
@@ -229,6 +247,8 @@ const RESOURCE_ADAPTER: Adapter = {
       upstream_url: 'upstream_url' in spec ? (spec.upstream_url as string | null) : undefined,
       gateway_application_id: 'gateway_application_id' in spec ? (spec.gateway_application_id as string | null) : undefined,
       credential_provider_id: 'credential_provider_id' in spec ? (spec.credential_provider_id as string | null) : undefined,
+      operations: 'operations' in spec ? (spec.operations as never) : undefined,
+      operation_enforcement: 'operation_enforcement' in spec ? (spec.operation_enforcement as never) : undefined,
     } as never) as unknown as Promise<LiveObject>,
   update: (admin, zone, live, spec) =>
     admin.resources.patch(zone, live.id, {
@@ -237,6 +257,8 @@ const RESOURCE_ADAPTER: Adapter = {
       upstream_url: 'upstream_url' in spec ? (spec.upstream_url as string | null) : undefined,
       gateway_application_id: 'gateway_application_id' in spec ? (spec.gateway_application_id as string | null) : undefined,
       credential_provider_id: 'credential_provider_id' in spec ? (spec.credential_provider_id as string | null) : undefined,
+      operations: 'operations' in spec ? (spec.operations as never) : undefined,
+      operation_enforcement: 'operation_enforcement' in spec ? (spec.operation_enforcement as never) : undefined,
     } as never) as unknown as Promise<LiveObject>,
   protectedFromPrune: () => false,
 }

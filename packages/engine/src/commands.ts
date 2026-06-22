@@ -186,6 +186,8 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
         { name: '--upstream-url', summary: 'Upstream URL' },
         { name: '--gateway-application-id', summary: 'Gateway application for upstream routing' },
         { name: '--credential-provider-id', summary: 'Upstream credential provider ID' },
+        { name: '--operations', summary: 'JSON array of {method, path, scope} operations the Gateway authorizes' },
+        { name: '--operation-enforcement', summary: 'enforced (deny undeclared operations) or transport_uniform' },
       ],
       patch: [
         { name: '--identifier', summary: 'Resource identifier' },
@@ -194,6 +196,8 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
         { name: '--upstream-url', summary: 'Upstream URL' },
         { name: '--gateway-application-id', summary: 'Gateway application for upstream routing' },
         { name: '--credential-provider-id', summary: 'Upstream credential provider ID' },
+        { name: '--operations', summary: 'JSON array of {method, path, scope} operations the Gateway authorizes' },
+        { name: '--operation-enforcement', summary: 'enforced (deny undeclared operations) or transport_uniform' },
       ],
     },
   },
