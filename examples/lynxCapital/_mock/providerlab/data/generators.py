@@ -4669,8 +4669,55 @@ def _qbo_roll_balances(
 # --------------------------------------------------------------------------- #
 _INKWELL_ENGINE = "inkwell-vision-3"
 _INKWELL_API_VERSION = "2026-02-01"
+_INKWELL_HOST = "api.inkwellocr.test"
 _INKWELL_REVIEW_THRESHOLD = 0.85
 _INKWELL_FIELD_THRESHOLD = 0.70
+_INKWELL_QUOTA_CAP = 1000
+_INKWELL_BATCH_CAP = 100
+_INKWELL_MAX_BYTES = 25_000_000
+_INKWELL_MAX_PAGES = 50
+
+_INKWELL_PAGE_SIZES = (
+    (2480, 3508),    # A4 @ 300dpi
+    (2550, 3300),    # US Letter @ 300dpi
+    (1700, 2200),    # US Letter @ 200dpi
+    (4960, 7016),    # A4 @ 600dpi
+)
+_INKWELL_DPI_CHOICES = (200, 300, 300, 400, 600)
+
+_INKWELL_CUSTOMER_POOL = (
+    ("Pied Piper Holdings, Inc.", "5230 Newell Rd, Palo Alto, CA, US"),
+    ("Hooli, Inc.", "1 Hooli Way, Mountain View, CA, US"),
+    ("Raviga Capital LP", "300 California St, Suite 1200, San Francisco, CA, US"),
+    ("LynxCapital Holdings", "200 Lynx Plaza, New York, NY, US"),
+    ("Endframe Industries", "1850 Gateway Blvd, Concord, CA, US"),
+    ("Northwind Logistics, Ltd.", "44 Aldgate High St, London, GB"),
+    ("Cobalt Materials GmbH", "Friedrichstrasse 110, Berlin, DE"),
+)
+_INKWELL_LANG_BY_COUNTRY = {
+    "US": ("en", "es"),
+    "GB": ("en",),
+    "DE": ("de", "en"),
+    "FR": ("fr", "en"),
+    "BR": ("pt", "en"),
+    "SG": ("en", "zh"),
+    "JP": ("ja", "en"),
+    "CA": ("en", "fr"),
+}
+_INKWELL_CURRENCY_SYMBOL = {
+    "USD": "$", "GBP": "£", "EUR": "€", "JPY": "¥",
+    "CAD": "C$", "SGD": "S$", "BRL": "R$",
+}
+_INKWELL_DATE_LOCALES = {
+    "US": "%m/%d/%Y",
+    "GB": "%d/%m/%Y",
+    "DE": "%d.%m.%Y",
+    "FR": "%d/%m/%Y",
+    "BR": "%d/%m/%Y",
+    "SG": "%d/%m/%Y",
+    "JP": "%Y/%m/%d",
+    "CA": "%Y-%m-%d",
+}
 
 # Image and document types a real capture engine ingests, mapped to the MIME a
 # client would send. A name without a known extension is treated as a sniffed PDF.
@@ -4775,6 +4822,10 @@ def inkwell_models() -> dict[str, dict]:
     """The extraction models Inkwell publishes, keyed by model id."""
     out: dict[str, dict] = {}
     supported_mimes = sorted(set(_INKWELL_MIME.values()))
+    pricing_by_model = {
+        "invoice": 0.05, "receipt": 0.03, "credit_note": 0.05,
+        "purchase_order": 0.05, "bank_statement": 0.04, "w9": 0.02,
+    }
     for model_id, name, desc, version, avg in _INKWELL_MODELS:
         out[model_id] = {
             "modelId": model_id,
@@ -4787,7 +4838,10 @@ def inkwell_models() -> dict[str, dict]:
             "avgConfidence": avg,
             "supportedLocales": ["en-US", "en-GB", "de-DE", "fr-FR", "pt-BR"],
             "supportedMimeTypes": supported_mimes,
-            "maxPages": 50,
+            "maxPages": _INKWELL_MAX_PAGES,
+            "maxFileSizeBytes": _INKWELL_MAX_BYTES,
+            "pricing": {"perPage": pricing_by_model[model_id], "currency": "USD"},
+            "regions": ["us-east", "eu-west", "ap-southeast"],
             "releasedAt": "2026-01-15T00:00:00Z",
         }
     return out
@@ -4818,6 +4872,24 @@ def _inkwell_outcome(file_name: str, model: str) -> dict:
             "errorCode": "no_content_detected",
             "errorMessage": "No machine-readable content was detected in the document.",
         }
+    if has("cyrillic", "kanji", "arabic-only", "arabiconly"):
+        return {
+            "status": "failed",
+            "errorCode": "unsupported_locale",
+            "errorMessage": "The document's primary script is not supported by the selected model.",
+        }
+    if has("modeloff", "deprecated"):
+        return {
+            "status": "failed",
+            "errorCode": "model_unavailable",
+            "errorMessage": "The selected model is temporarily unavailable; retry later or pick another model.",
+        }
+    if has("garbled", "noiseheavy", "noise-heavy"):
+        return {
+            "status": "failed",
+            "errorCode": "text_extraction_failed",
+            "errorMessage": "The recognizer could not extract usable text from the document.",
+        }
 
     document_type = model
     if has("receipt"):
@@ -4826,6 +4898,62 @@ def _inkwell_outcome(file_name: str, model: str) -> dict:
         document_type = "credit_note"
     degraded = has("scan", "photo", "handwritten", "lowres", "low-res", "fax", "skewed")
     return {"status": "extracted", "documentType": document_type, "degraded": degraded}
+
+
+def inkwell_submit_check(file_name: str, size_bytes: int, pages: int) -> tuple[int, str, str] | None:
+    """Pre-extraction validation a real OCR API runs synchronously on submit.
+
+    Returns ``(status, errorCode, errorMessage)`` for an upstream-rejectable payload, or
+    ``None`` to let the document enter the async pipeline."""
+    name = str(file_name or "").lower()
+    if any(t in name for t in ("huge", "oversized", "xxl")) or size_bytes > _INKWELL_MAX_BYTES:
+        return (413, "media_too_large",
+                f"file exceeds the {_INKWELL_MAX_BYTES // 1_000_000} MB limit for this account")
+    if any(t in name for t in ("manypages", "100page", "200page")) or pages > _INKWELL_MAX_PAGES:
+        return (422, "too_many_pages",
+                f"document has more than {_INKWELL_MAX_PAGES} pages")
+    return None
+
+
+def _customer(rng: random.Random) -> tuple[str, str]:
+    """Pick a paired customer name + address from the public pool."""
+    return rng.choice(_INKWELL_CUSTOMER_POOL)
+
+
+def _inkwell_value_type(name: str) -> str:
+    """Classify a field name into the value-type real OCR providers tag fields with."""
+    lower = name.lower()
+    if lower.endswith("date"):
+        return "date"
+    if lower in {"subtotal", "tip", "amountdue", "taxamount", "totalamount", "unitprice"}:
+        return "currency"
+    if "amount" in lower and "tax" in lower:
+        return "currency"
+    if lower in {"quantity", "pagecount"}:
+        return "number"
+    if lower.endswith("address"):
+        return "address"
+    return "string"
+
+
+def _inkwell_raw_text(name: str, value, currency: str | None, country: str | None) -> str:
+    """Stringify the field's value the way an OCR engine would output the verbatim text."""
+    if value is None or value == "":
+        return ""
+    vtype = _inkwell_value_type(name)
+    if vtype == "currency":
+        symbol = _INKWELL_CURRENCY_SYMBOL.get(currency or "USD", "")
+        try:
+            return f"{symbol}{float(value):,.2f}"
+        except (TypeError, ValueError):
+            return str(value)
+    if vtype == "date":
+        fmt = _INKWELL_DATE_LOCALES.get(country or "US", "%Y-%m-%d")
+        try:
+            return datetime.fromisoformat(str(value)).strftime(fmt)
+        except ValueError:
+            return str(value)
+    return str(value)
 
 
 def _inkwell_box(rng: random.Random) -> list[float]:
@@ -4837,14 +4965,145 @@ def _inkwell_box(rng: random.Random) -> list[float]:
     ]
 
 
-def _inkwell_field(rng: random.Random, value, page: int, base_conf: float) -> dict:
+def _inkwell_polygon(bbox: list[float]) -> list[float]:
+    """8-point axis-aligned polygon over a (x, y, w, h) bounding box, matching the Google DocAI shape."""
+    x, y, w, h = bbox
+    return [round(x, 4), round(y, 4),
+            round(x + w, 4), round(y, 4),
+            round(x + w, 4), round(y + h, 4),
+            round(x, 4), round(y + h, 4)]
+
+
+def _inkwell_field(rng: random.Random, name: str, value, page: int, base_conf: float,
+                   currency: str | None = None, country: str | None = None) -> dict:
     conf = round(min(0.999, max(0.30, rng.gauss(base_conf, 0.025))), 3)
+    box = _inkwell_box(rng)
     return {
         "value": value,
         "confidence": conf,
         "page": page,
-        "boundingBox": _inkwell_box(rng),
+        "boundingBox": box,
+        "polygon": _inkwell_polygon(box),
+        "valueType": _inkwell_value_type(name),
+        "rawText": _inkwell_raw_text(name, value, currency, country),
     }
+
+
+def _inkwell_pages(rng: random.Random, page_count: int, country: str) -> list[dict]:
+    """Per-page metadata a real document-AI engine returns alongside structured fields."""
+    pages = []
+    langs = _INKWELL_LANG_BY_COUNTRY.get(country, ("en",))
+    for n in range(1, max(1, page_count) + 1):
+        width, height = rng.choice(_INKWELL_PAGE_SIZES)
+        dpi = rng.choice(_INKWELL_DPI_CHOICES)
+        angle = round(rng.gauss(0.0, 0.4), 2)
+        detected = [{"language": langs[0],
+                     "confidence": round(rng.uniform(0.92, 0.998), 3)}]
+        if len(langs) > 1 and rng.random() < 0.25:
+            detected.append({"language": langs[1],
+                             "confidence": round(rng.uniform(0.20, 0.55), 3)})
+        pages.append({
+            "pageNumber": n,
+            "width": width,
+            "height": height,
+            "unit": "pixel",
+            "angle": angle,
+            "dpi": dpi,
+            "detectedLanguages": detected,
+        })
+    return pages
+
+
+def _inkwell_full_text(rng: random.Random, document_type: str, body: dict, page_count: int) -> str:
+    """Plausible raw-OCR text reconstructed from the structured extraction body."""
+    fields = body.get("fields", {})
+    line_items = body.get("lineItems", [])
+    locale = body.get("locale", {})
+    currency = locale.get("currency", "USD")
+    country = locale.get("country", "US")
+    symbol = _INKWELL_CURRENCY_SYMBOL.get(currency, "")
+
+    def fv(name: str) -> str:
+        f = fields.get(name)
+        return "" if f is None else str(f["value"])
+
+    if document_type == "receipt":
+        header = [fv("merchantName"), fv("merchantAddress"),
+                  f"Date: {fv('transactionDate')}  Time: {fv('transactionTime')}",
+                  f"Payment: {fv('paymentMethod')}  Card: ****{fv('cardLast4')}", ""]
+        rows = [f"  {it['description']:<28} {it['quantity']:>3}  "
+                f"{symbol}{it['unitPrice']:>8.2f}  {symbol}{it['amount']:>9.2f}"
+                for it in line_items]
+        footer = ["",
+                  f"  Subtotal{'':>32}{symbol}{fv('subtotal')}",
+                  f"  Tax{'':>37}{symbol}{fv('taxAmount')}",
+                  f"  Tip{'':>37}{symbol}{fv('tip')}",
+                  f"  TOTAL{'':>35}{symbol}{fv('totalAmount')}",
+                  "",
+                  "  Thank you for your business."]
+        return "\n".join(header + rows + footer)
+
+    header = [
+        f"INVOICE {fv('invoiceNumber')}" if document_type != "credit_note" else f"CREDIT NOTE {fv('invoiceNumber')}",
+        "",
+        fv("supplierName"),
+        fv("supplierAddress"),
+        f"VAT: {fv('supplierVatNumber')}    Tax ID: {fv('supplierTaxId')}",
+        "",
+        f"Bill to: {fv('customerName')}",
+        f"         {fv('customerAddress')}",
+        "",
+        f"Invoice date: {fv('invoiceDate')}   Due: {fv('dueDate')}   Terms: {fv('paymentTerms')}",
+        f"PO number:    {fv('purchaseOrderNumber')}",
+        "",
+        "Description                                Qty   Unit Price        Amount",
+        "-" * 76,
+    ]
+    rows = [f"{it['description']:<42} {it['quantity']:>4}   "
+            f"{symbol}{it['unitPrice']:>10,.2f}   {symbol}{it['amount']:>11,.2f}"
+            for it in line_items]
+    footer = ["-" * 76,
+              f"{'Subtotal':>62}   {symbol}{fv('subtotal')}",
+              f"{'Tax':>62}   {symbol}{fv('taxAmount')}",
+              f"{'TOTAL':>62}   {symbol}{fv('totalAmount')}",
+              f"{'Amount due':>62}   {symbol}{fv('amountDue')}",
+              "",
+              f"Remit to IBAN: {fv('supplierIban')}"]
+    text = "\n".join(header + rows + footer)
+    if page_count > 1:
+        continuation = "\n\n--- Page break ---\n\n(continued from previous page)\n" + \
+                       "Payment is due per the terms above. " \
+                       f"Currency: {currency}. " \
+                       "Please reference the invoice number on all remittances. " \
+                       "Late payments may incur a 1.5% monthly service charge under the " \
+                       "vendor's standard credit terms. " \
+                       "Please remit by wire or ACH to the IBAN on the cover page.\n"
+        text += continuation * max(1, min(page_count - 1, 3))
+    _ = rng  # seed already consumed upstream; kept for signature symmetry
+    return text
+
+
+def _inkwell_signatures(rng: random.Random, document_type: str, page_count: int,
+                        base_conf: float) -> list[dict]:
+    """Signature detections that a real invoice/PO/W-9 capture model returns."""
+    if document_type in ("receipt", "bank_statement", "credit_note"):
+        return []
+    count = rng.choices((0, 1, 2), weights=(40, 50, 10))[0]
+    out: list[dict] = []
+    for _ in range(count):
+        page = rng.randint(1, max(1, page_count))
+        box = [round(rng.uniform(0.55, 0.75), 4),
+               round(rng.uniform(0.78, 0.92), 4),
+               round(rng.uniform(0.15, 0.25), 4),
+               round(rng.uniform(0.04, 0.08), 4)]
+        out.append({
+            "page": page,
+            "boundingBox": box,
+            "polygon": _inkwell_polygon(box),
+            "confidence": round(min(0.99, max(0.45, rng.gauss(base_conf, 0.05))), 3),
+            "isSigned": rng.random() > 0.15,
+        })
+    return out
 
 
 def _inkwell_invoice(
@@ -4869,6 +5128,12 @@ def _inkwell_invoice(
                 "confidence": round(
                     min(0.999, max(0.40, rng.gauss(base_conf, 0.04))), 3
                 ),
+                "valueConfidences": {
+                    "description": round(min(0.999, max(0.45, rng.gauss(base_conf, 0.045))), 3),
+                    "quantity":    round(min(0.999, max(0.55, rng.gauss(base_conf, 0.035))), 3),
+                    "unitPrice":   round(min(0.999, max(0.50, rng.gauss(base_conf, 0.040))), 3),
+                    "amount":      round(min(0.999, max(0.50, rng.gauss(base_conf, 0.040))), 3),
+                },
             }
         )
     tax_rate = rng.choice((0.0, 0.05, 0.07, 0.0825, 0.19, 0.20))
@@ -4883,42 +5148,34 @@ def _inkwell_invoice(
     )
     supplier = _company(rng)
     account = "".join(rng.choice("0123456789") for _ in range(8))
+    customer_name, customer_address = _customer(rng)
+
+    def F(name: str, value, page: int) -> dict:
+        return _inkwell_field(rng, name, value, page, base_conf, currency, country)
 
     fields = {
-        "supplierName": _inkwell_field(rng, supplier, 1, base_conf),
-        "supplierTaxId": _inkwell_field(
-            rng, f"{rng.randint(10, 99)}-{rng.randint(10**6, 10**7 - 1)}", 1, base_conf
-        ),
-        "supplierVatNumber": _inkwell_field(
-            rng, f"{country}{rng.randint(10**8, 10**9 - 1)}", 1, base_conf
-        ),
-        "supplierAddress": _inkwell_field(
-            rng,
-            f"{rng.randint(1, 9999)} {rng.choice(_ROOTS)} Ave, {country}",
-            1,
-            base_conf,
-        ),
-        "supplierIban": _inkwell_field(
-            rng, _iban(rng, country, account), last_page, base_conf
-        ),
-        "customerName": _inkwell_field(rng, "LynxCapital Holdings", 1, base_conf),
-        "customerAddress": _inkwell_field(
-            rng, "200 Lynx Plaza, New York, US", 1, base_conf
-        ),
-        "invoiceNumber": _inkwell_field(
-            rng, f"{prefix}-{issued.year}-{rng.randint(1000, 9999)}", 1, base_conf
-        ),
-        "purchaseOrderNumber": _inkwell_field(
-            rng, f"PO-{rng.randint(100000, 999999)}", 1, base_conf
-        ),
-        "invoiceDate": _inkwell_field(rng, issued.isoformat(), 1, base_conf),
-        "dueDate": _inkwell_field(rng, due.isoformat(), 1, base_conf),
-        "paymentTerms": _inkwell_field(rng, f"NET{term_days}", 1, base_conf),
-        "currency": _inkwell_field(rng, currency, last_page, base_conf),
-        "subtotal": _inkwell_field(rng, subtotal, last_page, base_conf),
-        "taxAmount": _inkwell_field(rng, tax_amount, last_page, base_conf),
-        "totalAmount": _inkwell_field(rng, total, last_page, base_conf),
-        "amountDue": _inkwell_field(rng, total, last_page, base_conf),
+        "supplierName":       F("supplierName", supplier, 1),
+        "supplierTaxId":      F("supplierTaxId",
+                                f"{rng.randint(10, 99)}-{rng.randint(10**6, 10**7 - 1)}", 1),
+        "supplierVatNumber":  F("supplierVatNumber",
+                                f"{country}{rng.randint(10**8, 10**9 - 1)}", 1),
+        "supplierAddress":    F("supplierAddress",
+                                f"{rng.randint(1, 9999)} {rng.choice(_ROOTS)} Ave, {country}", 1),
+        "supplierIban":       F("supplierIban", _iban(rng, country, account), last_page),
+        "customerName":       F("customerName", customer_name, 1),
+        "customerAddress":    F("customerAddress", customer_address, 1),
+        "invoiceNumber":      F("invoiceNumber",
+                                f"{prefix}-{issued.year}-{rng.randint(1000, 9999)}", 1),
+        "purchaseOrderNumber":F("purchaseOrderNumber",
+                                f"PO-{rng.randint(100000, 999999)}", 1),
+        "invoiceDate":        F("invoiceDate", issued.isoformat(), 1),
+        "dueDate":            F("dueDate", due.isoformat(), 1),
+        "paymentTerms":       F("paymentTerms", f"NET{term_days}", 1),
+        "currency":           F("currency", currency, last_page),
+        "subtotal":           F("subtotal", subtotal, last_page),
+        "taxAmount":          F("taxAmount", tax_amount, last_page),
+        "totalAmount":        F("totalAmount", total, last_page),
+        "amountDue":          F("amountDue", total, last_page),
     }
     taxes = [
         {
@@ -4928,7 +5185,8 @@ def _inkwell_invoice(
             "amount": tax_amount,
         }
     ]
-    locale = {"language": "en", "country": country, "currency": currency}
+    locale = {"language": _INKWELL_LANG_BY_COUNTRY.get(country, ("en",))[0],
+              "country": country, "currency": currency}
     return {"locale": locale, "fields": fields, "lineItems": line_items, "taxes": taxes}
 
 
@@ -4949,6 +5207,12 @@ def _inkwell_receipt(rng: random.Random, page_count: int, base_conf: float) -> d
                 "confidence": round(
                     min(0.999, max(0.40, rng.gauss(base_conf, 0.05))), 3
                 ),
+                "valueConfidences": {
+                    "description": round(min(0.999, max(0.45, rng.gauss(base_conf, 0.05))), 3),
+                    "quantity":    round(min(0.999, max(0.55, rng.gauss(base_conf, 0.04))), 3),
+                    "unitPrice":   round(min(0.999, max(0.50, rng.gauss(base_conf, 0.05))), 3),
+                    "amount":      round(min(0.999, max(0.50, rng.gauss(base_conf, 0.05))), 3),
+                },
             }
         )
     tax_rate = rng.choice((0.0, 0.07, 0.0825, 0.20))
@@ -4958,27 +5222,24 @@ def _inkwell_receipt(rng: random.Random, page_count: int, base_conf: float) -> d
     method = rng.choice(_INKWELL_PAY_METHODS)
     purchased = _EPOCH + timedelta(days=rng.randint(-90, -1))
 
+    def F(name: str, value, page: int) -> dict:
+        return _inkwell_field(rng, name, value, page, base_conf, currency, country)
+
     fields = {
-        "merchantName": _inkwell_field(rng, _company(rng), 1, base_conf),
-        "merchantAddress": _inkwell_field(
-            rng,
-            f"{rng.randint(1, 999)} {rng.choice(_ROOTS)} St, {country}",
-            1,
-            base_conf,
-        ),
-        "transactionDate": _inkwell_field(rng, purchased.isoformat(), 1, base_conf),
-        "transactionTime": _inkwell_field(
-            rng, f"{rng.randint(7, 21):02d}:{rng.randint(0, 59):02d}", 1, base_conf
-        ),
-        "paymentMethod": _inkwell_field(rng, method, 1, base_conf),
-        "cardLast4": _inkwell_field(
-            rng, "" if method == "CASH" else f"{rng.randint(0, 9999):04d}", 1, base_conf
-        ),
-        "currency": _inkwell_field(rng, currency, 1, base_conf),
-        "subtotal": _inkwell_field(rng, subtotal, 1, base_conf),
-        "taxAmount": _inkwell_field(rng, tax_amount, 1, base_conf),
-        "tip": _inkwell_field(rng, tip, 1, base_conf),
-        "totalAmount": _inkwell_field(rng, total, 1, base_conf),
+        "merchantName":     F("merchantName", _company(rng), 1),
+        "merchantAddress":  F("merchantAddress",
+                              f"{rng.randint(1, 999)} {rng.choice(_ROOTS)} St, {country}", 1),
+        "transactionDate":  F("transactionDate", purchased.isoformat(), 1),
+        "transactionTime":  F("transactionTime",
+                              f"{rng.randint(7, 21):02d}:{rng.randint(0, 59):02d}", 1),
+        "paymentMethod":    F("paymentMethod", method, 1),
+        "cardLast4":        F("cardLast4",
+                              "" if method == "CASH" else f"{rng.randint(0, 9999):04d}", 1),
+        "currency":         F("currency", currency, 1),
+        "subtotal":         F("subtotal", subtotal, 1),
+        "taxAmount":        F("taxAmount", tax_amount, 1),
+        "tip":              F("tip", tip, 1),
+        "totalAmount":      F("totalAmount", total, 1),
     }
     taxes = [
         {
@@ -4988,7 +5249,8 @@ def _inkwell_receipt(rng: random.Random, page_count: int, base_conf: float) -> d
             "amount": tax_amount,
         }
     ]
-    locale = {"language": "en", "country": country, "currency": currency}
+    locale = {"language": _INKWELL_LANG_BY_COUNTRY.get(country, ("en",))[0],
+              "country": country, "currency": currency}
     return {"locale": locale, "fields": fields, "lineItems": line_items, "taxes": taxes}
 
 
@@ -4998,6 +5260,7 @@ def inkwell_extraction(doc: dict) -> dict:
     outcome = _inkwell_outcome(doc["fileName"], doc.get("model", "invoice"))
     base = {
         "documentId": doc["documentId"],
+        "extractionId": "ext_%012x" % rng.getrandbits(48),
         "object": "extraction",
         "model": doc.get("model", "invoice"),
         "modelVersion": doc.get("modelVersion", _INKWELL_MODEL_VERSION["invoice"]),
@@ -5005,6 +5268,7 @@ def inkwell_extraction(doc: dict) -> dict:
         "engine": _INKWELL_ENGINE,
         "pageCount": doc.get("pageCount", 1),
         "processingMs": rng.randint(640, 4200),
+        "corrections": [],
     }
 
     if outcome["status"] == "failed":
@@ -5023,6 +5287,9 @@ def inkwell_extraction(doc: dict) -> dict:
                 "fields": {},
                 "lineItems": [],
                 "taxes": [],
+                "pages": [],
+                "fullText": "",
+                "signatures": [],
             }
         )
         return base
@@ -5050,6 +5317,17 @@ def inkwell_extraction(doc: dict) -> dict:
     if degraded:
         reasons.append("image_quality_degraded")
 
+    country = body["locale"]["country"]
+    pages = _inkwell_pages(rng, base["pageCount"], country)
+    full_text = _inkwell_full_text(rng, document_type, body, base["pageCount"])
+    for page in pages:
+        page_no = page["pageNumber"]
+        if page_no == 1:
+            page["text"] = full_text
+        else:
+            page["text"] = ""
+    signatures = _inkwell_signatures(rng, document_type, base["pageCount"], base_conf)
+
     base.update(
         {
             "status": "needs_review" if reasons else "extracted",
@@ -5061,6 +5339,9 @@ def inkwell_extraction(doc: dict) -> dict:
             "fields": fields,
             "lineItems": body["lineItems"],
             "taxes": body["taxes"],
+            "pages": pages,
+            "fullText": full_text,
+            "signatures": signatures,
         }
     )
     return base
@@ -5071,6 +5352,7 @@ def _inkwell_document(seed: str, idx: int, model: str, file_name: str) -> dict:
     mime = inkwell_mime(file_name) or "application/pdf"
     doc_id = "doc_%012x" % rng.getrandbits(48)
     created = _instant(rng, -120, -1)
+    page_count = rng.choice((1, 1, 1, 2, 2, 3, 5))
     return {
         "documentId": doc_id,
         "object": "document",
@@ -5078,7 +5360,7 @@ def _inkwell_document(seed: str, idx: int, model: str, file_name: str) -> dict:
         "mimeType": mime,
         "sizeBytes": rng.randint(48_000, 5_200_000),
         "sha256": hashlib.sha256(f"{doc_id}:{file_name}".encode()).hexdigest(),
-        "pageCount": rng.choice((1, 1, 1, 2, 2, 3, 5)),
+        "pageCount": page_count,
         "model": model,
         "modelVersion": _INKWELL_MODEL_VERSION[model],
         "documentType": None,
@@ -5086,8 +5368,16 @@ def _inkwell_document(seed: str, idx: int, model: str, file_name: str) -> dict:
         "source": "api_upload",
         "reference": None,
         "callbackUrl": None,
+        "tags": {},
+        "idempotencyKey": None,
+        "selfUrl": f"https://{_INKWELL_HOST}/v1/documents/{doc_id}",
+        "apiVersion": _INKWELL_API_VERSION,
         "createdAt": created,
+        "queuedAt": created,
+        "startedAt": None,
         "completedAt": None,
+        "cancelledAt": None,
+        "processingDurationMs": None,
         "confidence": None,
     }
 
@@ -5117,13 +5407,18 @@ def inkwell_dataset(seed: str) -> dict[str, dict]:
         doc["status"] = extraction["status"]
         doc["documentType"] = extraction["documentType"]
         doc["confidence"] = extraction["confidence"]
+        doc["startedAt"] = doc["createdAt"]
         doc["completedAt"] = doc["createdAt"]
+        doc["processingDurationMs"] = extraction["processingMs"]
         documents[doc["documentId"]] = doc
         extractions[doc["documentId"]] = extraction
     return {
         "documents": documents,
         "extractions": extractions,
         "models": inkwell_models(),
+        "corrections": {},
+        "idempotency": {},
+        "batches": {},
     }
 
 

@@ -1877,11 +1877,169 @@ def test_api_key_pair_distinct_cases():
         f"/api/submit_document?api_key={okey}", json={"fileName": "a.pdf"}
     ).json()["data"]
     assert started["status"] == "processing"
+    assert started["selfUrl"].startswith("https://api.inkwellocr.test/")
+    assert started["apiVersion"] == "2026-02-01"
     done = ocr.post(
         f"/api/get_extraction?api_key={okey}",
         json={"documentId": started["documentId"]},
     ).json()["data"]
     assert done["status"] == "extracted" and "fields" in done
+    assert done["extractionId"].startswith("ext_") and len(done["pages"]) >= 1
+    assert done["fields"]["totalAmount"]["valueType"] == "currency"
+
+
+# --------------------------------------------------------------------------- #
+# Inkwell OCR — schema realism, corrections, cancellation, batching, idempotency
+# --------------------------------------------------------------------------- #
+def _inkwell_query() -> tuple[TestClient, str]:
+    return client("inkwell-ocr"), seed("inkwell-ocr")["apiKey"]
+
+
+def test_inkwell_extraction_schema_enrichment():
+    c, key = _inkwell_query()
+    started = c.post(f"/api/submit_document?api_key={key}",
+                     json={"fileName": "invoice-2026.pdf"}).json()["data"]
+    for envelope_field in ("selfUrl", "apiVersion", "queuedAt", "tags", "idempotencyKey"):
+        assert envelope_field in started
+    done = c.post(f"/api/get_extraction?api_key={key}",
+                  json={"documentId": started["documentId"]}).json()["data"]
+    assert done["status"] in ("extracted", "needs_review")
+    assert done["extractionId"].startswith("ext_")
+    assert done["corrections"] == []
+    assert isinstance(done["fullText"], str) and len(done["fullText"]) > 80
+    assert done["fullText"].count("\n") > 5
+    assert isinstance(done["pages"], list) and len(done["pages"]) >= 1
+    page = done["pages"][0]
+    for k in ("pageNumber", "width", "height", "unit", "angle", "dpi", "detectedLanguages", "text"):
+        assert k in page
+    assert page["detectedLanguages"] and "language" in page["detectedLanguages"][0]
+    for name, field in done["fields"].items():
+        assert "valueType" in field and "rawText" in field
+        assert isinstance(field["polygon"], list) and len(field["polygon"]) == 8
+    line_items = done["lineItems"]
+    if line_items:
+        assert "valueConfidences" in line_items[0]
+        assert set(line_items[0]["valueConfidences"]) == {"description", "quantity", "unitPrice", "amount"}
+    # Document is rolled forward with the extraction timestamps.
+    fresh = c.post(f"/api/get_document?api_key={key}",
+                   json={"documentId": started["documentId"]}).json()["data"]
+    assert fresh["completedAt"] is not None and fresh["processingDurationMs"] is not None
+    assert fresh["startedAt"] is not None
+
+
+def test_inkwell_correction_append_only():
+    c, key = _inkwell_query()
+    started = c.post(f"/api/submit_document?api_key={key}",
+                     json={"fileName": "invoice-correct.pdf"}).json()["data"]
+    document_id = started["documentId"]
+    done = c.post(f"/api/get_extraction?api_key={key}",
+                  json={"documentId": document_id}).json()["data"]
+    original = done["fields"]["totalAmount"]
+    correction = c.post(
+        f"/api/submit_correction?api_key={key}",
+        json={"documentId": document_id, "fieldPath": "totalAmount",
+              "value": 9999.99, "correctedBy": "reviewer@piedpiper.example"},
+    ).json()["data"]
+    assert correction["correctionId"].startswith("corr_")
+    assert correction["previousValue"] == original["value"]
+    assert correction["value"] == 9999.99
+    # Append-only: extraction's field is unchanged.
+    again = c.post(f"/api/get_extraction?api_key={key}",
+                   json={"documentId": document_id}).json()["data"]
+    assert again["fields"]["totalAmount"]["value"] == original["value"]
+    assert correction["correctionId"] in again["corrections"]
+    # list_corrections surfaces it.
+    listing = c.post(f"/api/list_corrections?api_key={key}",
+                     json={"documentId": document_id}).json()["data"]
+    assert any(item["correctionId"] == correction["correctionId"] for item in listing["items"])
+    # Unknown field paths reject.
+    bad = c.post(f"/api/submit_correction?api_key={key}",
+                 json={"documentId": document_id, "fieldPath": "nonsense", "value": 1})
+    assert bad.status_code == 422 and bad.json()["error"] == "unknown_field"
+
+
+def test_inkwell_cancel_blocks_extraction():
+    c, key = _inkwell_query()
+    started = c.post(f"/api/submit_document?api_key={key}",
+                     json={"fileName": "invoice-cancel.pdf"}).json()["data"]
+    document_id = started["documentId"]
+    cancelled = c.post(f"/api/cancel_document?api_key={key}",
+                       json={"documentId": document_id}).json()["data"]
+    assert cancelled["status"] == "cancelled" and cancelled["cancelledAt"]
+    missing = c.post(f"/api/get_extraction?api_key={key}",
+                     json={"documentId": document_id})
+    assert missing.status_code == 404 and missing.json()["error"] == "extraction_not_found"
+    again = c.post(f"/api/cancel_document?api_key={key}",
+                   json={"documentId": document_id})
+    assert again.status_code == 409 and again.json()["error"] == "cancel_not_allowed"
+    # A completed extraction cannot be retroactively cancelled.
+    other = c.post(f"/api/submit_document?api_key={key}",
+                   json={"fileName": "invoice-complete.pdf"}).json()["data"]
+    c.post(f"/api/get_extraction?api_key={key}",
+           json={"documentId": other["documentId"]})
+    blocked = c.post(f"/api/cancel_document?api_key={key}",
+                     json={"documentId": other["documentId"]})
+    assert blocked.status_code == 409 and blocked.json()["error"] == "cancel_not_allowed"
+
+
+def test_inkwell_submit_documents_batch():
+    c, key = _inkwell_query()
+    payload = {
+        "documents": [
+            {"fileName": "invoice-2026100.pdf"},
+            {"fileName": "receipt-2026101.png", "model": "receipt"},
+            {"fileName": "huge-scan-2026102.pdf"},
+            {"fileName": ""},
+        ],
+        "idempotencyKey": "batch-1",
+    }
+    batch = c.post(f"/api/submit_documents_batch?api_key={key}",
+                   json=payload).json()["data"]
+    assert batch["submitted"] == 4
+    assert batch["accepted"] == 2 and batch["rejected"] == 2
+    rejected_codes = {r["error"]["code"] for r in batch["results"]
+                      if r["status"] == "rejected"}
+    assert rejected_codes == {"media_too_large", "invalid_request"}
+    for row in batch["results"]:
+        if row["status"] == "accepted":
+            assert row["documentId"].startswith("doc_")
+    # Idempotent replay returns the same batch (no double-submit).
+    replay = c.post(f"/api/submit_documents_batch?api_key={key}",
+                    json=payload).json()["data"]
+    assert replay["batchId"] == batch["batchId"]
+    empty = c.post(f"/api/submit_documents_batch?api_key={key}",
+                   json={"documents": []})
+    assert empty.status_code == 422 and empty.json()["error"] == "empty_batch"
+
+
+def test_inkwell_idempotent_submit_and_get_model():
+    c, key = _inkwell_query()
+    body = {"fileName": "invoice-idem.pdf", "idempotencyKey": "submit-1"}
+    first = c.post(f"/api/submit_document?api_key={key}", json=body).json()["data"]
+    second = c.post(f"/api/submit_document?api_key={key}", json=body).json()["data"]
+    assert first["documentId"] == second["documentId"]
+    listing = c.post(f"/api/list_documents?api_key={key}",
+                     json={"pageSize": 100}).json()["data"]
+    assert sum(1 for d in listing["items"]
+               if d["documentId"] == first["documentId"]) == 1
+    # get_model returns one model and 404s on unknown ids; matches list_models.
+    one = c.post(f"/api/get_model?api_key={key}",
+                 json={"modelId": "invoice"}).json()["data"]
+    assert one["modelId"] == "invoice" and one["pricing"]["perPage"] > 0
+    assert "regions" in one and "us-east" in one["regions"]
+    missing = c.post(f"/api/get_model?api_key={key}",
+                     json={"modelId": "nonexistent"})
+    assert missing.status_code == 404 and missing.json()["error"] == "model_not_found"
+
+
+def test_inkwell_submit_oversized_rejected():
+    c, key = _inkwell_query()
+    bad = c.post(f"/api/submit_document?api_key={key}",
+                 json={"fileName": "huge-scan.pdf"})
+    assert bad.status_code == 413 and bad.json()["error"] == "media_too_large"
+    too_many = c.post(f"/api/submit_document?api_key={key}",
+                      json={"fileName": "manypages-report.pdf"})
+    assert too_many.status_code == 422 and too_many.json()["error"] == "too_many_pages"
 
 
 def test_meridian_card_decline_and_capture_flow():

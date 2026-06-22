@@ -120,8 +120,9 @@ providers:
       query_param_name: "api_key"
       api_key: "${LYNX_PARTNER_INKWELL_OCR_API_KEY}"
     scopes:
-      inkwell:extract: ["submit_document", "get_document", "get_extraction", "list_documents", "list_models"]
-      inkwell:manage: ["delete_document"]
+      inkwell:extract: ["submit_document", "submit_documents_batch", "get_document", "get_extraction", "list_documents", "list_models", "get_model"]
+      inkwell:review: ["submit_correction", "list_corrections"]
+      inkwell:manage: ["cancel_document", "delete_document"]
   - id: "aegis-screening"
     name: "Aegis Screening"
     kind: "caracal_mandate"
