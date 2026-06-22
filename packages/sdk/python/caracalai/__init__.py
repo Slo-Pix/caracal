@@ -5,6 +5,7 @@ Caracal, a product of Garudex Labs
 Public surface of the Caracal Python SDK.
 """
 
+from .auth import ApprovalRequired
 from .client import Caracal, CaracalConfig, GatewayRequest, ResourceBinding
 from .context import (
     AuthoritySummary,
@@ -22,6 +23,7 @@ from .json_types import JsonObject, JsonPrimitive, JsonValue
 from .primitives import Grant, LifecycleHook, ServiceAgent
 
 __all__ = [
+    "ApprovalRequired",
     "Caracal",
     "CaracalConfig",
     "CaracalContext",

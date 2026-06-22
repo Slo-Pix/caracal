@@ -24,6 +24,21 @@ DEFAULT_TIMEOUT_SECONDS = 5.0
 TokenSource = Callable[[], str]
 
 
+class ApprovalRequired(Exception):
+    """Raised when minting a mandate is gated on human approval. The platform has
+    recorded a durable, single-use approval challenge that an authenticated approver
+    must satisfy out-of-band before the mandate can be minted; an agent can never
+    satisfy its own approval. Retry ``mint_mandate`` with ``approval_id`` set to
+    ``challenge_id`` until the approver grants it: the same challenge id is returned
+    while the approval is still pending, and the mint succeeds once it is satisfied."""
+
+    def __init__(self, challenge_id: str, expires_at: str = "") -> None:
+        super().__init__(f"human approval required (challenge {challenge_id})")
+        self.challenge_id = challenge_id
+        self.expires_at = expires_at
+
+
+
 def _decode_jwt_exp(token: str) -> float | None:
     parts = token.split(".")
     if len(parts) != 3:
@@ -108,11 +123,15 @@ class ClientSecretExchanger:
         agent_session_id: str | None = None,
         delegation_edge_id: str | None = None,
         ttl_seconds: int | None = None,
+        approval_id: str | None = None,
     ) -> str:
         """Exchange the application credential for a resource mandate audienced
         to one resource and narrowed to the requested scopes. Pass the calling
         agent's session and delegation edge so the STS evaluates policy against
-        that agent's authority and the mandate carries its identity."""
+        that agent's authority and the mandate carries its identity. When a scope
+        is approval-gated the mint raises :class:`ApprovalRequired`; retry with
+        ``approval_id`` set to the returned challenge id once an approver has
+        satisfied it."""
         if not resource:
             raise ValueError("mint_mandate requires a resource")
         if not scopes:
@@ -136,6 +155,8 @@ class ClientSecretExchanger:
                 data["delegation_edge_id"] = delegation_edge_id
             if ttl_seconds is not None:
                 data["ttl_seconds"] = str(ttl_seconds)
+            if approval_id:
+                data["challenge_id"] = approval_id
             token, exp = self._exchange(data)
             self._mandates[key] = (token, exp)
             return token
@@ -146,6 +167,19 @@ class ClientSecretExchanger:
         else:
             with httpx.Client(timeout=self._timeout) as http:
                 resp = http.post(f"{self._sts_url}/oauth/2/token", data=data)
+        if resp.status_code == 401:
+            try:
+                pending = resp.json()
+            except ValueError:
+                pending = {}
+            if (
+                pending.get("error") == "interaction_required"
+                and pending.get("challenge_type") == "human_approval"
+            ):
+                raise ApprovalRequired(
+                    challenge_id=str(pending.get("challenge_id", "")),
+                    expires_at=str(pending.get("challenge_expires_at", "")),
+                )
         resp.raise_for_status()
         body = resp.json()
         token = body.get("access_token")

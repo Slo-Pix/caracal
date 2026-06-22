@@ -1224,6 +1224,7 @@ class Caracal:
         *,
         ctx: CaracalContext | None = None,
         ttl_seconds: int | None = None,
+        approval_id: str | None = None,
     ) -> str:
         """Mint a resource mandate for the current agent: a short-lived token
         audienced to ``resource_id`` and narrowed to ``scopes``, carrying the
@@ -1233,6 +1234,11 @@ class Caracal:
         narrowed child can mint only what its delegation edge allows. Results
         are cached per resource, scope set, and agent identity, and refreshed
         before expiry.
+
+        When a scope is approval-gated the mint raises
+        :class:`caracalai.ApprovalRequired`; retry with ``approval_id`` set to
+        the returned challenge id once an authenticated approver has satisfied
+        it.
 
         Requires client-secret credentials (:meth:`from_client_secret`,
         :meth:`from_config`, or ``CARACAL_APP_CLIENT_SECRET``)."""
@@ -1250,6 +1256,7 @@ class Caracal:
             agent_session_id=bound.agent_session_id if bound else None,
             delegation_edge_id=bound.delegation_edge_id if bound else None,
             ttl_seconds=ttl_seconds,
+            approval_id=approval_id,
         )
 
     async def fetch(

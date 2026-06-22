@@ -13,6 +13,7 @@ import httpx
 
 from caracalai.auth import (
     GRANT_TYPE,
+    ApprovalRequired,
     ClientSecretExchanger,
     _decode_jwt_exp,
 )
@@ -263,6 +264,43 @@ class MintMandateTests(unittest.TestCase):
             ex.mint_mandate(resource="", scopes=["s.read"])
         with self.assertRaises(ValueError):
             ex.mint_mandate(resource="urn:res:a", scopes=[])
+
+    def test_raises_approval_required_on_gated_mint(self):
+        def handler(req: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                401,
+                json={
+                    "error": "interaction_required",
+                    "challenge_type": "human_approval",
+                    "challenge_id": "chal_1",
+                    "challenge_expires_at": "2026-01-01T00:00:00Z",
+                },
+            )
+
+        with _patch_client(handler):
+            with self.assertRaises(ApprovalRequired) as caught:
+                _exchanger().mint_mandate(
+                    resource="resource://payments", scopes=["pay:write"]
+                )
+        self.assertEqual(caught.exception.challenge_id, "chal_1")
+        self.assertEqual(caught.exception.expires_at, "2026-01-01T00:00:00Z")
+
+    def test_sends_challenge_id_when_approval_id_set(self):
+        captured: list[bytes] = []
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            captured.append(req.content)
+            return httpx.Response(
+                200, json={"access_token": _jwt({"exp": time.time() + 300})}
+            )
+
+        with _patch_client(handler):
+            _exchanger().mint_mandate(
+                resource="resource://payments",
+                scopes=["pay:write"],
+                approval_id="chal_1",
+            )
+        self.assertIn("challenge_id=chal_1", captured[0].decode())
 
 
 if __name__ == "__main__":
