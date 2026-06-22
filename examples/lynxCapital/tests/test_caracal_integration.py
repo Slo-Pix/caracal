@@ -5,6 +5,7 @@ Caracal, a product of Garudex Labs
 Offline tests exercising the Caracal SDK seam, the per-agent runner, and the governed
 partner dispatch without a running control plane.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,6 +44,16 @@ def test_startup_fails_closed_when_a_boundary_is_unconfigured(monkeypatch):
         caracal.startup()
 
 
+def test_startup_refuses_zone_mismatch(monkeypatch):
+    monkeypatch.setattr(caracal, "_runtimes", None)
+    monkeypatch.setenv("CARACAL_ZONE_ID", "zone-workload")
+    monkeypatch.setenv("LYNX_CARACAL_ZONE_ID", "zone-provisioned")
+    monkeypatch.setenv("LYNX_CARACAL_OPERATIONS_APPLICATION_ID", "app_ops")
+    monkeypatch.setenv("LYNX_CARACAL_OPERATIONS_CLIENT_SECRET", "secret")
+    with pytest.raises(RuntimeError, match="provisioned.env was generated for zone"):
+        caracal.startup()
+
+
 def test_startup_builds_one_runtime_per_application(monkeypatch):
     monkeypatch.setenv("CARACAL_ZONE_ID", "zone_demo")
     model = tenancy.load_model()
@@ -57,7 +68,9 @@ def test_startup_builds_one_runtime_per_application(monkeypatch):
         for app in model.applications:
             runtime = caracal.runtime(app.id)
             assert runtime.application_id == f"app_{app.id}"
-            assert runtime.views == [r.identifier for r in model.application_resources(app.id)]
+            assert runtime.views == [
+                r.identifier for r in model.application_resources(app.id)
+            ]
             assert type(runtime.client).__name__ == "Caracal"
     finally:
         asyncio.run(caracal.aclose())
@@ -93,7 +106,9 @@ def test_worker_authority_gateway_post_mints_scoped_mandate():
 
     def sts_handler(req):
         sts_calls.append(req.content.decode())
-        return httpx.Response(200, json={"access_token": "mandate-1", "expires_in": 300})
+        return httpx.Response(
+            200, json={"access_token": "mandate-1", "expires_in": 300}
+        )
 
     client = Caracal.from_client_secret(
         coordinator_url="http://coord.test",
@@ -149,7 +164,9 @@ def test_runner_local_spawn_tracks_identity_without_caracal():
     runner = create_runner("run-local")
     assert get_runner("run-local") is runner
     fc = runner.spawn("finance-control", "run", parent=None, layer="orchestrator")
-    worker = runner.spawn("payment-execution", "payments.us", parent=fc, layer="worker", region="US")
+    worker = runner.spawn(
+        "payment-execution", "payments.us", parent=fc, layer="worker", region="US"
+    )
     assert worker.authority is None
     assert worker.parent_id == fc.id
     assert runner.handle(worker.id) is worker
@@ -163,7 +180,13 @@ def test_runner_rejects_unknown_role():
     from app.core.workers import WorkerPool
 
     runner = AgentRunner("run-roles")
-    parent = runner.spawn("regional-orchestrator", "region.us", parent=None, layer="orchestrator", region="US")
+    parent = runner.spawn(
+        "regional-orchestrator",
+        "region.us",
+        parent=None,
+        layer="orchestrator",
+        region="US",
+    )
     pool = WorkerPool("run-roles", runner, parent)
     with pytest.raises(ValueError):
         pool.acquire("no-such-role", "scope")
@@ -174,23 +197,32 @@ def test_customer_identity_propagates_through_spawn():
     from app.events.bus import bus
 
     runner = AgentRunner("run-cust")
-    parent = runner.spawn("workflow-orchestrator", "wf.ar", parent=None, layer="orchestrator")
+    parent = runner.spawn(
+        "workflow-orchestrator", "wf.ar", parent=None, layer="orchestrator"
+    )
     pool = WorkerPool("run-cust", runner, parent)
     worker = pool.acquire("receivables", "ar-dun:cust-204", customer_id="cust-204")
     assert worker.customer_id == "cust-204"
     spawn_events = [
-        e for e in bus.history("run-cust")
+        e
+        for e in bus.history("run-cust")
         if e.kind == "agent_spawn" and e.payload["agent_id"] == worker.id
     ]
     assert spawn_events and spawn_events[0].payload["customer_id"] == "cust-204"
 
     assert tenancy.agent_labels("receivables", "cust-204") == [
-        "receivables", "lynx-swarm", "customer:cust-204",
+        "receivables",
+        "lynx-swarm",
+        "customer:cust-204",
     ]
-    metadata = tenancy.agent_metadata("run-cust", worker.id, "ar-dun:cust-204", customer_id="cust-204")
+    metadata = tenancy.agent_metadata(
+        "run-cust", worker.id, "ar-dun:cust-204", customer_id="cust-204"
+    )
     assert metadata["customer_id"] == "cust-204"
     assert tenancy.agent_labels("receivables") == ["receivables", "lynx-swarm"]
-    assert "customer_id" not in tenancy.agent_metadata("run-cust", worker.id, "ar-summary")
+    assert "customer_id" not in tenancy.agent_metadata(
+        "run-cust", worker.id, "ar-summary"
+    )
 
     from fastapi.testclient import TestClient
 
@@ -204,7 +236,9 @@ def test_customer_identity_propagates_through_spawn():
 
 def test_partner_call_fails_closed_without_caracal_or_simulation(monkeypatch):
     monkeypatch.delenv("LYNX_SIMULATION", raising=False)
-    with pytest.raises(partners.PartnerError, match="fails closed|simulation mode is off"):
+    with pytest.raises(
+        partners.PartnerError, match="fails closed|simulation mode is off"
+    ):
         partners.call("meridian-pay", "get_balance", {})
 
 
@@ -241,10 +275,18 @@ def test_gateway_dispatch_routes_scope_view_and_path(monkeypatch):
             calls.append((view, path, payload, scopes))
             return _Response()
 
-    result = partners.call("meridian-pay", "create_payout", {"amount": 100}, authority=_Authority())
+    result = partners.call(
+        "meridian-pay", "create_payout", {"amount": 100}, authority=_Authority()
+    )
     assert result["status"] == 200 and result["data"] == {"ok": True}
-    assert calls == [("resource://payments-meridian", "/api/create_payout",
-                      {"amount": 100}, ["meridian:payout"])]
+    assert calls == [
+        (
+            "resource://payments-meridian",
+            "/api/create_payout",
+            {"amount": 100},
+            ["meridian:payout"],
+        )
+    ]
 
     with pytest.raises(partners.PartnerError, match="lacks scope"):
         partners.call("meridian-pay", "list_charges", {}, authority=_Authority())

@@ -4,6 +4,7 @@ Caracal, a product of Garudex Labs
 
 Provisioning script security regression tests.
 """
+
 from __future__ import annotations
 
 import sys
@@ -21,7 +22,9 @@ class _Application:
 
 
 class _Client:
-    def invoke(self, command: str, action: str, payload: dict | None = None) -> list | dict:
+    def invoke(
+        self, command: str, action: str, payload: dict | None = None
+    ) -> list | dict:
         if command == "app" and action == "list":
             return []
         if command == "app" and action == "create" and payload:
@@ -39,14 +42,16 @@ class _Model:
     ]
 
 
-def test_application_client_secrets_are_written_without_stdout(tmp_path, monkeypatch, capsys):
+def test_application_client_secrets_are_written_without_stdout(
+    tmp_path, monkeypatch, capsys
+):
     root = tmp_path / "lynx"
     config = root / "config"
     config.mkdir(parents=True)
     monkeypatch.setattr(provision, "ROOT", root)
     monkeypatch.setattr(provision, "APPLICATION_ENV_PATH", config / "provisioned.env")
 
-    application_ids = provision.ensure_applications(_Client(), _Model())
+    application_ids = provision.ensure_applications(_Client(), _Model(), "zone-1")
 
     output = capsys.readouterr().out
     env = (config / "provisioned.env").read_text(encoding="utf-8")
@@ -56,6 +61,7 @@ def test_application_client_secrets_are_written_without_stdout(tmp_path, monkeyp
     }
     assert "secret_Lynx" not in output
     assert "_CLIENT_SECRET=" not in output
+    assert "LYNX_CARACAL_ZONE_ID=zone-1" in env
     assert "LYNX_CARACAL_OPERATIONS_CLIENT_SECRET=secret_Lynx Operations" in env
     assert "LYNX_CARACAL_PAYMENTS_CLIENT_SECRET=secret_Lynx Payments" in env
     assert (config / "provisioned.env").stat().st_mode & 0o777 == 0o600
@@ -68,7 +74,9 @@ class _ExistingClient:
     def __init__(self) -> None:
         self.patched: list[str] = []
 
-    def invoke(self, command: str, action: str, payload: dict | None = None) -> list | dict:
+    def invoke(
+        self, command: str, action: str, payload: dict | None = None
+    ) -> list | dict:
         if command == "app" and action == "list":
             return [
                 {"id": "app_Lynx Operations", "name": "Lynx Operations"},
@@ -80,7 +88,9 @@ class _ExistingClient:
         raise AssertionError(f"unexpected control call: {command} {action}")
 
 
-def test_existing_application_without_known_secret_is_not_silently_rotated(tmp_path, monkeypatch):
+def test_existing_application_without_known_secret_is_not_silently_rotated(
+    tmp_path, monkeypatch
+):
     root = tmp_path / "lynx"
     config = root / "config"
     config.mkdir(parents=True)
@@ -89,8 +99,10 @@ def test_existing_application_without_known_secret_is_not_silently_rotated(tmp_p
     monkeypatch.delenv("LYNX_PROVISION_ALLOW_SECRET_ROTATION", raising=False)
 
     client = _ExistingClient()
-    with __import__("pytest").raises(provision.ControlError, match="refusing to rotate"):
-        provision.ensure_applications(client, _Model())
+    with __import__("pytest").raises(
+        provision.ControlError, match="refusing to rotate"
+    ):
+        provision.ensure_applications(client, _Model(), "zone-1")
     assert client.patched == []
     assert not (config / "provisioned.env").exists()
 
@@ -104,9 +116,35 @@ def test_existing_application_rotation_requires_explicit_opt_in(tmp_path, monkey
     monkeypatch.setenv("LYNX_PROVISION_ALLOW_SECRET_ROTATION", "1")
 
     client = _ExistingClient()
-    application_ids = provision.ensure_applications(client, _Model())
+    application_ids = provision.ensure_applications(client, _Model(), "zone-1")
     assert set(client.patched) == {"app_Lynx Operations", "app_Lynx Payments"}
     assert application_ids == {
         "operations": "app_Lynx Operations",
         "payments": "app_Lynx Payments",
     }
+
+
+class _ZoneClient:
+    def __init__(self, zone: str) -> None:
+        self._zone = zone
+
+    def bound_zone(self) -> str:
+        return self._zone
+
+
+def test_resolve_zone_uses_control_key_zone_when_unset(monkeypatch):
+    monkeypatch.delenv("CARACAL_ZONE_ID", raising=False)
+    assert provision._resolve_zone(_ZoneClient("zone-key")) == "zone-key"
+
+
+def test_resolve_zone_allows_matching_declared_zone(monkeypatch):
+    monkeypatch.setenv("CARACAL_ZONE_ID", "zone-key")
+    assert provision._resolve_zone(_ZoneClient("zone-key")) == "zone-key"
+
+
+def test_resolve_zone_refuses_cross_zone_declaration(monkeypatch):
+    monkeypatch.setenv("CARACAL_ZONE_ID", "zone-workload")
+    with __import__("pytest").raises(
+        provision.ControlError, match="refusing to provision"
+    ):
+        provision._resolve_zone(_ZoneClient("zone-key"))

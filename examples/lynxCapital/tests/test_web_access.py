@@ -382,3 +382,17 @@ def test_provision_scripts_exist_and_build_plan():
     assert config.scopes == control_client.SCOPES
     assert "control:resource:write" in control_client.SCOPES
     assert "control:policy-set:write" in control_client.SCOPES
+
+    import base64
+
+    def _segment(obj: dict) -> str:
+        return (
+            base64.urlsafe_b64encode(json.dumps(obj).encode("utf-8"))
+            .rstrip(b"=")
+            .decode("ascii")
+        )
+
+    token = f"{_segment({'alg': 'ES256'})}.{_segment({'zone_id': 'zone-control'})}.sig"
+    assert control_client._jwt_claims(token)["zone_id"] == "zone-control"
+    with pytest.raises(control_client.ControlError):
+        control_client._jwt_claims("not-a-jwt")

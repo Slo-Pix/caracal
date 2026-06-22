@@ -23,6 +23,7 @@ import (
 	"time"
 
 	sharedcrypto "github.com/garudex-labs/caracal/packages/core/go/crypto"
+	sharederr "github.com/garudex-labs/caracal/packages/core/go/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/open-policy-agent/opa/rego"
@@ -213,6 +214,8 @@ func TestBuildJWKSIncludesP256PublicKeyMetadata(t *testing.T) {
 type stubDB struct {
 	app           *Application
 	appErr        error
+	appGlobal     *Application
+	appGlobalErr  error
 	resource      *Resource
 	resErr        error
 	grant         *ProviderGrant
@@ -248,6 +251,9 @@ func (s *stubDB) GetApplicationByID(_ context.Context, _, _ string) (*Applicatio
 	return s.app, s.appErr
 }
 func (s *stubDB) GetApplicationByIDGlobal(_ context.Context, _ string) (*Application, error) {
+	if s.appGlobal != nil || s.appGlobalErr != nil {
+		return s.appGlobal, s.appGlobalErr
+	}
 	return s.app, s.appErr
 }
 func (s *stubDB) GetResourceByIdentifier(_ context.Context, _, _ string) (*Resource, error) {
@@ -500,6 +506,96 @@ func TestAuthenticateAppRejectsZoneLessNonControlApplication(t *testing.T) {
 		ClientSecret:  "test-secret",
 	}); err == nil || !strings.Contains(err.Error(), "zone_id required") {
 		t.Fatalf("non-control application without zone_id must fail, got %v", err)
+	}
+}
+
+func TestAuthenticateAppReportsCrossZoneCredentialWhenSecretVerifies(t *testing.T) {
+	hash, err := hashClientSecret("test-secret")
+	if err != nil {
+		t.Fatalf("hash client secret: %v", err)
+	}
+	srv := &Server{db: &stubDB{
+		appErr: errors.New("not found in requested zone"),
+		appGlobal: &Application{
+			ID:                 "app1",
+			ZoneID:             "zone-actual",
+			Name:               "Test App",
+			RegistrationMethod: "managed",
+			ClientSecretHash:   &hash,
+		},
+	}}
+	_, _, err = srv.authenticateApp(context.Background(), TokenExchangeRequest{
+		ZoneID:        "zone-requested",
+		ApplicationID: "app1",
+		ClientSecret:  "test-secret",
+	})
+	var zoneErr *zoneMismatchError
+	if !errors.As(err, &zoneErr) {
+		t.Fatalf("cross-zone credential with valid secret must report a zone mismatch, got %v", err)
+	}
+	if zoneErr.actual != "zone-actual" || zoneErr.requested != "zone-requested" {
+		t.Fatalf("zone mismatch must carry both zones, got %#v", zoneErr)
+	}
+}
+
+func TestAuthenticateAppHidesCrossZoneExistenceWhenSecretWrong(t *testing.T) {
+	hash, err := hashClientSecret("test-secret")
+	if err != nil {
+		t.Fatalf("hash client secret: %v", err)
+	}
+	srv := &Server{db: &stubDB{
+		appErr: errors.New("not found in requested zone"),
+		appGlobal: &Application{
+			ID:                 "app1",
+			ZoneID:             "zone-actual",
+			Name:               "Test App",
+			RegistrationMethod: "managed",
+			ClientSecretHash:   &hash,
+		},
+	}}
+	_, _, err = srv.authenticateApp(context.Background(), TokenExchangeRequest{
+		ZoneID:        "zone-requested",
+		ApplicationID: "app1",
+		ClientSecret:  "wrong-secret",
+	})
+	var zoneErr *zoneMismatchError
+	if errors.As(err, &zoneErr) {
+		t.Fatalf("a wrong secret must not disclose cross-zone existence, got %v", err)
+	}
+	if err == nil {
+		t.Fatalf("cross-zone lookup with a wrong secret must still fail")
+	}
+}
+
+func TestExchangeMapsZoneMismatchToZoneInvalid(t *testing.T) {
+	hash, err := hashClientSecret("test-secret")
+	if err != nil {
+		t.Fatalf("hash client secret: %v", err)
+	}
+	srv := &Server{db: &stubDB{
+		appErr: errors.New("not found in requested zone"),
+		appGlobal: &Application{
+			ID:                 "app1",
+			ZoneID:             "zone-actual",
+			Name:               "Test App",
+			RegistrationMethod: "managed",
+			ClientSecretHash:   &hash,
+		},
+	}}
+	_, _, status, exErr := srv.exchange(context.Background(), TokenExchangeRequest{
+		ZoneID:        "zone-requested",
+		ApplicationID: "app1",
+		ClientSecret:  "test-secret",
+		Resources:     []string{"resource://payments"},
+	}, "req-1")
+	if status != http.StatusForbidden {
+		t.Fatalf("zone mismatch must map to 403, got %d", status)
+	}
+	if exErr == nil || exErr.Code != sharederr.ZoneInvalid {
+		t.Fatalf("zone mismatch must surface zone_invalid, got %#v", exErr)
+	}
+	if !strings.Contains(exErr.Description, "zone-actual") || !strings.Contains(exErr.Description, "zone-requested") {
+		t.Fatalf("zone_invalid message must name both zones, got %q", exErr.Description)
 	}
 }
 
