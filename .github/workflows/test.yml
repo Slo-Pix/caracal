@@ -59,7 +59,7 @@ permissions:
 
 concurrency:
   group: test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   NODE_VERSION: '24'
@@ -175,6 +175,10 @@ jobs:
             docs=false
             postgres=false
             helm=false
+            # bash case patterns are not pathname-aware: * matches across '/',
+            # so these globs intentionally over-match and err toward running an
+            # extra job rather than skipping a needed one. Detection never
+            # under-triggers; precision is traded for safety.
             while IFS= read -r path; do
               case "$path" in
                 .github/workflows/test.yml|.prettierrc.json|scripts/checkStyle.sh|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|apps/**|packages/engine/**|packages/*/ts/**|packages/connectors/*/ts/**|packages/transport/*/ts/**|tests/typescript/**)
@@ -584,6 +588,7 @@ jobs:
 
   releaseConfig:
     name: Release config drift
+    if: github.repository == 'Garudex-Labs/caracal'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
