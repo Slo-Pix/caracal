@@ -1,11 +1,12 @@
-- Scope: `playbooks/policies/` contains playbooks for authoring and reviewing Caracal policies.
-- Must focus on Rego policy authoring, policy validation, policy versions, policy sets, simulation, and activation.
-- Must use Caracal-compatible Rego examples with `package caracal.authz` and `import rego.v1`.
-- Must use deny-by-default examples with `decision`, `evaluation_status`, `determining_policies`, and `diagnostics`.
-- Must explain that policies decide whether STS can honor a requested resource and scope.
-- Must distinguish policies from grants: grants define available access and policies define runtime conditions.
-- Must keep examples limited to app, resource, scope, subject, session, and delegation checks.
-- Must not claim that a policy creates grants, resources, applications, or tokens by itself.
-- Must not use non-deterministic or side-effecting Rego patterns such as network calls, time, random, or runtime access.
+- Scope: `playbooks/policies/` contains playbooks for authoring and reviewing Caracal policy data documents.
+- Must focus on policy data authoring, validation, policy versions, policy sets, simulation, and activation.
+- Must use Caracal-compatible data documents with `package caracal.authz`, `import rego.v1`, and the `# caracal:data-document` directive.
+- Must teach that the signed, versioned platform decision contract owns every allow and deny decision and that adopters supply only data.
+- Must limit authored data to `app_ids`, `grants`, `confinement`, and `restrict`.
+- Must explain that the platform contract decides whether STS can honor a requested resource and scope from the supplied data.
+- Must distinguish data documents from grants: grants define available access and data documents map applications, roles, scopes, confinement, and restriction.
+- Must keep examples limited to app, resource, scope, role, confinement, and restriction data.
+- Must not author or review a `result` rule, a `default result`, or any decision rule in adopter documents.
+- Must not claim that a data document creates grants, resources, applications, or tokens by itself.
 - Must not include real customer names, credentials, tenant IDs, app IDs, or provider secrets.
 - Must not place SDK integration steps or provider dashboard mapping instructions in this layer.
