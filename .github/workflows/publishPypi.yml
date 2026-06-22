@@ -43,6 +43,26 @@ on:
           - ubuntu-24.04
           - macos-15
           - windows-2022
+  workflow_call:
+    inputs:
+      package:
+        description: 'Packages to publish.'
+        required: true
+        type: string
+      baseRef:
+        description: 'Diff base. Empty uses latest release tag.'
+        required: false
+        default: ''
+        type: string
+      dryRun:
+        description: 'Build only.'
+        required: false
+        default: false
+        type: boolean
+      runner:
+        description: 'Publish runner.'
+        required: true
+        type: string
 permissions:
   contents: read
 

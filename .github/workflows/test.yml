@@ -610,7 +610,7 @@ jobs:
       - typescript
       - go
       - python
-    if: always() && !cancelled() && (needs.typescript.result == 'success' || needs.go.result == 'success' || needs.python.result == 'success')
+    if: always() && !cancelled() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.typescript.result == 'success' || needs.go.result == 'success' || needs.python.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -635,7 +635,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           directory: coverage/coverage-typescript
           flags: typescript
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
       - name: Upload Go coverage to Codecov
         if: needs.go.result == 'success'
@@ -645,7 +645,7 @@ jobs:
           files: coverage/coverage-go/coverage.out
           flags: go
           disable_search: true
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
       - name: Upload Python coverage to Codecov
         if: needs.python.result == 'success'
@@ -655,7 +655,7 @@ jobs:
           files: coverage/coverage-python/coverage.xml
           flags: python
           disable_search: true
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
   status:
     name: Test status

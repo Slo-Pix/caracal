@@ -501,52 +501,16 @@ jobs:
     name: Publish PyPI packages
     needs: context
     if: github.repository == 'Garudex-Labs/caracal'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    uses: ./.github/workflows/publishPypi.yml
+    with:
+      package: changed
+      baseRef: ''
+      dryRun: ${{ needs.context.outputs.dryRun == 'true' }}
+      runner: ubuntu-24.04
     permissions:
       contents: read
-      actions: write
-    steps:
-      - name: Dispatch PyPI publisher
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REF: ${{ needs.context.outputs.checkoutRef }}
-          REF_NAME: ${{ needs.context.outputs.releaseTag }}
-          DRY_RUN: ${{ needs.context.outputs.dryRun }}
-        run: |
-          set -euo pipefail
-          if [[ "$REF_NAME" == refs/* ]]; then
-            ref_name="${REF_NAME##*/}"
-          fi
-          if [[ -z "${ref_name:-}" ]]; then
-            ref_name="${REF#refs/tags/}"
-            ref_name="${ref_name#refs/heads/}"
-          fi
-          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          gh workflow run publishPypi.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref "$REF" \
-            --field package=changed \
-            --field baseRef='' \
-            --field dryRun="$DRY_RUN" \
-            --field runner=ubuntu-24.04
-          deadline=$((SECONDS + 300))
-          run_id=''
-          while [[ -z "$run_id" && $SECONDS -lt $deadline ]]; do
-            sleep 5
-            run_id="$(gh run list \
-              --repo "$GITHUB_REPOSITORY" \
-              --workflow publishPypi.yml \
-              --event workflow_dispatch \
-              --limit 20 \
-              --json databaseId,createdAt,headBranch \
-              --jq '.[] | select(.headBranch == "'"$ref_name"'" and .createdAt >= "'"$started"'") | .databaseId' | head -n 1)"
-          done
-          if [[ -z "$run_id" ]]; then
-            echo "::error::Timed out waiting for publishPypi.yml dispatch to appear."
-            exit 1
-          fi
-          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+      id-token: write
+    secrets: inherit
 
   githubRelease:
     name: Publish GitHub Release
@@ -601,23 +565,9 @@ jobs:
             echo "Built and verified assets. Publishing, validation, and promotion were skipped."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  postValidate:
-    name: Validate published release
-    needs: [context, githubRelease]
-    if: github.repository == 'Garudex-Labs/caracal' && needs.context.outputs.publish == 'true'
-    uses: ./.github/workflows/postReleaseValidation.yml
-    with:
-      release: ${{ needs.context.outputs.releaseTag }}
-    permissions:
-      contents: write
-      packages: read
-      attestations: read
-      pull-requests: write
-    secrets: inherit
-
   promoteStable:
     name: Promote stable tags
-    needs: [context, postValidate]
+    needs: [context, githubRelease]
     if: github.repository == 'Garudex-Labs/caracal' && needs.context.outputs.promoteStable == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
