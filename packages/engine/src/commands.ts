@@ -3,54 +3,67 @@
 //
 // Canonical command catalog shared by Caracal runtime, console management, and Control automation surfaces.
 
-export type CommandGroup =
-  | 'stack'
-  | 'runtime'
-  | 'admin'
-  | 'observability'
-  | 'multiagent';
+export type CommandGroup = 'stack' | 'runtime' | 'admin' | 'observability' | 'multiagent'
 
 export interface FlagDescriptor {
-  readonly name: string;
-  readonly summary: string;
+  readonly name: string
+  readonly summary: string
 }
 
-export type ScopeVerb = 'read' | 'write' | 'delete';
+export type ScopeVerb = 'read' | 'write' | 'delete'
 
 export interface CommandDescriptor {
-  readonly name: string;
-  readonly group: CommandGroup;
-  readonly summary: string;
-  readonly subcommands?: readonly string[];
-  readonly requiresConfig?: boolean;
-  readonly requiresArgs?: boolean;
-  readonly requiresZone?: boolean;
-  readonly hidden?: boolean;
-  readonly localOnly?: boolean;
+  readonly name: string
+  readonly group: CommandGroup
+  readonly summary: string
+  readonly subcommands?: readonly string[]
+  readonly requiresConfig?: boolean
+  readonly requiresArgs?: boolean
+  readonly requiresZone?: boolean
+  readonly hidden?: boolean
+  readonly localOnly?: boolean
+  /**
+   * Command performs its own per-object scope checks instead of carrying a single static scope.
+   * The declarative surface (state, ensure) asserts each touched noun's scope at runtime, so a
+   * key already holding control:resource:write can apply resources without a separate state scope.
+   */
+  readonly delegatesScope?: boolean
   /** Flags keyed by subcommand name; use '' for commands with no subcommands. */
-  readonly flags?: { readonly [k: string]: readonly FlagDescriptor[] | undefined };
+  readonly flags?: { readonly [k: string]: readonly FlagDescriptor[] | undefined }
   /** Required scope verb per subcommand. Used by the Control API to gate per-resource access. */
-  readonly scopes?: { readonly [k: string]: ScopeVerb | undefined };
+  readonly scopes?: { readonly [k: string]: ScopeVerb | undefined }
 }
 
 const READ_VERBS = new Set([
-  'list', 'get', 'tree', 'tail', 'active', 'inbound', 'outbound', 'traverse', 'read', 'inspect', 'use', 'validate', 'simulate',
-]);
+  'list',
+  'get',
+  'tree',
+  'tail',
+  'active',
+  'inbound',
+  'outbound',
+  'traverse',
+  'read',
+  'inspect',
+  'use',
+  'validate',
+  'simulate',
+])
 
-const DELETE_VERBS = new Set(['delete', 'terminate', 'revoke', 'purge']);
+const DELETE_VERBS = new Set(['delete', 'terminate', 'revoke', 'purge'])
 
 /** Derive a default scope verb for a subcommand using verb conventions. Explicit `scopes` map wins. */
 export function scopeFor(desc: CommandDescriptor, sub: string): ScopeVerb {
-  const explicit = desc.scopes?.[sub];
-  if (explicit) return explicit;
-  if (READ_VERBS.has(sub)) return 'read';
-  if (DELETE_VERBS.has(sub)) return 'delete';
-  return 'write';
+  const explicit = desc.scopes?.[sub]
+  if (explicit) return explicit
+  if (READ_VERBS.has(sub)) return 'read'
+  if (DELETE_VERBS.has(sub)) return 'delete'
+  return 'write'
 }
 
 /** Format the full scope string a token must carry for the (command, subcommand) pair. */
 export function scopeName(desc: CommandDescriptor, sub: string): string {
-  return `control:${desc.name}:${scopeFor(desc, sub)}`;
+  return `control:${desc.name}:${scopeFor(desc, sub)}`
 }
 
 export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
@@ -78,14 +91,18 @@ export const SHELL_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     group: 'stack',
     summary: 'Migrate and roll the stack onto this version with no maintenance window',
     flags: {
-      '': [
-        { name: '--no-pull', summary: 'Reuse local images instead of pulling the pinned release' },
-      ],
+      '': [{ name: '--no-pull', summary: 'Reuse local images instead of pulling the pinned release' }],
     },
   },
-  { name: 'run', group: 'runtime', summary: 'Run a command with just-in-time injected credentials', requiresConfig: true, requiresArgs: true },
+  {
+    name: 'run',
+    group: 'runtime',
+    summary: 'Run a command with just-in-time injected credentials',
+    requiresConfig: true,
+    requiresArgs: true,
+  },
   { name: 'console', group: 'runtime', summary: 'Launch the Caracal Console' },
-]);
+])
 
 export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   {
@@ -117,7 +134,9 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     scopes: { validate: 'read' },
   },
   {
-    name: 'zone', group: 'admin', summary: 'Manage zones',
+    name: 'zone',
+    group: 'admin',
+    summary: 'Manage zones',
     subcommands: ['use', 'list', 'get', 'create', 'patch', 'delete'],
     flags: {
       create: [
@@ -135,12 +154,13 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'app', group: 'admin', summary: 'Manage applications', requiresZone: true,
+    name: 'app',
+    group: 'admin',
+    summary: 'Manage applications',
+    requiresZone: true,
     subcommands: ['list', 'get', 'create', 'patch', 'delete', 'dcr'],
     flags: {
-      create: [
-        { name: '--name', summary: 'Application name' },
-      ],
+      create: [{ name: '--name', summary: 'Application name' }],
       patch: [
         { name: '--name', summary: 'Application name' },
         { name: '--client-secret', summary: 'Client secret' },
@@ -153,8 +173,11 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'resource', group: 'admin', summary: 'Manage protected resources',
-    subcommands: ['list', 'get', 'create', 'patch', 'delete'], requiresZone: true,
+    name: 'resource',
+    group: 'admin',
+    summary: 'Manage protected resources',
+    subcommands: ['list', 'get', 'create', 'patch', 'delete'],
+    requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Resource name' },
@@ -176,27 +199,39 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'identity-provider', group: 'admin', summary: 'Manage identity providers',
-    subcommands: ['list', 'get', 'create', 'patch', 'delete'], requiresZone: true,
+    name: 'identity-provider',
+    group: 'admin',
+    summary: 'Manage identity providers',
+    subcommands: ['list', 'get', 'create', 'patch', 'delete'],
+    requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Provider name' },
         { name: '--identifier', summary: 'Provider identifier' },
-        { name: '--kind', summary: 'Provider kind (caracal_mandate, oauth2_authorization_code, oauth2_client_credentials, api_key, bearer_token)' },
+        {
+          name: '--kind',
+          summary: 'Provider kind (caracal_mandate, oauth2_authorization_code, oauth2_client_credentials, api_key, bearer_token)',
+        },
         { name: '--config', summary: 'Inline config JSON' },
       ],
       patch: [
         { name: '--identifier', summary: 'Provider identifier' },
         { name: '--name', summary: 'Provider name' },
-        { name: '--kind', summary: 'Provider kind (caracal_mandate, oauth2_authorization_code, oauth2_client_credentials, api_key, bearer_token)' },
+        {
+          name: '--kind',
+          summary: 'Provider kind (caracal_mandate, oauth2_authorization_code, oauth2_client_credentials, api_key, bearer_token)',
+        },
         { name: '--config', summary: 'Inline config JSON' },
       ],
     },
   },
 
   {
-    name: 'policy', group: 'admin', summary: 'Manage policies',
-    subcommands: ['list', 'get', 'create', 'validate', 'version', 'delete'], requiresZone: true,
+    name: 'policy',
+    group: 'admin',
+    summary: 'Manage policies',
+    subcommands: ['list', 'get', 'create', 'validate', 'version', 'delete'],
+    requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Policy name' },
@@ -222,16 +257,17 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'policy-set', group: 'admin', summary: 'Manage policy sets',
-    subcommands: ['list', 'get', 'create', 'version', 'activate', 'simulate', 'delete'], requiresZone: true,
+    name: 'policy-set',
+    group: 'admin',
+    summary: 'Manage policy sets',
+    subcommands: ['list', 'get', 'create', 'version', 'activate', 'simulate', 'delete'],
+    requiresZone: true,
     flags: {
       create: [
         { name: '--name', summary: 'Policy set name' },
         { name: '--description', summary: 'Description' },
       ],
-      version: [
-        { name: '--policy-versions', summary: 'Comma-separated policy version IDs' },
-      ],
+      version: [{ name: '--policy-versions', summary: 'Comma-separated policy version IDs' }],
       activate: [
         { name: '--version', summary: 'Policy set version ID' },
         { name: '--shadow', summary: 'Shadow policy set version ID' },
@@ -245,8 +281,61 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'session', group: 'admin', summary: 'List authority sessions',
-    subcommands: ['list'], requiresZone: true,
+    name: 'state',
+    group: 'admin',
+    summary: 'Reconcile a zone toward a declarative desired-state document',
+    subcommands: ['apply', 'plan', 'verify'],
+    requiresZone: true,
+    delegatesScope: true,
+    flags: {
+      apply: [
+        { name: '--document', summary: 'Desired-state JSON: { objects: [{ kind, spec }], prune? }' },
+        { name: '--prune', summary: 'Delete managed objects of declared kinds absent from the document' },
+        { name: '--dry-run', summary: 'Compute the plan without writing' },
+        { name: '--idempotency-key', summary: 'Caller correlation key recorded in the audit trail' },
+      ],
+      plan: [
+        { name: '--document', summary: 'Desired-state JSON to diff against the live zone' },
+        { name: '--prune', summary: 'Include prune actions in the plan' },
+      ],
+      verify: [
+        { name: '--document', summary: 'Desired-state JSON to compare against the live zone' },
+        { name: '--prune', summary: 'Treat managed objects absent from the document as drift' },
+      ],
+    },
+  },
+
+  {
+    name: 'ensure',
+    group: 'admin',
+    summary: 'Idempotently create-or-patch one object to match a spec',
+    subcommands: ['application', 'identity-provider', 'resource', 'policy', 'policy-set'],
+    requiresZone: true,
+    delegatesScope: true,
+    flags: {
+      application: [
+        { name: '--spec', summary: 'Object spec JSON keyed by its stable identity field' },
+        { name: '--dry-run', summary: 'Compute the plan without writing' },
+        { name: '--idempotency-key', summary: 'Caller correlation key recorded in the audit trail' },
+      ],
+    },
+  },
+
+  {
+    name: 'catalog',
+    group: 'admin',
+    summary: 'Describe the Control surface: commands, scopes, flags, and declarative kinds',
+    subcommands: ['describe'],
+    requiresZone: true,
+    delegatesScope: true,
+  },
+
+  {
+    name: 'session',
+    group: 'admin',
+    summary: 'List authority sessions',
+    subcommands: ['list'],
+    requiresZone: true,
     flags: {
       list: [
         { name: '--subject', summary: 'Filter by subject ID' },
@@ -257,8 +346,11 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
   },
 
   {
-    name: 'audit', group: 'observability', summary: 'Search audit events',
-    subcommands: ['tail'], requiresZone: true,
+    name: 'audit',
+    group: 'observability',
+    summary: 'Search audit events',
+    subcommands: ['tail'],
+    requiresZone: true,
     flags: {
       tail: [
         { name: '--since', summary: 'Start of time window' },
@@ -303,11 +395,25 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     scopes: { request: 'read' },
   },
 
-  { name: 'agent', group: 'multiagent', summary: 'Manage agent sessions', subcommands: ['list', 'get', 'tree', 'suspend', 'resume', 'terminate'], requiresZone: true },
-  { name: 'delegation', group: 'multiagent', summary: 'Manage delegation edges', subcommands: ['active', 'inbound', 'outbound', 'traverse', 'revoke'], requiresZone: true },
+  {
+    name: 'agent',
+    group: 'multiagent',
+    summary: 'Manage agent sessions',
+    subcommands: ['list', 'get', 'tree', 'suspend', 'resume', 'terminate'],
+    requiresZone: true,
+  },
+  {
+    name: 'delegation',
+    group: 'multiagent',
+    summary: 'Manage delegation edges',
+    subcommands: ['active', 'inbound', 'outbound', 'traverse', 'revoke'],
+    requiresZone: true,
+  },
 
   {
-    name: 'control', group: 'admin', summary: 'Manage the optional in-process API control plane',
+    name: 'control',
+    group: 'admin',
+    summary: 'Manage the optional in-process API control plane',
     subcommands: ['enable', 'disable', 'status', 'key', 'rotate', 'revoke'],
     localOnly: true,
     flags: {
@@ -319,14 +425,17 @@ export const MANAGEMENT_COMMANDS: readonly CommandDescriptor[] = Object.freeze([
     },
   },
 
-  { name: 'completion', group: 'runtime', summary: 'Generate shell completions', subcommands: ['bash', 'zsh', 'fish', 'powershell'], hidden: true },
-]);
+  {
+    name: 'completion',
+    group: 'runtime',
+    summary: 'Generate shell completions',
+    subcommands: ['bash', 'zsh', 'fish', 'powershell'],
+    hidden: true,
+  },
+])
 
-export function findCommand(
-  table: readonly CommandDescriptor[],
-  name: string,
-): CommandDescriptor | undefined {
-  return table.find((c) => c.name === name);
+export function findCommand(table: readonly CommandDescriptor[], name: string): CommandDescriptor | undefined {
+  return table.find((c) => c.name === name)
 }
 
-export const COMMAND_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+export const COMMAND_NAME_PATTERN = /^[a-z][a-z0-9-]{0,31}$/
