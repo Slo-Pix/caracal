@@ -1,5 +1,5 @@
 ---
-description: "Use when verifying available Caracal policy input fields, schemas, sample inputs, or existing policy assumptions before policy authoring."
+description: "Use when verifying available Caracal policy input fields, schemas, sample inputs, or existing policy assumptions before data authoring."
 tools: [read, search, web]
 ---
 # Input Verifier Agent
