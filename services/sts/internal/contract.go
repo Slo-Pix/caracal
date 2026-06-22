@@ -6,8 +6,8 @@
 package internal
 
 import (
-	_ "embed"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"fmt"
 
