@@ -272,9 +272,12 @@ mobile-starlight-toc nav {
 }
 
 table {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
   border: 1px solid var(--sl-color-hairline);
   border-radius: 6px;
-  overflow: hidden;
 }
 
 th {
