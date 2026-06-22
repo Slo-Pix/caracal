@@ -226,6 +226,7 @@ func (s *Server) handleJWKS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, must-revalidate", jwksCacheMaxAge))
 	_, _ = w.Write(data)
 }

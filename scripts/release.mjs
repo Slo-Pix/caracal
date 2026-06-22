@@ -290,6 +290,13 @@ function writeManifest(manifest) {
   return path
 }
 
+function writeReleaseRecord(manifest) {
+  execFileSync('node', ['scripts/generateReleaseRecord.mjs', manifestPath(manifest)], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  })
+}
+
 function nextStableTag() {
   const today = currentCalVer()
   const prefix = `v${today}`
@@ -398,7 +405,9 @@ function stable(options) {
     return
   }
   if (pending > 0) execFileSync('pnpm', ['changeset', 'version'], { cwd: repoRoot, stdio: 'inherit' })
-  writeStableManifest(makeStableManifest(version, tag))
+  const releaseManifest = makeStableManifest(version, tag)
+  writeStableManifest(releaseManifest)
+  writeReleaseRecord(releaseManifest)
   execFileSync('git', ['add', '-A'], { cwd: repoRoot, stdio: 'inherit' })
   try {
     execFileSync('git', ['diff', '--cached', '--quiet'], { cwd: repoRoot, stdio: 'ignore' })
@@ -471,6 +480,7 @@ function prepare(options) {
   if (dirtyTree() && !options.flags.has('allow-dirty')) die('dirty tree; commit/stash or pass --allow-dirty')
   const manifest = makeManifest(options.values)
   const path = writeManifest(manifest)
+  writeReleaseRecord(manifest)
   for (const pkgPath of npmPaths) rewritePackageJson(join(repoRoot, pkgPath, 'package.json'), manifest.npm)
   for (const pyPath of pyPaths) rewritePyproject(join(repoRoot, pyPath, 'pyproject.toml'), manifest.pypi)
   rewriteHelm(manifest)
@@ -563,8 +573,6 @@ function simulateWorkflow(manifest) {
   say(`  githubRelease`)
   say(`    prerelease: ${manifest.release}`)
   say('    attach archives, manifest, sums, installers')
-  say(`  postValidate`)
-  say(`    release=${manifest.release}`)
   say(`  promoteStable`)
   say('    skipped for rc')
   say()
@@ -653,6 +661,7 @@ function promote(options) {
     },
   }
   const outPath = writeManifest(manifest)
+  writeReleaseRecord(manifest)
   say(`promoted: ${fromTag} -> ${stableTag}`)
   say(outPath)
   say('next: retag images via CI, then push tag')
