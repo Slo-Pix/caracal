@@ -42,17 +42,14 @@ Read the full documentation at [docs.caracal.run](https://docs.caracal.run).
 
 - Docker Desktop 4.x or Docker Engine 24+ with Compose v2
 - Git 2.x
-- GitHub CLI `gh` for installer provenance verification
 
 ### Install
 
 The installer provides the thin `caracal` runtime CLI and the `caracal-console` management interface.
 
-> Version examples below pin `v2026.06.21`. Check [GitHub Releases](https://github.com/Garudex-Labs/caracal/releases) for the latest available tag. Unpinned installs follow GitHub's latest stable release.
+> Check [GitHub Releases](https://github.com/Garudex-Labs/caracal/releases) for the latest available tag.
+
 > Pin a version: `--version vYYYY.MM.DD` on Unix or `-Version vYYYY.MM.DD` in PowerShell.  
-> Change install directory: `--install-dir /path` on Unix or `-InstallDir C:\path` in PowerShell. Unix installers also honor `PREFIX`/`CARACAL_PREFIX` and `DESTDIR` for staged installs.
-> Uninstall: rerun the installer with `--uninstall` on Unix or `-Uninstall` in PowerShell.
-> Provenance verification is required by default.
 
 <details>
 <summary><strong>Linux</strong> (amd64 / arm64)</summary>
@@ -62,8 +59,6 @@ The installer provides the thin `caracal` runtime CLI and the `caracal-console` 
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
   sh -s -- --version v2026.06.21
 ```
-
-Installs to `~/.local/bin` and verifies release provenance by default. Override with `--install-dir /usr/local/bin` (may need `sudo`) or use packaging-style roots such as `PREFIX=/usr DESTDIR=/tmp/pkg`.
 
 </details>
 
@@ -75,8 +70,6 @@ Installs to `~/.local/bin` and verifies release provenance by default. Override 
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-console.sh | \
   sh -s -- --version v2026.06.21
 ```
-
-If Gatekeeper blocks the binary: `xattr -d com.apple.quarantine ~/.local/bin/caracal`.
 
 </details>
 
@@ -90,8 +83,6 @@ iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install-co
 powershell -ExecutionPolicy Bypass -File $installer -Version v2026.06.21
 ```
 
-Installs to `%LOCALAPPDATA%\Programs\caracal` and verifies release provenance by default. Remove installed binaries and the user `Path` entry with `-Uninstall`. Requires Docker Desktop with WSL2.
-
 </details>
 
 ### Start the stack
@@ -99,34 +90,21 @@ Installs to `%LOCALAPPDATA%\Programs\caracal` and verifies release provenance by
 ```bash
 caracal up                            # start all services, override with `CARACAL_VERSION=vYYYY.MM.DD caracal up`
 caracal status [--ready]              # probe all services
+
 caracal down                          # stop; add -v to remove volumes
 caracal purge                         # interactive cleanup (containers, volumes, config, runtime, examples, caches)
+
 caracal console                       # launch Console
 caracal run -- node worker.js         # workload execution
 ```
 
 </details>
 
-<pr></pr>
+-----
 
-<details>
-<summary><strong>Contributors</strong></summary>
+## Contributing
 
-### Prerequisites
-
-- Node.js 24+
-- pnpm 11.1.1
-- Docker Engine 24+ with Compose v2 (or Docker Desktop 4.x)
-- Git 2.x
-- Go 1.26+ (only when changing Go services or shared Go packages)
-- Python 3.14+ (only when changing Python packages)
-- Bun (only when building distributable runtime/console binaries)
-
-Run `pnpm install` after cloning for the standard Node workspace setup. Run `pnpm run setup` when you need the full cross-platform developer environment with Go modules, Python test/style tooling, and editable Python packages.
-
-See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for clone, setup, testing, and pull request workflow.
-
-</details>
+See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
 
 -----
 
@@ -167,15 +145,11 @@ See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for clone, setup, testing, and 
 
 -----
 
-## Contributing
-
-See [CONTRIBUTING.md](./.github/CONTRIBUTING.md) for setup, workflow, tests, and pull request standards.
-
------
-
 ## Security & Trust
 
-See the [Enterprise Security Readiness](https://docs.caracal.run/security/enterprise-readiness/) guide for the security posture, supply-chain controls, release signing, SBOMs, and the enterprise-adoption review checklist. Report vulnerabilities privately through [SECURITY.md](./.github/SECURITY.md).
+See the [Enterprise Security Readiness](https://docs.caracal.run/security/enterprise-readiness) guide for the security posture, supply-chain controls, release signing, SBOMs, and the enterprise-adoption review checklist. 
+
+Report vulnerabilities privately through [SECURITY.md](./.github/SECURITY.md).
 
 -----
 
