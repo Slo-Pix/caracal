@@ -1,5 +1,5 @@
 ---
-description: "Use when updating an existing Caracal Rego policy while preserving current behavior and making the smallest safe change."
+description: "Use when updating an existing Caracal policy data document while preserving current behavior and making the smallest safe change."
 ---
 # Existing Policy Update
 
@@ -10,4 +10,4 @@ description: "Use when updating an existing Caracal Rego policy while preserving
 - Make the smallest focused change.
 - Provide simulation cases for unchanged behavior, newly allowed behavior, and newly denied behavior.
 
-Preserve the Caracal result contract and deny-by-default behavior.
+Preserve the data document shape; the platform decision contract denies by default.

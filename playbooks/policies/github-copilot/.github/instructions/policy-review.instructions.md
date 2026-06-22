@@ -1,11 +1,11 @@
 ---
-description: "Use when reviewing Caracal Rego policies for decision contract compliance, deny-by-default behavior, least privilege, deterministic logic, and activation readiness."
+description: "Use when reviewing Caracal policy data documents for data document shape, platform decision contract alignment, least privilege, deterministic data, and activation readiness."
 ---
 # Policy Review
 
 - Verify `package caracal.authz` and `import rego.v1`.
-- Verify deny-by-default behavior.
-- Verify the result contract includes `decision`, `evaluation_status`, `determining_policies`, and `diagnostics`.
+- Verify the platform decision contract denies by default and that data only grants or narrows.
+- Verify the document defines only `app_ids`, `grants`, `confinement`, or `restrict` and never a `result` rule.
 - Check resource and scope conditions for least privilege.
 - Check actor, subject, session, grant, and delegation conditions.
 - Identify undocumented input fields.
