@@ -1,6 +1,6 @@
 ---
 name: existing-policy-update
-description: Use to update an existing Caracal Rego policy while preserving current behavior and making the smallest safe change.
+description: Use to update an existing Caracal policy data document while preserving current behavior and making the smallest safe change.
 ---
 # Existing Policy Update
 
@@ -13,4 +13,4 @@ description: Use to update an existing Caracal Rego policy while preserving curr
 5. Make the smallest focused change.
 6. Provide simulation cases for unchanged behavior, newly allowed behavior, and newly denied behavior.
 
-Preserve the Caracal result contract and deny-by-default behavior.
+Preserve the data document shape; the platform decision contract denies by default.
