@@ -281,21 +281,56 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 
 	challengeResolved := false
 	if req.ChallengeID != "" || req.ChallengeResponse != "" {
-		if ok, _ := s.stepUpThrottle.Allow(zoneID, principalID); !ok {
-			if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "challenge_cooldown", &OPAResult{}, appMeta); auditErr != nil {
-				return nil, nil, http.StatusInternalServerError, auditErr
+		var approval *StepUpChallengePG
+		if req.ChallengeID != "" {
+			if existing, lookupErr := s.db.GetStepUpChallenge(ctx, req.ChallengeID); lookupErr == nil && existing.ChallengeType == humanApprovalChallengeType {
+				approval = existing
 			}
-			return nil, nil, http.StatusTooManyRequests, sharederr.New(sharederr.AccessDenied, "too many failed step-up attempts; try again later")
 		}
-		if cerr := s.verifyAndConsumeChallenge(ctx, zoneID, principalID, req.ChallengeID, req.ChallengeResponse, req.Resources); cerr != nil {
-			s.stepUpThrottle.RecordFailure(zoneID, principalID)
-			if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "challenge_invalid", &OPAResult{}, appMeta); auditErr != nil {
-				return nil, nil, http.StatusInternalServerError, auditErr
+		if approval != nil {
+			// Async human approval: satisfied out-of-band by a named approver, so it
+			// carries no secret and never feeds the brute-force throttle.
+			if approval.ConsumedAt != nil {
+				if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "approval_already_consumed", &OPAResult{}, appMeta); auditErr != nil {
+					return nil, nil, http.StatusInternalServerError, auditErr
+				}
+				return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "approval already used")
 			}
-			return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "challenge not satisfied or expired")
+			if approval.SatisfiedAt == nil {
+				// Still pending: re-surface the same challenge so a premature retry
+				// waits on the approver rather than failing.
+				return nil, &challengeState{
+					ID:            approval.ID,
+					ZoneID:        approval.ZoneID,
+					SessionID:     approval.SessionID,
+					ChallengeType: approval.ChallengeType,
+					ExpiresAt:     approval.ExpiresAt,
+				}, http.StatusUnauthorized, nil
+			}
+			if cerr := s.verifyAndConsumeApproval(ctx, zoneID, principalID, req.ChallengeID, req.Resources, strings.Fields(req.Scope)); cerr != nil {
+				if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "approval_invalid", &OPAResult{}, appMeta); auditErr != nil {
+					return nil, nil, http.StatusInternalServerError, auditErr
+				}
+				return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "approval not satisfied or expired")
+			}
+			challengeResolved = true
+		} else {
+			if ok, _ := s.stepUpThrottle.Allow(zoneID, principalID); !ok {
+				if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "challenge_cooldown", &OPAResult{}, appMeta); auditErr != nil {
+					return nil, nil, http.StatusInternalServerError, auditErr
+				}
+				return nil, nil, http.StatusTooManyRequests, sharederr.New(sharederr.AccessDenied, "too many failed step-up attempts; try again later")
+			}
+			if cerr := s.verifyAndConsumeChallenge(ctx, zoneID, principalID, req.ChallengeID, req.ChallengeResponse, req.Resources); cerr != nil {
+				s.stepUpThrottle.RecordFailure(zoneID, principalID)
+				if auditErr := s.emitAuditEvent(requestID, zoneID, "deny", "challenge_invalid", &OPAResult{}, appMeta); auditErr != nil {
+					return nil, nil, http.StatusInternalServerError, auditErr
+				}
+				return nil, nil, http.StatusUnauthorized, sharederr.New(sharederr.AccessDenied, "challenge not satisfied or expired")
+			}
+			s.stepUpThrottle.RecordSuccess(zoneID, principalID)
+			challengeResolved = true
 		}
-		s.stepUpThrottle.RecordSuccess(zoneID, principalID)
-		challengeResolved = true
 	}
 	delegation, agentSession, refErr := s.validateSessionReferences(ctx, zoneID, app.ID, req, subjectClaims != nil)
 	if refErr != nil {
@@ -513,7 +548,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 	}
 
 	if !challengeResolved && stepUpType != "" {
-		c, cErr := s.createChallenge(ctx, zoneID, req.SessionID, principalID, stepUpType, req.Resources)
+		c, cErr := s.createChallenge(ctx, zoneID, req.SessionID, principalID, stepUpType, req.Resources, scopes)
 		if cErr != nil {
 			return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "challenge creation failed")
 		}

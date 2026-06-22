@@ -22,6 +22,18 @@ allow_result(policy) := {
 	"diagnostics": [],
 }
 
+# A mint allow that may carry an approval gate. When the requested scopes touch an
+# approval-gated scope the decision stays allow but names a human-approval step-up, so
+# STS holds the mandate behind a durable approval an authenticated approver must
+# satisfy before it is minted. Without a gate the diagnostics are empty and the mint
+# proceeds unchanged.
+mint_allow(policy) := {
+	"decision": "allow",
+	"evaluation_status": "complete",
+	"determining_policies": [{"policy": policy}],
+	"diagnostics": approval_diagnostics,
+}
+
 # Adopter data. grants and app_ids resolve to undefined when a zone omits them, which
 # collapses every allow rule to the default deny: a zone with no data authorizes
 # nothing. The contract reads these documents; adopters never author the rules below.
@@ -132,6 +144,24 @@ restriction_denied if {
 	some _ in data.caracal.authz.restrict
 }
 
+# Approval gating. An adopter may publish approval rules pairing a scope with a
+# human-approval requirement. A requested mint whose scopes touch a gated scope is
+# authorized but marked step-up required, so STS holds the mandate behind a durable
+# approval an authenticated approver must satisfy before it is minted. Like
+# restrictions, an approval rule can only add a gate, never widen authority.
+default approval_list := []
+
+approval_list := data.caracal.authz.approval
+
+approval_required if {
+	some rule in approval_list
+	rule.scope in input.context.requested_scopes
+}
+
+default approval_diagnostics := []
+
+approval_diagnostics := [{"step_up_required": "human_approval"}] if approval_required
+
 # An application minting its session lifecycle mandate.
 result := allow_result("caracal-bootstrap") if {
 	bootstrap_exchange
@@ -141,7 +171,7 @@ result := allow_result("caracal-bootstrap") if {
 
 # A spawned agent minting a resource mandate, narrowed by its delegation edge, confined
 # by its labels, and bound to a role its grants allow.
-result := allow_result(sprintf("caracal-%s-mint", [principal_app])) if {
+result := mint_allow(sprintf("caracal-%s-mint", [principal_app])) if {
 	principal_owns_resource
 	delegated_mint
 	mint_role_allowed

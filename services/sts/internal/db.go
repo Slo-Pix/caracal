@@ -69,6 +69,8 @@ type DBQuerier interface {
 	InsertStepUpChallenge(ctx context.Context, c *StepUpChallengePG) error
 	SatisfyStepUpChallenge(ctx context.Context, id string) error
 	ConsumeStepUpChallenge(ctx context.Context, p ConsumeStepUpParams) error
+	ApproveStepUpChallenge(ctx context.Context, id, zoneID, approverSubjectID string) error
+	ConsumeApprovalChallenge(ctx context.Context, p ConsumeApprovalParams) error
 	EnsureZoneSigningKeySecret(ctx context.Context, zoneID string, ciphertext, nonce []byte) (*SecretRow, error)
 	InsertZoneSigningKeySecret(ctx context.Context, zoneID string, ciphertext, nonce []byte) (*SecretRow, error)
 	GetZoneSigningKeySecret(ctx context.Context, zoneID string) (*SecretRow, error)
@@ -407,6 +409,20 @@ type StepUpChallengePG struct {
 	ExpiresAt           time.Time
 	SatisfiedAt         *time.Time
 	ConsumedAt          *time.Time
+	ApproverSubjectID   *string
+	MetadataJSON        []byte
+}
+
+// ConsumeApprovalParams holds the bindings the caller must present to consume a
+// human-approval challenge. A human approval carries no client secret: its proof is an
+// authenticated approver having satisfied it, so consumption binds on zone, principal,
+// and the request hash rather than a returned secret.
+type ConsumeApprovalParams struct {
+	ID              string
+	ZoneID          string
+	PrincipalID     string
+	ResourceSetHash []byte
+	Now             time.Time
 }
 
 // ConsumeStepUpParams holds the bindings the caller must present to consume a challenge.
@@ -420,13 +436,17 @@ type ConsumeStepUpParams struct {
 }
 
 func (d *DB) InsertStepUpChallenge(ctx context.Context, c *StepUpChallengePG) error {
+	metadata := c.MetadataJSON
+	if len(metadata) == 0 {
+		metadata = []byte("{}")
+	}
 	_, err := d.pool.Exec(ctx,
 		`INSERT INTO step_up_challenges
 		   (id, zone_id, session_id, challenge_type, challenge_secret_hash,
-		    principal_id, resource_set_hash, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		    principal_id, resource_set_hash, expires_at, metadata_json)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		c.ID, c.ZoneID, c.SessionID, c.ChallengeType,
-		c.ChallengeSecretHash, c.PrincipalID, c.ResourceSetHash, c.ExpiresAt,
+		c.ChallengeSecretHash, c.PrincipalID, c.ResourceSetHash, c.ExpiresAt, metadata,
 	)
 	return err
 }
@@ -436,6 +456,33 @@ func (d *DB) SatisfyStepUpChallenge(ctx context.Context, id string) error {
 		`UPDATE step_up_challenges SET satisfied_at = now() WHERE id = $1`, id,
 	)
 	return err
+}
+
+// ApproveStepUpChallenge records an authenticated approver satisfying a pending
+// human-approval challenge. It is the async counterpart to a returned step-up secret:
+// instead of the caller echoing a proof, a named approver satisfies the challenge
+// out-of-band. The update only lands on a live, unsatisfied, unconsumed human-approval
+// challenge in the named zone, so an mfa challenge, an expired one, or a replay cannot
+// be approved. Returns ErrChallengeInvalid when no such challenge exists.
+func (d *DB) ApproveStepUpChallenge(ctx context.Context, id, zoneID, approverSubjectID string) error {
+	tag, err := d.pool.Exec(ctx,
+		`UPDATE step_up_challenges
+		 SET satisfied_at = now(), approver_subject_id = $3
+		 WHERE id = $1
+		   AND zone_id = $2
+		   AND challenge_type = 'human_approval'
+		   AND satisfied_at IS NULL
+		   AND consumed_at IS NULL
+		   AND expires_at > now()`,
+		id, zoneID, approverSubjectID,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrChallengeInvalid
+	}
+	return nil
 }
 
 // ConsumeStepUpChallenge atomically transitions a challenge to consumed state, but only
@@ -472,14 +519,46 @@ func (d *DB) ConsumeStepUpChallenge(ctx context.Context, p ConsumeStepUpParams) 
 	return nil
 }
 
+// ConsumeApprovalChallenge atomically transitions a human-approval challenge to
+// consumed, but only when every binding matches: zone, principal, request hash, an
+// approver having satisfied it, not yet expired, not yet consumed, and the originating
+// session still active. A human approval carries no client secret, so consumption
+// proves an authenticated approver satisfied this exact request rather than a returned
+// proof. Returns ErrChallengeInvalid otherwise.
+func (d *DB) ConsumeApprovalChallenge(ctx context.Context, p ConsumeApprovalParams) error {
+	tag, err := d.pool.Exec(ctx,
+		`UPDATE step_up_challenges c
+		 SET consumed_at = now()
+		 WHERE c.id = $1
+		   AND c.zone_id = $2
+		   AND c.principal_id = $3
+		   AND c.resource_set_hash = $4
+		   AND c.challenge_type = 'human_approval'
+		   AND c.satisfied_at IS NOT NULL
+		   AND c.approver_subject_id IS NOT NULL
+		   AND c.consumed_at IS NULL
+		   AND c.expires_at > now()`,
+		p.ID, p.ZoneID, p.PrincipalID, p.ResourceSetHash,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrChallengeInvalid
+	}
+	return nil
+}
+
 func (d *DB) GetStepUpChallenge(ctx context.Context, id string) (*StepUpChallengePG, error) {
 	var c StepUpChallengePG
 	err := d.pool.QueryRow(ctx,
 		`SELECT id, zone_id, session_id, challenge_type, challenge_secret_hash,
-		        principal_id, resource_set_hash, expires_at, satisfied_at, consumed_at
+		        principal_id, resource_set_hash, expires_at, satisfied_at, consumed_at,
+		        approver_subject_id, metadata_json
 		 FROM step_up_challenges WHERE id = $1`, id,
 	).Scan(&c.ID, &c.ZoneID, &c.SessionID, &c.ChallengeType, &c.ChallengeSecretHash,
-		&c.PrincipalID, &c.ResourceSetHash, &c.ExpiresAt, &c.SatisfiedAt, &c.ConsumedAt)
+		&c.PrincipalID, &c.ResourceSetHash, &c.ExpiresAt, &c.SatisfiedAt, &c.ConsumedAt,
+		&c.ApproverSubjectID, &c.MetadataJSON)
 	if err != nil {
 		return nil, err
 	}
