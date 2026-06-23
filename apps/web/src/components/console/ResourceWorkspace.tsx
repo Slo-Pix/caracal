@@ -74,11 +74,12 @@ export function ResourceWorkspace<T>({
   const [sortChoice, setSortChoice] = useState(sortOptions?.[0]?.id ?? "");
   const [sort, setSort] = useState<SortState | undefined>(initialSort);
   const [page, setPage] = useState(1);
+  const [pageSizeValue, setPageSizeValue] = useState(pageSize);
   const [selected, setSelected] = useState<T | null>(null);
 
   useEffect(() => {
     setPage(1);
-  }, [query, sortChoice, sort]);
+  }, [query, sortChoice, sort, pageSizeValue]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return rows;
@@ -86,8 +87,8 @@ export function ResourceWorkspace<T>({
   }, [rows, query, search]);
 
   const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
+    () => filtered.slice((page - 1) * pageSizeValue, page * pageSizeValue),
+    [filtered, page, pageSizeValue],
   );
 
   function toggleSort(column: string) {
@@ -144,6 +145,7 @@ export function ResourceWorkspace<T>({
         rows={paged}
         rowKey={rowKey}
         loading={loading}
+        skeletonRows={pageSizeValue}
         sort={sort}
         onSortChange={toggleSort}
         onRowClick={detail ? (row) => setSelected(row) : undefined}
@@ -164,9 +166,10 @@ export function ResourceWorkspace<T>({
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           <Pagination
             page={page}
-            pageSize={pageSize}
+            pageSize={pageSizeValue}
             total={filtered.length}
             onPageChange={setPage}
+            onPageSizeChange={setPageSizeValue}
           />
         </div>
       ) : null}

@@ -68,6 +68,7 @@ function ZonesPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>({ column: "name", direction: "asc" });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Zone | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Zone | null>(null);
@@ -77,7 +78,7 @@ function ZonesPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, sort]);
+  }, [query, sort, pageSize]);
 
   const visible = useMemo(() => {
     const filtered = zones.filter((zone) => {
@@ -95,8 +96,8 @@ function ZonesPage() {
   }, [zones, query, sort]);
 
   const paged = useMemo(
-    () => visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [visible, page],
+    () => visible.slice((page - 1) * pageSize, page * pageSize),
+    [visible, page, pageSize],
   );
 
   function toggleSort(column: string) {
@@ -240,6 +241,7 @@ function ZonesPage() {
         rows={paged}
         rowKey={(zone) => zone.id}
         loading={zonesQuery.isLoading}
+        skeletonRows={pageSize}
         sort={sort}
         onSortChange={toggleSort}
         empty={
@@ -271,9 +273,10 @@ function ZonesPage() {
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           <Pagination
             page={page}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
             total={visible.length}
             onPageChange={setPage}
+            onPageSizeChange={setPageSize}
           />
         </div>
       ) : null}
