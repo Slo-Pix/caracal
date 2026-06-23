@@ -8,6 +8,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { AvatarPicker } from "@/components/onboarding/AvatarPicker";
+import { DcrField } from "@/components/console/DcrField";
 import { IdentityCard } from "@/components/onboarding/IdentityCard";
 import { OnboardingLayout, type OnboardingStep } from "@/components/onboarding/OnboardingLayout";
 import { Button, Card, Field, SectionTitle, useToast } from "@/components/ui";
@@ -65,6 +66,7 @@ function OnboardingPage() {
   const [avatar, setAvatar] = useState("");
 
   const [zoneName, setZoneName] = useState("Production");
+  const [zoneDcr, setZoneDcr] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
@@ -104,7 +106,10 @@ function OnboardingPage() {
       avatar,
     };
     try {
-      const zone = await consoleApi.zones.create({ name: zoneName.trim() });
+      const zone = await consoleApi.zones.create({
+        name: zoneName.trim(),
+        dcr_enabled: zoneDcr,
+      });
       selectZone(zone.id);
       completeOnboarding(profile);
       navigate({ to: "/app" });
@@ -215,6 +220,7 @@ function OnboardingPage() {
               error={showErrors && !zoneValid ? "Zone name is required." : undefined}
               autoFocus
             />
+            <DcrField enabled={zoneDcr} onChange={setZoneDcr} />
           </div>
           <Card className="h-fit bg-muted/30">
             <SectionTitle>What is a zone</SectionTitle>
@@ -253,7 +259,10 @@ function OnboardingPage() {
           <ReviewSection
             title="First zone"
             onEdit={() => setStep(1)}
-            rows={[["Name", zoneName.trim()]]}
+            rows={[
+              ["Name", zoneName.trim()],
+              ["Dynamic Client Registration", zoneDcr ? "Enabled" : "Off"],
+            ]}
           />
           <Card>
             <SectionTitle>Ownership</SectionTitle>

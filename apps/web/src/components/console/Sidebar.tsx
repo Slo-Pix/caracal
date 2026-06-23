@@ -17,24 +17,6 @@ function isActive(pathname: string, to: string): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-function ChevronIcon({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cx("transition-transform", collapsed && "rotate-180")}
-    >
-      <path d="m15 18-6-6 6-6" />
-    </svg>
-  );
-}
-
 function SidebarItem({
   to,
   label,
@@ -113,29 +95,34 @@ export function Sidebar({
       <div
         className={cx(
           "flex h-14 flex-shrink-0 items-center border-b border-border",
-          collapsed ? "justify-center px-2" : "justify-between px-3",
+          collapsed ? "justify-center px-2" : "px-3",
         )}
       >
-        <Link to="/app" onClick={onNavigate} className="flex items-center gap-2">
-          <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-md bg-foreground text-sm font-bold text-background">
-            C
-          </span>
+        <button
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className={cx(
+            "group flex items-center rounded-md transition-colors hover:bg-accent",
+            collapsed ? "h-10 w-10 justify-center" : "w-full gap-2.5 p-1.5",
+          )}
+        >
+          <img
+            src="/caracal_sq.png"
+            alt="Caracal"
+            className="h-8 w-8 flex-shrink-0 rounded-md object-cover"
+          />
           {!collapsed ? (
-            <span className="flex flex-col leading-tight">
-              <span className="font-mono text-sm font-semibold tracking-tight">Caracal</span>
-              <span className="text-[10px] text-muted-foreground">Community Edition</span>
+            <span className="flex min-w-0 flex-col items-start leading-tight">
+              <span className="font-mono text-sm font-semibold tracking-tight text-foreground">
+                Caracal
+              </span>
+              <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+                Community Edition
+              </span>
             </span>
           ) : null}
-        </Link>
-        {!collapsed ? (
-          <button
-            onClick={onToggle}
-            aria-label="Collapse sidebar"
-            className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ChevronIcon collapsed={collapsed} />
-          </button>
-        ) : null}
+        </button>
       </div>
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3">
@@ -167,18 +154,6 @@ export function Sidebar({
           ))}
         </div>
       </nav>
-
-      {collapsed ? (
-        <div className="flex-shrink-0 border-t border-border p-2">
-          <button
-            onClick={onToggle}
-            aria-label="Expand sidebar"
-            className="grid h-9 w-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ChevronIcon collapsed={collapsed} />
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }
