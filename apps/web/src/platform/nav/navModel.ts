@@ -36,10 +36,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     id: "policy",
     label: "Policy",
-    items: [
-      { id: "policies", label: "Policies", to: "/app/policies", zoneScoped: true },
-      { id: "policy-sets", label: "Policy Sets", to: "/app/policy-sets", zoneScoped: true },
-    ],
+    items: [{ id: "policies", label: "Policies", to: "/app/policies", zoneScoped: true }],
   },
   {
     id: "runtime",

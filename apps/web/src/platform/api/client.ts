@@ -200,10 +200,9 @@ export const consoleApi = {
         { method: "POST", body: JSON.stringify({ content }) },
       ),
     delete: (zoneId: string, id: string) =>
-      request<void>(
-        `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`,
-        { method: "DELETE" },
-      ),
+      request<void>(`/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
   },
 
   policySets: {
