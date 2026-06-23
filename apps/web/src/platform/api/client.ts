@@ -14,9 +14,15 @@ import type {
   AuditEvent,
   ConsoleStatus,
   DecisionTrace,
+  ActivationStatus,
   Policy,
   PolicyDetail,
+  PolicyInput,
+  PolicyManifestEntry,
   PolicySet,
+  PolicySetDetail,
+  PolicySetVersion,
+  PolicyValidateResult,
   Provider,
   ProviderInput,
   ProviderPatchInput,
@@ -25,6 +31,7 @@ import type {
   ResourcePatchInput,
   RowList,
   Session,
+  SimulateResult,
   Zone,
   ZoneInput,
   ZonePatchInput,
@@ -177,14 +184,76 @@ export const consoleApi = {
       request<PolicyDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`,
       ),
+    validate: (content: string) =>
+      request<PolicyValidateResult>(`/v1/policies/validate`, {
+        method: "POST",
+        body: JSON.stringify({ content }),
+      }),
+    create: (zoneId: string, input: PolicyInput) =>
+      request<{ id: string }>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    addVersion: (zoneId: string, id: string, content: string) =>
+      request<{ version_id: string; version: number }>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}/versions`,
+        { method: "POST", body: JSON.stringify({ content }) },
+      ),
+    delete: (zoneId: string, id: string) =>
+      request<void>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      ),
   },
 
   policySets: {
     list: (zoneId: string) =>
       request<PolicySet[]>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`),
     get: (zoneId: string, id: string) =>
-      request<PolicySet>(
+      request<PolicySetDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}`,
+      ),
+    create: (zoneId: string, name: string, description?: string) =>
+      request<PolicySet>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`, {
+        method: "POST",
+        body: JSON.stringify({ name, description }),
+      }),
+    addVersion: (zoneId: string, id: string, manifest: PolicyManifestEntry[]) =>
+      request<{ version_id: string; version: number }>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}/versions`,
+        { method: "POST", body: JSON.stringify({ manifest }) },
+      ),
+    getVersion: (zoneId: string, id: string, versionId: string) =>
+      request<PolicySetVersion>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`,
+      ),
+    activate: (zoneId: string, id: string, versionId: string, shadowVersionId?: string) =>
+      request<{ activated: boolean; version_id: string; status_url: string }>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}/activate`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            version_id: versionId,
+            ...(shadowVersionId ? { shadow_version_id: shadowVersionId } : {}),
+          }),
+        },
+      ),
+    activationStatus: (zoneId: string, id: string, versionId?: string) =>
+      request<ActivationStatus>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}/activation-status${versionId ? `?version_id=${encodeURIComponent(versionId)}` : ""}`,
+      ),
+    simulate: (zoneId: string, id: string, versionId: string, input?: Record<string, unknown>) =>
+      request<SimulateResult>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}/simulate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ version_id: versionId, ...(input ? { input } : {}) }),
+        },
+      ),
+    delete: (zoneId: string, id: string) =>
+      request<void>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
       ),
   },
 

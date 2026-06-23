@@ -82,6 +82,19 @@ export interface Resource {
   updated_at: string;
 }
 
+export interface ResourceInput {
+  name?: string;
+  identifier?: string;
+  upstream_url?: string | null;
+  scopes: string[];
+  credential_provider_id?: string | null;
+  gateway_application_id?: string | null;
+  operations?: ResourceOperation[];
+  operation_enforcement?: ResourceOperationEnforcement;
+}
+
+export type ResourcePatchInput = Partial<ResourceInput>;
+
 export type ProviderKind =
   | "none"
   | "caracal_mandate"
@@ -132,12 +145,28 @@ export interface PolicyVersion {
   id: string;
   policy_id: string;
   version: number;
+  content?: string;
   content_sha256: string;
   schema_version: string;
+  created_by?: string;
   created_at: string;
 }
 
 export type PolicyDetail = Policy & { versions: PolicyVersion[] };
+
+export interface PolicyInput {
+  name: string;
+  description?: string;
+  content: string;
+}
+
+export interface PolicyValidateResult {
+  valid: boolean;
+  error?: string;
+  detail?: string;
+  schema_version?: string;
+  preview?: unknown;
+}
 
 export interface PolicySet {
   id: string;
@@ -146,6 +175,49 @@ export interface PolicySet {
   description: string | null;
   active_version_id: string | null;
   created_at: string;
+}
+
+export interface PolicyManifestEntry {
+  policy_version_id: string;
+}
+
+export interface PolicySetVersion {
+  id: string;
+  policy_set_id: string;
+  version: number;
+  manifest_json?: PolicyManifestEntry[];
+  manifest_sha256: string;
+  schema_version: string;
+  policies?: string[];
+  created_at: string;
+}
+
+export type PolicySetDetail = PolicySet & { versions?: PolicySetVersion[] };
+
+export interface ActivationStatus {
+  zone_id: string;
+  policy_set_id: string;
+  version_id: string;
+  active: boolean;
+  active_version_id: string | null;
+  shadow_version_id: string | null;
+  manifest_sha256: string | null;
+  propagation_status: string;
+  outbox: { state: string; [key: string]: unknown };
+  sts: { state: string; loaded?: boolean; [key: string]: unknown };
+}
+
+export interface SimulateResult {
+  dry_run: boolean;
+  would_activate: boolean;
+  policy_set_id: string;
+  version_id: string;
+  schema_version: string;
+  manifest_sha256: string;
+  policies: string[];
+  warnings: string[];
+  explanation: { evaluation: string; reason?: string; [key: string]: unknown };
+  result: unknown;
 }
 
 export interface Session {

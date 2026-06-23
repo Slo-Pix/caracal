@@ -14,6 +14,8 @@ import type {
   Application,
   ApplicationInput,
   ApplicationPatchInput,
+  PolicyInput,
+  PolicyManifestEntry,
   Provider,
   ProviderInput,
   ProviderPatchInput,
@@ -250,6 +252,93 @@ export function usePolicy(zoneId: string | null, id: string | null) {
     queryKey: keys.policy(zoneId, id),
     queryFn: () => consoleApi.policies.get(zoneId as string, id as string),
     enabled: Boolean(zoneId && id),
+  });
+}
+
+export function usePolicySet(zoneId: string | null, id: string | null) {
+  return useQuery({
+    queryKey: ["console", "policy-set", zoneId, id],
+    queryFn: () => consoleApi.policySets.get(zoneId as string, id as string),
+    enabled: Boolean(zoneId && id),
+  });
+}
+
+function invalidatePolicies(qc: ReturnType<typeof useQueryClient>, zoneId: string | null) {
+  qc.invalidateQueries({ queryKey: keys.policies(zoneId) });
+}
+
+function invalidatePolicySets(qc: ReturnType<typeof useQueryClient>, zoneId: string | null) {
+  qc.invalidateQueries({ queryKey: keys.policySets(zoneId) });
+  qc.invalidateQueries({ queryKey: ["console", "policy-set", zoneId] });
+}
+
+export function useCreatePolicy(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PolicyInput) => consoleApi.policies.create(zoneId as string, input),
+    onSuccess: () => invalidatePolicies(qc, zoneId),
+  });
+}
+
+export function useAddPolicyVersion(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, content }: { id: string; content: string }) =>
+      consoleApi.policies.addVersion(zoneId as string, id, content),
+    onSuccess: (_data, vars) => {
+      invalidatePolicies(qc, zoneId);
+      qc.invalidateQueries({ queryKey: keys.policy(zoneId, vars.id) });
+    },
+  });
+}
+
+export function useDeletePolicy(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => consoleApi.policies.delete(zoneId as string, id),
+    onSuccess: () => invalidatePolicies(qc, zoneId),
+  });
+}
+
+export function useCreatePolicySet(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      consoleApi.policySets.create(zoneId as string, name, description),
+    onSuccess: () => invalidatePolicySets(qc, zoneId),
+  });
+}
+
+export function useAddPolicySetVersion(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, manifest }: { id: string; manifest: PolicyManifestEntry[] }) =>
+      consoleApi.policySets.addVersion(zoneId as string, id, manifest),
+    onSuccess: () => invalidatePolicySets(qc, zoneId),
+  });
+}
+
+export function useActivatePolicySet(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      versionId,
+      shadowVersionId,
+    }: {
+      id: string;
+      versionId: string;
+      shadowVersionId?: string;
+    }) => consoleApi.policySets.activate(zoneId as string, id, versionId, shadowVersionId),
+    onSuccess: () => invalidatePolicySets(qc, zoneId),
+  });
+}
+
+export function useDeletePolicySet(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => consoleApi.policySets.delete(zoneId as string, id),
+    onSuccess: () => invalidatePolicySets(qc, zoneId),
   });
 }
 
