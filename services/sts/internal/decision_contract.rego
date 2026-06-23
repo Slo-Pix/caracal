@@ -22,16 +22,16 @@ allow_result(policy) := {
 	"diagnostics": [],
 }
 
-# A mint allow that may carry an approval gate. When the requested scopes touch an
-# approval-gated scope the decision stays allow but names a human-approval step-up, so
-# STS holds the mandate behind a durable approval an authenticated approver must
-# satisfy before it is minted. Without a gate the diagnostics are empty and the mint
-# proceeds unchanged.
+# A mint allow that may carry a risk and approval gate. When the requested scopes touch
+# an approval-gated risk tier the decision stays allow but names a human-approval step-up,
+# so STS holds the mandate behind a durable approval an authenticated approver must
+# satisfy before it is minted. The classified risk of every requested scope rides in the
+# diagnostics for audit and observability whether or not a gate fires.
 mint_allow(policy) := {
 	"decision": "allow",
 	"evaluation_status": "complete",
 	"determining_policies": [{"policy": policy}],
-	"diagnostics": approval_diagnostics,
+	"diagnostics": mint_diagnostics,
 }
 
 # Adopter data. grants and app_ids resolve to undefined when a zone omits them, which
@@ -144,23 +144,50 @@ restriction_denied if {
 	some _ in data.caracal.authz.restrict
 }
 
-# Approval gating. An adopter may publish approval rules pairing a scope with a
-# human-approval requirement. A requested mint whose scopes touch a gated scope is
-# authorized but marked step-up required, so STS holds the mandate behind a durable
-# approval an authenticated approver must satisfy before it is minted. Like
-# restrictions, an approval rule can only add a gate, never widen authority.
-default approval_list := []
+# Risk classification and approval gating. An adopter may tag scopes with an opaque
+# risk tier and declare which tiers require human approval. The platform reads the
+# tier as metadata, names it in mint diagnostics for audit and observability, and
+# holds any mint whose scope tier is approval-gated behind a durable approval an
+# authenticated approver must satisfy before it is minted. The tier vocabulary is the
+# adopter's; the platform fixes no taxonomy. Like restrictions, a risk rule can only
+# add a gate, never widen authority.
+default risk_rules := []
 
-approval_list := data.caracal.authz.approval
+risk_rules := data.caracal.authz.risk
 
-approval_required if {
-	some rule in approval_list
-	rule.scope in input.context.requested_scopes
+scope_tier(scope) := tier if {
+	some rule in risk_rules
+	rule.scope == scope
+	tier := rule.tier
 }
 
-default approval_diagnostics := []
+default gated_tiers := []
 
-approval_diagnostics := [{"step_up_required": "human_approval"}] if approval_required
+gated_tiers := data.caracal.authz.approval_tiers
+
+risk_scopes := sort([scope |
+	some scope in input.context.requested_scopes
+	scope_tier(scope)
+])
+
+requested_risk := [{"scope": scope, "tier": scope_tier(scope)} |
+	some scope in risk_scopes
+]
+
+approval_required if {
+	some scope in input.context.requested_scopes
+	scope_tier(scope) in gated_tiers
+}
+
+mint_diagnostics := array.concat(step_up_diagnostics, risk_diagnostics)
+
+default step_up_diagnostics := []
+
+step_up_diagnostics := [{"step_up_required": "human_approval"}] if approval_required
+
+default risk_diagnostics := []
+
+risk_diagnostics := [{"risk": requested_risk}] if count(requested_risk) > 0
 
 # An application minting its session lifecycle mandate.
 result := allow_result("caracal-bootstrap") if {

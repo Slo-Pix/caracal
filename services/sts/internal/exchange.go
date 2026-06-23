@@ -188,6 +188,22 @@ func mandateScopeSet(subjectClaims map[string]any) map[string]struct{} {
 	return scopes
 }
 
+// mintScope is the scope claim the issued mandate carries. An exchange that requests
+// scopes explicitly mints exactly those. A Gateway re-exchange requests none, since its
+// authority rides in the presented mandate, so the issued upstream mandate inherits the
+// presented mandate's scope claim. That makes the upstream mandate self-describing: the
+// resource verifies the authority it carries directly, never inferring scope from
+// out-of-band partnership terms.
+func mintScope(req TokenExchangeRequest, subjectClaims map[string]any) string {
+	if req.Scope != "" {
+		return req.Scope
+	}
+	if req.GatewayAuthenticated {
+		return claimString(subjectClaims, "scope")
+	}
+	return req.Scope
+}
+
 // authorizeOperation is the native operation-authority floor the Gateway relies on.
 // For a resource in enforced mode, the upstream operation (method and path) must be
 // declared on the resource and the presented mandate must carry that operation's
@@ -626,6 +642,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		return nil, nil, http.StatusInternalServerError, sharederr.New(sharederr.Internal, "session creation failed")
 	}
 
+	mintedScope := mintScope(req, subjectClaims)
 	issueParams := IssueParams{
 		ZoneID:         zoneID,
 		AppID:          app.ID,
@@ -634,7 +651,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		Use:            use,
 		SID:            sessID,
 		RootSID:        rootSessionID(subjectClaims, sessID, use),
-		Scopes:         req.Scope,
+		Scopes:         mintedScope,
 		Resources:      grantedResources,
 		TTL:            ttl,
 		AgentSessionID: req.AgentSessionID,
@@ -671,7 +688,7 @@ func (s *Server) exchange(ctx context.Context, req TokenExchangeRequest, request
 		AccessToken:     token,
 		TokenType:       "Bearer",
 		ExpiresIn:       int(ttl.Seconds()),
-		Scope:           req.Scope,
+		Scope:           mintedScope,
 		IssuedTokenType: "urn:ietf:params:oauth:token-type:access_token",
 		TargetResources: grantedResources,
 		Upstreams:       grantedDirectives,
