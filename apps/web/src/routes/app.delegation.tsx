@@ -5,62 +5,21 @@ Caracal, a product of Garudex Labs
 This file defines the Delegation route.
 */
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
 
-import { ModulePage } from "@/components/console/ModulePage";
-import { Badge, Card, EmptyState, SectionTitle, Tabs } from "@/components/ui";
+import { ModulePlaceholder } from "@/components/console/ModulePlaceholder";
 
 export const Route = createFileRoute("/app/delegation")({
   component: DelegationPage,
 });
 
 function DelegationPage() {
-  const [tab, setTab] = useState("overview");
   return (
-    <ModulePage
+    <ModulePlaceholder
       title="Delegation"
-      description="Manage delegated authority edges."
+      description="The graph of delegated authority between sessions."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Delegation" }]}
-      actions={<Badge tone="muted">UI in progress</Badge>}
-    >
-      <div className="mb-5">
-        <Tabs
-          tabs={[
-            { id: "overview", label: "Overview" },
-            { id: "activity", label: "Activity" },
-          ]}
-          active={tab}
-          onChange={setTab}
-        />
-      </div>
-
-      {tab === "overview" ? (
-        <Card>
-          <SectionTitle>Planned capabilities</SectionTitle>
-          <ul className="mt-3 flex flex-col gap-2.5">
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-              <span>View active, inbound, and outbound edges</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-              <span>Traverse the delegation graph</span>
-            </li>
-            <li className="flex items-start gap-2 text-sm text-foreground">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
-              <span>Revoke delegated permissions</span>
-            </li>{" "}
-          </ul>
-          <p className="mt-4 text-xs text-muted-foreground">
-            These mirror the terminal Console and connect to the Control API in a later step.
-          </p>
-        </Card>
-      ) : (
-        <EmptyState
-          title="No activity yet"
-          description="Activity for this module appears here once it is connected to the Control API."
-        />
-      )}
-    </ModulePage>
+      emptyTitle="No delegation edges"
+      emptyDescription="Delegated authority between agent sessions is mapped here as a graph."
+    />
   );
 }
