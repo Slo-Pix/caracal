@@ -11,7 +11,7 @@ import { ConfirmDialog } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { useActiveZone } from "@/platform/api/hooks";
 import { signOut, useSession } from "@/platform/auth";
-import { getProfile } from "@/platform/state/localInstall";
+import { useProfile } from "@/platform/state/localInstall";
 import { toggleTheme, useTheme } from "@/platform/theme";
 
 function initialsOf(name: string): string {
@@ -49,8 +49,9 @@ export function ProfileMenu() {
   const [signOutOpen, setSignOutOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const profile = getProfile();
+  const profile = useProfile();
   const fullName = profile.fullName || session.data?.user?.name || "Owner";
+  const profileName = profile.displayName.trim() || fullName;
   const email = session.data?.user?.email ?? "";
 
   useEffect(() => {
@@ -97,21 +98,24 @@ export function ProfileMenu() {
       >
         <span className="hidden min-w-0 flex-col leading-tight sm:flex">
           <span className="max-w-[12rem] truncate text-sm font-medium text-foreground">
-            {fullName}
+            {profileName}
           </span>
           <span className="max-w-[12rem] truncate text-[11px] text-muted-foreground">
             {activeZone ? activeZone.name : "No active zone"}
           </span>
         </span>
-        <Avatar avatar={profile.avatar} name={fullName} size={30} />
+        <Avatar avatar={profile.avatar} name={profileName} size={30} />
       </button>
 
       {open ? (
         <div className="absolute right-0 z-40 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-popover shadow-lg">
           <div className="flex items-center gap-3 border-b border-border p-3">
-            <Avatar avatar={profile.avatar} name={fullName} size={40} />
+            <Avatar avatar={profile.avatar} name={profileName} size={40} />
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-foreground">{fullName}</div>
+              <div className="truncate text-sm font-semibold text-foreground">{profileName}</div>
+              {profile.displayName.trim() && profile.displayName.trim() !== fullName ? (
+                <div className="truncate text-xs text-muted-foreground">{fullName}</div>
+              ) : null}
               {email ? <div className="truncate text-xs text-muted-foreground">{email}</div> : null}
               <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                 {profile.accountId}
