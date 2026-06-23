@@ -7,13 +7,19 @@ This file is the typed HTTP client the web app uses to reach the Caracal control
 import { config } from "@/platform/config";
 
 import type {
+  Agent,
   Application,
   ApplicationInput,
   ApplicationPatchInput,
   AuditDetail,
   AuditEvent,
   ConsoleStatus,
+  CoordinatorList,
   DecisionTrace,
+  DelegationEdge,
+  DelegationHop,
+  DelegationImpactRow,
+  EffectiveAuthority,
   ActivationStatus,
   Policy,
   PolicyDetail,
@@ -275,10 +281,9 @@ export const consoleApi = {
     get: (zoneId: string, id: string) =>
       request<Agent>(`/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}`),
     children: async (zoneId: string, id: string) => {
-      const res = await request<CoordinatorList<Agent>>(
+      return request<Agent[]>(
         `/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}/children`,
       );
-      return res.items;
     },
     effectiveAuthority: (zoneId: string, id: string) =>
       request<EffectiveAuthority>(
@@ -295,10 +300,9 @@ export const consoleApi = {
         { method: "PATCH", body: JSON.stringify({}) },
       ),
     terminate: (zoneId: string, id: string) =>
-      request<void>(
-        `/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}`,
-        { method: "DELETE" },
-      ),
+      request<void>(`/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
   },
 
   delegations: {

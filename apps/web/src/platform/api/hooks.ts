@@ -43,6 +43,9 @@ const keys = {
   audit: (zoneId: string | null) => ["console", "audit", zoneId] as const,
   auditExplain: (zoneId: string | null, requestId: string | null) =>
     ["console", "audit-explain", zoneId, requestId] as const,
+  agents: (zoneId: string | null) => ["console", "agents", zoneId] as const,
+  agent: (zoneId: string | null, id: string | null) => ["console", "agent", zoneId, id] as const,
+  delegationsActive: (zoneId: string | null) => ["console", "delegations-active", zoneId] as const,
 };
 
 export function useConsoleStatus() {
@@ -365,6 +368,66 @@ export function useDecisionTrace(zoneId: string | null, requestId: string | null
     queryKey: keys.auditExplain(zoneId, requestId),
     queryFn: () => consoleApi.audit.explain(zoneId as string, requestId as string),
     enabled: Boolean(zoneId && requestId),
+  });
+}
+
+export function useAgents(zoneId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: keys.agents(zoneId),
+    queryFn: () => consoleApi.agents.list(zoneId as string),
+    enabled: Boolean(zoneId) && enabled,
+    refetchInterval: LIVE_MS,
+  });
+}
+
+export function useAgentEffectiveAuthority(zoneId: string | null, id: string | null) {
+  return useQuery({
+    queryKey: [...keys.agent(zoneId, id), "authority"],
+    queryFn: () => consoleApi.agents.effectiveAuthority(zoneId as string, id as string),
+    enabled: Boolean(zoneId && id),
+  });
+}
+
+export function useAgentChildren(zoneId: string | null, id: string | null) {
+  return useQuery({
+    queryKey: [...keys.agent(zoneId, id), "children"],
+    queryFn: () => consoleApi.agents.children(zoneId as string, id as string),
+    enabled: Boolean(zoneId && id),
+  });
+}
+
+export function useAgentLifecycle(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      action,
+    }: {
+      id: string;
+      action: "suspend" | "resume" | "terminate";
+    }) => {
+      if (action === "suspend") await consoleApi.agents.suspend(zoneId as string, id);
+      else if (action === "resume") await consoleApi.agents.resume(zoneId as string, id);
+      else await consoleApi.agents.terminate(zoneId as string, id);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.agents(zoneId) }),
+  });
+}
+
+export function useActiveDelegations(zoneId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: keys.delegationsActive(zoneId),
+    queryFn: () => consoleApi.delegations.active(zoneId as string),
+    enabled: Boolean(zoneId) && enabled,
+    refetchInterval: LIVE_MS,
+  });
+}
+
+export function useRevokeDelegation(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => consoleApi.delegations.revoke(zoneId as string, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.delegationsActive(zoneId) }),
   });
 }
 

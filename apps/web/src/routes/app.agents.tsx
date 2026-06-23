@@ -14,6 +14,7 @@ import {
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
 import { LiveBadge } from "@/components/console/LiveBadge";
+import { ModulePage } from "@/components/console/ModulePage";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, ConfirmDialog, Skeleton, useToast, type Column } from "@/components/ui";
 import { cx } from "@/lib/cx";
@@ -23,7 +24,6 @@ import {
   useAgentEffectiveAuthority,
   useAgentLifecycle,
   useAgents,
-  useConsoleStatus,
 } from "@/platform/api/hooks";
 import type { Agent, AgentStatus } from "@/platform/api/types";
 
@@ -53,26 +53,11 @@ function errorMessage(error: unknown): string {
 }
 
 function AgentsGate({ zoneId }: { zoneId: string }) {
-  const status = useConsoleStatus();
-  const coordinatorReady = status.data?.coordinatorConfigured && status.data?.coordinatorReachable;
-
-  if (status.isLoading) {
-    return <Skeleton className="h-64 w-full" />;
-  }
-  if (!coordinatorReady) {
-    return <CoordinatorOffline status={status.data} onRetry={() => status.refetch()} />;
-  }
   return <AgentsPage zoneId={zoneId} />;
 }
 
-function CoordinatorOffline({
-  status,
-  onRetry,
-}: {
-  status: { coordinatorConfigured?: boolean; coordinatorUrl?: string } | undefined;
-  onRetry: () => void;
-}) {
-  const configured = status?.coordinatorConfigured;
+function CoordinatorOffline({ code, onRetry }: { code: string; onRetry: () => void }) {
+  const configured = code !== "coordinator_not_configured";
   return (
     <div className="border border-border p-6">
       <div className="flex items-start gap-4">
@@ -93,14 +78,7 @@ function CoordinatorOffline({
             {configured ? "Coordinator unreachable" : "Coordinator not connected"}
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Agent sessions are served by the Caracal Coordinator runtime
-            {status?.coordinatorUrl ? (
-              <>
-                {" "}
-                at <Mono>{status.coordinatorUrl}</Mono>
-              </>
-            ) : null}
-            .{" "}
+            Agent sessions are served by the Caracal Coordinator runtime.{" "}
             {configured
               ? "It is configured but not responding. Confirm the runtime is running, then retry."
               : "Start the local stack with `caracal up` to provision and run it, then retry."}
@@ -133,6 +111,14 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
   const [confirm, setConfirm] = useState<{ agent: Agent; action: "terminate" } | null>(null);
 
   const allRows = useMemo(() => query.data ?? [], [query.data]);
+
+  const coordError =
+    query.isError && query.error instanceof ConsoleApiError
+      ? query.error.code
+      : null;
+  const coordinatorDown =
+    coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
+
   const counts = useMemo(() => {
     const c = { active: 0, suspended: 0, terminated: 0 };
     for (const a of allRows) c[a.status] += 1;
@@ -153,6 +139,18 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
     } catch (err) {
       toast({ tone: "error", title: "Action failed", description: errorMessage(err) });
     }
+  }
+
+  if (coordinatorDown) {
+    return (
+      <ModulePage
+        title="Agents"
+        description="Live agent sessions and their delegation lineage in this zone."
+        breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Agents" }]}
+      >
+        <CoordinatorOffline code={coordError as string} onRetry={() => query.refetch()} />
+      </ModulePage>
+    );
   }
 
   const columns: Column<Agent>[] = [
