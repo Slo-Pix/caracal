@@ -17,7 +17,7 @@ import {
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, ConfirmDialog, Skeleton, useToast, type Column } from "@/components/ui";
 import { consoleApi, ConsoleApiError } from "@/platform/api/client";
-import { useActiveDelegations, useConsoleStatus, useRevokeDelegation } from "@/platform/api/hooks";
+import { useActiveDelegations, useRevokeDelegation } from "@/platform/api/hooks";
 import type { DelegationEdge, DelegationHop, DelegationImpactRow } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/delegation")({
@@ -50,30 +50,6 @@ function short(id: string): string {
 }
 
 function DelegationGate({ zoneId }: { zoneId: string }) {
-  const status = useConsoleStatus();
-  const coordinatorReady = status.data?.coordinatorConfigured && status.data?.coordinatorReachable;
-
-  if (status.isLoading) return <Skeleton className="h-64 w-full" />;
-  if (!coordinatorReady) {
-    return (
-      <div className="border border-border p-6">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {status.data?.coordinatorConfigured
-            ? "Coordinator unreachable"
-            : "Coordinator not connected"}
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Delegation edges are maintained by the Caracal Coordinator runtime. Start the local stack
-          with <Mono>caracal up</Mono> and confirm the runtime is running, then retry.
-        </p>
-        <div className="mt-5">
-          <Button variant="secondary" size="sm" onClick={() => status.refetch()}>
-            Retry
-          </Button>
-        </div>
-      </div>
-    );
-  }
   return <DelegationPage zoneId={zoneId} />;
 }
 
@@ -84,6 +60,32 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
   const [revokeTarget, setRevokeTarget] = useState<DelegationEdge | null>(null);
 
   const rows = useMemo(() => query.data ?? [], [query.data]);
+
+  const coordError =
+    query.isError && query.error instanceof ConsoleApiError ? query.error.code : null;
+  const coordinatorDown =
+    coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
+
+  if (coordinatorDown) {
+    return (
+      <div className="border border-border p-6">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {coordError === "coordinator_not_configured"
+            ? "Coordinator not connected"
+            : "Coordinator unreachable"}
+        </h2>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+          Delegation edges are maintained by the Caracal Coordinator runtime. Start the local stack
+          with <Mono>caracal up</Mono> and confirm the runtime is running, then retry.
+        </p>
+        <div className="mt-5">
+          <Button variant="secondary" size="sm" onClick={() => query.refetch()}>
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const columns: Column<DelegationEdge>[] = [
     {

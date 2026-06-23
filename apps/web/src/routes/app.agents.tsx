@@ -113,9 +113,7 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
   const allRows = useMemo(() => query.data ?? [], [query.data]);
 
   const coordError =
-    query.isError && query.error instanceof ConsoleApiError
-      ? query.error.code
-      : null;
+    query.isError && query.error instanceof ConsoleApiError ? query.error.code : null;
   const coordinatorDown =
     coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
 
