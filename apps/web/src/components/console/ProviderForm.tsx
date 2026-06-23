@@ -1,0 +1,668 @@
+/*
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+This file builds the kind-aware create and edit form for upstream credential providers.
+*/
+import { useMemo, useState } from "react";
+
+import { Button, Field, Modal, PasswordField, Select, Textarea } from "@/components/ui";
+import { cx } from "@/lib/cx";
+import type { Provider, ProviderInput, ProviderKind } from "@/platform/api/types";
+
+const KIND_OPTIONS: { value: ProviderKind; label: string }[] = [
+  { value: "caracal_mandate", label: "Caracal mandate" },
+  { value: "oauth2_authorization_code", label: "OAuth 2.0 — authorization code" },
+  { value: "oauth2_client_credentials", label: "OAuth 2.0 — client credentials" },
+  { value: "api_key", label: "API key" },
+  { value: "bearer_token", label: "Bearer token" },
+  { value: "none", label: "None" },
+];
+
+const KIND_SUMMARY: Record<ProviderKind, string> = {
+  caracal_mandate:
+    "Forwards the Caracal mandate directly to the upstream. No upstream credentials.",
+  oauth2_authorization_code:
+    "User-delegated OAuth. Users approve access; tokens are exchanged per user.",
+  oauth2_client_credentials:
+    "Service-to-service OAuth. Caracal exchanges client credentials for tokens.",
+  api_key: "Attaches a static API key in a header or query parameter.",
+  bearer_token: "Forwards a static bearer token to allow-listed upstream hosts.",
+  none: "Placeholder provider. No credential routing.",
+};
+
+type FieldKind = "text" | "secret" | "secret-multiline" | "list" | "bool" | "select";
+
+interface ProviderField {
+  key: string;
+  label: string;
+  kind: FieldKind;
+  hint?: string;
+  required?: boolean;
+  advanced?: boolean;
+  options?: string[];
+  placeholder?: string;
+  dependsOn?: Partial<Record<string, string>>;
+}
+
+const AUTH_CODE_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"];
+const CC_METHODS = ["client_secret_basic", "client_secret_post", "private_key_jwt", "none"];
+
+// Mirrors apps/api PUBLIC/SECRET provider config keys so the form never sends
+// fields the control plane would reject.
+const FIELDS: Record<ProviderKind, ProviderField[]> = {
+  none: [],
+  caracal_mandate: [],
+  oauth2_authorization_code: [
+    {
+      key: "authorization_endpoint",
+      label: "Authorization endpoint",
+      kind: "text",
+      required: true,
+      placeholder: "https://idp.example.com/authorize",
+      hint: "HTTPS endpoint where users approve delegated access.",
+    },
+    {
+      key: "token_endpoint",
+      label: "Token endpoint",
+      kind: "text",
+      required: true,
+      placeholder: "https://idp.example.com/token",
+      hint: "HTTPS endpoint where provider tokens are issued or refreshed.",
+    },
+    {
+      key: "redirect_uri",
+      label: "Redirect URI",
+      kind: "text",
+      required: true,
+      placeholder: "https://app.example.com/callback",
+      hint: "Callback URI registered with the provider.",
+    },
+    { key: "client_id", label: "Client ID", kind: "text", required: true },
+    {
+      key: "client_secret",
+      label: "Client secret",
+      kind: "secret",
+      hint: "Required for client_secret_basic and client_secret_post.",
+    },
+    {
+      key: "scopes",
+      label: "Upstream OAuth scopes",
+      kind: "list",
+      hint: "Optional. Comma-separated scopes requested from the provider.",
+    },
+    {
+      key: "client_auth_method",
+      label: "Client authentication",
+      kind: "select",
+      options: AUTH_CODE_METHODS,
+      advanced: true,
+    },
+    {
+      key: "authorization_params",
+      label: "Authorization parameters",
+      kind: "list",
+      advanced: true,
+      hint: "Optional key=value pairs, e.g. access_type=offline, prompt=consent.",
+    },
+    {
+      key: "token_params",
+      label: "Token parameters",
+      kind: "list",
+      advanced: true,
+      hint: "Optional key=value token endpoint parameters.",
+    },
+    {
+      key: "allowed_token_hosts",
+      label: "Token endpoint hosts",
+      kind: "list",
+      advanced: true,
+      hint: "Optional. Inferred from the token endpoint when blank.",
+    },
+    {
+      key: "auth_header",
+      label: "Upstream authorization header",
+      kind: "text",
+      advanced: true,
+      hint: "Optional. Leave blank for Authorization.",
+    },
+    {
+      key: "auth_scheme",
+      label: "Upstream authorization scheme",
+      kind: "text",
+      advanced: true,
+      hint: "Optional prefix such as Bearer or Token.",
+    },
+    {
+      key: "forward_caracal_identity",
+      label: "Forward Caracal identity",
+      kind: "bool",
+      advanced: true,
+      hint: "Also send X-Caracal-Identity to trusted upstreams.",
+    },
+    {
+      key: "allow_runtime_injection",
+      label: "Allow runtime injection",
+      kind: "bool",
+      advanced: true,
+      hint: "Allow caracal run to inject this credential into a child process.",
+    },
+  ],
+  oauth2_client_credentials: [
+    {
+      key: "token_endpoint",
+      label: "Token endpoint",
+      kind: "text",
+      required: true,
+      placeholder: "https://idp.example.com/token",
+      hint: "HTTPS endpoint where provider tokens are issued or refreshed.",
+    },
+    { key: "client_id", label: "Client ID", kind: "text", required: true },
+    {
+      key: "client_secret",
+      label: "Client secret",
+      kind: "secret",
+      hint: "Required unless using private_key_jwt or none.",
+    },
+    {
+      key: "scopes",
+      label: "Upstream OAuth scopes",
+      kind: "list",
+      hint: "Optional. Comma-separated scopes requested from the provider.",
+    },
+    {
+      key: "client_auth_method",
+      label: "Client authentication",
+      kind: "select",
+      options: CC_METHODS,
+      advanced: true,
+    },
+    {
+      key: "audience",
+      label: "Token audience",
+      kind: "text",
+      advanced: true,
+      hint: "Optional audience parameter for token endpoints that require one.",
+    },
+    {
+      key: "resource",
+      label: "Resource indicator",
+      kind: "text",
+      advanced: true,
+      hint: "Optional RFC 8707 / Azure-style resource value.",
+    },
+    {
+      key: "key_id",
+      label: "Key ID",
+      kind: "text",
+      advanced: true,
+      dependsOn: { client_auth_method: "private_key_jwt" },
+      hint: "Optional kid header for private_key_jwt assertions.",
+    },
+    {
+      key: "private_key",
+      label: "Private key (PEM)",
+      kind: "secret-multiline",
+      advanced: true,
+      dependsOn: { client_auth_method: "private_key_jwt" },
+      hint: "PEM private key used to sign private_key_jwt client assertions.",
+    },
+    {
+      key: "token_params",
+      label: "Token parameters",
+      kind: "list",
+      advanced: true,
+      hint: "Optional key=value token endpoint parameters.",
+    },
+    {
+      key: "allowed_token_hosts",
+      label: "Token endpoint hosts",
+      kind: "list",
+      advanced: true,
+      hint: "Optional. Inferred from the token endpoint when blank.",
+    },
+    {
+      key: "auth_header",
+      label: "Upstream authorization header",
+      kind: "text",
+      advanced: true,
+      hint: "Optional. Leave blank for Authorization.",
+    },
+    {
+      key: "auth_scheme",
+      label: "Upstream authorization scheme",
+      kind: "text",
+      advanced: true,
+      hint: "Optional prefix such as Bearer or Token.",
+    },
+    {
+      key: "forward_caracal_identity",
+      label: "Forward Caracal identity",
+      kind: "bool",
+      advanced: true,
+    },
+    {
+      key: "allow_runtime_injection",
+      label: "Allow runtime injection",
+      kind: "bool",
+      advanced: true,
+    },
+  ],
+  api_key: [
+    {
+      key: "auth_location",
+      label: "Key location",
+      kind: "select",
+      options: ["header", "query"],
+      hint: "Where the upstream expects the key.",
+    },
+    {
+      key: "header_name",
+      label: "Header name",
+      kind: "text",
+      required: true,
+      dependsOn: { auth_location: "header" },
+      placeholder: "X-API-Key",
+      hint: "Header where the upstream expects the key.",
+    },
+    {
+      key: "query_param_name",
+      label: "Query parameter",
+      kind: "text",
+      required: true,
+      dependsOn: { auth_location: "query" },
+      placeholder: "api_key",
+      hint: "Query parameter where the upstream expects the key.",
+    },
+    { key: "api_key", label: "API key", kind: "secret", required: true },
+    {
+      key: "auth_scheme",
+      label: "Authorization scheme",
+      kind: "text",
+      advanced: true,
+      dependsOn: { auth_location: "header" },
+      hint: "Optional prefix such as ApiKey or Token.",
+    },
+    {
+      key: "forward_caracal_identity",
+      label: "Forward Caracal identity",
+      kind: "bool",
+      advanced: true,
+    },
+    {
+      key: "allow_runtime_injection",
+      label: "Allow runtime injection",
+      kind: "bool",
+      advanced: true,
+    },
+  ],
+  bearer_token: [
+    { key: "bearer_token", label: "Bearer token", kind: "secret", required: true },
+    {
+      key: "allowed_token_hosts",
+      label: "Allowed upstream hosts",
+      kind: "list",
+      hint: "Host allow-list for static bearer-token forwarding.",
+    },
+    {
+      key: "auth_header",
+      label: "Upstream authorization header",
+      kind: "text",
+      advanced: true,
+      hint: "Optional. Leave blank for Authorization.",
+    },
+    {
+      key: "auth_scheme",
+      label: "Authorization scheme",
+      kind: "text",
+      advanced: true,
+      hint: "Optional prefix such as Bearer.",
+    },
+    {
+      key: "forward_caracal_identity",
+      label: "Forward Caracal identity",
+      kind: "bool",
+      advanced: true,
+    },
+    {
+      key: "allow_runtime_injection",
+      label: "Allow runtime injection",
+      kind: "bool",
+      advanced: true,
+    },
+  ],
+};
+
+const SECRET_KEYS = new Set(["client_secret", "private_key", "api_key", "bearer_token"]);
+
+type Values = Record<string, string>;
+
+function initialValues(provider?: Provider): Values {
+  const values: Values = {};
+  if (!provider) return values;
+  const config = provider.config_json ?? {};
+  for (const [key, raw] of Object.entries(config)) {
+    if (Array.isArray(raw)) values[key] = raw.join(", ");
+    else if (typeof raw === "boolean") values[key] = String(raw);
+    else if (raw != null && typeof raw === "object") values[key] = JSON.stringify(raw);
+    else if (raw != null) values[key] = String(raw);
+  }
+  return values;
+}
+
+function buildConfig(kind: ProviderKind, values: Values, isEdit: boolean): Record<string, unknown> {
+  const config: Record<string, unknown> = {};
+  for (const field of FIELDS[kind]) {
+    if (!fieldVisible(field, values)) continue;
+    const raw = (values[field.key] ?? "").trim();
+    if (field.kind === "bool") {
+      if (raw === "true") config[field.key] = true;
+      continue;
+    }
+    if (raw === "") continue;
+    if (SECRET_KEYS.has(field.key) && isEdit && raw === KEEP_SECRET) continue;
+    if (field.kind === "list") {
+      config[field.key] = raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    } else {
+      config[field.key] = raw;
+    }
+  }
+  return config;
+}
+
+const KEEP_SECRET = "";
+
+function fieldVisible(field: ProviderField, values: Values): boolean {
+  if (!field.dependsOn) return true;
+  return Object.entries(field.dependsOn).every(([key, expected]) => {
+    const current = values[key] ?? defaultFor(key);
+    return current === expected;
+  });
+}
+
+function defaultFor(key: string): string {
+  if (key === "auth_location") return "header";
+  if (key === "client_auth_method") return "client_secret_basic";
+  return "";
+}
+
+export function ProviderFormModal({
+  open,
+  mode,
+  provider,
+  busy,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  mode: "create" | "edit";
+  provider?: Provider;
+  busy: boolean;
+  onClose: () => void;
+  onSubmit: (input: ProviderInput) => void;
+}) {
+  const isEdit = mode === "edit";
+  const [name, setName] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [kind, setKind] = useState<ProviderKind>("caracal_mandate");
+  const [values, setValues] = useState<Values>({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [touched, setTouched] = useState(false);
+
+  // Reset whenever the modal opens for a different target.
+  const seedKey = `${open}:${provider?.id ?? "new"}`;
+  const seeded = useMemo(() => seedKey, [seedKey]);
+  const [seedRef, setSeedRef] = useState("");
+  if (open && seeded !== seedRef) {
+    setSeedRef(seeded);
+    setName(provider?.name ?? "");
+    setIdentifier(provider?.identifier ?? "");
+    setKind(provider?.kind ?? "caracal_mandate");
+    setValues(initialValues(provider));
+    setShowAdvanced(false);
+    setTouched(false);
+  }
+
+  const fields = FIELDS[kind];
+  const visibleFields = fields.filter((f) => fieldVisible(f, values));
+  const basicFields = visibleFields.filter((f) => !f.advanced);
+  const advancedFields = visibleFields.filter((f) => f.advanced);
+
+  function setValue(key: string, value: string) {
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function missingRequired(): string | null {
+    if (!isEdit && !name.trim()) return "Provider name is required.";
+    const kindUnchanged = isEdit && kind === provider?.kind;
+    for (const field of basicFields) {
+      if (!field.required) continue;
+      const raw = (values[field.key] ?? "").trim();
+      if (
+        SECRET_KEYS.has(field.key) &&
+        kindUnchanged &&
+        provider?.secret_config_keys.includes(field.key as never)
+      )
+        continue;
+      if (raw === "") return `${field.label} is required.`;
+    }
+    return null;
+  }
+
+  function submit() {
+    setTouched(true);
+    if (missingRequired()) return;
+    const config = buildConfig(kind, values, isEdit);
+    const input: ProviderInput = {
+      kind,
+      ...(name.trim() ? { name: name.trim() } : {}),
+      ...(identifier.trim() ? { identifier: identifier.trim() } : {}),
+      ...(kind === "none" || kind === "caracal_mandate" ? {} : { config_json: config }),
+    };
+    onSubmit(input);
+  }
+
+  const error = touched ? missingRequired() : null;
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? "Edit provider" : "New provider"}
+      description={
+        isEdit
+          ? "Update routing and credentials. Leave secrets blank to keep the stored value."
+          : "Configure an upstream credential source for this zone."
+      }
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={submit} loading={busy}>
+            {isEdit ? "Save changes" : "Create provider"}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label="Name"
+            placeholder="stripe-prod"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoFocus={!isEdit}
+          />
+          <Select
+            label="Type"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as ProviderKind)}
+          >
+            {KIND_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <p className="border-l-2 border-border pl-3 text-xs text-muted-foreground">
+          {KIND_SUMMARY[kind]}
+        </p>
+
+        {basicFields.map((field) => (
+          <ProviderFieldInput
+            key={field.key}
+            field={field}
+            value={values[field.key] ?? ""}
+            stored={Boolean(provider?.secret_config_keys.includes(field.key as never))}
+            isEdit={isEdit}
+            onChange={(v) => setValue(field.key, v)}
+          />
+        ))}
+
+        {advancedFields.length > 0 ? (
+          <div className="border-t border-border pt-3">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                className={cx("transition-transform", showAdvanced && "rotate-90")}
+              >
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+              Advanced ({advancedFields.length})
+            </button>
+            {showAdvanced ? (
+              <div className="mt-4 flex flex-col gap-4">
+                {advancedFields.map((field) => (
+                  <ProviderFieldInput
+                    key={field.key}
+                    field={field}
+                    value={values[field.key] ?? ""}
+                    stored={Boolean(provider?.secret_config_keys.includes(field.key as never))}
+                    isEdit={isEdit}
+                    onChange={(v) => setValue(field.key, v)}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="border-t border-border pt-3">
+          <Field
+            label="Identifier"
+            placeholder="provider://stripe-prod"
+            hint="Optional. Generated from the name when blank. Must match provider://lowercase-slug."
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+          />
+        </div>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      </div>
+    </Modal>
+  );
+}
+
+function ProviderFieldInput({
+  field,
+  value,
+  stored,
+  isEdit,
+  onChange,
+}: {
+  field: ProviderField;
+  value: string;
+  stored: boolean;
+  isEdit: boolean;
+  onChange: (value: string) => void;
+}) {
+  const isSecret = field.kind === "secret" || field.kind === "secret-multiline";
+  const hint =
+    isSecret && isEdit && stored ? "Stored. Leave blank to keep the current value." : field.hint;
+
+  if (field.kind === "bool") {
+    return (
+      <label className="flex items-center justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block text-sm font-medium text-foreground">{field.label}</span>
+          {field.hint ? (
+            <span className="mt-0.5 block text-xs text-muted-foreground">{field.hint}</span>
+          ) : null}
+        </span>
+        <input
+          type="checkbox"
+          checked={value === "true"}
+          onChange={(e) => onChange(e.target.checked ? "true" : "false")}
+          className="h-4 w-4 flex-shrink-0 accent-primary"
+        />
+      </label>
+    );
+  }
+
+  if (field.kind === "select") {
+    return (
+      <Select
+        label={field.label}
+        value={value || field.options?.[0]}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {field.options?.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </Select>
+    );
+  }
+
+  if (field.kind === "secret-multiline") {
+    return (
+      <Textarea
+        label={field.label}
+        hint={hint}
+        value={value}
+        placeholder={field.placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
+  if (field.kind === "secret") {
+    return (
+      <div>
+        <PasswordField
+          label={field.label}
+          value={value}
+          placeholder={field.placeholder}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        {hint ? <span className="mt-1 block text-xs text-muted-foreground">{hint}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <Field
+      label={field.label}
+      hint={hint}
+      placeholder={field.placeholder}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
