@@ -35,3 +35,11 @@ export async function fetchEnabledProviders(): Promise<EnabledProviders> {
     return { email: true, google: false, github: false };
   }
 }
+
+/** Temporary testing helper: wipe all auth accounts and sessions on the local auth service. */
+export async function resetAuthAccounts(): Promise<void> {
+  await fetch(`${config.authBaseUrl}/dev/reset`, {
+    method: "POST",
+    credentials: "include",
+  }).catch(() => undefined);
+}

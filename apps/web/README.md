@@ -30,14 +30,14 @@ The dev server runs on http://localhost:3001.
 Run these from `apps/web`. From the repository root, prefix with `--dir apps/web`
 (for example, `pnpm --dir apps/web dev`).
 
-| Command | Description |
-| --- | --- |
-| `pnpm dev` | Start the local dev server. |
-| `pnpm build` | Production build to `dist/`. |
-| `pnpm preview` | Preview the production build. |
-| `pnpm lint` | Run ESLint. |
+| Command          | Description                     |
+| ---------------- | ------------------------------- |
+| `pnpm dev`       | Start the local dev server.     |
+| `pnpm build`     | Production build to `dist/`.    |
+| `pnpm preview`   | Preview the production build.   |
+| `pnpm lint`      | Run ESLint.                     |
 | `pnpm typecheck` | Type-check with `tsc --noEmit`. |
-| `pnpm format` | Format with Prettier. |
+| `pnpm format`    | Format with Prettier.           |
 
 ## Structure
 
