@@ -154,4 +154,111 @@ This file defines the application theme and global styles.
       transform: scaleY(calc(var(--initial-scale) * 0.7));
     }
   }
+
+  @keyframes caracalFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes caracalOverlayIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes caracalPopIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes caracalSlideInRight {
+    from {
+      opacity: 0;
+      transform: translateX(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes caracalToastIn {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes caracalShimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+
+  .animate-fade-in {
+    animation: caracalFadeIn 0.18s ease-out both;
+  }
+  .animate-overlay-in {
+    animation: caracalOverlayIn 0.16s ease-out both;
+  }
+  .animate-pop-in {
+    animation: caracalPopIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-slide-in-right {
+    animation: caracalSlideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .animate-toast-in {
+    animation: caracalToastIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .skeleton {
+    background-image: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--foreground) 6%, transparent) 25%,
+      color-mix(in oklch, var(--foreground) 12%, transparent) 37%,
+      color-mix(in oklch, var(--foreground) 6%, transparent) 63%
+    );
+    background-size: 200% 100%;
+    animation: caracalShimmer 1.4s ease-in-out infinite;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: 9999px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-fade-in,
+    .animate-overlay-in,
+    .animate-pop-in,
+    .animate-slide-in-right,
+    .animate-toast-in,
+    .skeleton,
+    .marquee {
+      animation: none;
+    }
+  }
 }
