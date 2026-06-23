@@ -8,6 +8,7 @@ import { Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 
 import { ProfileMenu } from "@/components/console/ProfileMenu";
+import { LanguageMenu } from "@/components/console/LanguageMenu";
 import { Sidebar } from "@/components/console/Sidebar";
 import { cx } from "@/lib/cx";
 
@@ -87,7 +88,10 @@ export function ConsoleLayout() {
           </button>
           <div className="hidden md:block" />
 
-          <ProfileMenu />
+          <div className="flex items-center gap-2">
+            <ProfileMenu />
+            <LanguageMenu />
+          </div>
         </header>
 
         <main className="scrollbar-thin min-w-0 flex-1 overflow-y-auto px-5 py-6 md:px-8">

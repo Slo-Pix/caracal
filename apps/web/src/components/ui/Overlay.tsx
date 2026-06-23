@@ -5,6 +5,7 @@ Caracal, a product of Garudex Labs
 This file provides the shared modal and drawer overlays for the Console UI.
 */
 import { useEffect, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { cx } from "@/lib/cx";
 import { IconButton } from "./Primitives";
@@ -57,7 +58,7 @@ export function Modal({
 }) {
   useEscape(open, onClose);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       <div
         className="animate-overlay-in fixed inset-0 bg-foreground/30 backdrop-blur-[1px]"
@@ -87,7 +88,8 @@ export function Modal({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -110,7 +112,7 @@ export function Drawer({
 }) {
   useEscape(open, onClose);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50">
       <div
         className="animate-overlay-in absolute inset-0 bg-foreground/30 backdrop-blur-[1px]"
@@ -143,6 +145,7 @@ export function Drawer({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
