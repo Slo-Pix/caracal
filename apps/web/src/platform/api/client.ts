@@ -21,6 +21,8 @@ import type {
   ProviderInput,
   ProviderPatchInput,
   Resource,
+  ResourceInput,
+  ResourcePatchInput,
   RowList,
   Session,
   Zone,
@@ -126,6 +128,24 @@ export const consoleApi = {
   resources: {
     list: (zoneId: string) =>
       request<Resource[]>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`),
+    get: (zoneId: string, id: string) =>
+      request<Resource>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(id)}`,
+      ),
+    create: (zoneId: string, input: ResourceInput) =>
+      request<Resource>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    patch: (zoneId: string, id: string, input: ResourcePatchInput) =>
+      request<Resource>(
+        `/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(id)}`,
+        { method: "PATCH", body: JSON.stringify(input) },
+      ),
+    delete: (zoneId: string, id: string) =>
+      request<void>(`/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      }),
   },
 
   providers: {

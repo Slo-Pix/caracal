@@ -17,6 +17,9 @@ import type {
   Provider,
   ProviderInput,
   ProviderPatchInput,
+  Resource,
+  ResourceInput,
+  ResourcePatchInput,
   Zone,
   ZoneInput,
   ZonePatchInput,
@@ -143,6 +146,42 @@ export function useResources(zoneId: string | null) {
     queryKey: keys.resources(zoneId),
     queryFn: () => consoleApi.resources.list(zoneId as string),
     enabled: Boolean(zoneId),
+  });
+}
+
+export function useCreateResource(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ResourceInput) => consoleApi.resources.create(zoneId as string, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.resources(zoneId) }),
+  });
+}
+
+export function useUpdateResource(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ResourcePatchInput }) =>
+      consoleApi.resources.patch(zoneId as string, id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.resources(zoneId) }),
+  });
+}
+
+export function useDeleteResource(zoneId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => consoleApi.resources.delete(zoneId as string, id),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: keys.resources(zoneId) });
+      const previous = qc.getQueryData<Resource[]>(keys.resources(zoneId));
+      qc.setQueryData<Resource[]>(keys.resources(zoneId), (old) =>
+        old?.filter((resource) => resource.id !== id),
+      );
+      return { previous };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previous) qc.setQueryData(keys.resources(zoneId), context.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: keys.resources(zoneId) }),
   });
 }
 
