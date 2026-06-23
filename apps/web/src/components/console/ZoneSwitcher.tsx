@@ -8,14 +8,14 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { cx } from "@/lib/cx";
-import type { ZoneRecord } from "@/platform/state/localInstall";
+import type { Zone } from "@/platform/api/types";
 
 export function ZoneSwitcher({
   zones,
   activeZoneId,
   onSelect,
 }: {
-  zones: ZoneRecord[];
+  zones: Zone[];
   activeZoneId: string | null;
   onSelect: (id: string) => void;
 }) {

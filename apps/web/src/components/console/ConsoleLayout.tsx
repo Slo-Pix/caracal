@@ -5,19 +5,14 @@ Caracal, a product of Garudex Labs
 This file is the authenticated Console shell: top bar, zone switcher, and side navigation.
 */
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
 
 import { LockBadge, Tooltip } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { ZoneSwitcher } from "@/components/console/ZoneSwitcher";
+import { useActiveZone } from "@/platform/api/hooks";
 import { signOut } from "@/platform/auth";
 import { NAV_GROUPS } from "@/platform/nav/navModel";
-import {
-  activeZones,
-  getActiveZone,
-  setActiveZoneId,
-  workspaceLabel,
-} from "@/platform/state/localInstall";
+import { workspaceLabel } from "@/platform/state/localInstall";
 
 function isActive(pathname: string, to: string): boolean {
   if (to === "/app") return pathname === "/app";
@@ -28,8 +23,7 @@ export function ConsoleLayout() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const workspace = workspaceLabel();
-  const [zones] = useState(() => activeZones());
-  const [activeZoneId, setActive] = useState<string | null>(() => getActiveZone()?.id ?? null);
+  const { zones, activeZone, selectZone } = useActiveZone();
 
   async function handleSignOut() {
     await signOut();
@@ -50,11 +44,8 @@ export function ConsoleLayout() {
           <div className="ml-2">
             <ZoneSwitcher
               zones={zones}
-              activeZoneId={activeZoneId}
-              onSelect={(id) => {
-                setActiveZoneId(id);
-                setActive(id);
-              }}
+              activeZoneId={activeZone?.id ?? null}
+              onSelect={selectZone}
             />
           </div>
         </div>
