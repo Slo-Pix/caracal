@@ -69,11 +69,16 @@ export type ProviderKind =
   | "api_key"
   | "bearer_token";
 
+export type ProviderSecretConfigKey = "client_secret" | "private_key" | "api_key" | "bearer_token";
+
 export interface Provider {
   id: string;
   zone_id: string;
   name: string;
+  identifier: string;
   kind: ProviderKind;
+  config_json: Record<string, unknown>;
+  secret_config_keys: ProviderSecretConfigKey[];
   created_at: string;
   updated_at: string;
 }
@@ -88,6 +93,17 @@ export interface Policy {
   created_at: string;
 }
 
+export interface PolicyVersion {
+  id: string;
+  policy_id: string;
+  version: number;
+  content_sha256: string;
+  schema_version: string;
+  created_at: string;
+}
+
+export type PolicyDetail = Policy & { versions: PolicyVersion[] };
+
 export interface PolicySet {
   id: string;
   zone_id: string;
@@ -95,6 +111,51 @@ export interface PolicySet {
   description: string | null;
   active_version_id: string | null;
   created_at: string;
+}
+
+export interface Session {
+  id: string;
+  zone_id: string;
+  session_type: string;
+  subject_id: string;
+  parent_id: string | null;
+  status: string;
+  expires_at: string;
+  authenticated_at: string;
+  created_at: string;
+}
+
+export interface AuditEvent {
+  id: string;
+  zone_id: string;
+  event_type: string;
+  request_id: string | null;
+  decision: string | null;
+  evaluation_status: string | null;
+  metadata_json: Record<string, unknown> | null;
+  occurred_at: string;
+  ingested_at: string;
+}
+
+export interface AuditDetail extends AuditEvent {
+  policy_set_id: string | null;
+  policy_set_version_id: string | null;
+  manifest_sha: string | null;
+  determining_policies_json: unknown[] | null;
+  diagnostics_json: unknown[] | null;
+}
+
+export interface DecisionTrace {
+  request_id: string;
+  zone_id: string;
+  final_decision: string;
+  denied: unknown[];
+  events: AuditDetail[];
+}
+
+export interface RowList<T> {
+  rows: T[];
+  next_cursor: string | null;
 }
 
 export interface ConsoleStatus {

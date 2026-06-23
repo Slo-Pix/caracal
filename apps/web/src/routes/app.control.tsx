@@ -4,9 +4,9 @@ Caracal, a product of Garudex Labs
 
 This file defines the Control API route.
 */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ModulePlaceholder } from "@/components/console/ModulePlaceholder";
+import { ModuleNotice } from "@/components/console/ModuleNotice";
 
 export const Route = createFileRoute("/app/control")({
   component: ControlPage,
@@ -14,12 +14,30 @@ export const Route = createFileRoute("/app/control")({
 
 function ControlPage() {
   return (
-    <ModulePlaceholder
+    <ModuleNotice
       title="Control API"
-      description="Programmatic keys and tokens for automating this zone."
+      description="Programmatic, scoped automation of zone management."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Control API" }]}
-      emptyTitle="No Control keys yet"
-      emptyDescription="Issue a scoped Control API key to automate zone management."
-    />
+      noticeTitle="Control keys are issued locally by design"
+    >
+      <p>
+        For security, Control API keys are issued only from the local Caracal console running on an
+        interactive terminal. This keeps the one-time key secret on the operator's machine and out
+        of any browser session.
+      </p>
+      <p>
+        Once issued, automation exchanges the key for short-lived, least-privilege STS tokens scoped
+        as <span className="font-mono text-foreground">control:&lt;noun&gt;:&lt;verb&gt;</span> and
+        calls the Control API directly. The web console intentionally does not mint or display these
+        secrets.
+      </p>
+      <p>
+        Applications and their traits for this zone remain visible under{" "}
+        <Link to="/app/applications" className="font-medium text-foreground underline">
+          Applications
+        </Link>
+        .
+      </p>
+    </ModuleNotice>
   );
 }

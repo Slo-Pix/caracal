@@ -119,6 +119,46 @@ export function usePolicySets(zoneId: string | null) {
   });
 }
 
+export function usePolicy(zoneId: string | null, id: string | null) {
+  return useQuery({
+    queryKey: ["console", "policy", zoneId, id],
+    queryFn: () => consoleApi.policies.get(zoneId as string, id as string),
+    enabled: Boolean(zoneId && id),
+    staleTime: STALE_MS,
+    retry: false,
+  });
+}
+
+export function useSessions(zoneId: string | null) {
+  return useQuery({
+    queryKey: ["console", "sessions", zoneId],
+    queryFn: () => consoleApi.sessions.list(zoneId as string),
+    enabled: Boolean(zoneId),
+    staleTime: STALE_MS,
+    retry: false,
+  });
+}
+
+export function useAudit(zoneId: string | null) {
+  return useQuery({
+    queryKey: ["console", "audit", zoneId],
+    queryFn: () => consoleApi.audit.list(zoneId as string),
+    enabled: Boolean(zoneId),
+    staleTime: STALE_MS,
+    retry: false,
+  });
+}
+
+export function useDecisionTrace(zoneId: string | null, requestId: string | null) {
+  return useQuery({
+    queryKey: ["console", "audit-explain", zoneId, requestId],
+    queryFn: () => consoleApi.audit.explain(zoneId as string, requestId as string),
+    enabled: Boolean(zoneId && requestId),
+    staleTime: STALE_MS,
+    retry: false,
+  });
+}
+
 const zoneListeners = new Set<() => void>();
 
 function emitZoneChange(): void {
