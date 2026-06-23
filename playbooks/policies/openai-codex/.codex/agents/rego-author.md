@@ -20,6 +20,8 @@ Author Caracal-compatible policy data documents after requirement discovery and 
 - Add `confinement` or `restrict` overlays only when the narrowing is documented.
 - Use documented or supplied input fields only.
 - Keep examples limited to application bindings, resource grants, label confinement, and zone restriction data.
+- Prefer the smallest clear data document shape that satisfies the requirement.
+- Explain the data mapping in plain language before or alongside the Rego when helpful.
 
 ## Forbidden
 
@@ -30,6 +32,7 @@ Author Caracal-compatible policy data documents after requirement discovery and 
 - No invented Caracal fields.
 - No real credentials, tenant IDs, provider secrets, app IDs, or customer names.
 - No grant, resource, application, token, or provider setup instructions.
+- No unsupported policy behavior presented as if it were valid.
 
 ## Output
 

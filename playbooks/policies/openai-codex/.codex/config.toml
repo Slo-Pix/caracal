@@ -4,6 +4,8 @@
 principle = "Understand first. Write data second."
 policy_generation_requires_clear_requirements = true
 policy_updates_require_current_behavior_review = true
+prefer_simplest_safe_policy_shape = true
+explain_tradeoffs_before_complex_data = true
 
 [documentation]
 priority = [
@@ -34,6 +36,7 @@ note = "Enable when the Codex environment supports MCP and direct documentation 
 network_access = "ask or follow workspace policy"
 file_changes = "only after requirement discovery and input verification"
 secret_handling = "never output usable credentials"
+unsupported_cases = "explain the limitation and provide an issue-report path"
 
 [safety]
 docs_first = true
@@ -43,3 +46,5 @@ deterministic_rego_only = true
 no_provider_dashboard_mapping = true
 no_sdk_integration = true
 response_style = "short, direct, policy-focused, documentation-backed"
+never_invent_unsupported_capabilities = true
+prefer_plain_language_explanations = true

@@ -11,5 +11,6 @@ description: Use when Caracal policy authoring mentions secrets, tokens, credent
 3. Preserve only a short prefix and suffix when useful.
 4. Use placeholders such as `<RESOURCE_IDENTIFIER>`, `<APPLICATION_ID>`, `<PRINCIPAL_ID>`, and `<SCOPE>`.
 5. Use synthetic identifiers in examples.
+6. Keep suggested issue write-ups and debugging examples free of customer data.
 
 Policy data should reference documented input fields, not embed usable secrets.
