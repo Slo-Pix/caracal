@@ -4,9 +4,9 @@ Caracal, a product of Garudex Labs
 
 This file defines the Delegation route.
 */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
-import { ModulePlaceholder } from "@/components/console/ModulePlaceholder";
+import { ModuleNotice } from "@/components/console/ModuleNotice";
 
 export const Route = createFileRoute("/app/delegation")({
   component: DelegationPage,
@@ -14,12 +14,24 @@ export const Route = createFileRoute("/app/delegation")({
 
 function DelegationPage() {
   return (
-    <ModulePlaceholder
+    <ModuleNotice
       title="Delegation"
-      description="The graph of delegated authority between sessions."
+      description="The graph of delegated authority between agent sessions."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Delegation" }]}
-      emptyTitle="No delegation edges"
-      emptyDescription="Delegated authority between agent sessions is mapped here as a graph."
-    />
+      noticeTitle="Served by the Coordinator service"
+    >
+      <p>
+        Delegation edges describe how authority flows between agent sessions. This graph is
+        maintained by the Caracal Coordinator service. Connecting the Coordinator surfaces inbound
+        and outbound delegation, traversal, impact analysis, and edge revocation here.
+      </p>
+      <p>
+        Authority decisions for this zone are recorded under{" "}
+        <Link to="/app/audit" className="font-medium text-foreground underline">
+          Audit
+        </Link>
+        .
+      </p>
+    </ModuleNotice>
   );
 }
