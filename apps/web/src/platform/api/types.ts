@@ -21,6 +21,21 @@ export interface ZoneInput {
   dcr_enabled?: boolean;
 }
 
+export type DcrShutdownMode = "keep_live" | "revoke_live";
+
+export interface ZonePatchInput {
+  name?: string;
+  slug?: string;
+  dcr_enabled?: boolean;
+  dcr_shutdown?: DcrShutdownMode;
+}
+
+export interface ZoneDcrStatus {
+  id: string;
+  dcr_enabled: boolean;
+  live_dcr_applications: number;
+}
+
 export interface Application {
   id: string;
   zone_id: string;

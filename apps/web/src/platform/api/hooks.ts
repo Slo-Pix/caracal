@@ -10,7 +10,7 @@ import { useSyncExternalStore } from "react";
 import { getActiveZoneId, setActiveZoneId } from "@/platform/state/localInstall";
 
 import { consoleApi } from "./client";
-import type { Application, ApplicationInput, Zone, ZoneInput } from "./types";
+import type { Application, ApplicationInput, Zone, ZoneInput, ZonePatchInput } from "./types";
 
 // Operational data that benefits from staying live while the tab is focused.
 const LIVE_MS = 10_000;
@@ -46,6 +46,23 @@ export function useCreateZone() {
       qc.invalidateQueries({ queryKey: keys.zones });
       if (!getActiveZoneId()) selectZone(zone.id);
     },
+  });
+}
+
+export function useUpdateZone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: string; input: ZonePatchInput }) =>
+      consoleApi.zones.patch(id, input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: keys.zones }),
+  });
+}
+
+export function useZoneDcrStatus(zoneId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["console", "zone-dcr", zoneId],
+    queryFn: () => consoleApi.zones.dcrStatus(zoneId as string),
+    enabled: Boolean(zoneId) && enabled,
   });
 }
 
