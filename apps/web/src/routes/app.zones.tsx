@@ -18,21 +18,22 @@ import {
   Modal,
   Pagination,
   SearchInput,
-  Select,
-  Tabs,
-  Textarea,
+  Skeleton,
   Tooltip,
   useToast,
   type Column,
   type SortState,
 } from "@/components/ui";
+import { ConsoleApiError } from "@/platform/api/client";
 import {
-  addZone,
-  archiveZone,
-  listZones,
-  setActiveZoneId,
-  type ZoneRecord,
-} from "@/platform/state/localInstall";
+  useConsoleStatus,
+  useCreateZone,
+  useDeleteZone,
+  useZones,
+  selectZone,
+} from "@/platform/api/hooks";
+import { getActiveZoneId } from "@/platform/state/localInstall";
+import type { Zone } from "@/platform/api/types";
 
 const PAGE_SIZE = 8;
 
@@ -40,62 +41,49 @@ export const Route = createFileRoute("/app/zones")({
   component: ZonesPage,
 });
 
+function errorMessage(error: unknown): string {
+  if (error instanceof ConsoleApiError) {
+    if (error.notConfigured) return "Control plane not connected.";
+    if (error.unreachable) return "Control plane unreachable.";
+    return error.code;
+  }
+  return "Unexpected error.";
+}
+
 function ZonesPage() {
   const toast = useToast();
-  const [zones, setZones] = useState<ZoneRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("active");
+  const status = useConsoleStatus();
+  const zonesQuery = useZones();
+  const createZone = useCreateZone();
+  const deleteZone = useDeleteZone();
+
   const [query, setQuery] = useState("");
-  const [sortBy, setSortBy] = useState("created");
   const [sort, setSort] = useState<SortState>({ column: "name", direction: "asc" });
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  const [archiveTarget, setArchiveTarget] = useState<ZoneRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Zone | null>(null);
+  const activeId = getActiveZoneId();
 
-  function refresh() {
-    setZones(listZones());
-  }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      refresh();
-      setLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, []);
+  const zones = useMemo(() => zonesQuery.data ?? [], [zonesQuery.data]);
 
   useEffect(() => {
     setPage(1);
-  }, [tab, query, sortBy, sort]);
-
-  const counts = useMemo(
-    () => ({
-      active: zones.filter((z) => z.status === "active").length,
-      archived: zones.filter((z) => z.status === "archived").length,
-    }),
-    [zones],
-  );
+  }, [query, sort]);
 
   const visible = useMemo(() => {
-    const status = tab === "archived" ? "archived" : "active";
-    const filtered = zones
-      .filter((zone) => zone.status === status)
-      .filter((zone) => {
-        if (!query.trim()) return true;
-        const q = query.toLowerCase();
-        return zone.name.toLowerCase().includes(q) || zone.slug.toLowerCase().includes(q);
-      });
-
-    const sorted = [...filtered].sort((a, b) => {
-      const dir = sort.direction === "asc" ? 1 : -1;
-      if (sort.column === "name") return a.name.localeCompare(b.name) * dir;
-      if (sort.column === "slug") return a.slug.localeCompare(b.slug) * dir;
-      return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * dir;
+    const filtered = zones.filter((zone) => {
+      if (!query.trim()) return true;
+      const q = query.toLowerCase();
+      return zone.name.toLowerCase().includes(q) || zone.slug.toLowerCase().includes(q);
     });
-
-    if (sortBy === "name") sorted.sort((a, b) => a.name.localeCompare(b.name));
-    return sorted;
-  }, [zones, tab, query, sort, sortBy]);
+    const dir = sort.direction === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sort.column === "slug") return a.slug.localeCompare(b.slug) * dir;
+      if (sort.column === "created")
+        return (Date.parse(a.created_at) - Date.parse(b.created_at)) * dir;
+      return a.name.localeCompare(b.name) * dir;
+    });
+  }, [zones, query, sort]);
 
   const paged = useMemo(
     () => visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -110,19 +98,15 @@ function ZonesPage() {
     );
   }
 
-  const columns: Column<ZoneRecord>[] = [
+  const columns: Column<Zone>[] = [
     {
       id: "name",
       header: "Name",
       sortable: true,
       cell: (zone) => (
-        <div>
-          <div className="font-medium text-foreground">{zone.name}</div>
-          {zone.description ? (
-            <div className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-              {zone.description}
-            </div>
-          ) : null}
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground">{zone.name}</span>
+          {zone.id === activeId ? <Badge tone="success">Active</Badge> : null}
         </div>
       ),
     },
@@ -133,14 +117,10 @@ function ZonesPage() {
       cell: (zone) => <span className="font-mono text-xs text-muted-foreground">{zone.slug}</span>,
     },
     {
-      id: "status",
-      header: "Status",
+      id: "dcr",
+      header: "DCR",
       cell: (zone) =>
-        zone.status === "active" ? (
-          <Badge tone="success">Active</Badge>
-        ) : (
-          <Badge tone="muted">Archived</Badge>
-        ),
+        zone.dcr_enabled ? <Badge tone="neutral">Enabled</Badge> : <Badge tone="muted">Off</Badge>,
     },
     {
       id: "created",
@@ -148,7 +128,7 @@ function ZonesPage() {
       sortable: true,
       cell: (zone) => (
         <span className="text-xs text-muted-foreground">
-          {new Date(zone.createdAt).toLocaleDateString()}
+          {new Date(zone.created_at).toLocaleDateString()}
         </span>
       ),
     },
@@ -159,56 +139,74 @@ function ZonesPage() {
       width: "1%",
       cell: (zone) => (
         <div className="flex justify-end gap-1">
-          {zone.status === "active" ? (
-            <>
-              <Tooltip label="Make this the active zone">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setActiveZoneId(zone.id);
-                    toast({
-                      tone: "success",
-                      title: "Active zone switched",
-                      description: zone.name,
-                    });
-                  }}
-                >
-                  Switch
-                </Button>
-              </Tooltip>
-              <Tooltip label="Archive this zone">
-                <Button variant="ghost" size="sm" onClick={() => setArchiveTarget(zone)}>
-                  Archive
-                </Button>
-              </Tooltip>
-            </>
-          ) : (
-            <span className="px-2 text-xs text-muted-foreground">—</span>
-          )}
+          <Tooltip label="Make this the active zone">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={zone.id === activeId}
+              onClick={() => {
+                selectZone(zone.id);
+                toast({ tone: "success", title: "Active zone switched", description: zone.name });
+              }}
+            >
+              Switch
+            </Button>
+          </Tooltip>
+          <Tooltip label="Delete this zone">
+            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(zone)}>
+              Delete
+            </Button>
+          </Tooltip>
         </div>
       ),
     },
   ];
 
+  if (status.isLoading) {
+    return (
+      <ModulePage
+        title="Zones"
+        description="Zones are Caracal's primary trust boundary."
+        breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Zones" }]}
+      >
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      </ModulePage>
+    );
+  }
+
+  const disconnected = status.isError || !status.data?.configured || !status.data?.reachable;
+  if (disconnected) {
+    const title = !status.data?.configured
+      ? "Control plane not connected"
+      : "Control plane unreachable";
+    const description = !status.data?.configured
+      ? "No admin credentials were found. Start the local stack with `caracal up` to provision the control plane, then reload."
+      : `The control plane at ${status.data?.apiUrl ?? ""} is not responding. Confirm it is running, then retry.`;
+    return (
+      <ModulePage
+        title="Zones"
+        description="Zones are Caracal's primary trust boundary."
+        breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Zones" }]}
+      >
+        <EmptyState
+          title={title}
+          description={description}
+          action={<Button onClick={() => status.refetch()}>Retry</Button>}
+        />
+      </ModulePage>
+    );
+  }
+
   return (
     <ModulePage
       title="Zones"
-      description="Zones are Caracal's primary trust boundary. Create, switch, configure, and archive them here."
+      description="Zones are Caracal's primary trust boundary. Create, switch, and remove them here."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Zones" }]}
       actions={<Button onClick={() => setCreateOpen(true)}>New zone</Button>}
     >
-      <div className="mb-4">
-        <Tabs
-          tabs={[
-            { id: "active", label: "Active", count: counts.active },
-            { id: "archived", label: "Archived", count: counts.archived },
-          ]}
-          active={tab}
-          onChange={setTab}
-        />
-      </div>
-
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <SearchInput
           placeholder="Search zones…"
@@ -216,39 +214,33 @@ function ZonesPage() {
           onChange={(e) => setQuery(e.target.value)}
           className="w-full sm:w-64"
         />
-        <div className="w-40">
-          <Select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
-            <option value="created">Newest first</option>
-            <option value="name">Name</option>
-          </Select>
-        </div>
       </div>
 
       <DataTable
         columns={columns}
         rows={paged}
         rowKey={(zone) => zone.id}
-        loading={loading}
+        loading={zonesQuery.isLoading}
         sort={sort}
         onSortChange={toggleSort}
         empty={
           <EmptyState
             title={
-              query
-                ? "No matching zones"
-                : tab === "archived"
-                  ? "No archived zones"
+              zonesQuery.isError
+                ? "Could not load zones"
+                : query
+                  ? "No matching zones"
                   : "No zones yet"
             }
             description={
-              query
-                ? "Try a different search term."
-                : tab === "archived"
-                  ? "Archived zones will appear here."
+              zonesQuery.isError
+                ? errorMessage(zonesQuery.error)
+                : query
+                  ? "Try a different search term."
                   : "Create your first zone to start managing applications, resources, and policies."
             }
             action={
-              !query && tab === "active" ? (
+              !query && !zonesQuery.isError ? (
                 <Button onClick={() => setCreateOpen(true)}>Create zone</Button>
               ) : undefined
             }
@@ -256,7 +248,7 @@ function ZonesPage() {
         }
       />
 
-      {!loading && visible.length > 0 ? (
+      {!zonesQuery.isLoading && visible.length > 0 ? (
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-card">
           <Pagination
             page={page}
@@ -269,25 +261,34 @@ function ZonesPage() {
 
       <CreateZoneModal
         open={createOpen}
+        busy={createZone.isPending}
         onClose={() => setCreateOpen(false)}
-        onCreated={(name) => {
-          refresh();
-          toast({ tone: "success", title: "Zone created", description: name });
+        onSubmit={async (name) => {
+          try {
+            const zone = await createZone.mutateAsync({ name });
+            setCreateOpen(false);
+            toast({ tone: "success", title: "Zone created", description: zone.name });
+          } catch (err) {
+            toast({ tone: "error", title: "Create failed", description: errorMessage(err) });
+          }
         }}
       />
 
       <ConfirmDialog
-        open={archiveTarget !== null}
-        onClose={() => setArchiveTarget(null)}
-        title="Archive zone"
-        description={`Archiving "${archiveTarget?.name ?? ""}" hides it from active operations. You can still view it under the Archived tab.`}
-        confirmLabel="Archive zone"
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete zone"
+        description={`Deleting "${deleteTarget?.name ?? ""}" permanently removes its applications, resources, policies, and audit. This cannot be undone.`}
+        confirmLabel="Delete zone"
         tone="danger"
-        onConfirm={() => {
-          if (!archiveTarget) return;
-          archiveZone(archiveTarget.id);
-          refresh();
-          toast({ tone: "info", title: "Zone archived", description: archiveTarget.name });
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await deleteZone.mutateAsync(deleteTarget.id);
+            toast({ tone: "info", title: "Zone deleted", description: deleteTarget.name });
+          } catch (err) {
+            toast({ tone: "error", title: "Delete failed", description: errorMessage(err) });
+          }
         }}
       />
     </ModulePage>
@@ -296,32 +297,20 @@ function ZonesPage() {
 
 function CreateZoneModal({
   open,
+  busy,
   onClose,
-  onCreated,
+  onSubmit,
 }: {
   open: boolean;
+  busy: boolean;
   onClose: () => void;
-  onCreated: (name: string) => void;
+  onSubmit: (name: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setName("");
-      setDescription("");
-    }
+    if (open) setName("");
   }, [open]);
-
-  function submit() {
-    if (!name.trim()) return;
-    setBusy(true);
-    addZone({ name: name.trim(), description: description.trim() });
-    setBusy(false);
-    onCreated(name.trim());
-    onClose();
-  }
 
   return (
     <Modal
@@ -334,7 +323,11 @@ function CreateZoneModal({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={busy} disabled={!name.trim()}>
+          <Button
+            onClick={() => name.trim() && onSubmit(name.trim())}
+            loading={busy}
+            disabled={!name.trim()}
+          >
             Create zone
           </Button>
         </>
@@ -347,12 +340,6 @@ function CreateZoneModal({
           value={name}
           onChange={(e) => setName(e.target.value)}
           autoFocus
-        />
-        <Textarea
-          label="Description"
-          placeholder="Live workloads and production agents."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
         />
       </div>
     </Modal>

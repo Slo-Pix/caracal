@@ -13,141 +13,61 @@ import {
   Mono,
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
-import { Badge, Button, Field, Modal, Textarea, useToast, type Column } from "@/components/ui";
+import { ZoneScopedPage } from "@/components/console/ZoneScope";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  Field,
+  Modal,
+  Textarea,
+  useToast,
+  type Column,
+} from "@/components/ui";
+import { ConsoleApiError } from "@/platform/api/client";
+import { useApplications, useCreateApplication, useDeleteApplication } from "@/platform/api/hooks";
+import type { Application } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/applications")({
-  component: ApplicationsPage,
+  component: ApplicationsRoute,
 });
 
-type Registration = "console" | "dcr";
-
-interface Application {
-  id: string;
-  name: string;
-  clientId: string;
-  registration: Registration;
-  scopes: string[];
-  status: "active" | "expired";
-  lastSeen: string;
-  createdAt: string;
+function ApplicationsRoute() {
+  return (
+    <ZoneScopedPage
+      title="Applications"
+      description="Agent identities that can request authority in this zone."
+      breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Applications" }]}
+    >
+      {(zone) => <ApplicationsPage zoneId={zone.id} zoneName={zone.name} />}
+    </ZoneScopedPage>
+  );
 }
 
-const SEED: Application[] = [
-  {
-    id: "a1",
-    name: "billing-worker",
-    clientId: "cli_8f2a91c4",
-    registration: "console",
-    scopes: ["invoices:read", "invoices:write"],
-    status: "active",
-    lastSeen: "2m ago",
-    createdAt: "2026-05-12",
-  },
-  {
-    id: "a2",
-    name: "support-agent",
-    clientId: "cli_2b7d04e1",
-    registration: "dcr",
-    scopes: ["tickets:read"],
-    status: "active",
-    lastSeen: "11m ago",
-    createdAt: "2026-05-20",
-  },
-  {
-    id: "a3",
-    name: "etl-pipeline",
-    clientId: "cli_55c9aa30",
-    registration: "console",
-    scopes: ["warehouse:read", "warehouse:write"],
-    status: "active",
-    lastSeen: "1h ago",
-    createdAt: "2026-04-30",
-  },
-  {
-    id: "a4",
-    name: "notify-bot",
-    clientId: "cli_a01ff7b2",
-    registration: "dcr",
-    scopes: ["events:publish"],
-    status: "expired",
-    lastSeen: "6d ago",
-    createdAt: "2026-03-18",
-  },
-  {
-    id: "a5",
-    name: "scheduler",
-    clientId: "cli_77de1290",
-    registration: "console",
-    scopes: ["jobs:read", "jobs:write"],
-    status: "active",
-    lastSeen: "20m ago",
-    createdAt: "2026-05-02",
-  },
-  {
-    id: "a6",
-    name: "audit-exporter",
-    clientId: "cli_3c8b6e45",
-    registration: "console",
-    scopes: ["audit:read"],
-    status: "active",
-    lastSeen: "3h ago",
-    createdAt: "2026-05-25",
-  },
-  {
-    id: "a7",
-    name: "doc-indexer",
-    clientId: "cli_9a14f0d7",
-    registration: "dcr",
-    scopes: ["docs:read"],
-    status: "active",
-    lastSeen: "44m ago",
-    createdAt: "2026-06-01",
-  },
-  {
-    id: "a8",
-    name: "payments-reconciler",
-    clientId: "cli_61ab22ce",
-    registration: "console",
-    scopes: ["payments:read"],
-    status: "active",
-    lastSeen: "8m ago",
-    createdAt: "2026-06-08",
-  },
-  {
-    id: "a9",
-    name: "lead-enricher",
-    clientId: "cli_0fd7c3a8",
-    registration: "dcr",
-    scopes: ["crm:read", "crm:write"],
-    status: "active",
-    lastSeen: "2h ago",
-    createdAt: "2026-06-10",
-  },
-  {
-    id: "a10",
-    name: "backup-runner",
-    clientId: "cli_d24e90b1",
-    registration: "console",
-    scopes: ["storage:read"],
-    status: "active",
-    lastSeen: "30m ago",
-    createdAt: "2026-06-12",
-  },
-];
+function isExpired(app: Application): boolean {
+  return Boolean(app.expires_at && Date.parse(app.expires_at) < Date.now());
+}
 
-function ApplicationsPage() {
+function errorMessage(error: unknown): string {
+  if (error instanceof ConsoleApiError) {
+    if (error.notConfigured) return "Control plane not connected.";
+    if (error.unreachable) return "Control plane unreachable.";
+    return error.code;
+  }
+  return "Unexpected error.";
+}
+
+function ApplicationsPage({ zoneId, zoneName }: { zoneId: string; zoneName: string }) {
   const toast = useToast();
-  const [rows, setRows] = useState<Application[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
+  const query = useApplications(zoneId);
+  const createApp = useCreateApplication(zoneId);
+  const deleteApp = useDeleteApplication(zoneId);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setRows(SEED);
-      setLoading(false);
-    }, 450);
-    return () => clearTimeout(timer);
-  }, []);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [secret, setSecret] = useState<{ name: string; clientSecret: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
+
+  const rows = query.data ?? [];
 
   const columns: Column<Application>[] = [
     {
@@ -161,7 +81,7 @@ function ApplicationsPage() {
           </span>
           <div>
             <div className="font-medium text-foreground">{app.name}</div>
-            <div className="font-mono text-xs text-muted-foreground">{app.clientId}</div>
+            <div className="font-mono text-xs text-muted-foreground">{app.id}</div>
           </div>
         </div>
       ),
@@ -170,30 +90,34 @@ function ApplicationsPage() {
       id: "registration",
       header: "Registration",
       cell: (app) => (
-        <Badge tone="neutral">{app.registration === "dcr" ? "Dynamic (DCR)" : "Console"}</Badge>
+        <Badge tone="neutral">
+          {app.registration_method === "dcr" ? "Dynamic (DCR)" : "Managed"}
+        </Badge>
       ),
     },
     {
-      id: "scopes",
-      header: "Scopes",
-      cell: (app) => <span className="text-sm text-muted-foreground">{app.scopes.length}</span>,
+      id: "traits",
+      header: "Traits",
+      cell: (app) => (
+        <span className="text-sm text-muted-foreground">{app.traits?.length ?? 0}</span>
+      ),
     },
     {
       id: "status",
       header: "Status",
       cell: (app) =>
-        app.status === "active" ? (
-          <Badge tone="success">Active</Badge>
-        ) : (
-          <Badge tone="muted">Expired</Badge>
-        ),
+        isExpired(app) ? <Badge tone="muted">Expired</Badge> : <Badge tone="success">Active</Badge>,
     },
     {
-      id: "lastSeen",
-      header: "Last seen",
+      id: "created",
+      header: "Created",
       sortable: true,
       align: "right",
-      cell: (app) => <span className="text-xs text-muted-foreground">{app.lastSeen}</span>,
+      cell: (app) => (
+        <span className="text-xs text-muted-foreground">
+          {new Date(app.created_at).toLocaleDateString()}
+        </span>
+      ),
     },
   ];
 
@@ -205,120 +129,168 @@ function ApplicationsPage() {
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Applications" }]}
         primaryAction={{ label: "New application", onClick: () => setCreateOpen(true) }}
         rows={rows}
-        loading={loading}
+        loading={query.isLoading}
         columns={columns}
         rowKey={(app) => app.id}
         search={{
           placeholder: "Search applications…",
-          match: (app, q) =>
-            app.name.toLowerCase().includes(q) || app.clientId.toLowerCase().includes(q),
+          match: (app, q) => app.name.toLowerCase().includes(q) || app.id.toLowerCase().includes(q),
         }}
         sortOptions={[
-          { id: "recent", label: "Recently active" },
+          { id: "recent", label: "Recently created" },
           { id: "name", label: "Name" },
         ]}
         empty={{
-          title: "No applications yet",
-          description: "Create an application to give an agent a scoped identity in this zone.",
-          actionLabel: "New application",
-          onAction: () => setCreateOpen(true),
+          title: query.isError ? "Could not load applications" : "No applications yet",
+          description: query.isError
+            ? errorMessage(query.error)
+            : "Create an application to give an agent a scoped identity in this zone.",
+          actionLabel: query.isError ? undefined : "New application",
+          onAction: query.isError ? undefined : () => setCreateOpen(true),
         }}
         detail={{
           title: (app) => app.name,
-          description: (app) => app.clientId,
-          render: (app) => <ApplicationDetail app={app} onToast={toast} />,
+          description: (app) => app.id,
+          render: (app) => <ApplicationDetail app={app} onDelete={() => setDeleteTarget(app)} />,
         }}
       />
 
       <CreateApplicationModal
         open={createOpen}
+        zoneName={zoneName}
+        busy={createApp.isPending}
         onClose={() => setCreateOpen(false)}
-        onCreated={(name) =>
-          toast({ tone: "success", title: "Application created", description: name })
-        }
+        onSubmit={async (name, traits) => {
+          try {
+            const app = await createApp.mutateAsync({
+              name,
+              registration_method: "managed",
+              traits,
+            });
+            setCreateOpen(false);
+            if (app.client_secret) {
+              setSecret({ name: app.name, clientSecret: app.client_secret });
+            } else {
+              toast({ tone: "success", title: "Application created", description: app.name });
+            }
+          } catch (err) {
+            toast({ tone: "error", title: "Create failed", description: errorMessage(err) });
+          }
+        }}
+      />
+
+      <SecretModal
+        secret={secret}
+        onClose={() => setSecret(null)}
+        onCopied={() => toast({ tone: "success", title: "Client secret copied" })}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete application"
+        description={`Deleting "${deleteTarget?.name ?? ""}" permanently revokes its identity. This cannot be undone.`}
+        confirmLabel="Delete application"
+        tone="danger"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await deleteApp.mutateAsync(deleteTarget.id);
+            toast({ tone: "info", title: "Application deleted", description: deleteTarget.name });
+          } catch (err) {
+            toast({ tone: "error", title: "Delete failed", description: errorMessage(err) });
+          }
+        }}
       />
     </>
   );
 }
 
-function ApplicationDetail({
-  app,
-  onToast,
-}: {
-  app: Application;
-  onToast: (t: { tone: "success" | "info" | "error"; title: string; description?: string }) => void;
-}) {
+function ApplicationDetail({ app, onDelete }: { app: Application; onDelete: () => void }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-2">
-        {app.status === "active" ? (
-          <Badge tone="success">Active</Badge>
-        ) : (
+        {isExpired(app) ? (
           <Badge tone="muted">Expired</Badge>
+        ) : (
+          <Badge tone="success">Active</Badge>
         )}
-        <Badge tone="neutral">{app.registration === "dcr" ? "Dynamic (DCR)" : "Console"}</Badge>
+        <Badge tone="neutral">
+          {app.registration_method === "dcr" ? "Dynamic (DCR)" : "Managed"}
+        </Badge>
       </div>
 
       <DetailGroup title="Identity">
         <DetailField label="Name">{app.name}</DetailField>
-        <DetailField label="Client ID">
-          <Mono>{app.clientId}</Mono>
+        <DetailField label="Application ID">
+          <Mono>{app.id}</Mono>
         </DetailField>
-        <DetailField label="Created">{app.createdAt}</DetailField>
-        <DetailField label="Last seen">{app.lastSeen}</DetailField>
+        <DetailField label="Created">{new Date(app.created_at).toLocaleString()}</DetailField>
+        {app.expires_at ? (
+          <DetailField label="Expires">{new Date(app.expires_at).toLocaleString()}</DetailField>
+        ) : null}
       </DetailGroup>
 
-      <DetailGroup title="Scopes">
-        <div className="flex flex-wrap gap-1.5 pt-2">
-          {app.scopes.map((scope) => (
-            <Badge key={scope} tone="neutral">
-              <Mono>{scope}</Mono>
-            </Badge>
-          ))}
+      <DetailGroup title="Traits">
+        {app.traits && app.traits.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5 pt-2">
+            {app.traits.map((trait) => (
+              <Badge key={trait} tone="neutral">
+                <Mono>{trait}</Mono>
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="pt-2 text-sm text-muted-foreground">No traits assigned.</p>
+        )}
+      </DetailGroup>
+
+      {app.registration_method === "dcr" ? (
+        <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          Dynamic clients are created programmatically and expire automatically. They are read-only
+          here.
+        </p>
+      ) : (
+        <div className="flex items-center gap-2 border-t border-border pt-4">
+          <Button variant="danger" size="sm" onClick={onDelete}>
+            Delete application
+          </Button>
         </div>
-      </DetailGroup>
-
-      <div className="flex items-center gap-2 border-t border-border pt-4">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() =>
-            onToast({ tone: "success", title: "Client secret rotated", description: app.name })
-          }
-        >
-          Rotate secret
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
 
 function CreateApplicationModal({
   open,
+  zoneName,
+  busy,
   onClose,
-  onCreated,
+  onSubmit,
 }: {
   open: boolean;
+  zoneName: string;
+  busy: boolean;
   onClose: () => void;
-  onCreated: (name: string) => void;
+  onSubmit: (name: string, traits: string[] | undefined) => void;
 }) {
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [traits, setTraits] = useState("");
 
   useEffect(() => {
     if (open) {
       setName("");
-      setScopes("");
+      setTraits("");
     }
   }, [open]);
 
   function submit() {
     if (!name.trim()) return;
-    setBusy(true);
-    setBusy(false);
-    onCreated(name.trim());
-    onClose();
+    const parsed = traits
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    onSubmit(name.trim(), parsed.length > 0 ? parsed : undefined);
   }
 
   return (
@@ -326,7 +298,7 @@ function CreateApplicationModal({
       open={open}
       onClose={onClose}
       title="New application"
-      description="Give an agent a scoped identity in this zone."
+      description={`Give an agent a managed identity in ${zoneName}.`}
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -347,13 +319,54 @@ function CreateApplicationModal({
           autoFocus
         />
         <Textarea
-          label="Scopes"
-          hint="Optional. Comma-separated scopes this application may request."
-          placeholder="invoices:read, invoices:write"
-          value={scopes}
-          onChange={(e) => setScopes(e.target.value)}
+          label="Traits"
+          hint="Optional. Comma-separated traits to attach to this application."
+          placeholder="control:invoke"
+          value={traits}
+          onChange={(e) => setTraits(e.target.value)}
         />
       </div>
+    </Modal>
+  );
+}
+
+function SecretModal({
+  secret,
+  onClose,
+  onCopied,
+}: {
+  secret: { name: string; clientSecret: string } | null;
+  onClose: () => void;
+  onCopied: () => void;
+}) {
+  return (
+    <Modal
+      open={secret !== null}
+      onClose={onClose}
+      title="Store the client secret now"
+      description="This secret is shown once and cannot be retrieved later. Copy it before closing."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {secret ? (
+        <div className="flex flex-col gap-3">
+          <div className="text-sm text-muted-foreground">{secret.name}</div>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-muted px-3 py-2 font-mono text-xs">
+              {secret.clientSecret}
+            </code>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard?.writeText(secret.clientSecret);
+                onCopied();
+              }}
+            >
+              Copy
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </Modal>
   );
 }

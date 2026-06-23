@@ -2,19 +2,8 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-This file holds a temporary browser-local installation and zone store pending the Control API.
+This file holds browser-local Community Edition identity: the operator profile, onboarding state, and active-zone selection.
 */
-export type ZoneStatus = "active" | "archived";
-
-export interface ZoneRecord {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  status: ZoneStatus;
-  createdAt: string;
-}
-
 export interface InstallationRecord {
   name: string;
   onboarded: boolean;
@@ -28,7 +17,6 @@ export interface ProfileRecord {
 }
 
 const INSTALL_KEY = "caracal.install";
-const ZONES_KEY = "caracal.zones";
 const ACTIVE_ZONE_KEY = "caracal.activeZone";
 const PROFILE_KEY = "caracal.profile";
 
@@ -60,57 +48,12 @@ export function isOnboarded(): boolean {
   return getInstallation().onboarded;
 }
 
-export function listZones(): ZoneRecord[] {
-  return read<ZoneRecord[]>(ZONES_KEY, []);
-}
-
-export function activeZones(): ZoneRecord[] {
-  return listZones().filter((zone) => zone.status === "active");
-}
-
-export function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-}
-
-export function addZone(input: { name: string; description: string; slug?: string }): ZoneRecord {
-  const zones = listZones();
-  const zone: ZoneRecord = {
-    id: `zone_${Math.random().toString(36).slice(2, 10)}`,
-    name: input.name,
-    slug: input.slug?.trim() || slugify(input.name),
-    description: input.description,
-    status: "active",
-    createdAt: new Date().toISOString(),
-  };
-  write(ZONES_KEY, [...zones, zone]);
-  if (!getActiveZoneId()) setActiveZoneId(zone.id);
-  return zone;
-}
-
-export function archiveZone(id: string): void {
-  write(
-    ZONES_KEY,
-    listZones().map((zone) => (zone.id === id ? { ...zone, status: "archived" } : zone)),
-  );
-}
-
 export function getActiveZoneId(): string | null {
   return read<string | null>(ACTIVE_ZONE_KEY, null);
 }
 
 export function setActiveZoneId(id: string): void {
   write(ACTIVE_ZONE_KEY, id);
-}
-
-export function getActiveZone(): ZoneRecord | null {
-  const id = getActiveZoneId();
-  const zones = activeZones();
-  return zones.find((zone) => zone.id === id) ?? zones[0] ?? null;
 }
 
 /** Generate a stable, unique internal account identifier, formatted CRC-XXXX-XXXX-XXXX. */
@@ -160,7 +103,6 @@ export function completeOnboarding(profile: ProfileRecord): void {
 export function resetInstallation(): void {
   if (typeof localStorage === "undefined") return;
   localStorage.removeItem(INSTALL_KEY);
-  localStorage.removeItem(ZONES_KEY);
   localStorage.removeItem(ACTIVE_ZONE_KEY);
   localStorage.removeItem(PROFILE_KEY);
 }
