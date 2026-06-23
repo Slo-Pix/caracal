@@ -9,6 +9,7 @@ import { toNodeHandler } from "better-auth/node";
 
 import { auth } from "./auth.ts";
 import { loadConfig } from "./config.ts";
+import { handleConsole } from "./console.ts";
 import { devReset } from "./devReset.ts";
 import { enabledProviders } from "./providers.ts";
 
@@ -22,7 +23,7 @@ async function ensureSchema(): Promise<void> {
 function applyCors(origin: string, res: import("node:http").ServerResponse): void {
   res.setHeader("Access-Control-Allow-Origin", origin);
   res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Vary", "Origin");
 }
@@ -37,6 +38,17 @@ const server = createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
+    return;
+  }
+
+  if ((req.url ?? "").startsWith("/api/console")) {
+    void handleConsole(req, res).catch(() => {
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "console_proxy_failed" }));
+      }
+    });
     return;
   }
 
