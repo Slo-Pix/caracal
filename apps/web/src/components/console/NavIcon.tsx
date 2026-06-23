@@ -9,10 +9,9 @@ import type { ReactNode } from "react";
 const PATHS: Record<string, ReactNode> = {
   dashboard: (
     <>
-      <rect x="3" y="3" width="7" height="9" rx="1.5" />
-      <rect x="14" y="3" width="7" height="5" rx="1.5" />
-      <rect x="14" y="12" width="7" height="9" rx="1.5" />
-      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+      <path d="M4 13a8 8 0 0 1 16 0v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5Z" />
+      <path d="m12 13 4-4" />
+      <path d="M8 17h8" />
     </>
   ),
   zones: (

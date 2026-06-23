@@ -91,11 +91,10 @@ export function ProfileMenu() {
       <button
         onClick={() => setOpen((v) => !v)}
         className={cx(
-          "flex items-center gap-2.5 rounded-lg bg-background py-1.5 pl-1.5 pr-2.5 text-left transition-colors hover:bg-accent",
+          "flex items-center gap-2.5 rounded-lg bg-background py-1.5 pl-2.5 pr-1.5 text-right transition-colors hover:bg-accent",
           open && "bg-accent",
         )}
       >
-        <Avatar avatar={profile.avatar} name={fullName} size={30} />
         <span className="hidden min-w-0 flex-col leading-tight sm:flex">
           <span className="max-w-[12rem] truncate text-sm font-medium text-foreground">
             {fullName}
@@ -104,6 +103,7 @@ export function ProfileMenu() {
             {activeZone ? activeZone.name : "No active zone"}
           </span>
         </span>
+        <Avatar avatar={profile.avatar} name={fullName} size={30} />
       </button>
 
       {open ? (
