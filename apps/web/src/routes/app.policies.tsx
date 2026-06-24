@@ -4,8 +4,8 @@ Caracal, a product of Garudex Labs
 
 This file defines the unified Policies workspace covering policy sets and the policy library.
 */
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { PolicyEditorModal } from "@/components/console/PolicyEditor";
 import { PolicySetComposer, type ComposerResult } from "@/components/console/PolicySetComposer";
@@ -52,6 +52,9 @@ import type {
 
 export const Route = createFileRoute("/app/policies")({
   component: PolicyWorkspaceRoute,
+  validateSearch: (search: Record<string, unknown>): { create?: string } => ({
+    create: typeof search.create === "string" ? search.create : undefined,
+  }),
 });
 
 type TabId = "sets" | "policies";
@@ -97,7 +100,24 @@ function exampleSimulationInput(zoneId: string): string {
 }
 
 function PolicyWorkspace({ zoneId }: { zoneId: string }) {
+  const { create } = Route.useSearch();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<TabId>("sets");
+  // Guided setup deep links here with ?create=policy to teach policy authoring first.
+  // Switch to the Policies tab and hand the tab a one-shot signal to open the editor, then
+  // strip the param so the form does not reopen on refresh.
+  const [autoCreatePolicy, setAutoCreatePolicy] = useState(false);
+  const deepLinkFired = useRef(false);
+  useEffect(() => {
+    if (!create || deepLinkFired.current) return;
+    deepLinkFired.current = true;
+    if (create === "policy" || create === "1") {
+      setTab("policies");
+      setAutoCreatePolicy(true);
+    }
+    navigate({ to: "/app/policies", search: {}, replace: true });
+  }, [create, navigate]);
+
   const policies = usePolicies(zoneId);
   const policySets = usePolicySets(zoneId);
 
@@ -115,7 +135,12 @@ function PolicyWorkspace({ zoneId }: { zoneId: string }) {
   return tab === "sets" ? (
     <PolicySetsTab zoneId={zoneId} policies={policies.data ?? []} headerExtra={tabsNode} />
   ) : (
-    <PoliciesTab zoneId={zoneId} headerExtra={tabsNode} />
+    <PoliciesTab
+      zoneId={zoneId}
+      headerExtra={tabsNode}
+      autoCreate={autoCreatePolicy}
+      onAutoCreateHandled={() => setAutoCreatePolicy(false)}
+    />
   );
 }
 
@@ -859,7 +884,17 @@ function SimulationResult({ result }: { result: SimulateResult }) {
 
 /* ============================== Policies tab ============================== */
 
-function PoliciesTab({ zoneId, headerExtra }: { zoneId: string; headerExtra: ReactNode }) {
+function PoliciesTab({
+  zoneId,
+  headerExtra,
+  autoCreate = false,
+  onAutoCreateHandled,
+}: {
+  zoneId: string;
+  headerExtra: ReactNode;
+  autoCreate?: boolean;
+  onAutoCreateHandled?: () => void;
+}) {
   const toast = useToast();
   const query = usePolicies(zoneId);
   const createPolicy = useCreatePolicy(zoneId);
@@ -870,6 +905,14 @@ function PoliciesTab({ zoneId, headerExtra }: { zoneId: string; headerExtra: Rea
     null,
   );
   const [deleteTarget, setDeleteTarget] = useState<Policy | null>(null);
+
+  // Honor the guided-setup deep link once: open the create editor, then notify the parent
+  // so the one-shot flag clears and the form does not reopen on the next render.
+  useEffect(() => {
+    if (!autoCreate) return;
+    setEditor({ mode: "create" });
+    onAutoCreateHandled?.();
+  }, [autoCreate, onAutoCreateHandled]);
 
   const rows = query.data ?? [];
   const busy = createPolicy.isPending || addVersion.isPending;

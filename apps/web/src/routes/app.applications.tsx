@@ -32,11 +32,15 @@ import {
   useDeleteApplication,
   useUpdateApplication,
 } from "@/platform/api/hooks";
+import { useCreateDeepLink } from "@/platform/nav/createDeepLink";
 import { parseList, privilegedTraits, validateTraits } from "@/platform/api/validation";
 import type { Application } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/applications")({
   component: ApplicationsRoute,
+  validateSearch: (search: Record<string, unknown>): { create?: string } => ({
+    create: typeof search.create === "string" ? search.create : undefined,
+  }),
 });
 
 function ApplicationsRoute() {
@@ -88,6 +92,11 @@ function ApplicationsPage({ zoneId, zoneName }: { zoneId: string; zoneName: stri
   const deleteApp = useDeleteApplication(zoneId);
 
   const [createOpen, setCreateOpen] = useState(false);
+  useCreateDeepLink({
+    to: "/app/applications",
+    value: Route.useSearch().create,
+    open: () => setCreateOpen(true),
+  });
   const [secret, setSecret] = useState<{
     name: string;
     clientSecret: string;

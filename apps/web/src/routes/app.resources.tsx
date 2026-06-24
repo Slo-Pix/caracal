@@ -26,10 +26,14 @@ import {
   useResources,
   useUpdateResource,
 } from "@/platform/api/hooks";
+import { useCreateDeepLink } from "@/platform/nav/createDeepLink";
 import type { Application, Provider, Resource, ResourceInput } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/resources")({
   component: ResourcesRoute,
+  validateSearch: (search: Record<string, unknown>): { create?: string } => ({
+    create: typeof search.create === "string" ? search.create : undefined,
+  }),
 });
 
 function ResourcesRoute() {
@@ -65,6 +69,11 @@ function ResourcesPage({ zoneId }: { zoneId: string }) {
   const deleteResource = useDeleteResource(zoneId);
 
   const [createOpen, setCreateOpen] = useState(false);
+  useCreateDeepLink({
+    to: "/app/resources",
+    value: Route.useSearch().create,
+    open: () => setCreateOpen(true),
+  });
   const [editTarget, setEditTarget] = useState<Resource | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Resource | null>(null);
   const [filter, setFilter] = useState<EnforcementFilter>("all");
