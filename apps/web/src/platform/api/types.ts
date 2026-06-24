@@ -373,3 +373,120 @@ export interface DelegationHop {
 export interface DelegationImpactRow extends DelegationHop {
   subject_session_id: string | null;
 }
+
+/* ------------------------------ Provider grants ----------------------------- */
+
+export interface ProviderGrant {
+  id: string;
+  zone_id: string;
+  user_id: string;
+  resource_id: string;
+  provider_id: string;
+  scopes: string[];
+  status: string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderGrantAuthorizeInput {
+  user_id: string;
+  resource_id: string;
+  provider_id: string;
+  scopes: string[];
+}
+
+export interface ProviderGrantAuthorizeResult {
+  authorization_url: string;
+  state: string;
+  expires_at: string;
+}
+
+export interface ProviderGrantRevokeInput {
+  user_id: string;
+  resource_id: string;
+  provider_id: string;
+}
+
+export interface ProviderGrantListQuery {
+  provider_id?: string;
+  resource_id?: string;
+  user_id?: string;
+  status?: string;
+}
+
+/* -------------------------------- Control API ------------------------------- */
+
+export type ControlAction = "read" | "write" | "delete";
+
+export interface ControlPermission {
+  command: string;
+  verb: string;
+  action: ControlAction;
+  scope: string;
+  summary: string;
+}
+
+export interface ControlKey {
+  id: string;
+  name: string;
+  scopes: string[];
+  maxTtlSeconds?: number;
+  expiresAt?: string;
+  createdAt: string;
+}
+
+export interface ControlKeyCreateInput {
+  name: string;
+  scopes: string[];
+  maxTtlSeconds?: number;
+  expiresAt?: string;
+}
+
+export interface ControlKeyCreateResult {
+  id: string;
+  name: string;
+  clientSecret: string;
+  scopes: string[];
+  maxTtlSeconds?: number;
+  expiresAt?: string;
+}
+
+/* ------------------------------- Pagination -------------------------------- */
+
+export interface Paged<T> {
+  rows: T[];
+  nextCursor: string | null;
+}
+
+/* --------------------------------- Filters --------------------------------- */
+
+export interface AuditQuery {
+  decision?: string;
+  subject_id?: string;
+  action?: string;
+  occurred_after?: string;
+  occurred_before?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface SessionQuery {
+  status?: string;
+  subject_id?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface AgentQuery {
+  status?: string;
+  lifecycle?: string;
+  application_id?: string;
+  label?: string;
+}
+
+export interface DiagnosticsOptions {
+  zoneId?: string;
+  strict?: boolean;
+  preflight?: boolean;
+}

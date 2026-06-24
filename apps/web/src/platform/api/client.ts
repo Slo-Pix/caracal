@@ -13,15 +13,23 @@ import type {
   ApplicationPatchInput,
   AuditDetail,
   AuditEvent,
+  AuditQuery,
+  AgentQuery,
   ConsoleStatus,
+  ControlKey,
+  ControlKeyCreateInput,
+  ControlKeyCreateResult,
+  ControlPermission,
   CoordinatorList,
   DecisionTrace,
   DelegationEdge,
   DelegationHop,
   DelegationImpactRow,
+  DiagnosticsOptions,
   DiagnosticsReport,
   EffectiveAuthority,
   ActivationStatus,
+  Paged,
   Policy,
   PolicyDetail,
   PolicyInput,
@@ -31,6 +39,11 @@ import type {
   PolicySetVersion,
   PolicyValidateResult,
   Provider,
+  ProviderGrant,
+  ProviderGrantAuthorizeInput,
+  ProviderGrantAuthorizeResult,
+  ProviderGrantListQuery,
+  ProviderGrantRevokeInput,
   ProviderInput,
   ProviderPatchInput,
   Resource,
@@ -38,6 +51,7 @@ import type {
   ResourcePatchInput,
   RowList,
   Session,
+  SessionQuery,
   SimulateResult,
   Zone,
   ZoneInput,
@@ -100,12 +114,159 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return parsed as T;
 }
 
+// Parses RFC 5988 Link headers to recover the keyset cursor for the next page.
+function parseNextCursor(linkHeader: string | null): string | null {
+  if (!linkHeader) return null;
+  for (const part of linkHeader.split(",")) {
+    const match = /<([^>]+)>\s*;\s*rel="?next"?/.exec(part.trim());
+    if (match) {
+      try {
+        return new URL(match[1], config.consoleBaseUrl).searchParams.get("cursor");
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
+// Issues a list request and returns both the parsed rows and the next cursor
+// advertised by the control plane through the (proxied) Link header.
+async function requestList<T>(path: string): Promise<{ rows: T[]; nextCursor: string | null }> {
+  let res: Response;
+  try {
+    res = await fetch(`${config.consoleBaseUrl}${path}`, {
+      credentials: "include",
+    });
+  } catch {
+    throw new ConsoleApiError(0, "network_error");
+  }
+  const text = await res.text();
+  let parsed: unknown = undefined;
+  try {
+    parsed = text ? JSON.parse(text) : undefined;
+  } catch {
+    parsed = text;
+  }
+  if (!res.ok) {
+    const code =
+      parsed && typeof parsed === "object" && parsed !== null && "error" in parsed
+        ? String((parsed as { error: unknown }).error)
+        : res.statusText || "request_failed";
+    throw new ConsoleApiError(res.status, code, parsed);
+  }
+  const rows = Array.isArray(parsed) ? (parsed as T[]) : [];
+  return { rows, nextCursor: parseNextCursor(res.headers.get("link")) };
+}
+
+// Maximum number of pages auto-followed for "show everything" admin lists. At the
+// server cap of 500 rows/page this surfaces up to 25k entities while bounding the
+// worst-case request fan-out, so large zones never silently truncate.
+const MAX_AUTO_PAGES = 50;
+const ADMIN_PAGE_SIZE = 500;
+
+// Follows keyset pagination to assemble a complete admin list. Returns the rows plus
+// a flag indicating the safety cap was hit so the UI can prompt for server-side search.
+async function fetchAllPages<T>(
+  basePath: string,
+): Promise<{ rows: T[]; truncated: boolean }> {
+  const sep = basePath.includes("?") ? "&" : "?";
+  let cursor: string | null = null;
+  const rows: T[] = [];
+  for (let page = 0; page < MAX_AUTO_PAGES; page++) {
+    const path: string = `${basePath}${sep}limit=${ADMIN_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+    const result: { rows: T[]; nextCursor: string | null } = await requestList<T>(path);
+    rows.push(...result.rows);
+    if (!result.nextCursor) return { rows, truncated: false };
+    cursor = result.nextCursor;
+  }
+  return { rows, truncated: true };
+}
+
+function queryString(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === "") continue;
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export const CONTROL_INVOKE_TRAIT = "control:invoke";
+export const CONTROL_SCOPE_PREFIX = "control:scope:";
+export const CONTROL_MAX_TTL_PREFIX = "control:max-ttl:";
+export const CONTROL_EXPIRES_PREFIX = "control:expires:";
+export const CONTROL_AUDIENCE = "caracal-control";
+export const CONTROL_MIN_TTL_SECONDS = 60;
+export const CONTROL_MAX_TTL_SECONDS = 900;
+
+// Authoritative catalog of Control API permissions, mirroring the remote surface the
+// engine exposes (control:<noun>:<verb>). Used to compose least-privilege key scopes
+// and to size the control resource that STS validates tokens against.
+export const CONTROL_PERMISSIONS: ControlPermission[] = [
+  { command: "agent", verb: "read", action: "read", scope: "control:agent:read", summary: "List and inspect agent sessions." },
+  { command: "agent", verb: "write", action: "write", scope: "control:agent:write", summary: "Suspend and resume sessions." },
+  { command: "agent", verb: "delete", action: "delete", scope: "control:agent:delete", summary: "Terminate agent sessions." },
+  { command: "app", verb: "read", action: "read", scope: "control:app:read", summary: "List and inspect applications." },
+  { command: "app", verb: "write", action: "write", scope: "control:app:write", summary: "Create and update applications." },
+  { command: "app", verb: "delete", action: "delete", scope: "control:app:delete", summary: "Delete applications." },
+  { command: "resource", verb: "read", action: "read", scope: "control:resource:read", summary: "List and inspect resources." },
+  { command: "resource", verb: "write", action: "write", scope: "control:resource:write", summary: "Create and update resources." },
+  { command: "resource", verb: "delete", action: "delete", scope: "control:resource:delete", summary: "Delete resources." },
+  { command: "delegation", verb: "read", action: "read", scope: "control:delegation:read", summary: "Inspect delegation edges." },
+  { command: "delegation", verb: "delete", action: "delete", scope: "control:delegation:delete", summary: "Revoke delegation edges." },
+];
+
+const CONTROL_SCOPES = CONTROL_PERMISSIONS.map((permission) => permission.scope).sort();
+
+function controlKeyFromApplication(app: Application): ControlKey {
+  const traits = app.traits ?? [];
+  const scopes = traits
+    .filter((trait) => trait.startsWith(CONTROL_SCOPE_PREFIX))
+    .map((trait) => trait.slice(CONTROL_SCOPE_PREFIX.length))
+    .sort();
+  const ttlTrait = traits.find((trait) => trait.startsWith(CONTROL_MAX_TTL_PREFIX));
+  const expiresTrait = traits.find((trait) => trait.startsWith(CONTROL_EXPIRES_PREFIX));
+  const ttl = ttlTrait ? Number.parseInt(ttlTrait.slice(CONTROL_MAX_TTL_PREFIX.length), 10) : undefined;
+  return {
+    id: app.id,
+    name: app.name,
+    scopes,
+    maxTtlSeconds: ttl !== undefined && Number.isFinite(ttl) ? ttl : undefined,
+    expiresAt: expiresTrait ? expiresTrait.slice(CONTROL_EXPIRES_PREFIX.length) : undefined,
+    createdAt: app.created_at,
+  };
+}
+
+export function isControlKeyApplication(app: Application): boolean {
+  return (app.traits ?? []).includes(CONTROL_INVOKE_TRAIT);
+}
+
+// Generates a one-time client secret in the browser, matching the application secret
+// format so control keys never round-trip a secret through a server session.
+export function generateClientSecret(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  const base64url = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `cs_${base64url}`;
+}
+
 export const consoleApi = {
   status: () => request<ConsoleStatus>("/status"),
-  diagnostics: () => request<DiagnosticsReport>("/diagnostics"),
+  diagnostics: (options: DiagnosticsOptions = {}) =>
+    request<DiagnosticsReport>(
+      `/diagnostics${queryString({
+        zone: options.zoneId,
+        strict: options.strict ? "true" : undefined,
+        mode: options.preflight ? "preflight" : undefined,
+      })}`,
+    ),
 
   zones: {
-    list: () => request<Zone[]>("/v1/zones"),
+    list: async () => (await fetchAllPages<Zone>("/v1/zones")).rows,
     get: (id: string) => request<Zone>(`/v1/zones/${encodeURIComponent(id)}`),
     dcrStatus: (id: string) =>
       request<ZoneDcrStatus>(`/v1/zones/${encodeURIComponent(id)}/dcr-status`),
@@ -121,8 +282,8 @@ export const consoleApi = {
   },
 
   applications: {
-    list: (zoneId: string) =>
-      request<Application[]>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`),
+    list: async (zoneId: string) =>
+      (await fetchAllPages<Application>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`)).rows,
     create: (zoneId: string, input: ApplicationInput) =>
       request<Application>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`, {
         method: "POST",
@@ -141,8 +302,8 @@ export const consoleApi = {
   },
 
   resources: {
-    list: (zoneId: string) =>
-      request<Resource[]>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`),
+    list: async (zoneId: string) =>
+      (await fetchAllPages<Resource>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`)).rows,
     get: (zoneId: string, id: string) =>
       request<Resource>(
         `/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(id)}`,
@@ -164,8 +325,8 @@ export const consoleApi = {
   },
 
   providers: {
-    list: (zoneId: string) =>
-      request<Provider[]>(`/v1/zones/${encodeURIComponent(zoneId)}/providers`),
+    list: async (zoneId: string) =>
+      (await fetchAllPages<Provider>(`/v1/zones/${encodeURIComponent(zoneId)}/providers`)).rows,
     get: (zoneId: string, id: string) =>
       request<Provider>(
         `/v1/zones/${encodeURIComponent(zoneId)}/providers/${encodeURIComponent(id)}`,
@@ -187,7 +348,8 @@ export const consoleApi = {
   },
 
   policies: {
-    list: (zoneId: string) => request<Policy[]>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`),
+    list: async (zoneId: string) =>
+      (await fetchAllPages<Policy>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`)).rows,
     get: (zoneId: string, id: string) =>
       request<PolicyDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`,
@@ -214,8 +376,8 @@ export const consoleApi = {
   },
 
   policySets: {
-    list: (zoneId: string) =>
-      request<PolicySet[]>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`),
+    list: async (zoneId: string) =>
+      (await fetchAllPages<PolicySet>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`)).rows,
     get: (zoneId: string, id: string) =>
       request<PolicySetDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}`,

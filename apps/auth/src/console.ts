@@ -133,39 +133,68 @@ interface DiagnosticsCacheEntry {
   at: number;
   payload: DoctorReport & { generatedAt: string };
 }
-let diagnosticsCache: DiagnosticsCacheEntry | undefined;
-let diagnosticsInFlight: Promise<DiagnosticsCacheEntry> | undefined;
+const diagnosticsCache = new Map<string, DiagnosticsCacheEntry>();
+const diagnosticsInFlight = new Map<string, Promise<DiagnosticsCacheEntry>>();
 
-async function computeDiagnostics(): Promise<DiagnosticsCacheEntry> {
-  const report = await runDoctorDiagnostics({});
+interface DiagnosticsOptions {
+  zoneId?: string;
+  strict: boolean;
+  preflightOnly: boolean;
+}
+
+function parseDiagnosticsOptions(path: string): DiagnosticsOptions {
+  const query = path.includes("?") ? new URLSearchParams(path.slice(path.indexOf("?") + 1)) : new URLSearchParams();
+  return {
+    zoneId: query.get("zone") ?? undefined,
+    strict: query.get("strict") === "true",
+    preflightOnly: query.get("mode") === "preflight",
+  };
+}
+
+function diagnosticsCacheKey(options: DiagnosticsOptions): string {
+  return `${options.preflightOnly ? "preflight" : "system"}:${options.strict ? "strict" : "lax"}:${options.zoneId ?? "all"}`;
+}
+
+async function computeDiagnostics(options: DiagnosticsOptions): Promise<DiagnosticsCacheEntry> {
+  const report = await runDoctorDiagnostics({
+    zoneId: options.preflightOnly ? undefined : options.zoneId,
+    strict: options.strict,
+    preflightOnly: options.preflightOnly,
+  });
   const generatedAt = new Date().toISOString();
   return { at: Date.now(), payload: { ...report, generatedAt } };
 }
 
-async function handleDiagnostics(res: ServerResponse): Promise<void> {
+async function handleDiagnostics(res: ServerResponse, path: string): Promise<void> {
   if (!adminToken()) {
     sendJson(res, 503, { error: "control_plane_not_configured" });
     return;
   }
-  const fresh = diagnosticsCache && Date.now() - diagnosticsCache.at < DIAGNOSTICS_TTL_MS;
+  const options = parseDiagnosticsOptions(path);
+  const key = diagnosticsCacheKey(options);
+  const cached = diagnosticsCache.get(key);
+  const fresh = cached && Date.now() - cached.at < DIAGNOSTICS_TTL_MS;
   if (!fresh) {
-    if (!diagnosticsInFlight) {
-      diagnosticsInFlight = computeDiagnostics().finally(() => {
-        diagnosticsInFlight = undefined;
+    let inFlight = diagnosticsInFlight.get(key);
+    if (!inFlight) {
+      inFlight = computeDiagnostics(options).finally(() => {
+        diagnosticsInFlight.delete(key);
       });
+      diagnosticsInFlight.set(key, inFlight);
     }
     try {
-      diagnosticsCache = await diagnosticsInFlight;
+      diagnosticsCache.set(key, await inFlight);
     } catch {
       sendJson(res, 502, { error: "diagnostics_failed" });
       return;
     }
   }
-  if (!diagnosticsCache) {
+  const entry = diagnosticsCache.get(key);
+  if (!entry) {
     sendJson(res, 502, { error: "diagnostics_failed" });
     return;
   }
-  sendJson(res, 200, diagnosticsCache.payload);
+  sendJson(res, 200, entry.payload);
 }
 
 async function forwardProxy(
@@ -196,6 +225,11 @@ async function forwardProxy(
     res.statusCode = upstream.status;
     res.setHeader("Content-Type", upstream.headers.get("content-type") ?? "application/json");
     res.setHeader("Cache-Control", "no-store");
+    // Surface keyset pagination to the browser. The control plane advertises the next
+    // page through a same-origin Link header; without forwarding it the web client
+    // silently truncates large lists at the server default page size.
+    const link = upstream.headers.get("link");
+    if (link) res.setHeader("Link", link);
     res.end(text);
   } catch {
     sendJson(res, 502, { error: "upstream_unreachable" });
@@ -249,7 +283,7 @@ export async function handleConsole(req: IncomingMessage, res: ServerResponse): 
     return true;
   }
   if (path === "/diagnostics" || path.startsWith("/diagnostics?")) {
-    await handleDiagnostics(res);
+    await handleDiagnostics(res, path);
     return true;
   }
   if (path.startsWith("/v1/")) {
