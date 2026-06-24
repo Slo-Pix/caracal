@@ -44,6 +44,7 @@ const INSTALL_KEY = "caracal.install";
 const ACTIVE_ZONE_KEY = "caracal.activeZone";
 const PROFILE_KEY = "caracal.profile";
 const OWNER_KEY = "caracal.owner";
+const GUIDED_SETUP_KEY = "caracal.guidedSetup";
 const profileListeners = new Set<() => void>();
 let profileSnapshot: ProfileRecord | null = null;
 
@@ -97,6 +98,25 @@ export function setActiveZoneId(id: string): void {
   write(ACTIVE_ZONE_KEY, id);
 }
 
+// Tracks whether the operator has finished or dismissed the in-app guided setup, so the
+// coachmark checklist does not reappear on every visit once they have opted out or
+// completed it. Completion of individual steps is derived from live backend state, not
+// stored here.
+interface GuidedSetupRecord {
+  dismissed: boolean;
+  finished: boolean;
+}
+
+export type { GuidedSetupRecord };
+
+export function getGuidedSetup(): GuidedSetupRecord {
+  return read<GuidedSetupRecord>(GUIDED_SETUP_KEY, { dismissed: false, finished: false });
+}
+
+export function setGuidedSetup(record: GuidedSetupRecord): void {
+  write(GUIDED_SETUP_KEY, record);
+}
+
 /** Generate a stable, unique internal account identifier, formatted CRC-XXXX-XXXX-XXXX. */
 function generateAccountId(): string {
   const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -144,6 +164,7 @@ export function clearLocalIdentity(): void {
   remove(ACTIVE_ZONE_KEY);
   remove(PROFILE_KEY);
   remove(OWNER_KEY);
+  remove(GUIDED_SETUP_KEY);
   emitProfileChange();
 }
 

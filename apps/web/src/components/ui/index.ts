@@ -15,3 +15,4 @@ export * from "./Breadcrumbs";
 export * from "./Pagination";
 export * from "./DataTable";
 export * from "./AvatarPicker";
+export * from "./OnboardingChecklist";
