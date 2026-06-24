@@ -16,7 +16,7 @@ import {
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, ConfirmDialog, Skeleton, useToast, type Column } from "@/components/ui";
 import { consoleApi, ConsoleApiError } from "@/platform/api/client";
-import { useActiveDelegations, useRevokeDelegation } from "@/platform/api/hooks";
+import { useDelegationsFeed, useRevokeDelegation } from "@/platform/api/hooks";
 import type { DelegationEdge, DelegationHop, DelegationImpactRow } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/delegation")({
@@ -54,14 +54,14 @@ function DelegationGate({ zoneId }: { zoneId: string }) {
 
 function DelegationPage({ zoneId }: { zoneId: string }) {
   const toast = useToast();
-  const query = useActiveDelegations(zoneId);
+  const feed = useDelegationsFeed(zoneId);
   const revoke = useRevokeDelegation(zoneId);
   const [revokeTarget, setRevokeTarget] = useState<DelegationEdge | null>(null);
 
-  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const rows = useMemo(() => (feed.data?.pages ?? []).flatMap((p) => p.rows), [feed.data]);
 
   const coordError =
-    query.isError && query.error instanceof ConsoleApiError ? query.error.code : null;
+    feed.isError && feed.error instanceof ConsoleApiError ? feed.error.code : null;
   const coordinatorDown =
     coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
 
@@ -78,7 +78,7 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
           with <Mono>caracal up</Mono> and confirm the runtime is running, then retry.
         </p>
         <div className="mt-5">
-          <Button variant="secondary" size="sm" onClick={() => query.refetch()}>
+          <Button variant="secondary" size="sm" onClick={() => feed.refetch()}>
             Retry
           </Button>
         </div>
@@ -151,13 +151,30 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
         title="Delegation"
         description="Active delegation edges. Each edge grants one agent session authority to act on another's behalf within scope."
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Delegation" }]}
+        headerExtra={
+          <div className="flex items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-2.5">
+            <span className="text-xs text-muted-foreground">
+              {rows.length} active edge{rows.length === 1 ? "" : "s"} loaded
+              {feed.hasNextPage ? " · more available" : ""}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => feed.fetchNextPage()}
+              disabled={!feed.hasNextPage}
+              loading={feed.isFetchingNextPage}
+            >
+              {feed.hasNextPage ? "Load more" : "All loaded"}
+            </Button>
+          </div>
+        }
         rows={rows}
-        loading={query.isLoading}
+        loading={feed.isLoading}
         columns={columns}
         rowKey={(e) => e.id}
         pageSize={12}
         search={{
-          placeholder: "Search by session or scope…",
+          placeholder: "Search loaded edges by session or scope…",
           match: (e, q) =>
             e.source_session_id.toLowerCase().includes(q) ||
             e.target_session_id.toLowerCase().includes(q) ||
@@ -165,9 +182,9 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
         }}
         sortOptions={[{ id: "recent", label: "Most recent" }]}
         empty={{
-          title: query.isError ? "Could not load delegations" : "No active delegations",
-          description: query.isError
-            ? errorMessage(query.error)
+          title: feed.isError ? "Could not load delegations" : "No active delegations",
+          description: feed.isError
+            ? errorMessage(feed.error)
             : "When agent sessions delegate authority to one another, the active edges appear here with their chains and impact.",
         }}
         detail={{
@@ -378,15 +395,32 @@ function ImpactView({ rows }: { rows: DelegationImpactRow[] }) {
     <div className="mt-4">
       <p className="mb-3 text-xs text-muted-foreground">
         Revoking this delegation cascades to {rows.length} downstream session
-        {rows.length === 1 ? "" : "s"}.
+        {rows.length === 1 ? "" : "s"}. Each row shows the agent session that loses authority and
+        the subject session whose access is revoked.
       </p>
       <div className="overflow-hidden border border-border">
         <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/30 text-left">
+              <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Agent session
+              </th>
+              <th className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Subject session
+              </th>
+              <th className="px-3 py-2 text-right text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Depth
+              </th>
+            </tr>
+          </thead>
           <tbody className="divide-y divide-border">
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="px-3 py-2 font-mono text-xs text-foreground">
                   {short(row.target_session_id)}
+                </td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                  {row.subject_session_id ? short(row.subject_session_id) : "—"}
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-[11px] text-muted-foreground">
                   depth {row.depth}

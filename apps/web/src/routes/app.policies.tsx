@@ -5,7 +5,7 @@ Caracal, a product of Garudex Labs
 This file defines the unified Policies workspace covering policy sets and the policy library.
 */
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { PolicyEditorModal } from "@/components/console/PolicyEditor";
 import { PolicySetComposer, type ComposerResult } from "@/components/console/PolicySetComposer";
@@ -22,6 +22,7 @@ import {
   ConfirmDialog,
   Modal,
   Skeleton,
+  Spinner,
   Tabs,
   useToast,
   type Column,
@@ -41,6 +42,7 @@ import {
   usePolicySets,
 } from "@/platform/api/hooks";
 import type {
+  ActivationStatus,
   Policy,
   PolicySet,
   PolicySetVersion,
@@ -384,6 +386,14 @@ function PolicySetInspector({
 
       <ActiveManifest zoneId={zoneId} policySet={policySet} policies={policies} />
 
+      {policySet.active_version_id ? (
+        <EnforcementStatus
+          zoneId={zoneId}
+          policySetId={policySet.id}
+          versionId={policySet.active_version_id}
+        />
+      ) : null}
+
       <section className="border-t border-border pt-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-destructive">
           Danger zone
@@ -471,6 +481,158 @@ function ActiveManifest({
       ) : null}
     </section>
   );
+}
+
+// Surfaces how far an activation has propagated: the binding flips immediately, but
+// enforcement only changes once the outbox dispatches the invalidation and the STS
+// runtime reloads the bundle. Polls until the rollout is loaded or has failed so an
+// operator sees real enforcement state, not just a database write.
+function usePolicyActivationStatus(zoneId: string, policySetId: string, versionId: string) {
+  const [status, setStatus] = useState<ActivationStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    async function poll() {
+      try {
+        const next = await consoleApi.policySets.activationStatus(zoneId, policySetId, versionId);
+        if (cancelled) return;
+        setStatus(next);
+        setError(null);
+        const settled =
+          next.propagation_status === "loaded" || next.propagation_status === "failed";
+        if (!settled) timer = setTimeout(poll, 2500);
+      } catch (err) {
+        if (cancelled) return;
+        setError(errorMessage(err));
+        timer = setTimeout(poll, 5000);
+      }
+    }
+
+    setStatus(null);
+    setError(null);
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [zoneId, policySetId, versionId]);
+
+  return { status, error };
+}
+
+const PROPAGATION_COPY: Record<string, { label: string; tone: "success" | "warning" | "danger" }> =
+  {
+    loaded: { label: "Enforcing", tone: "success" },
+    waiting_for_activation: { label: "Activating…", tone: "warning" },
+    waiting_for_outbox: { label: "Dispatching…", tone: "warning" },
+    waiting_for_sts: { label: "Loading into runtime…", tone: "warning" },
+    failed: { label: "Propagation failed", tone: "danger" },
+  };
+
+function EnforcementStatus({
+  zoneId,
+  policySetId,
+  versionId,
+}: {
+  zoneId: string;
+  policySetId: string;
+  versionId: string;
+}) {
+  const { status, error } = usePolicyActivationStatus(zoneId, policySetId, versionId);
+
+  return (
+    <section className="border-t border-border pt-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Enforcement status
+      </h3>
+      {!status && !error ? (
+        <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner /> Checking propagation…
+        </div>
+      ) : error ? (
+        <p className="mt-2 text-sm text-muted-foreground">Could not load enforcement status.</p>
+      ) : status ? (
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {(() => {
+              const copy = PROPAGATION_COPY[status.propagation_status] ?? {
+                label: status.propagation_status,
+                tone: "muted" as const,
+              };
+              return <Badge tone={copy.tone}>{copy.label}</Badge>;
+            })()}
+            {status.propagation_status !== "loaded" && status.propagation_status !== "failed" ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Spinner /> live
+              </span>
+            ) : null}
+          </div>
+          <dl className="grid grid-cols-[auto,1fr] gap-x-3 gap-y-1.5 text-xs">
+            <dt className="text-muted-foreground">Dispatch</dt>
+            <dd className="text-foreground">{describeOutbox(status.outbox.state)}</dd>
+            <dt className="text-muted-foreground">Runtime (STS)</dt>
+            <dd className="text-foreground">{describeSts(status.sts.state)}</dd>
+            <dt className="text-muted-foreground">Manifest</dt>
+            <dd>
+              <Mono>{(status.manifest_sha256 ?? "").slice(0, 12) || "—"}…</Mono>
+            </dd>
+            {status.shadow_version_id ? (
+              <>
+                <dt className="text-muted-foreground">Shadow</dt>
+                <dd>
+                  <Mono>{status.shadow_version_id.slice(0, 12)}…</Mono>
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          {status.propagation_status === "failed" ? (
+            <p className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              {typeof status.outbox.last_error === "string" && status.outbox.last_error
+                ? `Dispatch error: ${status.outbox.last_error}`
+                : "The runtime did not load this version. Re-activate, or check platform health in Diagnostics."}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function describeOutbox(state: string): string {
+  switch (state) {
+    case "dispatched":
+      return "Delivered to runtime stream";
+    case "pending":
+      return "Queued for delivery";
+    case "dead":
+      return "Failed — exhausted retries";
+    case "mismatch":
+      return "Superseded by a newer activation";
+    case "missing":
+      return "No dispatch record found";
+    default:
+      return state;
+  }
+}
+
+function describeSts(state: string): string {
+  switch (state) {
+    case "loaded":
+      return "Bundle loaded and enforcing";
+    case "not_loaded":
+      return "Bundle not yet loaded";
+    case "not_configured":
+      return "Runtime status not configured";
+    case "unreachable":
+      return "Runtime unreachable";
+    case "failed":
+      return "Runtime reported a failure";
+    default:
+      return state;
+  }
 }
 
 // Resolves policy_version_id -> { policy name, version number } by loading each
@@ -595,17 +757,30 @@ function SimulateModal({
       ) : (
         <div className="flex max-h-[60vh] flex-col gap-4 overflow-y-auto pr-1">
           <div>
-            <div className="mb-1.5 text-sm font-medium text-foreground">Input (optional JSON)</div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">Input (optional JSON)</span>
+              <button
+                type="button"
+                onClick={() => setInput(exampleSimulationInput(zoneId))}
+                className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Load example
+              </button>
+            </div>
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               spellCheck={false}
-              rows={8}
-              placeholder='{"subject": {"traits": ["billing:read"]}, "resource": {"identifier": "resource://payments"}}'
+              rows={10}
+              placeholder={exampleSimulationInput(zoneId)}
               className="scrollbar-thin w-full resize-y rounded-md border border-border bg-[#0d1117] px-3 py-2.5 font-mono text-xs leading-relaxed text-[#e6edf3] outline-none focus:border-ring"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Leave blank to validate the rollout contract only.
+              Expected fields: <span className="font-mono">principal.zone_id</span> (this zone),{" "}
+              <span className="font-mono">resource</span>, <span className="font-mono">action</span>
+              , <span className="font-mono">context</span>, and{" "}
+              <span className="font-mono">schema_version</span>. Leave blank to validate the rollout
+              contract only.
             </p>
           </div>
           {error ? <p className="text-sm text-destructive">{error}</p> : null}

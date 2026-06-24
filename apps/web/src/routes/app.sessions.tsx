@@ -21,16 +21,20 @@ import type { Session, SessionQuery } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/sessions")({
   component: SessionsRoute,
+  validateSearch: (search: Record<string, unknown>): { subject?: string } => ({
+    subject: typeof search.subject === "string" ? search.subject : undefined,
+  }),
 });
 
 function SessionsRoute() {
+  const { subject } = Route.useSearch();
   return (
     <ZoneScopedPage
       title="Sessions"
       description="Authenticated subject sessions issued in this zone."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Sessions" }]}
     >
-      {(zone) => <SessionsPage zoneId={zone.id} />}
+      {(zone) => <SessionsPage zoneId={zone.id} initialSubject={subject} />}
     </ZoneScopedPage>
   );
 }
