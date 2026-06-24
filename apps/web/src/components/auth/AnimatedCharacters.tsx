@@ -215,7 +215,7 @@ export function AnimatedCharacters({
 
   return (
     <div className="relative" style={{ width: 520, height: 380 }}>
-      {/* Violet operator — back, wearing a soft beanie */}
+      {/* Violet operator, back, wearing a soft beanie */}
       <div
         ref={violetRef}
         className="absolute bottom-0 transition-all duration-700 ease-in-out"
@@ -287,7 +287,7 @@ export function AnimatedCharacters({
         </div>
       </div>
 
-      {/* Periwinkle character — middle */}
+      {/* Periwinkle character, middle */}
       <div
         ref={tealRef}
         className="absolute bottom-0 transition-all duration-700 ease-in-out"
@@ -359,7 +359,7 @@ export function AnimatedCharacters({
         </div>
       </div>
 
-      {/* Lilac guardian — front left arch, with a shield crest */}
+      {/* Lilac guardian, front left arch, with a shield crest */}
       <div
         ref={archRef}
         className="absolute bottom-0 transition-all duration-700 ease-in-out"
@@ -424,7 +424,7 @@ export function AnimatedCharacters({
         </div>
       </div>
 
-      {/* Mauve character — front right */}
+      {/* Mauve character, front right */}
       <div
         ref={amberRef}
         className="absolute bottom-0 transition-all duration-700 ease-in-out"

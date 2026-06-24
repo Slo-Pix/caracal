@@ -20,7 +20,7 @@ package caracal.authz
 import rego.v1
 
 # Adopter policies supply DATA only. The platform decision contract reads this
-# data and owns every allow/deny decision — never define \`result\` here.
+# data and owns every allow/deny decision. Never define \`result\` here.
 
 # Map the application keys used in grants to control-plane application ids.
 app_ids := {
@@ -149,7 +149,7 @@ export function PolicyEditorModal({
       title={isCreate ? "New policy" : `New version · ${policyName ?? ""}`}
       description={
         isCreate
-          ? "Author a Rego data document. It supplies data the platform decision contract reads — it never decides on its own. Validated before it is saved."
+          ? "Author a Rego data document. It supplies data the platform decision contract reads. It never decides on its own. Validated before it is saved."
           : "Add an immutable version. Existing versions are never modified."
       }
       footer={
@@ -237,7 +237,7 @@ export function PolicyEditorModal({
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Must start with <span className="font-mono">{"# caracal:data-document"}</span>, use
-            package <span className="font-mono">caracal.authz</span>, and define data only — never{" "}
+            package <span className="font-mono">caracal.authz</span>, and define data only, never{" "}
             <span className="font-mono">result</span>.
           </p>
         </div>
@@ -257,7 +257,7 @@ function humanizeRegoError(code: string | undefined): string {
     case "must_use_package_caracal_authz":
       return "The policy must declare `package caracal.authz`.";
     case "data_document_must_not_define_result":
-      return "Remove the `result` rule. The platform decision contract owns every allow/deny — your policy supplies data only.";
+      return "Remove the `result` rule. The platform decision contract owns every allow/deny. Your policy supplies data only.";
     case "data_document_must_define_data":
       return "Define at least one data rule (for example `grants`, `app_ids`, `confinement`, or `restrict`).";
     case "missing_package_declaration":

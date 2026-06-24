@@ -141,7 +141,7 @@ function liveness(agent: Agent, now = Date.now()): Liveness {
       return {
         tone: "danger",
         label: "Lease expired",
-        detail: `Heartbeat lost ${relativeTime(agent.heartbeat_deadline_at, now)} — pending auto-suspend`,
+        detail: `Heartbeat lost ${relativeTime(agent.heartbeat_deadline_at, now)}, pending auto-suspend`,
       };
     }
     if (deadline - now < 30_000) {
@@ -157,11 +157,11 @@ function liveness(agent: Agent, now = Date.now()): Liveness {
       detail: `Heartbeat lease valid until ${new Date(deadline).toLocaleTimeString()}`,
     };
   }
-  // task agent — TTL from spawned_at
+  // task agent: TTL from spawned_at
   if (agent.ttl_seconds && agent.spawned_at) {
     const expires = Date.parse(agent.spawned_at) + agent.ttl_seconds * 1000;
     if (expires < now) {
-      return { tone: "danger", label: "Expired", detail: "Past TTL — pending auto-terminate" };
+      return { tone: "danger", label: "Expired", detail: "Past TTL, pending auto-terminate" };
     }
     if (expires - now < 60_000) {
       return {
@@ -180,7 +180,7 @@ function liveness(agent: Agent, now = Date.now()): Liveness {
 }
 
 function agentExpiry(agent: Agent): string {
-  if (agent.status !== "active") return "—";
+  if (agent.status !== "active") return "-";
   if (agent.lifecycle === "service") {
     return agent.heartbeat_deadline_at
       ? new Date(agent.heartbeat_deadline_at).toLocaleString()
@@ -189,7 +189,7 @@ function agentExpiry(agent: Agent): string {
   if (agent.ttl_seconds && agent.spawned_at) {
     return new Date(Date.parse(agent.spawned_at) + agent.ttl_seconds * 1000).toLocaleString();
   }
-  return "—";
+  return "-";
 }
 
 function relativeTime(iso: string, now = Date.now()): string {
@@ -833,17 +833,17 @@ function AuthorityEnvelope({
                 />
                 <Metric
                   label="TTL"
-                  text={a.effective_ttl_seconds == null ? "—" : `${a.effective_ttl_seconds}s`}
+                  text={a.effective_ttl_seconds == null ? "-" : `${a.effective_ttl_seconds}s`}
                 />
                 <Metric
                   label="Expires"
-                  text={a.earliest_expires_at ? relativeTime(a.earliest_expires_at) : "—"}
+                  text={a.earliest_expires_at ? relativeTime(a.earliest_expires_at) : "-"}
                 />
               </div>
 
               {noAuthority ? (
                 <p className="text-sm text-muted-foreground">
-                  No inbound delegations — this agent acts only under its own application authority.
+                  No inbound delegations. This agent acts only under its own application authority.
                 </p>
               ) : (
                 <>
@@ -864,7 +864,7 @@ function AuthorityEnvelope({
                       </div>
                     ) : (
                       <p className="mt-1 text-sm text-muted-foreground">
-                        Scope intersection is empty — inbound edges share no common scope.
+                        Scope intersection is empty: inbound edges share no common scope.
                       </p>
                     )}
                   </div>
