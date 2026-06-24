@@ -10,7 +10,7 @@ import { SectionLabel } from "@/components/SiteShell";
 export const Route = createFileRoute("/community")({
   head: () => ({
     meta: [
-      { title: "Community — Caracal" },
+      { title: "Community · Caracal" },
       { name: "description", content: "Join the Caracal community on GitHub, Discord, and X." },
       { property: "og:title", content: "Caracal Community" },
       { property: "og:description", content: "Built in the open by a community of contributors." },

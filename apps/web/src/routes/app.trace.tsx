@@ -25,8 +25,8 @@ function TracePage() {
         <Link to="/app/audit" className="font-medium text-foreground underline">
           Audit
         </Link>{" "}
-        to see its full decision trace — the final decision, every event in the request, and any
-        denied decisions — in one place.
+        to see its full decision trace: the final decision, every event in the request, and any
+        denied decisions, all in one place.
       </p>
     </ModuleNotice>
   );

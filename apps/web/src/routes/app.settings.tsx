@@ -326,7 +326,7 @@ function ProfileSection() {
       <SettingsGroup title="Account identifiers" description="Identifiers for this owner account.">
         <InfoGrid>
           <InfoItem label="Account ID" value={profile.accountId} mono />
-          <InfoItem label="Email" value={session.data?.user?.email ?? "—"} mono />
+          <InfoItem label="Email" value={session.data?.user?.email ?? "-"} mono />
           <InfoItem label="Role" value="Owner" />
         </InfoGrid>
       </SettingsGroup>
@@ -392,8 +392,8 @@ function AccessSection() {
         description="The authenticated owner for this web session."
       >
         <InfoGrid>
-          <InfoItem label="Name" value={session.data?.user?.name ?? "—"} />
-          <InfoItem label="Email" value={session.data?.user?.email ?? "—"} mono />
+          <InfoItem label="Name" value={session.data?.user?.name ?? "-"} />
+          <InfoItem label="Email" value={session.data?.user?.email ?? "-"} mono />
           <InfoItem label="Role" value="Owner" />
         </InfoGrid>
       </SettingsGroup>
@@ -684,7 +684,7 @@ function LifecycleSection() {
             label="Zones"
             value={zones.isLoading ? "..." : zones.isError ? "!" : String(zoneCount)}
           />
-          <Metric label="Owner email" value={email || "—"} mono />
+          <Metric label="Owner email" value={email || "-"} mono />
         </div>
       </SettingsGroup>
 
