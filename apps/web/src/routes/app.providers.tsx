@@ -163,6 +163,7 @@ function ProvidersPage({ zoneId, zoneName }: { zoneId: string; zoneName: string 
       id: "name",
       header: "Provider",
       sortable: true,
+      truncate: true,
       cell: (p) => (
         <div className="min-w-0">
           <div className="truncate font-medium text-foreground">{p.name}</div>
@@ -178,8 +179,9 @@ function ProvidersPage({ zoneId, zoneName }: { zoneId: string; zoneName: string 
     {
       id: "routing",
       header: "Routing",
+      truncate: true,
       cell: (p) => (
-        <span className="truncate font-mono text-xs text-muted-foreground">
+        <span className="block truncate font-mono text-xs text-muted-foreground">
           {routingSummary(p)}
         </span>
       ),
@@ -430,8 +432,10 @@ function ProviderDetail({
             <div className="flex flex-col gap-2 pt-2">
               {provider.secret_config_keys.map((key) => (
                 <div key={key} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="font-mono text-xs text-foreground">{key}</span>
-                  <span className="font-mono text-xs text-muted-foreground">•••••••• sealed</span>
+                  <span className="min-w-0 break-all font-mono text-xs text-foreground">{key}</span>
+                  <span className="flex-shrink-0 font-mono text-xs text-muted-foreground">
+                    •••••••• sealed
+                  </span>
                 </div>
               ))}
             </div>
@@ -453,10 +457,10 @@ function ProviderDetail({
               <tbody className="divide-y divide-border">
                 {configEntries.map(([key, value]) => (
                   <tr key={key}>
-                    <td className="w-2/5 px-3 py-2 align-top font-mono text-xs text-muted-foreground">
+                    <td className="w-2/5 px-3 py-2 align-top break-all font-mono text-xs text-muted-foreground">
                       {key}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-foreground">
+                    <td className="px-3 py-2 break-words font-mono text-xs text-foreground">
                       {formatValue(value)}
                     </td>
                   </tr>
@@ -555,8 +559,10 @@ function ProviderConnections({ provider, zoneId }: { provider: Provider; zoneId:
               {rows.map((grant) => (
                 <tr key={grant.id}>
                   <td className="px-3 py-2 align-top">
-                    <div className="font-mono text-xs text-foreground">{grant.user_id}</div>
-                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                    <div className="break-all font-mono text-xs text-foreground">
+                      {grant.user_id}
+                    </div>
+                    <div className="mt-0.5 break-words font-mono text-[11px] text-muted-foreground">
                       {grant.scopes.join(" · ") || "no scopes"}
                     </div>
                   </td>

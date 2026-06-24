@@ -129,10 +129,15 @@ function ZonesPage() {
       id: "name",
       header: "Name",
       sortable: true,
+      truncate: true,
       cell: (zone) => (
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground">{zone.name}</span>
-          {zone.id === activeId ? <Badge tone="success">Active</Badge> : null}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium text-foreground">{zone.name}</span>
+          {zone.id === activeId ? (
+            <span className="flex-shrink-0">
+              <Badge tone="success">Active</Badge>
+            </span>
+          ) : null}
         </div>
       ),
     },
@@ -140,12 +145,16 @@ function ZonesPage() {
       id: "slug",
       header: "Slug",
       sortable: true,
-      cell: (zone) => <span className="font-mono text-xs text-muted-foreground">{zone.slug}</span>,
+      truncate: true,
+      cell: (zone) => (
+        <span className="block truncate font-mono text-xs text-muted-foreground">{zone.slug}</span>
+      ),
     },
     {
       id: "owner",
       header: "Owner",
-      cell: () => <span className="text-sm text-muted-foreground">{owner}</span>,
+      truncate: true,
+      cell: () => <span className="block truncate text-sm text-muted-foreground">{owner}</span>,
     },
     {
       id: "dcr",
@@ -204,10 +213,24 @@ function ZonesPage() {
         title="Zones"
         description="Zones are Caracal's primary trust boundary."
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Zones" }]}
+        actions={
+          <Button disabled aria-disabled>
+            New zone
+          </Button>
+        }
       >
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-10 w-full" />
-          <Skeleton className="h-10 w-full" />
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <SearchInput placeholder="Search zones…" disabled className="w-full sm:w-64" />
+        </div>
+        <DataTable
+          columns={columns}
+          rows={[]}
+          rowKey={(zone) => zone.id}
+          loading
+          skeletonRows={pageSize}
+        />
+        <div className="flex h-[49px] items-center justify-end gap-2 border-x border-b border-border bg-card px-4">
+          <Skeleton className="h-4 w-40" />
         </div>
       </ModulePage>
     );
@@ -272,7 +295,7 @@ function ZonesPage() {
         }
       />
 
-      {!zonesQuery.isLoading && visible.length > 0 ? (
+      {visible.length > 0 ? (
         <div className="border-x border-b border-border bg-card">
           <Pagination
             page={page}

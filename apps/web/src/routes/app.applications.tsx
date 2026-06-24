@@ -112,6 +112,7 @@ function ApplicationsPage({ zoneId, zoneName }: { zoneId: string; zoneName: stri
       id: "name",
       header: "Application",
       sortable: true,
+      truncate: true,
       cell: (app) => (
         <div className="flex items-center gap-3">
           <span className="grid h-8 w-8 flex-shrink-0 place-items-center rounded-md bg-muted text-xs font-semibold text-muted-foreground">
@@ -311,7 +312,7 @@ function TraitChip({ trait }: { trait: string }) {
   return (
     <span
       className={cx(
-        "inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-[11px]",
+        "inline-flex max-w-full items-center break-all rounded border px-1.5 py-0.5 font-mono text-[11px]",
         privileged
           ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
           : "border-border bg-muted text-muted-foreground",
