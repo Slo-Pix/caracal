@@ -11,7 +11,7 @@ import { ConfirmDialog } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { useActiveZone } from "@/platform/api/hooks";
 import { signOut, useSession } from "@/platform/auth";
-import { useProfile } from "@/platform/state/localInstall";
+import { useProfile, resolveDisplayName } from "@/platform/state/localInstall";
 import { toggleTheme, useTheme } from "@/platform/theme";
 
 function initialsOf(name: string): string {
@@ -51,7 +51,7 @@ export function ProfileMenu() {
 
   const profile = useProfile();
   const fullName = profile.fullName || session.data?.user?.name || "Owner";
-  const profileName = profile.displayName.trim() || fullName;
+  const profileName = resolveDisplayName(fullName, profile.displayName) || fullName;
   const email = session.data?.user?.email ?? "";
 
   useEffect(() => {

@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { CommandPalette } from "@/components/console/CommandPalette";
 import { CommandTrigger } from "@/components/console/CommandTrigger";
+import { PlatformStatus } from "@/components/console/PlatformStatus";
 import { ProfileMenu } from "@/components/console/ProfileMenu";
 import { LanguageMenu } from "@/components/console/LanguageMenu";
 import { Sidebar } from "@/components/console/Sidebar";
@@ -100,8 +101,9 @@ export function ConsoleLayout() {
               <path d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
-          <div className="hidden md:block">
+          <div className="hidden items-center gap-2 md:flex">
             <CommandTrigger onOpen={() => setPaletteOpen(true)} />
+            <PlatformStatus />
           </div>
 
           <div className="flex items-center gap-2">
