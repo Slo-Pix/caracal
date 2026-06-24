@@ -11,7 +11,7 @@ import { SectionLabel } from "@/components/SiteShell";
 export const Route = createFileRoute("/legal")({
   head: () => ({
     meta: [
-      { title: "Legal — Caracal" },
+      { title: "Legal · Caracal" },
       {
         name: "description",
         content: "Licensing, privacy posture, and security disclosures for Caracal.",

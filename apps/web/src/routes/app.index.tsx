@@ -109,9 +109,6 @@ function ConnectedDashboard({ zone }: { zone: Zone }) {
     denied,
   });
 
-  const setupComplete =
-    zone && providerRows.length > 0 && policySetRows.some((ps) => ps.active_version_id);
-
   return (
     <ModulePage
       title="Dashboard"
@@ -147,15 +144,6 @@ function ConnectedDashboard({ zone }: { zone: Zone }) {
             />
           </div>
         </div>
-
-        {!setupComplete ? (
-          <SetupStrip
-            hasApplication={appRows.length > 0}
-            hasProvider={providerRows.length > 0}
-            hasResource={resourceRows.length > 0}
-            hasPolicySet={policySetRows.some((ps) => ps.active_version_id)}
-          />
-        ) : null}
       </div>
     </ModulePage>
   );
@@ -383,7 +371,7 @@ function buildAttention({
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
   // Default-deny with no active policy set is the secure baseline, not a failure. Only flag it
-  // once the zone actually has applications or resources that requests cannot reach yet — and
+  // once the zone actually has applications or resources that requests cannot reach yet, and
   // as attention (amber), never an alarming error. A brand-new empty zone is guided by the
   // setup checklist instead.
   if (!enforcing && !policySetsLoading && hasProtectables) {
@@ -473,7 +461,7 @@ function AttentionPanel({ loading, items }: { loading: boolean; items: Attention
               <path d="M20 6 9 17l-5-5" />
             </svg>
           </span>
-          All clear — no action required.
+          All clear. No action required.
         </div>
       ) : (
         <ul className="divide-y divide-border">
@@ -545,132 +533,6 @@ function InventoryPanel({
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-/* ------------------------------- setup strip ------------------------------ */
-
-function SetupStrip({
-  hasApplication,
-  hasProvider,
-  hasResource,
-  hasPolicySet,
-}: {
-  hasApplication: boolean;
-  hasProvider: boolean;
-  hasResource: boolean;
-  hasPolicySet: boolean;
-}) {
-  // Ordered onboarding chain mirroring the Console guided setup. Unlike a blocking
-  // linear wizard, every step is resumable and the next incomplete step is highlighted,
-  // so operators can complete setup in any order without losing their place.
-  const steps: { label: string; detail: string; done: boolean; to: string }[] = [
-    {
-      label: "Create a zone",
-      detail: "The trust boundary for everything below.",
-      done: true,
-      to: "/app/zones",
-    },
-    {
-      label: "Register an application",
-      detail: "A managed identity the Gateway uses for upstream exchanges.",
-      done: hasApplication,
-      to: "/app/applications",
-    },
-    {
-      label: "Add a provider",
-      detail: "The credential source that issues upstream access.",
-      done: hasProvider,
-      to: "/app/providers",
-    },
-    {
-      label: "Protect a resource",
-      detail: "Bind an upstream behind the Gateway with scopes.",
-      done: hasResource,
-      to: "/app/resources",
-    },
-    {
-      label: "Activate a policy set",
-      detail: "Authorize traffic — without one the zone denies by default.",
-      done: hasPolicySet,
-      to: "/app/policies",
-    },
-  ];
-  const done = steps.filter((s) => s.done).length;
-  const nextIndex = steps.findIndex((s) => !s.done);
-
-  return (
-    <section className="border border-border">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
-        <SectionLabel>Guided setup</SectionLabel>
-        <span className="text-xs font-medium text-muted-foreground">
-          {done}/{steps.length} complete
-        </span>
-      </header>
-      <ol className="divide-y divide-border">
-        {steps.map((step, index) => {
-          const isNext = index === nextIndex;
-          return (
-            <li key={step.label}>
-              <Link
-                to={step.to}
-                className={cx(
-                  "flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-surface",
-                  isNext && "bg-surface/60",
-                )}
-              >
-                <span
-                  className={cx(
-                    "grid h-6 w-6 shrink-0 place-items-center rounded-full border text-[11px] font-semibold",
-                    step.done
-                      ? "border-emerald-500 bg-emerald-500 text-white"
-                      : isNext
-                        ? "border-foreground text-foreground"
-                        : "border-border text-muted-foreground",
-                  )}
-                >
-                  {step.done ? (
-                    <svg
-                      width="13"
-                      height="13"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="3"
-                    >
-                      <path d="M20 6 9 17l-5-5" />
-                    </svg>
-                  ) : (
-                    index + 1
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div
-                    className={cx(
-                      "text-sm font-medium",
-                      step.done ? "text-muted-foreground" : "text-foreground",
-                    )}
-                  >
-                    {step.label}
-                  </div>
-                  <div className="truncate text-xs text-muted-foreground">{step.detail}</div>
-                </div>
-                {!step.done ? (
-                  <span
-                    className={cx(
-                      "shrink-0 text-xs font-medium",
-                      isNext ? "text-foreground" : "text-muted-foreground",
-                    )}
-                  >
-                    {isNext ? "Start →" : "Do this"}
-                  </span>
-                ) : null}
-              </Link>
-            </li>
-          );
-        })}
-      </ol>
     </section>
   );
 }
@@ -753,7 +615,7 @@ function activePolicySetName(
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - Date.parse(iso);
-  if (Number.isNaN(diff)) return "—";
+  if (Number.isNaN(diff)) return "-";
   const sec = Math.max(0, Math.floor(diff / 1000));
   if (sec < 60) return `${sec}s ago`;
   const min = Math.floor(sec / 60);

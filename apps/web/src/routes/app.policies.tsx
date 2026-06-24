@@ -347,7 +347,7 @@ function PolicySetsTab({
         title="Delete policy set"
         description={
           deleteTarget?.active_version_id
-            ? `"${deleteTarget.name}" is currently enforcing authority in this zone. Deleting it immediately drops the zone to deny-all — every request is denied until another set is activated. This cannot be undone.`
+            ? `"${deleteTarget.name}" is currently enforcing authority in this zone. Deleting it immediately drops the zone to deny-all, so every request is denied until another set is activated. This cannot be undone.`
             : `Deleting "${deleteTarget?.name ?? ""}" removes it from this zone. It is not currently enforcing, so live decisions are unaffected. This cannot be undone.`
         }
         confirmLabel="Delete policy set"
@@ -412,9 +412,9 @@ function PolicySetInspector({
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center gap-2">
         {policySet.active_version_id ? (
-          <Badge tone="success">Active — governs this zone</Badge>
+          <Badge tone="success">Active: governs this zone</Badge>
         ) : (
-          <Badge tone="warning">Not enforcing — requests deny</Badge>
+          <Badge tone="warning">Not enforcing: requests deny</Badge>
         )}
         <div className="ml-auto flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={onSimulate}>
@@ -428,7 +428,7 @@ function PolicySetInspector({
 
       <DetailGroup title="Policy set">
         <DetailField label="Name">{policySet.name}</DetailField>
-        <DetailField label="Description">{policySet.description ?? "—"}</DetailField>
+        <DetailField label="Description">{policySet.description ?? "-"}</DetailField>
         <DetailField label="Created">{new Date(policySet.created_at).toLocaleString()}</DetailField>
       </DetailGroup>
 
@@ -625,7 +625,7 @@ function EnforcementStatus({
             <dd className="text-foreground">{describeSts(status.sts.state)}</dd>
             <dt className="text-muted-foreground">Manifest</dt>
             <dd>
-              <Mono>{(status.manifest_sha256 ?? "").slice(0, 12) || "—"}…</Mono>
+              <Mono>{(status.manifest_sha256 ?? "").slice(0, 12) || "-"}…</Mono>
             </dd>
             {status.shadow_version_id ? (
               <>
@@ -656,7 +656,7 @@ function describeOutbox(state: string): string {
     case "pending":
       return "Queued for delivery";
     case "dead":
-      return "Failed — exhausted retries";
+      return "Failed: exhausted retries";
     case "mismatch":
       return "Superseded by a newer activation";
     case "missing":
@@ -1072,7 +1072,7 @@ function PolicyInspector({
 
       <DetailGroup title="Policy">
         <DetailField label="Name">{policy.name}</DetailField>
-        <DetailField label="Description">{policy.description ?? "—"}</DetailField>
+        <DetailField label="Description">{policy.description ?? "-"}</DetailField>
         <DetailField label="Created by">{policy.created_by}</DetailField>
         <DetailField label="Created">{new Date(policy.created_at).toLocaleString()}</DetailField>
       </DetailGroup>
