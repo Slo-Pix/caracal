@@ -308,7 +308,7 @@ function IssuanceNotice() {
       </svg>
       <div className="min-w-0 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">The client secret is shown only once.</span>{" "}
-        It is generated in your browser, never stored, and cannot be retrieved later — copy it
+        It is generated in your browser, never stored, and cannot be retrieved later, so copy it
         before closing the dialog. The same key is also issuable with{" "}
         <Mono>caracal control key create</Mono>.
       </div>
@@ -487,7 +487,7 @@ function CreateControlKeyModal({
 
         <details className="border-t border-border pt-3">
           <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-            Advanced — token guards
+            Advanced: token guards
           </summary>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field
@@ -529,7 +529,7 @@ function ControlSecretModal({
       open={secret !== null}
       onClose={onClose}
       title="Control key secret"
-      description="Copy the client secret now — it is never shown again."
+      description="Copy the client secret now. It is never shown again."
       footer={<Button onClick={onClose}>Done</Button>}
     >
       {secret ? (
@@ -623,7 +623,7 @@ function ControlKeyInspector({
           </div>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">
-            No scoped permissions — this key can authenticate but invokes nothing.
+            No scoped permissions: this key can authenticate but invokes nothing.
           </p>
         )}
       </section>

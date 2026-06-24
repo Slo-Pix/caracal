@@ -124,7 +124,7 @@ function routingSummary(provider: Provider): string {
   if (Array.isArray(config.allowed_token_hosts) && config.allowed_token_hosts.length > 0) {
     return String(config.allowed_token_hosts[0]);
   }
-  return "—";
+  return "-";
 }
 
 function ProvidersPage({ zoneId, zoneName }: { zoneId: string; zoneName: string }) {
@@ -205,7 +205,7 @@ function ProvidersPage({ zoneId, zoneName }: { zoneId: string; zoneName: string 
             {p.secret_config_keys.length} sealed
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-xs text-muted-foreground">-</span>
         ),
     },
     {
@@ -491,7 +491,7 @@ function ProviderDetail({
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "object") return JSON.stringify(value);

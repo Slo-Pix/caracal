@@ -174,7 +174,7 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
           {e.scopes.length > 2 ? (
             <span className="text-[11px] text-muted-foreground">+{e.scopes.length - 2}</span>
           ) : null}
-          {e.scopes.length === 0 ? <span className="text-xs text-muted-foreground">—</span> : null}
+          {e.scopes.length === 0 ? <span className="text-xs text-muted-foreground">-</span> : null}
         </div>
       ),
     },
@@ -189,7 +189,7 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
       align: "right",
       cell: (e) => (
         <span className="text-xs text-muted-foreground">
-          {e.expires_at ? new Date(e.expires_at).toLocaleString() : "—"}
+          {e.expires_at ? new Date(e.expires_at).toLocaleString() : "-"}
         </span>
       ),
     },
@@ -511,7 +511,7 @@ function ImpactView({ rows }: { rows: DelegationImpactRow[] }) {
                   {short(row.target_session_id)}
                 </td>
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {row.subject_session_id ? short(row.subject_session_id) : "—"}
+                  {row.subject_session_id ? short(row.subject_session_id) : "-"}
                 </td>
                 <td className="px-3 py-2 text-right font-mono text-[11px] text-muted-foreground">
                   depth {row.depth}
