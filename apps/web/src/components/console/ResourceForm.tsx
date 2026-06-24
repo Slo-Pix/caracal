@@ -97,20 +97,37 @@ export function ResourceFormModal({
     if (scopes.length === 0) return "At least one scope is required.";
     // The control plane requires the full Gateway binding for every resource.
     if (!upstreamUrl.trim()) return "Upstream URL is required.";
+    try {
+      const protocol = new URL(upstreamUrl.trim()).protocol;
+      if (protocol !== "http:" && protocol !== "https:") {
+        return "Upstream URL must use http:// or https://.";
+      }
+    } catch {
+      return "Upstream URL must be a valid http(s) URL.";
+    }
     if (!gatewayApp) return "Gateway application is required.";
     if (!credentialProvider) return "Credential provider is required.";
     const identifierError = validateResourceIdentifier(identifier);
     if (identifierError) return identifierError;
     if (enforcement === "enforced") {
+      const seen = new Set<string>();
       for (const op of operations) {
         if (!op.path.trim()) continue;
         if (!op.path.startsWith("/")) return `Operation path "${op.path}" must be absolute.`;
         if (!scopes.includes(op.scope))
           return `Operation scope "${op.scope}" must be a declared scope.`;
+        const key = `${op.method.toUpperCase()} ${op.path.trim()}`;
+        if (seen.has(key)) return `Operation "${key}" is listed more than once.`;
+        seen.add(key);
       }
     }
     return null;
   }
+
+  // Enforced operations with a blank path are dropped on submit; warn before that
+  // happens so an operator does not silently lose a half-filled row.
+  const droppedOps =
+    enforcement === "enforced" ? operations.filter((op) => !op.path.trim()).length : 0;
 
   function submit() {
     setTouched(true);
@@ -384,6 +401,12 @@ export function ResourceFormModal({
         </div>
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        {!error && droppedOps > 0 ? (
+          <p className="text-xs text-amber-700 dark:text-amber-400">
+            {droppedOps} operation{droppedOps === 1 ? "" : "s"} with an empty path will be discarded
+            on save.
+          </p>
+        ) : null}
       </div>
     </Modal>
   );

@@ -21,7 +21,7 @@ export interface ComposerResult {
   name?: string;
   description?: string;
   manifest: PolicyManifestEntry[];
-  activateNow: boolean;
+  deploy: "activate" | "shadow" | "none";
 }
 
 export function PolicySetComposer({
@@ -30,6 +30,7 @@ export function PolicySetComposer({
   zoneId,
   policies,
   policySetName,
+  hasActiveVersion = false,
   busy,
   onClose,
   onSubmit,
@@ -39,14 +40,19 @@ export function PolicySetComposer({
   zoneId: string;
   policies: Policy[];
   policySetName?: string;
+  hasActiveVersion?: boolean;
   busy: boolean;
   onClose: () => void;
   onSubmit: (result: ComposerResult) => void;
 }) {
   const isCreate = mode === "create";
+  // Shadow only makes sense when a live version already governs the zone: it evaluates
+  // the new manifest alongside the active one without changing enforcement. A first
+  // activation (zone otherwise deny-all) has nothing to shadow.
+  const canShadow = !isCreate && hasActiveVersion;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [activateNow, setActivateNow] = useState(true);
+  const [deploy, setDeploy] = useState<ComposerResult["deploy"]>("activate");
   const [choices, setChoices] = useState<PolicyChoice[] | null>(null);
   const [selected, setSelected] = useState<Map<string, string>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -55,7 +61,9 @@ export function PolicySetComposer({
     if (!open) return;
     setName("");
     setDescription("");
-    setActivateNow(true);
+    // Safer default: when a version is already live, compose to shadow so enforcement is
+    // never silently replaced; otherwise default to activating the first version.
+    setDeploy(canShadow ? "shadow" : "activate");
     setSelected(new Map());
     setError(null);
     setChoices(null);
@@ -84,7 +92,7 @@ export function PolicySetComposer({
     return () => {
       cancelled = true;
     };
-  }, [open, zoneId, policies]);
+  }, [open, zoneId, policies, canShadow]);
 
   function toggle(choice: PolicyChoice) {
     setSelected((prev) => {
@@ -115,10 +123,17 @@ export function PolicySetComposer({
     );
     onSubmit({
       manifest,
-      activateNow,
+      deploy,
       ...(isCreate ? { name: name.trim(), description: description.trim() || undefined } : {}),
     });
   }
+
+  const submitLabel =
+    deploy === "shadow"
+      ? "Compose & shadow"
+      : deploy === "activate"
+        ? "Compose & activate"
+        : "Compose version";
 
   return (
     <Modal
@@ -140,7 +155,7 @@ export function PolicySetComposer({
             loading={busy}
             disabled={(isCreate && !name.trim()) || selected.size === 0}
           >
-            {activateNow ? "Compose & activate" : "Compose version"}
+            {submitLabel}
           </Button>
         </>
       }
@@ -219,23 +234,77 @@ export function PolicySetComposer({
           )}
         </div>
 
-        <label className="flex items-center justify-between gap-3 border-t border-border pt-3">
-          <span>
-            <span className="block text-sm font-medium text-foreground">Activate immediately</span>
-            <span className="mt-0.5 block text-xs text-muted-foreground">
-              Make this version govern every decision in the zone as soon as it is composed.
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            checked={activateNow}
-            onChange={(e) => setActivateNow(e.target.checked)}
-            className="h-4 w-4 flex-shrink-0 accent-primary"
-          />
-        </label>
+        <DeployChoice value={deploy} onChange={setDeploy} canShadow={canShadow} />
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </div>
     </Modal>
+  );
+}
+
+// Lets the operator choose how the composed version reaches enforcement. Shadow is only
+// offered when a live version exists, since it evaluates in parallel without replacing it.
+function DeployChoice({
+  value,
+  onChange,
+  canShadow,
+}: {
+  value: ComposerResult["deploy"];
+  onChange: (value: ComposerResult["deploy"]) => void;
+  canShadow: boolean;
+}) {
+  const options: { id: ComposerResult["deploy"]; label: string; hint: string }[] = [
+    ...(canShadow
+      ? [
+          {
+            id: "shadow" as const,
+            label: "Deploy as shadow",
+            hint: "Evaluate alongside the live version without changing enforcement. Compare, then promote.",
+          },
+          {
+            id: "activate" as const,
+            label: "Replace live version",
+            hint: "Immediately govern every decision in the zone with this version.",
+          },
+        ]
+      : [
+          {
+            id: "activate" as const,
+            label: "Activate immediately",
+            hint: "Make this version govern every decision in the zone as soon as it is composed.",
+          },
+        ]),
+    {
+      id: "none" as const,
+      label: "Compose only",
+      hint: "Save the version without changing what is enforced. Activate it later.",
+    },
+  ];
+
+  return (
+    <fieldset className="flex flex-col gap-2 border-t border-border pt-3">
+      <legend className="mb-1 text-sm font-medium text-foreground">Deployment</legend>
+      {options.map((option) => (
+        <label
+          key={option.id}
+          className={cx(
+            "flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors",
+            value === option.id ? "border-foreground/40 bg-surface" : "border-border",
+          )}
+        >
+          <input
+            type="radio"
+            name="deploy"
+            checked={value === option.id}
+            onChange={() => onChange(option.id)}
+            className="mt-0.5 h-4 w-4 flex-shrink-0 accent-primary"
+          />
+          <span>
+            <span className="block text-sm font-medium text-foreground">{option.label}</span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">{option.hint}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
   );
 }

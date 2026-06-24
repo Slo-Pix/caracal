@@ -158,7 +158,8 @@ function PolicySetsTab({
           description: result.description,
         });
         const version = await addVersion.mutateAsync({ id: set.id, manifest: result.manifest });
-        if (result.activateNow) {
+        // A new set has no live version, so only direct activation applies here.
+        if (result.deploy === "activate") {
           await activate.mutateAsync({ id: set.id, versionId: version.version_id });
         }
         toast({ tone: "success", title: "Policy set created", description: set.name });
@@ -167,12 +168,25 @@ function PolicySetsTab({
           id: composer.set.id,
           manifest: result.manifest,
         });
-        if (result.activateNow) {
+        if (result.deploy === "activate") {
           await activate.mutateAsync({ id: composer.set.id, versionId: version.version_id });
+        } else if (result.deploy === "shadow" && composer.set.active_version_id) {
+          // Keep the current version live and evaluate the new one in parallel by pinning
+          // it as the shadow over the still-active primary.
+          await activate.mutateAsync({
+            id: composer.set.id,
+            versionId: composer.set.active_version_id,
+            shadowVersionId: version.version_id,
+          });
         }
         toast({
           tone: "success",
-          title: result.activateNow ? "Version composed and activated" : "Version composed",
+          title:
+            result.deploy === "activate"
+              ? "Version composed and activated"
+              : result.deploy === "shadow"
+                ? "Shadow version deployed"
+                : "Version composed",
           description: composer.set.name,
         });
       }
@@ -183,10 +197,10 @@ function PolicySetsTab({
   }
 
   // Activating a new version that replaces a live one rewrites enforcement for the whole
-  // zone, so confirm that specific case. First activations (zone currently deny-all) are
-  // the desired safe path and proceed without an extra gate.
+  // zone, so confirm that specific case. First activations (zone currently deny-all) and
+  // shadow deployments (which never touch the live version) are safe and proceed directly.
   async function handleCompose(result: ComposerResult) {
-    if (result.activateNow && composer?.mode === "version" && composer.set?.active_version_id) {
+    if (result.deploy === "activate" && composer?.mode === "version" && composer.set?.active_version_id) {
       setComposer(null);
       setConfirmActivation({ set: composer.set, result });
       return;
@@ -286,6 +300,7 @@ function PolicySetsTab({
         zoneId={zoneId}
         policies={policies}
         policySetName={composer?.set?.name}
+        hasActiveVersion={Boolean(composer?.set?.active_version_id)}
         busy={busy}
         onClose={() => setComposer(null)}
         onSubmit={handleCompose}
