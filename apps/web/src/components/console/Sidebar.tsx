@@ -39,6 +39,7 @@ function SidebarItem({
   return (
     <li
       className="relative"
+      data-tour={`nav-${iconName}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >

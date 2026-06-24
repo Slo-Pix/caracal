@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { CommandPalette } from "@/components/console/CommandPalette";
 import { CommandTrigger } from "@/components/console/CommandTrigger";
+import { GuidedSetup } from "@/components/console/GuidedSetup";
 import { PlatformStatus } from "@/components/console/PlatformStatus";
 import { ProfileMenu } from "@/components/console/ProfileMenu";
 import { LanguageMenu } from "@/components/console/LanguageMenu";
@@ -120,6 +121,7 @@ export function ConsoleLayout() {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <GuidedSetup />
     </div>
   );
 }
