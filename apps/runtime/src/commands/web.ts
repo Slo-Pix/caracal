@@ -212,6 +212,7 @@ export async function webCommand(argv: string[]): Promise<void> {
 
   const children: ChildProcess[] = []
   let shuttingDown = false
+  const FORCE_KILL_MS = 5000
 
   type Role = 'backend' | 'web'
   const procs: Record<Role, ChildProcess | null> = { backend: null, web: null }
@@ -234,16 +235,49 @@ export async function webCommand(argv: string[]): Promise<void> {
     web: { label: 'web UI', args: webArgs, env: { VITE_CARACAL_AUTH_URL: authUrl } },
   }
 
-  function shutdown(code: number): never {
-    shuttingDown = true
-    restoreStdin()
-    for (const child of children) {
+  // Each child is a detached process-group leader (see spawnRole), so the pnpm
+  // wrapper and its vite/tsx/node descendants share one group. Signalling the whole
+  // group is the only reliable way to take the entire tree down — a plain
+  // `child.kill()` hits only the pnpm wrapper and orphans the real servers.
+  function killTree(child: ChildProcess, signal: NodeJS.Signals): void {
+    const pid = child.pid
+    if (pid === undefined) return
+    try {
+      process.kill(-pid, signal)
+    } catch {
       try {
-        child.kill('SIGTERM')
+        child.kill(signal)
       } catch {
         /* already gone */
       }
     }
+  }
+
+  async function shutdown(code: number): Promise<void> {
+    if (shuttingDown) {
+      // A second interrupt force-kills anything still winding down.
+      for (const child of children) killTree(child, 'SIGKILL')
+      process.exit(code)
+    }
+    shuttingDown = true
+    restoreStdin()
+
+    const alive = children.filter((child) => child.exitCode === null && child.signalCode === null)
+    if (alive.length === 0) process.exit(code)
+
+    // Wait for every service to actually exit before leaving, so a single Ctrl+C
+    // never returns the prompt while a server is still holding a port or the DB.
+    const exits = alive.map(
+      (child) => new Promise<void>((resolve) => child.once('exit', () => resolve())),
+    )
+    for (const child of alive) killTree(child, 'SIGTERM')
+    const force = setTimeout(() => {
+      for (const child of alive) killTree(child, 'SIGKILL')
+    }, FORCE_KILL_MS)
+    if (typeof force.unref === 'function') force.unref()
+
+    await Promise.all(exits)
+    clearTimeout(force)
     process.exit(code)
   }
 
@@ -253,13 +287,17 @@ export async function webCommand(argv: string[]): Promise<void> {
       cwd: root,
       // The parent owns stdin so it can handle restart keys; children only write output.
       stdio: ['ignore', 'inherit', 'inherit'],
+      // Detach so each child leads its own process group: it stays out of the TTY's
+      // foreground group (a single Ctrl+C reaches only the launcher) and can be torn
+      // down as a whole group, descendants included.
+      detached: true,
       env: { ...process.env, ...spec.env },
     })
     procs[role] = child
     children.push(child)
     child.on('error', (err) => {
       printError(`web: failed to start ${spec.label}: ${err.message}`)
-      if (!shuttingDown) shutdown(1)
+      if (!shuttingDown) void shutdown(1)
     })
     child.on('exit', () => {
       if (shuttingDown) return
@@ -267,7 +305,7 @@ export async function webCommand(argv: string[]): Promise<void> {
       // process exiting on its own is a real failure.
       if (procs[role] === child) {
         printError(`web: ${spec.label} exited unexpectedly.`)
-        shutdown(1)
+        void shutdown(1)
       }
     })
   }
@@ -275,13 +313,7 @@ export async function webCommand(argv: string[]): Promise<void> {
   function restartRole(role: Role): void {
     const current = procs[role]
     procs[role] = null
-    if (current) {
-      try {
-        current.kill('SIGTERM')
-      } catch {
-        /* already gone */
-      }
-    }
+    if (current) killTree(current, 'SIGTERM')
     printInfo(`Restarting ${SPEC[role].label}…`)
     spawnRole(role)
   }
@@ -307,7 +339,7 @@ export async function webCommand(argv: string[]): Promise<void> {
       switch (key) {
         case '\u0003': // Ctrl+C
         case 'q':
-          shutdown(0)
+          void shutdown(0)
           break
         case 'r':
           restartRole('backend')
@@ -342,7 +374,20 @@ export async function webCommand(argv: string[]): Promise<void> {
     ].join('\n') + '\n',
   )
 
-  process.on('SIGINT', () => shutdown(0))
-  process.on('SIGTERM', () => shutdown(0))
+  process.on('SIGINT', () => void shutdown(0))
+  process.on('SIGTERM', () => void shutdown(0))
+  // Final safety net: if the launcher exits for any other reason, take the detached
+  // service groups down with it rather than leaking ports and an open database.
+  process.on('exit', () => {
+    for (const child of children) {
+      const pid = child.pid
+      if (pid === undefined) continue
+      try {
+        process.kill(-pid, 'SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }
+  })
   listenForKeys()
 }

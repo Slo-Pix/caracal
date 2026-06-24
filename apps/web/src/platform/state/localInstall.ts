@@ -21,6 +21,7 @@ export interface ProfileRecord {
 const INSTALL_KEY = "caracal.install";
 const ACTIVE_ZONE_KEY = "caracal.activeZone";
 const PROFILE_KEY = "caracal.profile";
+const OWNER_KEY = "caracal.owner";
 const profileListeners = new Set<() => void>();
 let profileSnapshot: ProfileRecord | null = null;
 
@@ -120,7 +121,31 @@ export function clearLocalIdentity(): void {
   remove(INSTALL_KEY);
   remove(ACTIVE_ZONE_KEY);
   remove(PROFILE_KEY);
+  remove(OWNER_KEY);
   emitProfileChange();
+}
+
+// The browser caches the operator profile and onboarding state in localStorage, but
+// the authentication backend is the source of truth for the account. Bind the cached
+// identity to the signed-in user id and drop it whenever the server reports a different
+// account or none at all — so a backend `caracal purge` (which deletes the account)
+// fully resets the web identity on the next session check instead of resurfacing a
+// profile whose account no longer exists.
+export function reconcileLocalIdentity(serverUserId: string | null): void {
+  const boundId = read<string | null>(OWNER_KEY, null);
+  if (serverUserId === null) {
+    if (boundId !== null || hasStoredIdentity()) clearLocalIdentity();
+    return;
+  }
+  if (boundId !== serverUserId) {
+    clearLocalIdentity();
+    write(OWNER_KEY, serverUserId);
+  }
+}
+
+function hasStoredIdentity(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem(INSTALL_KEY) !== null || localStorage.getItem(PROFILE_KEY) !== null;
 }
 
 /** Human label for the active workspace shown in the Console chrome. */

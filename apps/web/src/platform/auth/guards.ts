@@ -7,12 +7,16 @@ This file provides route guards that bridge Better Auth sessions with onboarding
 import { redirect } from "@tanstack/react-router";
 
 import { getSession } from "@/platform/auth";
-import { isOnboarded } from "@/platform/state/localInstall";
+import { isOnboarded, reconcileLocalIdentity } from "@/platform/state/localInstall";
 
 export async function hasSession(): Promise<boolean> {
   try {
     const { data } = await getSession();
-    return Boolean(data?.user);
+    const userId = data?.user?.id ?? null;
+    // The backend account is authoritative: align the browser-local identity with it
+    // (clearing it when the account is gone) before gating the route.
+    reconcileLocalIdentity(userId);
+    return userId !== null;
   } catch {
     return false;
   }

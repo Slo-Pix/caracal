@@ -6,6 +6,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
+import { DatabaseSync } from 'node:sqlite'
 import { createInterface } from 'node:readline'
 import { dirname, join, relative } from 'node:path'
 import { devSecretsHome } from '@caracalai/core'
@@ -137,6 +138,36 @@ function webConsoleStatePaths(ctx: PurgeContext): string[] {
   const base = webConsoleStateBase(ctx)
   if (!base) return []
   return [base, `${base}-wal`, `${base}-shm`, `${base}-journal`]
+}
+
+// Deleting the SQLite file does not log out an operator while `caracal web` is
+// running: the auth backend keeps the unlinked inode open and goes on serving the
+// cached identity. Mirror the web "Delete profile" command (apps/auth account
+// endpoint) by clearing every row in-place first, so a live auth connection sees
+// an empty database immediately, then the file itself is removed for a clean slate.
+function clearAuthDatabase(path: string, ctx: PurgeContext, label: string): void {
+  if (!existsSync(path)) return
+  if (ctx.dryRun) {
+    process.stdout.write(`  ${style.label('[dry-run]')} clear identity rows ${style.code(label)}: ${path}\n`)
+    return
+  }
+  try {
+    const db = new DatabaseSync(path)
+    try {
+      const tables = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+        .all() as { name: string }[]
+      db.exec('BEGIN IMMEDIATE')
+      for (const { name } of tables) db.prepare(`DELETE FROM "${name}"`).run()
+      db.exec('COMMIT')
+    } finally {
+      db.close()
+    }
+    process.stdout.write(`  ${style.success(SYMBOL.ok)} cleared ${style.code(label)} identity records\n`)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    process.stdout.write(`  ${style.label(`(skip) ${label} row clear:`)} ${message}\n`)
+  }
 }
 
 function purgeHelp(): never {
@@ -414,6 +445,8 @@ const TARGETS: Target[] = [
     },
     available: (ctx) => webConsoleStateBase(ctx) !== undefined,
     run: async (ctx) => {
+      const base = webConsoleStateBase(ctx)
+      if (base) clearAuthDatabase(base, ctx, `web/${base.split('/').pop()}`)
       for (const path of webConsoleStatePaths(ctx)) {
         removePath(path, ctx, `web/${path.split('/').pop()}`)
       }
