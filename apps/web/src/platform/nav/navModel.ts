@@ -57,7 +57,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: "audit", label: "Audit", to: "/app/audit", zoneScoped: true },
       { id: "analytics", label: "Analytics", to: "/app/enterprise/analytics", locked: true },
       { id: "compliance", label: "Compliance", to: "/app/enterprise/compliance", locked: true },
-      { id: "diagnostics", label: "Diagnostics", to: "/app/diagnostics" },
     ],
   },
   {

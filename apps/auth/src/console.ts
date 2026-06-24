@@ -5,6 +5,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { discoverAdminToken, discoverCoordinatorToken } from "@caracalai/core";
+import { runDoctorDiagnostics, type DoctorReport } from "@caracalai/engine";
 
 import { auth } from "./auth.ts";
 
@@ -123,6 +124,50 @@ async function handleStatus(res: ServerResponse): Promise<void> {
   });
 }
 
+// Full control-plane diagnostics: the same checks the Console `doctor` runs, surfaced
+// to the web client so platform health lives in one place. The report is comparatively
+// expensive (it probes every service and walks each zone), so a short in-process cache
+// absorbs the navbar's background polling without hammering the control plane.
+const DIAGNOSTICS_TTL_MS = 8_000;
+interface DiagnosticsCacheEntry {
+  at: number;
+  payload: DoctorReport & { generatedAt: string };
+}
+let diagnosticsCache: DiagnosticsCacheEntry | undefined;
+let diagnosticsInFlight: Promise<DiagnosticsCacheEntry> | undefined;
+
+async function computeDiagnostics(): Promise<DiagnosticsCacheEntry> {
+  const report = await runDoctorDiagnostics({});
+  const generatedAt = new Date().toISOString();
+  return { at: Date.now(), payload: { ...report, generatedAt } };
+}
+
+async function handleDiagnostics(res: ServerResponse): Promise<void> {
+  if (!adminToken()) {
+    sendJson(res, 503, { error: "control_plane_not_configured" });
+    return;
+  }
+  const fresh = diagnosticsCache && Date.now() - diagnosticsCache.at < DIAGNOSTICS_TTL_MS;
+  if (!fresh) {
+    if (!diagnosticsInFlight) {
+      diagnosticsInFlight = computeDiagnostics().finally(() => {
+        diagnosticsInFlight = undefined;
+      });
+    }
+    try {
+      diagnosticsCache = await diagnosticsInFlight;
+    } catch {
+      sendJson(res, 502, { error: "diagnostics_failed" });
+      return;
+    }
+  }
+  if (!diagnosticsCache) {
+    sendJson(res, 502, { error: "diagnostics_failed" });
+    return;
+  }
+  sendJson(res, 200, diagnosticsCache.payload);
+}
+
 async function forwardProxy(
   req: IncomingMessage,
   res: ServerResponse,
@@ -201,6 +246,10 @@ export async function handleConsole(req: IncomingMessage, res: ServerResponse): 
   const path = url.slice(API_PREFIX.length);
   if (path === "/status" || path.startsWith("/status?")) {
     await handleStatus(res);
+    return true;
+  }
+  if (path === "/diagnostics" || path.startsWith("/diagnostics?")) {
+    await handleDiagnostics(res);
     return true;
   }
   if (path.startsWith("/v1/")) {

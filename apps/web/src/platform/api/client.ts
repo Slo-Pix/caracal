@@ -19,6 +19,7 @@ import type {
   DelegationEdge,
   DelegationHop,
   DelegationImpactRow,
+  DiagnosticsReport,
   EffectiveAuthority,
   ActivationStatus,
   Policy,
@@ -101,6 +102,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const consoleApi = {
   status: () => request<ConsoleStatus>("/status"),
+  diagnostics: () => request<DiagnosticsReport>("/diagnostics"),
 
   zones: {
     list: () => request<Zone[]>("/v1/zones"),
