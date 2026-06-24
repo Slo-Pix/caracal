@@ -381,6 +381,11 @@ export class AdminClient {
       if (!Array.isArray(response.rows)) throw new Error('audit response missing rows')
       return response.rows
     },
+    listPage: async (zoneId: string, query?: AuditQuery): Promise<{ rows: AuditEvent[]; next_cursor: string | null }> => {
+      const response = await this.request<RowListResponse<AuditEvent>>(`/v1/zones/${zoneId}/audit`, { query: { ...query } })
+      if (!Array.isArray(response.rows)) throw new Error('audit response missing rows')
+      return { rows: response.rows, next_cursor: response.next_cursor ?? null }
+    },
     byRequest: (zoneId: string, requestId: string) =>
       this.request<AuditDetail[]>(`/v1/zones/${zoneId}/audit/by-request/${requestId}`),
     explain: (zoneId: string, requestId: string) =>

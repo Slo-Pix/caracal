@@ -316,7 +316,11 @@ function PolicySetsTab({
         open={deleteTarget !== null}
         onClose={() => setDeleteTarget(null)}
         title="Delete policy set"
-        description={`Deleting "${deleteTarget?.name ?? ""}" removes it from this zone. If it is active, the zone falls back to deny-all. This cannot be undone.`}
+        description={
+          deleteTarget?.active_version_id
+            ? `"${deleteTarget.name}" is currently enforcing authority in this zone. Deleting it immediately drops the zone to deny-all — every request is denied until another set is activated. This cannot be undone.`
+            : `Deleting "${deleteTarget?.name ?? ""}" removes it from this zone. It is not currently enforcing, so live decisions are unaffected. This cannot be undone.`
+        }
         confirmLabel="Delete policy set"
         tone="danger"
         onConfirm={async () => {
@@ -970,18 +974,17 @@ function PoliciesTab({ zoneId, headerExtra }: { zoneId: string; headerExtra: Rea
         onSubmit={handleSubmit}
       />
 
-      <ConfirmDialog
-        open={deleteTarget !== null}
+      <DeletePolicyDialog
+        zoneId={zoneId}
+        policy={deleteTarget}
+        busy={deletePolicy.isPending}
         onClose={() => setDeleteTarget(null)}
-        title="Delete policy"
-        description={`Deleting "${deleteTarget?.name ?? ""}" removes it and all its versions. Policy sets referencing it must be recomposed. This cannot be undone.`}
-        confirmLabel="Delete policy"
-        tone="danger"
         onConfirm={async () => {
           if (!deleteTarget) return;
           try {
             await deletePolicy.mutateAsync(deleteTarget.id);
             toast({ tone: "info", title: "Policy deleted", description: deleteTarget.name });
+            setDeleteTarget(null);
           } catch (err) {
             toast({ tone: "error", title: "Delete failed", description: errorMessage(err) });
           }
@@ -1119,5 +1122,124 @@ function VersionRow({
         )
       ) : null}
     </div>
+  );
+}
+
+// Reference-aware policy delete: a policy's versions can be pinned inside active policy
+// sets that are currently enforcing the zone. Deleting the policy archives it (live sets
+// keep enforcing their pinned versions), but it disappears from the library and can no
+// longer be composed into new versions. Surface the real references so the operator sees
+// the blast radius instead of a generic "must be recomposed" string.
+function DeletePolicyDialog({
+  zoneId,
+  policy,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  zoneId: string;
+  policy: Policy | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [refs, setRefs] = useState<{ id: string; name: string }[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!policy) return;
+    setRefs(null);
+    setLoadError(null);
+    setLoading(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const [detail, sets] = await Promise.all([
+          consoleApi.policies.get(zoneId, policy.id),
+          consoleApi.policySets.list(zoneId),
+        ]);
+        const versionIds = new Set((detail.versions ?? []).map((v) => v.id));
+        const activeSets = sets.filter((s) => s.active_version_id);
+        const manifests = await Promise.all(
+          activeSets.map((s) =>
+            consoleApi.policySets
+              .getVersion(zoneId, s.id, s.active_version_id as string)
+              .then((version) => ({ set: s, policies: version.policies ?? [] }))
+              .catch(() => ({ set: s, policies: [] as string[] })),
+          ),
+        );
+        if (cancelled) return;
+        const referencing = manifests
+          .filter((m) => m.policies.some((pid) => versionIds.has(pid)))
+          .map((m) => ({ id: m.set.id, name: m.set.name }));
+        setRefs(referencing);
+      } catch (err) {
+        if (!cancelled) setLoadError(errorMessage(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [zoneId, policy]);
+
+  return (
+    <Modal
+      open={policy !== null}
+      onClose={onClose}
+      title="Delete policy"
+      description={`Deleting "${policy?.name ?? ""}" archives it and all its versions. This cannot be undone.`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={onConfirm}
+            loading={busy}
+            disabled={loading || loadError !== null}
+          >
+            Delete policy
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner /> Checking references…
+          </div>
+        ) : loadError ? (
+          <p className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Could not check references: {loadError}
+          </p>
+        ) : refs && refs.length > 0 ? (
+          <div className="border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-xs text-amber-700 dark:text-amber-400">
+            <div className="font-medium">
+              {refs.length} active policy set{refs.length === 1 ? "" : "s"} enforce a version of this
+              policy
+            </div>
+            <ul className="mt-2 flex flex-col gap-1">
+              {refs.map((r) => (
+                <li key={r.id} className="font-medium text-foreground">
+                  {r.name}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-amber-700/90 dark:text-amber-400/90">
+              Those sets keep enforcing their pinned versions, but this policy leaves the library and
+              can no longer be composed into new policy-set versions.
+            </p>
+          </div>
+        ) : refs ? (
+          <p className="text-sm text-muted-foreground">
+            No active policy set references this policy.
+          </p>
+        ) : null}
+      </div>
+    </Modal>
   );
 }

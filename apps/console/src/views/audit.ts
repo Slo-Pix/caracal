@@ -23,6 +23,9 @@ export class AuditTailView implements View {
   private events: AuditEvent[] = []
   private cursor = 0
   private offset = 0
+  private maxRows = MAX_ROWS
+  private loadingOlder = false
+  private exhausted = false
   private decision: 'all' | 'allow' | 'deny' | 'partial'
   private paused = false
   private timer: NodeJS.Timeout | undefined
@@ -53,7 +56,7 @@ export class AuditTailView implements View {
     ]
     return this.events.length === 0
       ? hints
-      : [...hints.slice(0, 4), 'enter:details', 'x:trace', ...hints.slice(4)]
+      : [...hints.slice(0, 4), 'enter:details', 'x:trace', 'm:load-older', ...hints.slice(4)]
   }
 
   async init(app: App): Promise<void> {
@@ -85,6 +88,8 @@ export class AuditTailView implements View {
       this.events = rows
       this.cursor = 0
       this.offset = 0
+      this.maxRows = MAX_ROWS
+      this.exhausted = rows.length < (this.filters.limit ?? 100)
       this.lastSince = rows[0]?.occurred_at
       this.app?.invalidate()
     } catch (err) {
@@ -113,7 +118,7 @@ export class AuditTailView implements View {
       const known = new Set(this.events.map((e) => e.id))
       const fresh = rows.filter((r) => !known.has(r.id))
       if (fresh.length > 0) {
-        this.events = [...fresh, ...this.events].slice(0, MAX_ROWS)
+        this.events = [...fresh, ...this.events].slice(0, this.maxRows)
         this.lastSince = this.events[0]?.occurred_at
         this.cursor = Math.min(this.cursor, this.events.length - 1)
         this.app?.invalidate()
@@ -122,6 +127,40 @@ export class AuditTailView implements View {
       if (!this.aborted) this.app?.setStatus(`audit: ${explainError(err)}`, 'error')
     } finally {
       this.scheduleNext()
+    }
+  }
+
+  // Fetches the next older page using the oldest loaded event as the upper bound,
+  // appends unique rows, and grows the retained window so a later live poll does
+  // not trim the history the operator just paged into view.
+  private async loadOlder(): Promise<void> {
+    if (this.loadingOlder || this.exhausted) return
+    const oldest = this.events[this.events.length - 1]?.occurred_at
+    if (!oldest) return
+    this.loadingOlder = true
+    this.app?.setStatus('loading older events...')
+    try {
+      const limit = this.filters.limit ?? 100
+      const rows = await this.client.audit.list(this.zoneId, {
+        ...this.filters,
+        until: oldest,
+        limit,
+        decision: this.decision === 'all' ? undefined : this.decision,
+      })
+      if (this.aborted) return
+      const known = new Set(this.events.map((e) => e.id))
+      const older = rows.filter((r) => !known.has(r.id))
+      if (older.length > 0) {
+        this.events = [...this.events, ...older]
+        this.maxRows = Math.max(this.maxRows, this.events.length)
+      }
+      if (rows.length < limit) this.exhausted = true
+      this.app?.setStatus(older.length > 0 ? `loaded ${older.length} older events` : 'no older events')
+      this.app?.invalidate()
+    } catch (err) {
+      if (!this.aborted) this.app?.setStatus(`audit: ${explainError(err)}`, 'error')
+    } finally {
+      this.loadingOlder = false
     }
   }
 
