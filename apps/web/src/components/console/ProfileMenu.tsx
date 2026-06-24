@@ -2,7 +2,7 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-This file renders the top-right profile menu: identity, zone switching, and account actions.
+This file renders the profile menu in the sidebar footer: identity, zone switching, and account actions.
 */
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -39,7 +39,7 @@ function Avatar({ avatar, name, size }: { avatar: string; name: string; size: nu
   );
 }
 
-export function ProfileMenu() {
+export function ProfileMenu({ collapsed = false }: { collapsed?: boolean }) {
   const navigate = useNavigate();
   const session = useSession();
   const { zones, activeZone, selectZone } = useActiveZone();
@@ -91,24 +91,43 @@ export function ProfileMenu() {
     <div className="relative" ref={rootRef}>
       <button
         onClick={() => setOpen((v) => !v)}
+        aria-label="Account menu"
+        title={collapsed ? profileName : undefined}
         className={cx(
-          "flex items-center gap-2.5 rounded-lg bg-background py-1.5 pl-2.5 pr-1.5 text-right transition-colors hover:bg-accent",
+          "flex items-center rounded-lg transition-colors hover:bg-accent",
+          collapsed ? "h-10 w-10 justify-center" : "w-full gap-2.5 p-1.5",
           open && "bg-accent",
         )}
       >
-        <span className="hidden min-w-0 flex-col leading-tight sm:flex">
-          <span className="max-w-[12rem] truncate text-sm font-medium text-foreground">
-            {profileName}
-          </span>
-          <span className="max-w-[12rem] truncate text-[11px] text-muted-foreground">
-            {activeZone ? activeZone.name : "No active zone"}
-          </span>
-        </span>
-        <Avatar avatar={profile.avatar} name={profileName} size={30} />
+        <Avatar avatar={profile.avatar} name={profileName} size={collapsed ? 30 : 32} />
+        {!collapsed ? (
+          <>
+            <span className="flex min-w-0 flex-1 flex-col text-left leading-tight">
+              <span className="truncate text-sm font-medium text-foreground">{profileName}</span>
+              <span className="truncate text-[11px] text-muted-foreground">
+                {activeZone ? activeZone.name : "No active zone"}
+              </span>
+            </span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="flex-shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            >
+              <path d="m7 15 5 5 5-5M7 9l5-5 5 5" />
+            </svg>
+          </>
+        ) : null}
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-40 mt-2 w-72 overflow-hidden rounded-xl border border-border bg-popover shadow-lg">
+        <div className="absolute bottom-full left-0 z-40 mb-2 w-72 overflow-hidden rounded-xl border border-border bg-popover shadow-lg">
           <div className="flex items-center gap-3 border-b border-border p-3">
             <Avatar avatar={profile.avatar} name={profileName} size={40} />
             <div className="min-w-0">
@@ -142,7 +161,7 @@ export function ProfileMenu() {
                 onClick={() => setOpen(false)}
                 className="block rounded-md px-1.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                No zones yet — create one
+                No zones yet. Create one
               </Link>
             ) : (
               <>

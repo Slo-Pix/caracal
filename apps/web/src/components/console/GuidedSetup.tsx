@@ -2,10 +2,10 @@
 Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 Caracal, a product of Garudex Labs
 
-This file wires the in-app guided setup: a narrated, element-anchored checklist that teaches the authorization model and drops operators into the real create forms.
+This file wires the in-app guided setup: a short, element-anchored walkthrough that explains each building block and opens its real create form.
 */
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { InteractiveOnboardingChecklist, type Step } from "@/components/ui";
 import {
@@ -41,88 +41,49 @@ function PlayIcon({ className }: { className?: string }) {
   );
 }
 
-// Compact lesson layout shared by every build step: what the object is, why it matters in
-// the authority chain, and the fields the operator will fill — so the coachmark teaches the
-// concept and the form, not just the location of a button.
-function Lesson({
-  what,
-  why,
-  fields,
-}: {
-  what: string;
-  why: string;
-  fields: { name: string; hint: string }[];
-}) {
+// Compact "you'll set" field list, two items max, one line each, so the card stays
+// scannable instead of becoming prose.
+function Fields({ items }: { items: { name: string; hint: string }[] }) {
   return (
-    <div className="flex flex-col gap-3 text-sm">
-      <div>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          What it is
-        </div>
-        <p className="mt-0.5 text-foreground">{what}</p>
+    <div className="rounded-md border border-border bg-muted/30 p-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        You&apos;ll set
       </div>
-      <div>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Why it matters
-        </div>
-        <p className="mt-0.5 text-muted-foreground">{why}</p>
-      </div>
-      <div>
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          What you&apos;ll fill in
-        </div>
-        <ul className="mt-1 flex flex-col gap-1.5">
-          {fields.map((field) => (
-            <li key={field.name} className="flex gap-2">
-              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-foreground/50" />
-              <span>
-                <span className="font-medium text-foreground">{field.name}</span>
-                <span className="text-muted-foreground"> — {field.hint}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </div>
+      <ul className="mt-1.5 flex flex-col gap-1">
+        {items.map((item) => (
+          <li key={item.name} className="text-xs leading-snug">
+            <span className="font-medium text-foreground">{item.name}</span>
+            <span className="text-muted-foreground">: {item.hint}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-function ChainMap({ active }: { active: string }) {
-  const nodes = [
-    { id: "application", label: "Application" },
-    { id: "provider", label: "Provider" },
-    { id: "resource", label: "Resource" },
-    { id: "policy", label: "Policy" },
-  ];
+// One-time mental model, shown only on the orientation step.
+function ChainMap() {
+  const nodes = ["Application", "Provider", "Resource", "Policy"];
   return (
-    <div className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/30 p-2.5 text-xs">
+    <div className="flex flex-wrap items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 py-2 text-xs">
       <span className="font-medium text-foreground">Zone</span>
       <span className="text-muted-foreground">→</span>
       {nodes.map((node, index) => (
-        <span key={node.id} className="flex items-center gap-1.5">
-          <span
-            className={
-              node.id === active
-                ? "rounded bg-primary px-1.5 py-0.5 font-medium text-primary-foreground"
-                : "text-muted-foreground"
-            }
-          >
-            {node.label}
-          </span>
+        <span key={node} className="flex items-center gap-1">
+          <span className="text-foreground">{node}</span>
           {index < nodes.length - 1 ? <span className="text-muted-foreground">+</span> : null}
         </span>
       ))}
       <span className="text-muted-foreground">→</span>
-      <span className="font-medium text-foreground">Runtime</span>
+      <span className="font-medium text-foreground">Access</span>
     </div>
   );
 }
 
-// Drives the narrated guided setup from the active zone's real inventory. The tour opens
-// with the authorization model, walks each building block (teaching its fields and reason
-// before deep linking into the real create form), and closes by sending the operator to
-// verify enforcement. Build steps complete from live backend state; the orientation and
-// verify bookends complete when acknowledged.
+// Drives the guided walkthrough from the active zone's real inventory. Each build step is a
+// one-line explanation plus the two fields the operator will fill, with a button that opens
+// the real form. Build steps tick off from live data; the orientation and verify bookends
+// complete when acknowledged.
 export function GuidedSetup() {
   const navigate = useNavigate();
   const { activeZone } = useActiveZone();
@@ -160,194 +121,114 @@ export function GuidedSetup() {
     () => [
       {
         id: "orientation",
-        title: "How authorization works here",
-        description: "A quick map before you build — every step below has a purpose and an order.",
+        title: "Set up access in 4 steps",
+        description: "A zone authorizes a request once it has these four things.",
         targetSelector: "",
-        actionLabel: "Start building",
+        actionLabel: "Start",
         advanceOnAction: true,
+        hideInList: true,
         completed: ackOrientation || anyBuilt,
         details: (
-          <div className="flex flex-col gap-3 text-sm">
-            <ChainMap active="" />
-            <p className="text-muted-foreground">
-              Caracal brokers authority inside a <span className="text-foreground">zone</span>. To
-              authorize a request it needs four things: an{" "}
-              <span className="text-foreground">application</span> (who is asking), a{" "}
-              <span className="text-foreground">provider</span> (where upstream credentials come
-              from), a <span className="text-foreground">resource</span> (what is being accessed and
-              with which scopes), and an active <span className="text-foreground">policy set</span>{" "}
-              (the rules). Until a policy set is active, the zone denies everything by default.
-            </p>
-            <p className="text-muted-foreground">
-              We&apos;ll do them in that order. Each step opens the real form and explains every
-              field. It ticks off here automatically once the object exists.
+          <div className="flex flex-col gap-2">
+            <ChainMap />
+            <p className="text-xs text-muted-foreground">
+              Until a policy is active, the zone denies everything. We&apos;ll add each piece in
+              order. Every step opens the real form.
             </p>
           </div>
         ),
       },
       {
         id: "application",
-        title: "Register an application",
-        description: "The identity that requests authority.",
+        title: "1. Register an application",
+        description: "The identity that asks for access. Policies grant scopes to it.",
         targetSelector: '[data-tour="nav-applications"]',
         to: "/app/applications",
         search: { create: "1" },
         actionLabel: "Open the form",
         completed: hasApps,
         details: (
-          <>
-            <ChainMap active="application" />
-            <div className="mt-3">
-              <Lesson
-                what="A managed application is a stable identity — an agent, service, worker, or CI job — that authenticates to Caracal and requests tokens."
-                why="It is the “who” in every authorization decision. Policies grant scopes to applications, and the runtime issues tokens to them."
-                fields={[
-                  { name: "Name", hint: "a human label for the workload, e.g. Billing Worker." },
-                  {
-                    name: "Traits",
-                    hint: "optional tags policies can match on (max 32); leave empty to start.",
-                  },
-                ]}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                On create you&apos;ll see a one-time client secret — copy it then; it is never shown
-                again.
-              </p>
-            </div>
-          </>
+          <Fields
+            items={[
+              { name: "Name", hint: "a label for the workload, e.g. Billing Worker." },
+              { name: "Traits", hint: "optional tags; leave empty to start." },
+            ]}
+          />
         ),
       },
       {
         id: "provider",
-        title: "Connect a provider",
-        description: "Where upstream credentials come from.",
+        title: "2. Connect a provider",
+        description: "Where upstream credentials come from at runtime.",
         targetSelector: '[data-tour="nav-providers"]',
         to: "/app/providers",
         search: { create: "1" },
         actionLabel: "Open the form",
         completed: hasProviders,
         details: (
-          <>
-            <ChainMap active="provider" />
-            <div className="mt-3">
-              <Lesson
-                what="A provider is an upstream identity or credential source the zone brokers — an OAuth provider, an API-key source, or a token exchange."
-                why="Resources reference a provider to obtain real upstream credentials at runtime, so Caracal can mint scoped access on the agent's behalf."
-                fields={[
-                  {
-                    name: "Kind",
-                    hint: "the provider type (OAuth, API key, …) — sets the rest of the form.",
-                  },
-                  {
-                    name: "Identifier",
-                    hint: "provider://lowercase-slug, unique within the zone.",
-                  },
-                  {
-                    name: "Config",
-                    hint: "endpoints and auth method; secret fields are write-only.",
-                  },
-                ]}
-              />
-            </div>
-          </>
+          <Fields
+            items={[
+              { name: "Kind", hint: "OAuth, API key, etc. Picks the rest of the form." },
+              { name: "Identifier", hint: "provider://slug, unique in the zone." },
+            ]}
+          />
         ),
       },
       {
         id: "resource",
-        title: "Define a resource",
-        description: "What is protected, and the scopes on it.",
+        title: "3. Define a resource",
+        description: "What is protected, and the scopes that can be granted on it.",
         targetSelector: '[data-tour="nav-resources"]',
         to: "/app/resources",
         search: { create: "1" },
         actionLabel: "Open the form",
         completed: hasResources,
         details: (
-          <>
-            <ChainMap active="resource" />
-            <div className="mt-3">
-              <Lesson
-                what="A resource describes a protected upstream the Gateway authorizes — its identifier, the scopes that can be granted on it, and the provider that backs its credentials."
-                why="It is the “what” in a decision. Policies grant an application a set of scopes on a resource; the runtime enforces exactly those."
-                fields={[
-                  {
-                    name: "Identifier",
-                    hint: "resource://lowercase-slug naming the protected thing.",
-                  },
-                  {
-                    name: "Scopes",
-                    hint: "the permission strings agents can be granted, e.g. example:read.",
-                  },
-                  {
-                    name: "Credential provider",
-                    hint: "the provider this resource draws upstream credentials from.",
-                  },
-                ]}
-              />
-            </div>
-          </>
+          <Fields
+            items={[
+              { name: "Identifier", hint: "resource://slug for the protected upstream." },
+              { name: "Scopes", hint: "grantable permissions, e.g. example:read." },
+            ]}
+          />
         ),
       },
       {
         id: "policy",
-        title: "Author & activate a policy",
-        description: "The rules that turn deny-all into authorized access.",
+        title: "4. Activate a policy",
+        description: "The rules that switch the zone from deny-all to authorized.",
         targetSelector: '[data-tour="nav-policies"]',
         to: "/app/policies",
         search: { create: "policy" },
         actionLabel: "Open the editor",
         completed: hasActivePolicy,
         details: (
-          <>
-            <ChainMap active="policy" />
-            <div className="mt-3">
-              <Lesson
-                what="A policy is a Rego data document (package caracal.authz, marked # caracal:data-document). It supplies data — grants, application bindings — that the platform decision contract reads. It never decides on its own."
-                why="No active policy set means the zone denies every request. Composing your policy into a policy set and activating it is what finally authorizes traffic."
-                fields={[
-                  { name: "Name", hint: "what the policy authorizes, e.g. billing-read-access." },
-                  {
-                    name: "Rego source",
-                    hint: "start from a template; define data like grants and app_ids — never result.",
-                  },
-                ]}
-              />
-              <p className="mt-3 text-xs text-muted-foreground">
-                After saving the policy, compose it into a policy set and activate it — the Policies
-                tab walks you through it.
-              </p>
-            </div>
-          </>
+          <Fields
+            items={[
+              { name: "Name", hint: "what it authorizes, e.g. billing-read." },
+              { name: "Rego", hint: "start from a template, then activate it." },
+            ]}
+          />
         ),
       },
       {
         id: "verify",
-        title: "Verify enforcement",
-        description: "Confirm the zone is authorizing, not denying.",
+        title: buildComplete ? "You're enforcing" : "Almost there",
+        description: buildComplete
+          ? "This zone now authorizes requests for the scopes your policy grants."
+          : "Finish the unchecked steps. The zone denies by default until then.",
         targetSelector: "",
         to: "/app",
-        actionLabel: buildComplete ? "Go to dashboard" : "Review remaining steps",
+        actionLabel: buildComplete ? "Go to dashboard" : "Done for now",
         advanceOnAction: true,
+        hideInList: true,
         completed: ackVerify,
-        details: (
-          <div className="flex flex-col gap-3 text-sm">
-            <ChainMap active="" />
-            {buildComplete ? (
-              <p className="text-muted-foreground">
-                All four building blocks are in place, so this zone now authorizes requests for the
-                scopes your policy grants. Use <span className="text-foreground">Simulate</span> on
-                the policy set to dry-run a decision, and watch{" "}
-                <span className="text-foreground">Sessions</span> and{" "}
-                <span className="text-foreground">Audit</span> as agents start exchanging tokens.
-              </p>
-            ) : (
-              <p className="text-muted-foreground">
-                A few building blocks are still missing, so the zone keeps denying by default.
-                Finish the unchecked steps above — each opens its real form with the fields
-                explained.
-              </p>
-            )}
-          </div>
-        ),
+        details: buildComplete ? (
+          <p className="text-xs text-muted-foreground">
+            Use <span className="text-foreground">Simulate</span> on the policy set to dry-run a
+            decision, and watch <span className="text-foreground">Sessions</span> and{" "}
+            <span className="text-foreground">Audit</span> as agents exchange tokens.
+          </p>
+        ) : undefined,
       },
     ],
     [

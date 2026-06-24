@@ -53,7 +53,7 @@ export function PlatformStatus() {
     <button
       onClick={() => navigate({ to: "/app/diagnostics" })}
       aria-label={`Platform status: ${label}. Open Diagnostics.`}
-      title={`${label} — open Diagnostics`}
+      title={`${label}: open Diagnostics`}
       className={cx(
         "group inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-xs font-medium",
         "outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/40",
