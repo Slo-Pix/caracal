@@ -52,6 +52,49 @@ function toWebHeaders(req: IncomingMessage): Headers {
   return headers;
 }
 
+type SessionResult = Awaited<ReturnType<typeof auth.api.getSession>>;
+
+// A single page load fires many parallel console requests carrying the same session
+// cookie, and each getSession() is a Postgres round-trip. Validation is therefore cached
+// per cookie for a short window and concurrent lookups are de-duplicated onto one promise,
+// collapsing N auth round-trips into one. The TTL is intentionally short so revoked or
+// expired sessions stop working within seconds; the upstream control plane still enforces
+// its own admin token, so this gate only answers "is this operator signed in".
+const SESSION_TTL_MS = 3_000;
+const SESSION_CACHE_MAX = 1_000;
+const sessionCache = new Map<string, { at: number; session: SessionResult }>();
+const sessionInFlight = new Map<string, Promise<SessionResult>>();
+
+async function validateSession(req: IncomingMessage): Promise<SessionResult> {
+  const cookie = req.headers.cookie;
+  if (!cookie) return auth.api.getSession({ headers: toWebHeaders(req) });
+
+  const now = Date.now();
+  const cached = sessionCache.get(cookie);
+  if (cached && now - cached.at < SESSION_TTL_MS) return cached.session;
+
+  const existing = sessionInFlight.get(cookie);
+  if (existing) return existing;
+
+  const lookup = auth.api
+    .getSession({ headers: toWebHeaders(req) })
+    .then((session) => {
+      if (sessionCache.size >= SESSION_CACHE_MAX) {
+        for (const key of sessionCache.keys()) {
+          sessionCache.delete(key);
+          if (sessionCache.size < SESSION_CACHE_MAX) break;
+        }
+      }
+      sessionCache.set(cookie, { at: Date.now(), session });
+      return session;
+    })
+    .finally(() => {
+      sessionInFlight.delete(cookie);
+    });
+  sessionInFlight.set(cookie, lookup);
+  return lookup;
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
@@ -94,34 +137,49 @@ async function probeReachable(base: string, token: string): Promise<boolean> {
 }
 
 // Reports whether the control plane is configured and reachable so the web
-// client can show an honest connection state instead of fabricated data.
-async function handleStatus(res: ServerResponse): Promise<void> {
+// client can show an honest connection state instead of fabricated data. The two
+// readiness probes run concurrently and the result is cached briefly so repeated
+// navigations and the navbar indicator do not each pay two network round-trips.
+const STATUS_TTL_MS = 3_000;
+let statusCache: { at: number; payload: Record<string, unknown> } | undefined;
+let statusInFlight: Promise<Record<string, unknown>> | undefined;
+
+async function computeStatus(): Promise<Record<string, unknown>> {
   const base = apiUrl();
   const token = adminToken();
   const coordBase = coordinatorUrl();
   const coordTok = coordinatorToken();
   const coordinatorConfigured = Boolean(coordTok);
-  const coordinatorReachable = coordTok ? await probeReachable(coordBase, coordTok) : false;
-  if (!token) {
-    sendJson(res, 200, {
-      configured: false,
-      reachable: false,
-      apiUrl: base,
-      coordinatorConfigured,
-      coordinatorReachable,
-      coordinatorUrl: coordBase,
-    });
-    return;
-  }
-  const reachable = await probeReachable(base, token);
-  sendJson(res, 200, {
-    configured: true,
-    reachable,
+  const [reachable, coordinatorReachable] = await Promise.all([
+    token ? probeReachable(base, token) : Promise.resolve(false),
+    coordTok ? probeReachable(coordBase, coordTok) : Promise.resolve(false),
+  ]);
+  return {
+    configured: Boolean(token),
+    reachable: Boolean(token) && reachable,
     apiUrl: base,
     coordinatorConfigured,
     coordinatorReachable,
     coordinatorUrl: coordBase,
-  });
+  };
+}
+
+async function handleStatus(res: ServerResponse): Promise<void> {
+  const now = Date.now();
+  if (!statusCache || now - statusCache.at >= STATUS_TTL_MS) {
+    if (!statusInFlight) {
+      statusInFlight = computeStatus().finally(() => {
+        statusInFlight = undefined;
+      });
+    }
+    try {
+      statusCache = { at: Date.now(), payload: await statusInFlight };
+    } catch {
+      sendJson(res, 200, { configured: false, reachable: false, apiUrl: apiUrl() });
+      return;
+    }
+  }
+  sendJson(res, 200, statusCache.payload);
 }
 
 // Full control-plane diagnostics: the same checks the Console `doctor` runs, surfaced

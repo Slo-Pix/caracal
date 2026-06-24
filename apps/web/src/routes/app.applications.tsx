@@ -34,7 +34,6 @@ import {
 } from "@/platform/api/hooks";
 import { parseList, privilegedTraits, validateTraits } from "@/platform/api/validation";
 import type { Application } from "@/platform/api/types";
-import { parseList, privilegedTraits, validateTraits } from "@/platform/api/validation";
 
 export const Route = createFileRoute("/app/applications")({
   component: ApplicationsRoute,

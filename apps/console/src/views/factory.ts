@@ -225,13 +225,21 @@ function parseResourceOperations(raw: string): { value: ResourceOperation[] | un
   }
   if (!Array.isArray(parsed)) return { value: undefined, error: 'operations must be a JSON array of {method, path, scope}' }
   const value: ResourceOperation[] = []
+  const seen = new Set<string>()
   for (const entry of parsed) {
     if (typeof entry !== 'object' || entry === null) return { value: undefined, error: 'each operation must be an object with method, path, and scope' }
     const op = entry as Record<string, unknown>
     if (typeof op.method !== 'string' || typeof op.path !== 'string' || typeof op.scope !== 'string') {
       return { value: undefined, error: 'each operation must have string method, path, and scope' }
     }
-    value.push({ method: op.method, path: op.path, scope: op.scope })
+    const method = op.method.trim().toUpperCase()
+    const path = op.path.trim()
+    if (!method || !path) return { value: undefined, error: 'each operation must have a non-empty method and path' }
+    if (!path.startsWith('/')) return { value: undefined, error: `operation path "${path}" must be absolute` }
+    const key = `${method} ${path}`
+    if (seen.has(key)) return { value: undefined, error: `operation "${key}" is listed more than once` }
+    seen.add(key)
+    value.push({ method, path, scope: op.scope })
   }
   return { value, error: undefined }
 }
