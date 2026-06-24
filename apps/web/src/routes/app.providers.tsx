@@ -15,16 +15,36 @@ import {
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
-import { Badge, Button, ConfirmDialog, useToast, type Column } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  Field,
+  Modal,
+  Select,
+  Spinner,
+  useToast,
+  type Column,
+} from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { ConsoleApiError } from "@/platform/api/client";
 import {
+  useAuthorizeProviderGrant,
   useCreateProvider,
   useDeleteProvider,
+  useProviderGrants,
   useProviders,
+  useResources,
+  useRevokeProviderGrant,
   useUpdateProvider,
 } from "@/platform/api/hooks";
-import type { Provider, ProviderInput, ProviderKind } from "@/platform/api/types";
+import type {
+  Provider,
+  ProviderGrant,
+  ProviderInput,
+  ProviderKind,
+  Resource,
+} from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/providers")({
   component: ProvidersRoute,
@@ -222,6 +242,7 @@ function ProvidersPage({ zoneId, zoneName }: { zoneId: string; zoneName: string 
           render: (p) => (
             <ProviderDetail
               provider={p}
+              zoneId={zoneId}
               onEdit={() => setEditTarget(p)}
               onDelete={() => setDeleteTarget(p)}
             />
@@ -334,10 +355,12 @@ function ProviderDetail({
   provider,
   onEdit,
   onDelete,
+  zoneId,
 }: {
   provider: Provider;
   onEdit: () => void;
   onDelete: () => void;
+  zoneId: string;
 }) {
   const secretKeys = new Set(provider.secret_config_keys);
   const configEntries = Object.entries(provider.config_json ?? {}).filter(
@@ -421,14 +444,7 @@ function ProviderDetail({
       </section>
 
       <section className="border-t border-border pt-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Connections
-        </h3>
-        <p className="mt-2 text-xs text-muted-foreground">
-          User and resource connections (provider grants) are established at runtime through the
-          OAuth authorize flow and <Mono>caracal</Mono> CLI. They are not managed from the web
-          console.
-        </p>
+        <ProviderConnections provider={provider} zoneId={zoneId} />
       </section>
 
       <section className="border-t border-border pt-4">
@@ -454,4 +470,284 @@ function formatValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+}
+
+/* ------------------------------ Provider grants ----------------------------- */
+
+// Provider grants only apply to delegated OAuth (authorization_code). For every other
+// kind the upstream credential is sealed on the provider itself, so there is nothing
+// per-user to connect.
+function ProviderConnections({ provider, zoneId }: { provider: Provider; zoneId: string }) {
+  const isDelegatedOAuth = provider.kind === "oauth2_authorization_code";
+  const toast = useToast();
+  const grants = useProviderGrants(zoneId, isDelegatedOAuth ? provider.id : null);
+  const revoke = useRevokeProviderGrant(zoneId);
+  const [connectOpen, setConnectOpen] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<ProviderGrant | null>(null);
+
+  if (!isDelegatedOAuth) {
+    return (
+      <>
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Connections
+        </h3>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {provider.kind === "none" || provider.kind === "caracal_mandate"
+            ? "This provider issues no upstream credential, so there is nothing to connect per user."
+            : "This provider seals a single shared upstream credential. Per-user OAuth connections apply only to authorization-code providers."}
+        </p>
+      </>
+    );
+  }
+
+  const rows = grants.data ?? [];
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Connected users ({rows.length})
+        </h3>
+        <Button variant="secondary" size="sm" onClick={() => setConnectOpen(true)}>
+          Connect user
+        </Button>
+      </div>
+
+      {grants.isLoading ? (
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <Spinner className="h-3.5 w-3.5" /> Loading connections…
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          No users connected yet. Use “Connect user” to start the OAuth authorization flow for a
+          subject and resource.
+        </p>
+      ) : (
+        <div className="mt-3 overflow-hidden border border-border">
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-border">
+              {rows.map((grant) => (
+                <tr key={grant.id}>
+                  <td className="px-3 py-2 align-top">
+                    <div className="font-mono text-xs text-foreground">{grant.user_id}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+                      {grant.scopes.join(" · ") || "no scopes"}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top text-right">
+                    <Badge tone={grant.status === "active" ? "success" : "muted"}>
+                      {grant.status}
+                    </Badge>
+                  </td>
+                  <td className="w-20 px-3 py-2 text-right align-top">
+                    {grant.status === "active" ? (
+                      <button
+                        onClick={() => setRevokeTarget(grant)}
+                        className="text-xs font-medium text-destructive hover:underline"
+                      >
+                        Revoke
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <ConnectProviderModal
+        open={connectOpen}
+        provider={provider}
+        zoneId={zoneId}
+        onClose={() => setConnectOpen(false)}
+        onConnected={() => grants.refetch()}
+      />
+
+      <ConfirmDialog
+        open={revokeTarget !== null}
+        onClose={() => setRevokeTarget(null)}
+        title="Revoke connection"
+        description={`Revoking ${provider.name} for "${revokeTarget?.user_id ?? ""}" immediately invalidates the stored upstream tokens. The user must reconnect to regain access.`}
+        confirmLabel="Revoke connection"
+        tone="danger"
+        onConfirm={async () => {
+          if (!revokeTarget) return;
+          try {
+            await revoke.mutateAsync({
+              user_id: revokeTarget.user_id,
+              resource_id: revokeTarget.resource_id,
+              provider_id: revokeTarget.provider_id,
+            });
+            toast({ tone: "info", title: "Connection revoked", description: revokeTarget.user_id });
+          } catch (err) {
+            toast({ tone: "error", title: "Revoke failed", description: errorMessage(err) });
+          }
+        }}
+      />
+    </>
+  );
+}
+
+// Drives the per-user OAuth authorize flow. The web improves on the TUI here: the
+// resource picker is bound to providers that route through this OAuth provider, scopes
+// are pre-filled from the chosen resource, and the resulting authorization URL is
+// presented with copy + open actions and a live expiry so operators can hand it off.
+function ConnectProviderModal({
+  open,
+  provider,
+  zoneId,
+  onClose,
+  onConnected,
+}: {
+  open: boolean;
+  provider: Provider;
+  zoneId: string;
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const toast = useToast();
+  const resourcesQuery = useResources(zoneId);
+  const authorize = useAuthorizeProviderGrant(zoneId);
+  const [userId, setUserId] = useState("");
+  const [resourceId, setResourceId] = useState("");
+  const [scopes, setScopes] = useState("");
+  const [result, setResult] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const boundResources = useMemo<Resource[]>(
+    () => (resourcesQuery.data ?? []).filter((r) => r.credential_provider_id === provider.id),
+    [resourcesQuery.data, provider.id],
+  );
+
+  function reset() {
+    setUserId("");
+    setResourceId("");
+    setScopes("");
+    setResult(null);
+    setError(null);
+  }
+
+  function handleClose() {
+    reset();
+    onClose();
+  }
+
+  function selectResource(id: string) {
+    setResourceId(id);
+    const resource = boundResources.find((r) => r.id === id);
+    setScopes(resource ? resource.scopes.join(", ") : "");
+  }
+
+  async function submit() {
+    setError(null);
+    const parsedScopes = scopes
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!userId.trim()) return setError("A subject (user ID) is required.");
+    if (!resourceId) return setError("Choose the resource this connection authorizes.");
+    if (parsedScopes.length === 0) return setError("At least one scope is required.");
+    try {
+      const res = await authorize.mutateAsync({
+        user_id: userId.trim(),
+        resource_id: resourceId,
+        provider_id: provider.id,
+        scopes: parsedScopes,
+      });
+      setResult({ url: res.authorization_url, expiresAt: res.expires_at });
+      onConnected();
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title={`Connect a user to ${provider.name}`}
+      description="Generate an OAuth authorization link for a subject and resource."
+      footer={
+        result ? (
+          <Button onClick={handleClose}>Done</Button>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button onClick={submit} loading={authorize.isPending}>
+              Generate link
+            </Button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            Send this authorization link to the user. After they approve, Caracal stores the
+            provider grant automatically. The link expires{" "}
+            <span className="text-foreground">{new Date(result.expiresAt).toLocaleString()}</span>.
+          </p>
+          <div className="flex items-stretch gap-2">
+            <input
+              readOnly
+              value={result.url}
+              className="min-w-0 flex-1 border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-foreground"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                void navigator.clipboard?.writeText(result.url);
+                toast({ tone: "success", title: "Link copied" });
+              }}
+            >
+              Copy
+            </Button>
+            <a href={result.url} target="_blank" rel="noreferrer">
+              <Button size="sm">Open</Button>
+            </a>
+          </div>
+        </div>
+      ) : boundResources.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No resources route through this provider yet. Bind a resource to{" "}
+          <span className="text-foreground">{provider.name}</span> as its credential provider before
+          connecting users.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <Field
+            label="Subject (user ID)"
+            placeholder="user@example.com"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            autoFocus
+          />
+          <Select
+            label="Resource"
+            value={resourceId}
+            onChange={(e) => selectResource(e.target.value)}
+          >
+            <option value="">Select a resource…</option>
+            {boundResources.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name} ({r.identifier})
+              </option>
+            ))}
+          </Select>
+          <Field
+            label="Scopes"
+            hint="Comma-separated. Pre-filled from the resource; trim to request least privilege."
+            placeholder="invoices:read, invoices:write"
+            value={scopes}
+            onChange={(e) => setScopes(e.target.value)}
+          />
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        </div>
+      )}
+    </Modal>
+  );
 }

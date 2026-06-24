@@ -6,8 +6,40 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const pgMock = vi.hoisted(() => {
+  const queries: { sql: string; params?: unknown[] }[] = []
+  let existingDatabases = new Set<string>(['caracal_auth'])
+  class Client {
+    connectionString: string
+    constructor(opts: { connectionString: string }) {
+      this.connectionString = opts.connectionString
+    }
+    async connect(): Promise<void> {}
+    async query(sql: string, params?: unknown[]): Promise<{ rowCount: number; rows: unknown[] }> {
+      queries.push({ sql, params })
+      if (sql.includes('FROM pg_database')) {
+        const name = String(params?.[0] ?? '')
+        return { rowCount: existingDatabases.has(name) ? 1 : 0, rows: [] }
+      }
+      const drop = /DROP DATABASE "([^"]+)"/.exec(sql)
+      if (drop) existingDatabases.delete(drop[1])
+      return { rowCount: 0, rows: [] }
+    }
+    async end(): Promise<void> {}
+  }
+  return {
+    queries,
+    Client,
+    reset: (databases: string[]) => {
+      queries.length = 0
+      existingDatabases = new Set(databases)
+    },
+  }
+})
+
+vi.mock('pg', () => ({ default: { Client: pgMock.Client }, Client: pgMock.Client }))
 
 const engineMocks = vi.hoisted(() => ({
   composeRun: vi.fn(),
@@ -242,59 +274,38 @@ describe('purgeCommand', () => {
     }
   })
 
-  it('clears identity records and removes the web console database', async () => {
-    const authDir = join(repoRoot, 'apps', 'auth')
-    mkdirSync(authDir, { recursive: true })
-    const dbBase = join(authDir, 'caracal-auth.sqlite')
-    // A real SQLite identity database the way the auth backend leaves it on disk.
-    const seed = new DatabaseSync(dbBase)
-    seed.exec('CREATE TABLE "user" (id TEXT PRIMARY KEY, email TEXT)')
-    seed.exec('CREATE TABLE "session" (id TEXT PRIMARY KEY, userId TEXT)')
-    seed.prepare('INSERT INTO "user" (id, email) VALUES (?, ?)').run('u1', 'op@example.com')
-    seed.prepare('INSERT INTO "session" (id, userId) VALUES (?, ?)').run('s1', 'u1')
-    seed.close()
-    // WAL/SHM sidecars are removed when present.
-    writeFileSync(`${dbBase}-wal`, '')
-    writeFileSync(`${dbBase}-shm`, '')
+  it('drops the web console PostgreSQL database', async () => {
+    process.env.CARACAL_AUTH_DATABASE_URL = 'postgres://caracal:pw@localhost:5432/caracal_auth'
+    pgMock.reset(['caracal_auth'])
 
     await purgeCommand(['web', '--yes'])
 
-    // removeFsPath is mocked to a no-op, so the file survives and we can prove the
-    // operator identity was wiped in-place (mirrors the web "Delete profile" flow)
-    // before the file removal would have run.
-    const after = new DatabaseSync(dbBase)
-    expect(after.prepare('SELECT COUNT(*) c FROM "user"').get()).toEqual({ c: 0 })
-    expect(after.prepare('SELECT COUNT(*) c FROM "session"').get()).toEqual({ c: 0 })
-    after.close()
-
-    const removed = engineMocks.removeFsPath.mock.calls.map((call) => call[0])
-    expect(removed).toContain(dbBase)
-    expect(removed).toContain(`${dbBase}-wal`)
-    expect(removed).toContain(`${dbBase}-shm`)
+    // The existence probe targets caracal_auth, then it is dropped WITH FORCE through a
+    // maintenance connection (/postgres), not the auth database itself.
+    const probe = pgMock.queries.find((q) => q.sql.includes('FROM pg_database'))
+    expect(probe?.params?.[0]).toBe('caracal_auth')
+    const drop = pgMock.queries.find((q) => q.sql.includes('DROP DATABASE'))
+    expect(drop?.sql).toContain('"caracal_auth"')
+    expect(drop?.sql).toContain('FORCE')
   })
 
-  it('honors CARACAL_AUTH_DB override for the web target', async () => {
-    const custom = mkdtempSync(join(tmpdir(), 'caracal-auth-db-'))
-    const dbBase = join(custom, 'auth.sqlite')
-    try {
-      process.env.CARACAL_AUTH_DB = dbBase
-      const seed = new DatabaseSync(dbBase)
-      seed.exec('CREATE TABLE "user" (id TEXT PRIMARY KEY)')
-      seed.prepare('INSERT INTO "user" (id) VALUES (?)').run('u1')
-      seed.close()
-      writeFileSync(`${dbBase}-wal`, '')
+  it('skips dropping when the web console database does not exist', async () => {
+    process.env.CARACAL_AUTH_DATABASE_URL = 'postgres://caracal:pw@localhost:5432/caracal_auth'
+    pgMock.reset([])
 
-      await purgeCommand(['web', '--yes'])
+    await purgeCommand(['web', '--yes'])
 
-      const after = new DatabaseSync(dbBase)
-      expect(after.prepare('SELECT COUNT(*) c FROM "user"').get()).toEqual({ c: 0 })
-      after.close()
+    expect(pgMock.queries.some((q) => q.sql.includes('FROM pg_database'))).toBe(true)
+    expect(pgMock.queries.some((q) => q.sql.includes('DROP DATABASE'))).toBe(false)
+  })
 
-      const removed = engineMocks.removeFsPath.mock.calls.map((call) => call[0])
-      expect(removed).toContain(dbBase)
-      expect(removed).toContain(`${dbBase}-wal`)
-    } finally {
-      rmSync(custom, { recursive: true, force: true })
-    }
+  it('derives the auth database name from CARACAL_AUTH_DATABASE_URL', async () => {
+    process.env.CARACAL_AUTH_DATABASE_URL = 'postgres://caracal:pw@db.internal:5432/custom_auth'
+    pgMock.reset(['custom_auth'])
+
+    await purgeCommand(['web', '--yes'])
+
+    const drop = pgMock.queries.find((q) => q.sql.includes('DROP DATABASE'))
+    expect(drop?.sql).toContain('"custom_auth"')
   })
 })

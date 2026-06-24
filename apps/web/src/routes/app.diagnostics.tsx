@@ -43,8 +43,15 @@ const SECTION_HINTS: Record<DiagnosticSection, string> = {
 };
 
 function DiagnosticsPage() {
-  const diagnostics = useDiagnostics();
+  const [mode, setMode] = useState<"system" | "preflight">("system");
+  const [strict, setStrict] = useState(false);
+  const [zoneScope, setZoneScope] = useState<string>("all");
   const zones = useZones();
+  const diagnostics = useDiagnostics({
+    preflight: mode === "preflight",
+    strict,
+    zoneId: mode === "system" && zoneScope !== "all" ? zoneScope : undefined,
+  });
   const report = diagnostics.data;
 
   const zoneNames = useMemo(() => {
@@ -60,6 +67,15 @@ function DiagnosticsPage() {
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Diagnostics" }]}
       actions={<SyncIndicator report={report} fetching={diagnostics.isFetching} />}
     >
+      <DiagnosticsControls
+        mode={mode}
+        strict={strict}
+        zoneScope={zoneScope}
+        zones={zones.data ?? []}
+        onMode={setMode}
+        onStrict={setStrict}
+        onZoneScope={setZoneScope}
+      />
       {diagnostics.isLoading ? (
         <LoadingState />
       ) : diagnostics.isError || !report ? (
@@ -68,6 +84,89 @@ function DiagnosticsPage() {
         <DiagnosticsConsole report={report} zoneNames={zoneNames} />
       )}
     </ModulePage>
+  );
+}
+
+// Operator controls mirroring the Console doctor: switch between a full system check and
+// a local preflight, gate readiness on strict mode, and narrow zone diagnostics to one
+// zone for fast, targeted runs.
+function DiagnosticsControls({
+  mode,
+  strict,
+  zoneScope,
+  zones,
+  onMode,
+  onStrict,
+  onZoneScope,
+}: {
+  mode: "system" | "preflight";
+  strict: boolean;
+  zoneScope: string;
+  zones: { id: string; name: string }[];
+  onMode: (mode: "system" | "preflight") => void;
+  onStrict: (strict: boolean) => void;
+  onZoneScope: (zoneId: string) => void;
+}) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center gap-2 border border-border bg-muted/20 px-3 py-2.5">
+      <div className="inline-flex overflow-hidden border border-border">
+        {(["system", "preflight"] as const).map((value) => (
+          <button
+            key={value}
+            onClick={() => onMode(value)}
+            className={cx(
+              "px-3 py-1.5 text-xs font-medium capitalize transition-colors",
+              mode === value
+                ? "bg-foreground text-background"
+                : "bg-background text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {value === "system" ? "System check" : "Preflight"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "system" ? (
+        <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+          <span>Zone scope</span>
+          <select
+            value={zoneScope}
+            onChange={(e) => onZoneScope(e.target.value)}
+            className="h-8 border border-border bg-background px-2 text-xs text-foreground"
+          >
+            <option value="all">All zones</option>
+            {zones.map((zone) => (
+              <option key={zone.id} value={zone.id}>
+                {zone.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          Local runtime and environment checks only.
+        </span>
+      )}
+
+      <button
+        onClick={() => onStrict(!strict)}
+        className={cx(
+          "ml-auto inline-flex items-center gap-2 border px-3 py-1.5 text-xs font-medium transition-colors",
+          strict
+            ? "border-foreground bg-foreground text-background"
+            : "border-border text-muted-foreground hover:text-foreground",
+        )}
+        title="Strict mode treats warnings as not-ready, matching CI readiness gates."
+      >
+        <span
+          className={cx(
+            "inline-block h-2 w-2 rounded-full",
+            strict ? "bg-background" : "bg-muted-foreground",
+          )}
+        />
+        Strict readiness
+      </button>
+    </div>
   );
 }
 
