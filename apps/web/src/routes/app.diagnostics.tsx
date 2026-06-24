@@ -63,7 +63,7 @@ function DiagnosticsPage() {
   return (
     <ModulePage
       title="Diagnostics"
-      description="Live operational health of the Caracal control plane — services, authority, policy, zones, and runtime."
+      description="Live operational health of the Caracal control plane: services, authority, policy, zones, and runtime."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Diagnostics" }]}
       actions={<SyncIndicator report={report} fetching={diagnostics.isFetching} />}
     >
@@ -624,10 +624,10 @@ function healthHeadline(health: PlatformHealth): string {
 function healthSubline(report: DiagnosticsReport): string {
   const { fail, warn } = report.summary;
   if (fail > 0) {
-    return `${fail} component${fail === 1 ? "" : "s"} failing${warn > 0 ? `, ${warn} degraded` : ""} — requires attention.`;
+    return `${fail} component${fail === 1 ? "" : "s"} failing${warn > 0 ? `, ${warn} degraded` : ""}. Requires attention.`;
   }
   if (warn > 0) {
-    return `${warn} component${warn === 1 ? "" : "s"} degraded — review recommended.`;
+    return `${warn} component${warn === 1 ? "" : "s"} degraded. Review recommended.`;
   }
   return "All control-plane components are operating normally.";
 }

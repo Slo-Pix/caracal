@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ErrorState } from "@/components/ErrorState";
 
 export const Route = createFileRoute("/401")({
-  head: () => ({ meta: [{ title: "401 — Sign in required · Caracal" }] }),
+  head: () => ({ meta: [{ title: "401: Sign in required · Caracal" }] }),
   component: UnauthorizedPage,
 });
 

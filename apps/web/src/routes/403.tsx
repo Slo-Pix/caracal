@@ -9,7 +9,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ErrorState } from "@/components/ErrorState";
 
 export const Route = createFileRoute("/403")({
-  head: () => ({ meta: [{ title: "403 — Access denied · Caracal" }] }),
+  head: () => ({ meta: [{ title: "403: Access denied · Caracal" }] }),
   component: ForbiddenPage,
 });
 
