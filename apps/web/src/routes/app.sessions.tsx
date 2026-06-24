@@ -62,10 +62,7 @@ function SessionsPage({ zoneId }: { zoneId: string }) {
   }, [status, subject]);
 
   const feed = useSessionsFeed(zoneId, serverQuery);
-  const rows = useMemo(
-    () => (feed.data?.pages ?? []).flatMap((page) => page.rows),
-    [feed.data],
-  );
+  const rows = useMemo(() => (feed.data?.pages ?? []).flatMap((page) => page.rows), [feed.data]);
 
   const columns: Column<Session>[] = [
     {

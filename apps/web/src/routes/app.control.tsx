@@ -308,8 +308,8 @@ function IssuanceNotice() {
       </svg>
       <div className="min-w-0 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">The client secret is shown only once.</span>{" "}
-        It is generated in your browser, never stored, and cannot be retrieved later — copy it before
-        closing the dialog. The same key is also issuable with{" "}
+        It is generated in your browser, never stored, and cannot be retrieved later — copy it
+        before closing the dialog. The same key is also issuable with{" "}
         <Mono>caracal control key create</Mono>.
       </div>
     </div>
@@ -560,8 +560,8 @@ function ControlSecretModal({
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Store it in your automation&apos;s secret manager as{" "}
-            <Mono>CARACAL_CONTROL_SECRET</Mono>.
+            Store it in your automation&apos;s secret manager as <Mono>CARACAL_CONTROL_SECRET</Mono>
+            .
           </p>
         </div>
       ) : null}

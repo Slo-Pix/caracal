@@ -74,10 +74,7 @@ function AuditPage({ zoneId }: { zoneId: string }) {
   }, [decision, eventType, since, until]);
 
   const feed = useAuditFeed(zoneId, serverQuery);
-  const rows = useMemo(
-    () => (feed.data?.pages ?? []).flatMap((page) => page.rows),
-    [feed.data],
-  );
+  const rows = useMemo(() => (feed.data?.pages ?? []).flatMap((page) => page.rows), [feed.data]);
 
   const columns: Column<AuditEvent>[] = [
     {
