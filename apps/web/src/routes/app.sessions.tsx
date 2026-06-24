@@ -54,9 +54,9 @@ function statusTone(status: string): "success" | "muted" | "danger" {
   return "muted";
 }
 
-function SessionsPage({ zoneId }: { zoneId: string }) {
+function SessionsPage({ zoneId, initialSubject }: { zoneId: string; initialSubject?: string }) {
   const [status, setStatus] = useState<string>("all");
-  const [subject, setSubject] = useState("");
+  const [subject, setSubject] = useState(initialSubject ?? "");
 
   const serverQuery = useMemo<SessionQuery>(() => {
     const q: SessionQuery = {};

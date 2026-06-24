@@ -4,7 +4,7 @@ Caracal, a product of Garudex Labs
 
 This file defines the Agents runtime workspace for live agent sessions and their lifecycle.
 */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 
 import {
@@ -15,16 +15,28 @@ import {
 } from "@/components/console/ResourceWorkspace";
 import { ModulePage } from "@/components/console/ModulePage";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
-import { Badge, Button, ConfirmDialog, Skeleton, useToast, type Column } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Field,
+  Modal,
+  Select,
+  Skeleton,
+  Spinner,
+  useToast,
+  type Column,
+} from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { ConsoleApiError } from "@/platform/api/client";
 import {
   useAgentChildren,
   useAgentEffectiveAuthority,
+  useAgentInboundDelegations,
   useAgentLifecycle,
-  useAgents,
+  useAgentOutboundDelegations,
+  useAgentsFeed,
 } from "@/platform/api/hooks";
-import type { Agent, AgentStatus } from "@/platform/api/types";
+import type { Agent, AgentStatus, AgentQuery } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/agents")({
   component: AgentsRoute,
@@ -93,49 +105,138 @@ function CoordinatorOffline({ code, onRetry }: { code: string; onRetry: () => vo
   );
 }
 
-type StatusFilter = "all" | AgentStatus;
-
 function statusTone(status: AgentStatus): "success" | "warning" | "muted" {
   if (status === "active") return "success";
   if (status === "suspended") return "warning";
   return "muted";
 }
 
+type Liveness = { tone: "success" | "warning" | "danger" | "muted"; label: string; detail: string };
+
+// Derives a single runtime-health signal from lifecycle fields so operators can spot dying
+// agents at a glance: task agents are governed by TTL, service agents by heartbeat lease.
+function liveness(agent: Agent, now = Date.now()): Liveness {
+  if (agent.status === "terminated") {
+    return {
+      tone: "muted",
+      label: "Terminated",
+      detail: agent.terminated_at ? `Ended ${relativeTime(agent.terminated_at, now)}` : "Ended",
+    };
+  }
+  if (agent.status === "suspended") {
+    return { tone: "warning", label: "Suspended", detail: "Authority paused until resumed" };
+  }
+  if (agent.lifecycle === "service") {
+    if (!agent.heartbeat_deadline_at) {
+      return {
+        tone: "muted",
+        label: "No lease",
+        detail: "Service agent has not reported a heartbeat",
+      };
+    }
+    const deadline = Date.parse(agent.heartbeat_deadline_at);
+    if (deadline < now) {
+      return {
+        tone: "danger",
+        label: "Lease expired",
+        detail: `Heartbeat lost ${relativeTime(agent.heartbeat_deadline_at, now)} — pending auto-suspend`,
+      };
+    }
+    if (deadline - now < 30_000) {
+      return {
+        tone: "warning",
+        label: "Lease expiring",
+        detail: `Heartbeat lease ends ${relativeTime(agent.heartbeat_deadline_at, now)}`,
+      };
+    }
+    return {
+      tone: "success",
+      label: "Healthy",
+      detail: `Heartbeat lease valid until ${new Date(deadline).toLocaleTimeString()}`,
+    };
+  }
+  // task agent — TTL from spawned_at
+  if (agent.ttl_seconds && agent.spawned_at) {
+    const expires = Date.parse(agent.spawned_at) + agent.ttl_seconds * 1000;
+    if (expires < now) {
+      return { tone: "danger", label: "Expired", detail: "Past TTL — pending auto-terminate" };
+    }
+    if (expires - now < 60_000) {
+      return {
+        tone: "warning",
+        label: "Expiring",
+        detail: `TTL ends ${relativeTime(new Date(expires).toISOString(), now)}`,
+      };
+    }
+    return {
+      tone: "success",
+      label: "Active",
+      detail: `TTL ends ${relativeTime(new Date(expires).toISOString(), now)}`,
+    };
+  }
+  return { tone: "success", label: "Active", detail: "Running" };
+}
+
+function agentExpiry(agent: Agent): string {
+  if (agent.status !== "active") return "—";
+  if (agent.lifecycle === "service") {
+    return agent.heartbeat_deadline_at
+      ? new Date(agent.heartbeat_deadline_at).toLocaleString()
+      : "no lease";
+  }
+  if (agent.ttl_seconds && agent.spawned_at) {
+    return new Date(Date.parse(agent.spawned_at) + agent.ttl_seconds * 1000).toLocaleString();
+  }
+  return "—";
+}
+
+function relativeTime(iso: string, now = Date.now()): string {
+  const diff = Date.parse(iso) - now;
+  const abs = Math.abs(diff);
+  const suffix = diff >= 0 ? "from now" : "ago";
+  const mins = Math.round(abs / 60_000);
+  if (mins < 1) return diff >= 0 ? "in <1m" : "<1m ago";
+  if (mins < 60) return `${mins}m ${suffix}`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ${suffix}`;
+  return `${Math.round(hrs / 24)}d ${suffix}`;
+}
+
 function AgentsPage({ zoneId }: { zoneId: string }) {
   const toast = useToast();
-  const query = useAgents(zoneId);
   const lifecycle = useAgentLifecycle(zoneId);
 
-  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<string>("all");
+  const [lifecycleFilter, setLifecycleFilter] = useState<string>("all");
+  const [application, setApplication] = useState("");
+  const [label, setLabel] = useState("");
   const [confirm, setConfirm] = useState<{
     agent: Agent;
     action: "suspend" | "resume" | "terminate";
   } | null>(null);
 
-  const allRows = useMemo(() => query.data ?? [], [query.data]);
+  const serverQuery = useMemo<AgentQuery>(() => {
+    const q: AgentQuery = {};
+    if (status !== "all") q.status = status;
+    if (lifecycleFilter !== "all") q.lifecycle = lifecycleFilter;
+    if (application.trim()) q.application_id = application.trim();
+    if (label.trim()) q.label = label.trim();
+    return q;
+  }, [status, lifecycleFilter, application, label]);
 
-  const coordError =
-    query.isError && query.error instanceof ConsoleApiError ? query.error.code : null;
+  const feed = useAgentsFeed(zoneId, serverQuery);
+  const rows = useMemo(() => (feed.data?.pages ?? []).flatMap((page) => page.rows), [feed.data]);
+
+  const coordError = feed.isError && feed.error instanceof ConsoleApiError ? feed.error.code : null;
   const coordinatorDown =
     coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
-
-  const counts = useMemo(() => {
-    const c = { active: 0, suspended: 0, terminated: 0 };
-    for (const a of allRows) c[a.status] += 1;
-    return c;
-  }, [allRows]);
-
-  const rows = useMemo(
-    () => (filter === "all" ? allRows : allRows.filter((a) => a.status === filter)),
-    [allRows, filter],
-  );
 
   async function runLifecycle(agent: Agent, action: "suspend" | "resume" | "terminate") {
     try {
       await lifecycle.mutateAsync({ id: agent.agent_session_id, action });
-      const label =
+      const verb =
         action === "suspend" ? "suspended" : action === "resume" ? "resumed" : "terminated";
-      toast({ tone: action === "terminate" ? "info" : "success", title: `Agent ${label}` });
+      toast({ tone: action === "terminate" ? "info" : "success", title: `Agent ${verb}` });
     } catch (err) {
       toast({ tone: "error", title: "Action failed", description: errorMessage(err) });
     }
@@ -148,7 +249,7 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
         description="Live agent sessions and their delegation lineage in this zone."
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Agents" }]}
       >
-        <CoordinatorOffline code={coordError as string} onRetry={() => query.refetch()} />
+        <CoordinatorOffline code={coordError as string} onRetry={() => feed.refetch()} />
       </ModulePage>
     );
   }
@@ -161,20 +262,43 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
         <div className="min-w-0">
           <div className="truncate font-mono text-xs text-foreground">{a.agent_session_id}</div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1">
-            {a.labels.slice(0, 3).map((label) => (
+            <span className="font-mono text-[10px] text-muted-foreground">{a.application_id}</span>
+            {a.labels.slice(0, 2).map((l) => (
               <span
-                key={label}
+                key={l}
                 className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
               >
-                {label}
+                {l}
               </span>
             ))}
-            {a.labels.length > 3 ? (
-              <span className="text-[10px] text-muted-foreground">+{a.labels.length - 3}</span>
+            {a.labels.length > 2 ? (
+              <span className="text-[10px] text-muted-foreground">+{a.labels.length - 2}</span>
             ) : null}
           </div>
         </div>
       ),
+    },
+    {
+      id: "health",
+      header: "Health",
+      cell: (a) => {
+        const live = liveness(a);
+        return (
+          <Badge
+            tone={
+              live.tone === "danger"
+                ? "danger"
+                : live.tone === "success"
+                  ? "success"
+                  : live.tone === "warning"
+                    ? "warning"
+                    : "muted"
+            }
+          >
+            {live.label}
+          </Badge>
+        );
+      },
     },
     {
       id: "status",
@@ -196,15 +320,10 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
       ),
     },
     {
-      id: "spawned",
-      header: "Spawned",
-      sortable: true,
+      id: "expires",
+      header: "Expires",
       align: "right",
-      cell: (a) => (
-        <span className="text-xs text-muted-foreground">
-          {new Date(a.spawned_at).toLocaleString()}
-        </span>
-      ),
+      cell: (a) => <span className="text-xs text-muted-foreground">{agentExpiry(a)}</span>,
     },
   ];
 
@@ -212,33 +331,42 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
     <>
       <ResourceWorkspace
         title="Agents"
-        description="Live agent sessions and their delegation lineage in this zone."
+        description="Live agent sessions, their authority, and delegation lineage in this zone."
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Agents" }]}
         headerExtra={
-          <StatusFilterBar
-            filter={filter}
-            total={allRows.length}
-            counts={counts}
-            onSelect={setFilter}
+          <AgentFilterBar
+            status={status}
+            lifecycle={lifecycleFilter}
+            application={application}
+            label={label}
+            loaded={rows.length}
+            hasMore={Boolean(feed.hasNextPage)}
+            fetchingMore={feed.isFetchingNextPage}
+            onStatus={setStatus}
+            onLifecycle={setLifecycleFilter}
+            onApplication={setApplication}
+            onLabel={setLabel}
+            onLoadMore={() => feed.fetchNextPage()}
           />
         }
         rows={rows}
-        loading={query.isLoading}
+        loading={feed.isLoading}
         columns={columns}
         rowKey={(a) => a.agent_session_id}
         pageSize={12}
         search={{
-          placeholder: "Search by session, label, or lifecycle…",
+          placeholder: "Filter loaded agents by session, app, or label…",
           match: (a, q) =>
             a.agent_session_id.toLowerCase().includes(q) ||
+            a.application_id.toLowerCase().includes(q) ||
             a.lifecycle.toLowerCase().includes(q) ||
             a.labels.some((l) => l.toLowerCase().includes(q)),
         }}
         sortOptions={[{ id: "recent", label: "Most recent" }]}
         empty={{
-          title: query.isError ? "Could not load agents" : "No agent sessions",
-          description: query.isError
-            ? errorMessage(query.error)
+          title: feed.isError ? "Could not load agents" : "No agent sessions",
+          description: feed.isError
+            ? errorMessage(feed.error)
             : "Agent sessions appear here as the Coordinator spawns them in this zone.",
         }}
         detail={{
@@ -258,31 +386,10 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
         }}
       />
 
-      <ConfirmDialog
-        open={confirm !== null}
+      <AgentLifecycleConfirm
+        zoneId={zoneId}
+        request={confirm}
         onClose={() => setConfirm(null)}
-        title={
-          confirm?.action === "suspend"
-            ? "Suspend agent session"
-            : confirm?.action === "resume"
-              ? "Resume agent session"
-              : "Terminate agent session"
-        }
-        description={
-          confirm?.action === "suspend"
-            ? "Suspending pauses this agent's authority. In-flight work may fail until it is resumed."
-            : confirm?.action === "resume"
-              ? "Resuming restores this agent's authority and lets it act again."
-              : "Terminating this agent session ends it and revokes its authority immediately. Child sessions are cascaded. This cannot be undone."
-        }
-        confirmLabel={
-          confirm?.action === "suspend"
-            ? "Suspend"
-            : confirm?.action === "resume"
-              ? "Resume"
-              : "Terminate"
-        }
-        tone={confirm?.action === "terminate" ? "danger" : "primary"}
         onConfirm={async () => {
           if (confirm) await runLifecycle(confirm.agent, confirm.action);
         }}
@@ -291,41 +398,180 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
   );
 }
 
-function StatusFilterBar({
-  filter,
-  total,
-  counts,
-  onSelect,
+// Server-side agent filters + cursor pagination. Filters run against the Coordinator so
+// large zones stay searchable; "Load more" follows the keyset cursor.
+function AgentFilterBar({
+  status,
+  lifecycle,
+  application,
+  label,
+  loaded,
+  hasMore,
+  fetchingMore,
+  onStatus,
+  onLifecycle,
+  onApplication,
+  onLabel,
+  onLoadMore,
 }: {
-  filter: StatusFilter;
-  total: number;
-  counts: { active: number; suspended: number; terminated: number };
-  onSelect: (filter: StatusFilter) => void;
+  status: string;
+  lifecycle: string;
+  application: string;
+  label: string;
+  loaded: number;
+  hasMore: boolean;
+  fetchingMore: boolean;
+  onStatus: (v: string) => void;
+  onLifecycle: (v: string) => void;
+  onApplication: (v: string) => void;
+  onLabel: (v: string) => void;
+  onLoadMore: () => void;
 }) {
-  const chips: { id: StatusFilter; label: string; count: number }[] = [
-    { id: "all", label: "All", count: total },
-    { id: "active", label: "Active", count: counts.active },
-    { id: "suspended", label: "Suspended", count: counts.suspended },
-    { id: "terminated", label: "Terminated", count: counts.terminated },
-  ];
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {chips.map((chip) => (
-        <button
-          key={chip.id}
-          onClick={() => onSelect(chip.id)}
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
-            filter === chip.id
-              ? "border-foreground/20 bg-accent text-foreground"
-              : "border-border text-muted-foreground hover:bg-surface hover:text-foreground",
-          )}
+    <div className="flex flex-col gap-3 border border-border bg-muted/20 p-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Select label="Status" value={status} onChange={(e) => onStatus(e.target.value)}>
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="suspended">Suspended</option>
+          <option value="terminated">Terminated</option>
+        </Select>
+        <Select label="Lifecycle" value={lifecycle} onChange={(e) => onLifecycle(e.target.value)}>
+          <option value="all">All lifecycles</option>
+          <option value="task">Task</option>
+          <option value="service">Service</option>
+        </Select>
+        <Field
+          label="Application"
+          placeholder="application id"
+          value={application}
+          onChange={(e) => onApplication(e.target.value)}
+        />
+        <Field
+          label="Label"
+          placeholder="exact label"
+          value={label}
+          onChange={(e) => onLabel(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">
+          {loaded} agent{loaded === 1 ? "" : "s"} loaded{hasMore ? " · more available" : ""}
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onLoadMore}
+          disabled={!hasMore}
+          loading={fetchingMore}
         >
-          {chip.label}
-          <span className="font-mono text-[10px] text-muted-foreground">{chip.count}</span>
-        </button>
-      ))}
+          {hasMore ? "Load more" : "All loaded"}
+        </Button>
+      </div>
     </div>
+  );
+}
+
+// Lifecycle confirmation that previews the cascade blast radius. Suspend and terminate
+// recurse the agent subtree and revoke subject sessions on the backend, so the operator
+// sees the direct child sessions that will be affected before committing.
+function AgentLifecycleConfirm({
+  zoneId,
+  request,
+  onClose,
+  onConfirm,
+}: {
+  zoneId: string;
+  request: { agent: Agent; action: "suspend" | "resume" | "terminate" } | null;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const cascades = request?.action !== "resume";
+  const children = useAgentChildren(
+    zoneId,
+    cascades && request ? request.agent.agent_session_id : null,
+  );
+  const childCount = (children.data ?? []).length;
+
+  if (!request) return null;
+  const { action } = request;
+  const title =
+    action === "suspend"
+      ? "Suspend agent session"
+      : action === "resume"
+        ? "Resume agent session"
+        : "Terminate agent session";
+  const base =
+    action === "suspend"
+      ? "Suspending pauses this agent's authority and cascades to its descendant agents. Subject sessions held only by the suspended subtree are revoked. In-flight work may fail until resumed."
+      : action === "resume"
+        ? "Resuming restores this agent's authority and reactivates its suspended subtree."
+        : "Terminating ends this agent and its entire descendant subtree immediately, revoking their authority and subject sessions. This cannot be undone.";
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      description={`${request.agent.lifecycle} agent · depth ${request.agent.depth}`}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant={action === "terminate" ? "danger" : "primary"}
+            onClick={async () => {
+              await onConfirm();
+              onClose();
+            }}
+          >
+            {action === "suspend" ? "Suspend" : action === "resume" ? "Resume" : "Terminate"}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-sm text-muted-foreground">{base}</p>
+        {cascades ? (
+          <div className="border border-border bg-muted/20 p-3 text-xs">
+            {children.isLoading ? (
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Spinner className="h-3.5 w-3.5" /> Checking cascade impact…
+              </span>
+            ) : childCount === 0 ? (
+              <span className="text-muted-foreground">
+                No direct child sessions. Only this agent is affected.
+              </span>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <span className="font-medium text-foreground">
+                  {childCount} direct child session{childCount === 1 ? "" : "s"} will cascade
+                  {action === "suspend" ? " into suspension" : " into termination"} (descendants
+                  included):
+                </span>
+                <ul className="flex flex-col gap-1">
+                  {(children.data ?? []).slice(0, 6).map((c) => (
+                    <li
+                      key={c.agent_session_id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate font-mono text-[11px] text-muted-foreground">
+                        {c.agent_session_id}
+                      </span>
+                      <Badge tone={statusTone(c.status)}>{c.status}</Badge>
+                    </li>
+                  ))}
+                </ul>
+                {childCount > 6 ? (
+                  <span className="text-muted-foreground">…and {childCount - 6} more</span>
+                ) : null}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </Modal>
   );
 }
 
@@ -348,6 +594,13 @@ function AgentInspector({
   const children = useAgentChildren(zoneId, agent.agent_session_id);
   const terminal = agent.status === "terminated";
   const metadata = agent.metadata ?? {};
+  const live = liveness(agent);
+  const toast = useToast();
+
+  function copy(value: string, label: string) {
+    void navigator.clipboard?.writeText(value);
+    toast({ tone: "success", title: `${label} copied` });
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -373,12 +626,52 @@ function AgentInspector({
         ) : null}
       </div>
 
+      <div
+        className={cx(
+          "flex items-center gap-3 border px-3 py-2.5",
+          live.tone === "danger"
+            ? "border-destructive/40 bg-destructive/5"
+            : live.tone === "warning"
+              ? "border-amber-500/40 bg-amber-500/5"
+              : live.tone === "success"
+                ? "border-emerald-500/30 bg-emerald-500/5"
+                : "border-border bg-muted/20",
+        )}
+      >
+        <span
+          className={cx(
+            "inline-block h-2 w-2 rounded-full",
+            live.tone === "danger"
+              ? "bg-destructive"
+              : live.tone === "warning"
+                ? "bg-amber-500"
+                : live.tone === "success"
+                  ? "bg-emerald-500"
+                  : "bg-muted-foreground",
+          )}
+        />
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-foreground">{live.label}</div>
+          <div className="text-xs text-muted-foreground">{live.detail}</div>
+        </div>
+      </div>
+
       <DetailGroup title="Identity">
         <DetailField label="Agent session">
-          <Mono>{agent.agent_session_id}</Mono>
+          <button
+            onClick={() => copy(agent.agent_session_id, "Session ID")}
+            className="text-left hover:underline"
+          >
+            <Mono>{agent.agent_session_id}</Mono>
+          </button>
         </DetailField>
         <DetailField label="Application">
-          <Mono>{agent.application_id}</Mono>
+          <Link
+            to="/app/applications"
+            className="font-mono text-xs text-foreground hover:underline"
+          >
+            {agent.application_id}
+          </Link>
         </DetailField>
         {agent.parent_id ? (
           <DetailField label="Parent session">
@@ -387,7 +680,13 @@ function AgentInspector({
         ) : null}
         {agent.subject_session_id ? (
           <DetailField label="Subject session">
-            <Mono>{agent.subject_session_id}</Mono>
+            <Link
+              to="/app/sessions"
+              search={{ subject: agent.subject_session_id }}
+              className="font-mono text-xs text-foreground hover:underline"
+            >
+              {agent.subject_session_id}
+            </Link>
           </DetailField>
         ) : null}
       </DetailGroup>
@@ -395,11 +694,21 @@ function AgentInspector({
       <DetailGroup title="Lifecycle">
         <DetailField label="Spawned">{new Date(agent.spawned_at).toLocaleString()}</DetailField>
         {agent.ttl_seconds != null ? (
-          <DetailField label="TTL">{agent.ttl_seconds}s</DetailField>
+          <DetailField label="TTL">
+            {agent.ttl_seconds}s
+            {agent.status === "active" && agent.lifecycle === "task" ? (
+              <span className="ml-1 text-muted-foreground">· expires {agentExpiry(agent)}</span>
+            ) : null}
+          </DetailField>
         ) : null}
         {agent.last_heartbeat_at ? (
           <DetailField label="Last heartbeat">
             {new Date(agent.last_heartbeat_at).toLocaleString()}
+          </DetailField>
+        ) : null}
+        {agent.heartbeat_deadline_at ? (
+          <DetailField label="Heartbeat lease">
+            {new Date(agent.heartbeat_deadline_at).toLocaleString()}
           </DetailField>
         ) : null}
         {agent.terminated_at ? (
@@ -409,82 +718,9 @@ function AgentInspector({
         ) : null}
       </DetailGroup>
 
-      {agent.labels.length > 0 ? (
-        <section className="border-t border-border pt-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Labels
-          </h3>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {agent.labels.map((label) => (
-              <span
-                key={label}
-                className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
-              >
-                {label}
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <AuthorityEnvelope authority={authority} />
 
-      {Object.keys(metadata).length > 0 ? (
-        <section className="border-t border-border pt-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Metadata
-          </h3>
-          <div className="mt-3 overflow-hidden border border-border">
-            <table className="w-full text-sm">
-              <tbody className="divide-y divide-border">
-                {Object.entries(metadata).map(([key, value]) => (
-                  <tr key={key}>
-                    <td className="w-2/5 px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {key}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs text-foreground">{String(value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="border-t border-border pt-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Effective authority
-        </h3>
-        {authority.isLoading ? (
-          <Skeleton className="mt-3 h-16 w-full" />
-        ) : authority.isError ? (
-          <p className="mt-2 text-sm text-muted-foreground">{errorMessage(authority.error)}</p>
-        ) : authority.data ? (
-          <div className="mt-3 flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-px border border-border bg-border [&>*]:bg-background">
-              <Metric label="Inbound edges" value={authority.data.inbound_edges.length} />
-              <Metric label="Max hops" value={authority.data.effective_max_hops} />
-            </div>
-            <div>
-              <span className="text-xs text-muted-foreground">Scopes</span>
-              {authority.data.effective_scopes.length > 0 ? (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {authority.data.effective_scopes.map((scope) => (
-                    <span
-                      key={scope}
-                      className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
-                    >
-                      {scope}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  No delegated scopes — this agent acts only under its own application authority.
-                </p>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </section>
+      <AgentDelegations zoneId={zoneId} subjectSessionId={agent.subject_session_id} />
 
       <section className="border-t border-border pt-4">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -500,7 +736,10 @@ function AgentInspector({
                 className="flex items-center justify-between gap-3 py-2.5"
               >
                 <Mono>{child.agent_session_id}</Mono>
-                <Badge tone={statusTone(child.status)}>{child.status}</Badge>
+                <div className="flex items-center gap-1.5">
+                  <Badge tone="muted">{child.lifecycle}</Badge>
+                  <Badge tone={statusTone(child.status)}>{child.status}</Badge>
+                </div>
               </li>
             ))}
           </ul>
@@ -508,17 +747,265 @@ function AgentInspector({
           <p className="mt-2 text-sm text-muted-foreground">No child sessions.</p>
         )}
       </section>
+
+      {agent.labels.length > 0 ? (
+        <section className="border-t border-border pt-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Labels
+          </h3>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {agent.labels.map((l) => (
+              <span
+                key={l}
+                className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+              >
+                {l}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {Object.keys(metadata).length > 0 ? (
+        <section className="border-t border-border pt-4">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            Metadata
+          </h3>
+          <div className="mt-3 max-h-64 overflow-auto border border-border">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-border">
+                {Object.entries(metadata).map(([key, value]) => (
+                  <tr key={key}>
+                    <td className="w-2/5 px-3 py-2 align-top font-mono text-xs text-muted-foreground">
+                      {key}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-foreground">
+                      {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+// Full effective-authority envelope. The Coordinator intersects every active inbound edge
+// into scopes/resources/hops/ttl/expiry; surfacing all of it (not just scopes) lets an
+// operator see the agent's complete runtime authority boundary.
+function AuthorityEnvelope({
+  authority,
+}: {
+  authority: ReturnType<typeof useAgentEffectiveAuthority>;
+}) {
+  return (
+    <section className="border-t border-border pt-4">
+      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Effective authority
+      </h3>
+      {authority.isLoading ? (
+        <Skeleton className="mt-3 h-20 w-full" />
+      ) : authority.isError ? (
+        <p className="mt-2 text-sm text-muted-foreground">{errorMessage(authority.error)}</p>
+      ) : authority.data ? (
+        (() => {
+          const a = authority.data;
+          const noAuthority = a.inbound_edges.length === 0;
+          return (
+            <div className="mt-3 flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4 [&>*]:bg-background">
+                <Metric label="Inbound edges" value={a.inbound_edges.length} />
+                <Metric
+                  label="Max hops"
+                  text={a.effective_max_hops == null ? "∞" : String(a.effective_max_hops)}
+                />
+                <Metric
+                  label="TTL"
+                  text={a.effective_ttl_seconds == null ? "—" : `${a.effective_ttl_seconds}s`}
+                />
+                <Metric
+                  label="Expires"
+                  text={a.earliest_expires_at ? relativeTime(a.earliest_expires_at) : "—"}
+                />
+              </div>
+
+              {noAuthority ? (
+                <p className="text-sm text-muted-foreground">
+                  No inbound delegations — this agent acts only under its own application authority.
+                </p>
+              ) : (
+                <>
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Scopes ({a.effective_scopes.length})
+                    </span>
+                    {a.effective_scopes.length > 0 ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {a.effective_scopes.map((scope) => (
+                          <span
+                            key={scope}
+                            className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                          >
+                            {scope}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Scope intersection is empty — inbound edges share no common scope.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-xs text-muted-foreground">
+                      Resources{" "}
+                      {a.effective_resource_constrained ? (
+                        <Badge tone="warning">constrained</Badge>
+                      ) : (
+                        <Badge tone="muted">unconstrained</Badge>
+                      )}
+                    </span>
+                    {a.effective_resources.length > 0 ? (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {a.effective_resources.map((r) => (
+                          <span
+                            key={r}
+                            className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                          >
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {a.effective_resource_constrained
+                          ? "Constrained by resource id only."
+                          : "Authority is not resource-bound."}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()
+      ) : null}
+    </section>
+  );
+}
+
+// Inbound/outbound delegation edges for the agent, keyed by its subject session. Inbound =
+// authority the agent received; outbound = authority it granted onward.
+function AgentDelegations({
+  zoneId,
+  subjectSessionId,
+}: {
+  zoneId: string;
+  subjectSessionId: string | null;
+}) {
+  const [tab, setTab] = useState<"inbound" | "outbound">("inbound");
+  const inbound = useAgentInboundDelegations(zoneId, tab === "inbound" ? subjectSessionId : null);
+  const outbound = useAgentOutboundDelegations(
+    zoneId,
+    tab === "outbound" ? subjectSessionId : null,
+  );
+  const active = tab === "inbound" ? inbound : outbound;
+  const edges = active.data ?? [];
+
+  if (!subjectSessionId) {
+    return (
+      <section className="border-t border-border pt-4">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Delegations
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          This agent has no subject session, so it holds no delegation edges.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border-t border-border pt-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Delegations
+        </h3>
+        <div className="inline-flex overflow-hidden border border-border">
+          {(["inbound", "outbound"] as const).map((id) => (
+            <button
+              key={id}
+              onClick={() => setTab(id)}
+              className={cx(
+                "px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                tab === id
+                  ? "bg-foreground text-background"
+                  : "bg-background text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {id}
+            </button>
+          ))}
+        </div>
+      </div>
+      {active.isLoading ? (
+        <Skeleton className="mt-3 h-12 w-full" />
+      ) : edges.length === 0 ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          No {tab} delegation edges.{" "}
+          <Link to="/app/delegation" className="text-foreground hover:underline">
+            Open delegation workspace
+          </Link>
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-border border-y border-border">
+          {edges.map((edge) => (
+            <li key={edge.id} className="flex flex-col gap-1 py-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  {tab === "inbound" ? edge.source_session_id : edge.target_session_id}
+                </span>
+                <Badge tone={edge.status === "active" ? "success" : "muted"}>{edge.status}</Badge>
+              </div>
+              <div className="flex flex-wrap items-center gap-1">
+                {edge.scopes.slice(0, 4).map((s) => (
+                  <span
+                    key={s}
+                    className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                  >
+                    {s}
+                  </span>
+                ))}
+                {edge.scopes.length > 4 ? (
+                  <span className="text-[10px] text-muted-foreground">
+                    +{edge.scopes.length - 4}
+                  </span>
+                ) : null}
+                {edge.scopes.length === 0 ? (
+                  <span className="text-[10px] text-muted-foreground">no scopes</span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function Metric({ label, value, text }: { label: string; value?: number; text?: string }) {
   return (
     <div className="p-3">
       <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-1 text-xl font-semibold tracking-tight text-foreground">{value}</div>
+      <div className="mt-1 text-xl font-semibold tracking-tight text-foreground">
+        {value !== undefined ? value : text}
+      </div>
     </div>
   );
 }

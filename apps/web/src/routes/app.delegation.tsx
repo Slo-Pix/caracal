@@ -60,8 +60,7 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
 
   const rows = useMemo(() => (feed.data?.pages ?? []).flatMap((p) => p.rows), [feed.data]);
 
-  const coordError =
-    feed.isError && feed.error instanceof ConsoleApiError ? feed.error.code : null;
+  const coordError = feed.isError && feed.error instanceof ConsoleApiError ? feed.error.code : null;
   const coordinatorDown =
     coordError === "coordinator_not_configured" || coordError === "upstream_unreachable";
 
