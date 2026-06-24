@@ -13,7 +13,7 @@ export const Route = createFileRoute("/error/$code")({
   head: ({ params }) => {
     const code = Number(params.code);
     const entry = errorEntry(code);
-    return { meta: [{ title: `${code} — ${entry.title} · Caracal` }] };
+    return { meta: [{ title: `${code}: ${entry.title} · Caracal` }] };
   },
   component: ErrorByCodePage,
 });

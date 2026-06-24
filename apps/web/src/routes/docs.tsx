@@ -10,7 +10,7 @@ import { SectionLabel } from "@/components/SiteShell";
 export const Route = createFileRoute("/docs")({
   head: () => ({
     meta: [
-      { title: "Docs — Caracal" },
+      { title: "Docs · Caracal" },
       {
         name: "description",
         content: "Choose the Caracal documentation path that matches your implementation.",
