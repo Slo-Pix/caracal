@@ -61,7 +61,7 @@ export function Modal({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
       <div
-        className="animate-overlay-in fixed inset-0 bg-foreground/30 backdrop-blur-[1px]"
+        className="animate-overlay-in fixed inset-0 bg-overlay/40 backdrop-blur-[1px]"
         onClick={onClose}
       />
       <div
@@ -119,7 +119,7 @@ export function Drawer({
   return createPortal(
     <div className="fixed inset-0 z-50">
       <div
-        className="animate-overlay-in absolute inset-0 bg-foreground/30 backdrop-blur-[1px]"
+        className="animate-overlay-in absolute inset-0 bg-overlay/40 backdrop-blur-[1px]"
         onClick={onClose}
       />
       <div

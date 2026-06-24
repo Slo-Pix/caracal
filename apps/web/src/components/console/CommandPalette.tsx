@@ -213,7 +213,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 pt-[12vh]">
       <div
-        className="animate-overlay-in fixed inset-0 bg-foreground/30 backdrop-blur-[1px]"
+        className="animate-overlay-in fixed inset-0 bg-overlay/40 backdrop-blur-[1px]"
         onClick={onClose}
       />
       <div

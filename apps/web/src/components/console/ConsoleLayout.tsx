@@ -70,7 +70,7 @@ export function ConsoleLayout() {
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
-            className="absolute inset-0 bg-foreground/20 backdrop-blur-sm"
+            className="absolute inset-0 bg-overlay/30 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute left-0 top-0 h-full w-60 border-r border-border bg-background shadow-xl">
