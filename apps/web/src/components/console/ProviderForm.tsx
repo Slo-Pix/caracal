@@ -6,7 +6,7 @@ This file builds the kind-aware create and edit form for upstream credential pro
 */
 import { useMemo, useState } from "react";
 
-import { Button, Field, Modal, PasswordField, Select, Textarea } from "@/components/ui";
+import { Button, Field, InfoHint, Modal, PasswordField, Select, Textarea } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import {
   crossFieldIssues,
@@ -540,6 +540,7 @@ export function ProviderFormModal({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Name"
+            info="Human-readable name for this credential source, shown across the console. Use a short operational name."
             placeholder="stripe-prod"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -547,6 +548,7 @@ export function ProviderFormModal({
           />
           <Select
             label="Type"
+            info="The credential mechanism this provider uses to obtain upstream access. Selecting a type determines the rest of the configuration fields."
             value={kind}
             onChange={(e) => setKind(e.target.value as ProviderKind)}
           >
@@ -618,6 +620,7 @@ export function ProviderFormModal({
         <div className="border-t border-border pt-3">
           <Field
             label="Identifier"
+            info="The stable identifier used to reference this provider in resources and tokens. Generated from the name when blank; must use the provider:// namespace."
             placeholder="provider://stripe-prod"
             hint="Optional. Generated from the name when blank. Must match provider://lowercase-slug."
             value={identifier}
@@ -664,7 +667,10 @@ function ProviderFieldInput({
     return (
       <label className="flex items-center justify-between gap-3">
         <span className="min-w-0">
-          <span className="block text-sm font-medium text-foreground">{field.label}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">{field.label}</span>
+            {field.hint ? <InfoHint label={field.hint} /> : null}
+          </span>
           {field.hint ? (
             <span className="mt-0.5 block text-xs text-muted-foreground">{field.hint}</span>
           ) : null}
@@ -683,6 +689,7 @@ function ProviderFieldInput({
     return (
       <Select
         label={field.label}
+        info={field.hint}
         value={value || field.options?.[0]}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -700,6 +707,7 @@ function ProviderFieldInput({
       <div>
         <Textarea
           label={field.label}
+          info={field.hint}
           value={value}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -714,6 +722,7 @@ function ProviderFieldInput({
       <div>
         <PasswordField
           label={field.label}
+          info={field.hint}
           value={value}
           placeholder={field.placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -726,6 +735,7 @@ function ProviderFieldInput({
   return (
     <Field
       label={field.label}
+      info={field.hint}
       hint={hint}
       error={error}
       placeholder={field.placeholder}

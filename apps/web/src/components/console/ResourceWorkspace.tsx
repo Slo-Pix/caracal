@@ -197,6 +197,7 @@ export function ResourceWorkspace<T>({
           onClose={() => setSelected(null)}
           title={selected ? detail.title(selected) : ""}
           description={selected && detail.description ? detail.description(selected) : undefined}
+          icon={selected ? <Monogram label={detail.title(selected)} /> : undefined}
           width={detail.width}
         >
           {selected ? detail.render(selected) : null}
@@ -208,28 +209,169 @@ export function ResourceWorkspace<T>({
 
 /* ---- shared detail-panel building blocks for a consistent drawer layout ---- */
 
+// A square monogram derived from an object's name, used as the leading icon in detail
+// drawers so every panel opens with a consistent visual anchor.
+export function Monogram({ label }: { label: string }) {
+  const initials =
+    label
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .join("") || "•";
+  return (
+    <span className="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-xs font-semibold text-muted-foreground">
+      {initials}
+    </span>
+  );
+}
+
+// A hero row pinned to the top of a detail panel: status badges on the left, primary
+// actions (e.g. Edit) pushed to the right, with a hairline separating it from the body.
+export function DetailHeader({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b border-border pb-4">
+      {children}
+      {action ? <div className="ml-auto flex items-center gap-2">{action}</div> : null}
+    </div>
+  );
+}
+
+// A titled section with an optional trailing action, so every panel groups content the same
+// way. Sections are separated by the panel's container gap, not ad-hoc top borders.
+export function DetailSection({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-2 flex min-h-7 items-center justify-between gap-2">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          {title}
+        </h3>
+        {action ?? null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+// A bordered key/value card. Each DetailField is a responsive two-column row so labels and
+// values align cleanly and use the full panel width.
+export function DetailGroup({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <DetailSection title={title} action={action}>
+      <dl className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        {children}
+      </dl>
+    </DetailSection>
+  );
+}
+
 export function DetailField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 flex-col gap-1 py-2.5">
-      <dt className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </dt>
+    <div className="grid grid-cols-1 gap-0.5 px-3 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-3">
+      <dt className="text-xs font-medium text-muted-foreground sm:pt-px">{label}</dt>
       <dd className="min-w-0 break-words text-sm text-foreground">{children}</dd>
     </div>
   );
 }
 
-export function DetailGroup({ title, children }: { title: string; children: ReactNode }) {
+// A consistent destructive footer block for irreversible actions across every detail panel.
+export function DangerZone({
+  description,
+  actionLabel,
+  onAction,
+}: {
+  description: string;
+  actionLabel: string;
+  onAction: () => void;
+}) {
   return (
-    <section className="border-t border-border pt-4 first:border-t-0 first:pt-0">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {title}
-      </h3>
-      <dl className="mt-1 divide-y divide-border">{children}</dl>
-    </section>
+    <DetailSection title="Danger zone">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3">
+        <p className="min-w-0 text-xs text-muted-foreground">{description}</p>
+        <Button variant="danger" size="sm" onClick={onAction} className="flex-shrink-0">
+          {actionLabel}
+        </Button>
+      </div>
+    </DetailSection>
   );
 }
 
 export function Mono({ children }: { children: ReactNode }) {
   return <span className="break-all font-mono text-xs text-foreground">{children}</span>;
+}
+
+// An inline value with a copy affordance, for identifiers and other reference strings that
+// operators routinely copy out of a detail panel.
+export function CopyValue({ value, mono = true }: { value: string; mono?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+      <span
+        className={
+          mono
+            ? "min-w-0 break-all font-mono text-xs text-foreground"
+            : "min-w-0 break-words text-sm text-foreground"
+        }
+      >
+        {value}
+      </span>
+      <button
+        type="button"
+        aria-label={copied ? "Copied" : "Copy"}
+        onClick={() => {
+          void navigator.clipboard?.writeText(value);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1200);
+        }}
+        className="grid h-5 w-5 flex-shrink-0 place-items-center rounded text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+      >
+        {copied ? (
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="9" y="9" width="11" height="11" rx="2" />
+            <path d="M5 15V5a2 2 0 0 1 2-2h10" />
+          </svg>
+        )}
+      </button>
+    </span>
+  );
 }

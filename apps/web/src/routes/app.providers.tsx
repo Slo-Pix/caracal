@@ -9,9 +9,12 @@ import { useMemo, useState } from "react";
 
 import { ProviderFormModal } from "@/components/console/ProviderForm";
 import {
+  CopyValue,
+  DangerZone,
   DetailField,
   DetailGroup,
-  Mono,
+  DetailHeader,
+  DetailSection,
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
@@ -398,24 +401,25 @@ function ProviderDetail({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-center gap-2">
+      <DetailHeader
+        action={
+          <Button variant="secondary" size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+        }
+      >
         <Badge tone="neutral">{KIND_LABEL[provider.kind]}</Badge>
         {provider.secret_config_keys.length > 0 ? (
           <Badge tone="warning">Secrets sealed</Badge>
         ) : credentialKind ? (
           <Badge tone="muted">No secret stored</Badge>
         ) : null}
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={onEdit}>
-            Edit
-          </Button>
-        </div>
-      </div>
+      </DetailHeader>
 
       <DetailGroup title="Identity">
         <DetailField label="Name">{provider.name}</DetailField>
         <DetailField label="Identifier">
-          <Mono>{provider.identifier}</Mono>
+          <CopyValue value={provider.identifier} />
         </DetailField>
         <DetailField label="Type">{KIND_LABEL[provider.kind]}</DetailField>
         <DetailField label="Created">{new Date(provider.created_at).toLocaleString()}</DetailField>
@@ -427,32 +431,45 @@ function ProviderDetail({
       </DetailGroup>
 
       {credentialKind ? (
-        <DetailGroup title="Credentials">
+        <DetailSection title="Credentials">
           {provider.secret_config_keys.length > 0 ? (
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
               {provider.secret_config_keys.map((key) => (
-                <div key={key} className="flex items-center justify-between gap-3 text-sm">
+                <div
+                  key={key}
+                  className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm"
+                >
                   <span className="min-w-0 break-all font-mono text-xs text-foreground">{key}</span>
-                  <span className="flex-shrink-0 font-mono text-xs text-muted-foreground">
-                    •••••••• sealed
+                  <span className="flex flex-shrink-0 items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="text-amber-600 dark:text-amber-400"
+                      aria-hidden="true"
+                    >
+                      <rect x="5" y="11" width="14" height="9" rx="2" />
+                      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+                    </svg>
+                    sealed
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="pt-2 text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               No secret stored. Edit the provider to add one.
             </p>
           )}
-        </DetailGroup>
+        </DetailSection>
       ) : null}
 
-      <section className="border-t border-border pt-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Configuration
-        </h3>
+      <DetailSection title="Configuration">
         {configEntries.length > 0 ? (
-          <div className="mt-3 overflow-hidden border border-border">
+          <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">
               <tbody className="divide-y divide-border">
                 {configEntries.map(([key, value]) => (
@@ -469,27 +486,17 @@ function ProviderDetail({
             </table>
           </div>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">No configuration fields.</p>
+          <p className="text-sm text-muted-foreground">No configuration fields.</p>
         )}
-      </section>
+      </DetailSection>
 
-      <section className="border-t border-border pt-4">
-        <ProviderConnections provider={provider} zoneId={zoneId} />
-      </section>
+      <ProviderConnections provider={provider} zoneId={zoneId} />
 
-      <section className="border-t border-border pt-4">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-destructive">
-          Danger zone
-        </h3>
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            Remove this provider and its credential routing.
-          </p>
-          <Button variant="danger" size="sm" onClick={onDelete}>
-            Delete
-          </Button>
-        </div>
-      </section>
+      <DangerZone
+        description="Remove this provider and its credential routing."
+        actionLabel="Delete"
+        onAction={onDelete}
+      />
     </div>
   );
 }
@@ -517,43 +524,38 @@ function ProviderConnections({ provider, zoneId }: { provider: Provider; zoneId:
 
   if (!isDelegatedOAuth) {
     return (
-      <>
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Connections
-        </h3>
-        <p className="mt-2 text-xs text-muted-foreground">
+      <DetailSection title="Connections">
+        <p className="text-xs text-muted-foreground">
           {provider.kind === "none" || provider.kind === "caracal_mandate"
             ? "This provider issues no upstream credential, so there is nothing to connect per user."
             : "This provider seals a single shared upstream credential. Per-user OAuth connections apply only to authorization-code providers."}
         </p>
-      </>
+      </DetailSection>
     );
   }
 
   const rows = grants.data ?? [];
 
   return (
-    <>
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          Connected users ({rows.length})
-        </h3>
+    <DetailSection
+      title={`Connected users (${rows.length})`}
+      action={
         <Button variant="secondary" size="sm" onClick={() => setConnectOpen(true)}>
           Connect user
         </Button>
-      </div>
-
+      }
+    >
       {grants.isLoading ? (
-        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Spinner className="h-3.5 w-3.5" /> Loading connections…
         </div>
       ) : rows.length === 0 ? (
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           No users connected yet. Use “Connect user” to start the OAuth authorization flow for a
           subject and resource.
         </p>
       ) : (
-        <div className="mt-3 overflow-hidden border border-border">
+        <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full text-sm">
             <tbody className="divide-y divide-border">
               {rows.map((grant) => (
@@ -617,7 +619,7 @@ function ProviderConnections({ provider, zoneId }: { provider: Provider; zoneId:
           }
         }}
       />
-    </>
+    </DetailSection>
   );
 }
 
@@ -753,6 +755,7 @@ function ConnectProviderModal({
         <div className="flex flex-col gap-4">
           <Field
             label="Subject (user ID)"
+            info="The end user this connection authorizes. Their approval binds upstream tokens to this subject for the selected resource."
             placeholder="user@example.com"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
@@ -760,6 +763,7 @@ function ConnectProviderModal({
           />
           <Select
             label="Resource"
+            info="The protected resource this connection grants the user access to. Only resources routed through this provider are listed."
             value={resourceId}
             onChange={(e) => selectResource(e.target.value)}
           >
@@ -772,6 +776,7 @@ function ConnectProviderModal({
           </Select>
           <Field
             label="Scopes"
+            info="The upstream permissions requested during authorization. Pre-filled from the resource; trim to request least privilege."
             hint="Comma-separated. Pre-filled from the resource; trim to request least privilege."
             placeholder="invoices:read, invoices:write"
             value={scopes}
