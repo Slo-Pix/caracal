@@ -189,10 +189,24 @@ async function handleStatus(res: ServerResponse): Promise<void> {
 const DIAGNOSTICS_TTL_MS = 8_000;
 interface DiagnosticsCacheEntry {
   at: number;
+  generation: number;
   payload: DoctorReport & { generatedAt: string };
 }
 const diagnosticsCache = new Map<string, DiagnosticsCacheEntry>();
 const diagnosticsInFlight = new Map<string, Promise<DiagnosticsCacheEntry>>();
+// The report is derived from the control-plane state (zones, resources, policies, …). Any
+// mutation through this proxy can change it, so a monotonic generation lets a write
+// invalidate every cached/in-flight report: a computation that started before the change is
+// neither served as fresh nor stored, forcing the next read to recompute against current state.
+let diagnosticsGeneration = 0;
+
+// Invalidate all diagnostics state after a control-plane mutation so the next read reflects
+// the change immediately instead of waiting out the freshness window.
+function invalidateDiagnostics(): void {
+  diagnosticsGeneration += 1;
+  diagnosticsCache.clear();
+  diagnosticsInFlight.clear();
+}
 
 interface DiagnosticsOptions {
   zoneId?: string;
@@ -214,13 +228,16 @@ function diagnosticsCacheKey(options: DiagnosticsOptions): string {
 }
 
 async function computeDiagnostics(options: DiagnosticsOptions): Promise<DiagnosticsCacheEntry> {
+  // Capture the generation at the start of the read; if a mutation bumps it before the
+  // report finishes, the result is considered stale and is dropped by the caller.
+  const generation = diagnosticsGeneration;
   const report = await runDoctorDiagnostics({
     zoneId: options.preflightOnly ? undefined : options.zoneId,
     strict: options.strict,
     preflightOnly: options.preflightOnly,
   });
   const generatedAt = new Date().toISOString();
-  return { at: Date.now(), payload: { ...report, generatedAt } };
+  return { at: Date.now(), generation, payload: { ...report, generatedAt } };
 }
 
 async function handleDiagnostics(res: ServerResponse, path: string): Promise<void> {
@@ -231,27 +248,31 @@ async function handleDiagnostics(res: ServerResponse, path: string): Promise<voi
   const options = parseDiagnosticsOptions(path);
   const key = diagnosticsCacheKey(options);
   const cached = diagnosticsCache.get(key);
-  const fresh = cached && Date.now() - cached.at < DIAGNOSTICS_TTL_MS;
-  if (!fresh) {
-    let inFlight = diagnosticsInFlight.get(key);
-    if (!inFlight) {
-      inFlight = computeDiagnostics(options).finally(() => {
-        diagnosticsInFlight.delete(key);
-      });
-      diagnosticsInFlight.set(key, inFlight);
-    }
-    try {
-      diagnosticsCache.set(key, await inFlight);
-    } catch {
-      sendJson(res, 502, { error: "diagnostics_failed" });
-      return;
-    }
+  const fresh =
+    cached && cached.generation === diagnosticsGeneration && Date.now() - cached.at < DIAGNOSTICS_TTL_MS;
+  if (fresh) {
+    sendJson(res, 200, cached.payload);
+    return;
   }
-  const entry = diagnosticsCache.get(key);
-  if (!entry) {
+  let inFlight = diagnosticsInFlight.get(key);
+  if (!inFlight) {
+    inFlight = computeDiagnostics(options);
+    diagnosticsInFlight.set(key, inFlight);
+    void inFlight.finally(() => {
+      // Only clear our own slot; a mutation may have already replaced it.
+      if (diagnosticsInFlight.get(key) === inFlight) diagnosticsInFlight.delete(key);
+    });
+  }
+  let entry: DiagnosticsCacheEntry;
+  try {
+    entry = await inFlight;
+  } catch {
     sendJson(res, 502, { error: "diagnostics_failed" });
     return;
   }
+  // Cache only results that still reflect the current generation; a report computed across a
+  // mutation is served once but never cached, so the next read recomputes against fresh state.
+  if (entry.generation === diagnosticsGeneration) diagnosticsCache.set(key, entry);
   sendJson(res, 200, entry.payload);
 }
 
@@ -303,6 +324,13 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: stri
     return;
   }
   await forwardProxy(req, res, `${apiUrl()}${rest}`, token);
+  // A successful write to the control plane can change what diagnostics reports (zone
+  // inventory, resources, policy enforcement, …); drop cached reports so the next read
+  // recomputes against the new state instead of surfacing a stale warning.
+  const method = (req.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD" && res.statusCode < 400) {
+    invalidateDiagnostics();
+  }
 }
 
 // Proxies the agent and delegation runtime surfaces served by the Coordinator.

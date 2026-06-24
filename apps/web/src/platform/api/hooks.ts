@@ -103,12 +103,20 @@ export function useZones() {
   return useQuery({ queryKey: keys.zones, queryFn: () => consoleApi.zones.list() });
 }
 
+// Zone create/update/delete change the zone inventory the diagnostics report walks, so
+// refresh both the zones list and the diagnostics report rather than leaving Diagnostics
+// showing a stale "no zones are visible" warning until the next poll.
+function invalidateZonesAndDiagnostics(qc: ReturnType<typeof useQueryClient>): void {
+  qc.invalidateQueries({ queryKey: keys.zones });
+  qc.invalidateQueries({ queryKey: keys.diagnostics });
+}
+
 export function useCreateZone() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: ZoneInput) => consoleApi.zones.create(input),
     onSuccess: (zone) => {
-      qc.invalidateQueries({ queryKey: keys.zones });
+      invalidateZonesAndDiagnostics(qc);
       if (!getActiveZoneId()) selectZone(zone.id);
     },
   });
@@ -119,7 +127,7 @@ export function useUpdateZone() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: ZonePatchInput }) =>
       consoleApi.zones.patch(id, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.zones }),
+    onSuccess: () => invalidateZonesAndDiagnostics(qc),
   });
 }
 
@@ -144,7 +152,7 @@ export function useDeleteZone() {
     onError: (_error, _id, context) => {
       if (context?.previous) qc.setQueryData(keys.zones, context.previous);
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: keys.zones }),
+    onSettled: () => invalidateZonesAndDiagnostics(qc),
   });
 }
 
