@@ -9,9 +9,11 @@ import { useState } from "react";
 
 import { NavIcon } from "@/components/console/NavIcon";
 import { ProfileMenu } from "@/components/console/ProfileMenu";
+import { SidebarActions } from "@/components/console/SidebarActions";
 import { LockBadge } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { NAV_GROUPS } from "@/platform/nav/navModel";
+import { useHiddenNavItems } from "@/platform/state/sidebarPrefs";
 import { useTheme } from "@/platform/theme";
 
 function isActive(pathname: string, to: string): boolean {
@@ -94,6 +96,12 @@ export function Sidebar({
   onNavigate?: () => void;
 }) {
   const theme = useTheme();
+  const hidden = useHiddenNavItems();
+  const hiddenSet = new Set(hidden);
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !hiddenSet.has(item.id)),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -132,7 +140,7 @@ export function Sidebar({
 
       <nav className="scrollbar-thin flex-1 overflow-y-auto px-2 py-3">
         <div className="flex flex-col gap-4">
-          {NAV_GROUPS.map((group) => (
+          {groups.map((group) => (
             <div key={group.id}>
               {!collapsed ? (
                 <div className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -162,11 +170,14 @@ export function Sidebar({
 
       <div
         className={cx(
-          "flex-shrink-0 border-t border-border py-2",
-          collapsed ? "flex justify-center px-2" : "px-2",
+          "flex-shrink-0 space-y-2 border-t border-border py-2",
+          collapsed ? "px-2" : "px-2",
         )}
       >
-        <ProfileMenu collapsed={collapsed} />
+        <SidebarActions collapsed={collapsed} />
+        <div className={cx(collapsed && "flex justify-center")}>
+          <ProfileMenu collapsed={collapsed} />
+        </div>
       </div>
     </div>
   );
