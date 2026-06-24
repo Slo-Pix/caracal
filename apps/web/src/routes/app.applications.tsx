@@ -33,6 +33,7 @@ import {
   useUpdateApplication,
 } from "@/platform/api/hooks";
 import type { Application } from "@/platform/api/types";
+import { parseList, privilegedTraits, validateTraits } from "@/platform/api/validation";
 
 export const Route = createFileRoute("/app/applications")({
   component: ApplicationsRoute,
@@ -506,11 +507,10 @@ function AuthoritySection({
     setEditing(false);
   }, [app.id, initial]);
 
-  const parsed = value
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean);
+  const parsed = parseList(value);
   const dirty = parsed.join("\u0000") !== initial.join("\u0000");
+  const traitError = validateTraits(parsed);
+  const privileged = privilegedTraits(parsed);
 
   return (
     <section className="border-t border-border pt-4">
@@ -534,11 +534,18 @@ function AuthoritySection({
             placeholder="control:invoke, billing:read"
             autoFocus
           />
+          {traitError ? (
+            <p className="text-xs text-destructive">{traitError}</p>
+          ) : privileged.length > 0 ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              The {privileged.join(", ")} namespace requires global admin scope.
+            </p>
+          ) : null}
           <div className="flex items-center gap-2">
             <Button
               size="sm"
               loading={busy}
-              disabled={!dirty}
+              disabled={!dirty || Boolean(traitError)}
               onClick={() => void onSave(parsed).then(() => setEditing(false))}
             >
               Save authority
@@ -614,13 +621,13 @@ function CreateApplicationModal({
     }
   }, [open]);
 
+  const parsedTraits = useMemo(() => parseList(traits), [traits]);
+  const traitError = validateTraits(parsedTraits);
+  const privileged = privilegedTraits(parsedTraits);
+
   function submit() {
-    if (!name.trim()) return;
-    const parsed = traits
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    onSubmit(name.trim(), parsed.length > 0 ? parsed : undefined);
+    if (!name.trim() || traitError) return;
+    onSubmit(name.trim(), parsedTraits.length > 0 ? parsedTraits : undefined);
   }
 
   return (
@@ -634,7 +641,7 @@ function CreateApplicationModal({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button onClick={submit} loading={busy} disabled={!name.trim()}>
+          <Button onClick={submit} loading={busy} disabled={!name.trim() || Boolean(traitError)}>
             Create application
           </Button>
         </>
@@ -648,13 +655,22 @@ function CreateApplicationModal({
           onChange={(e) => setName(e.target.value)}
           autoFocus
         />
-        <Textarea
-          label="Traits"
-          hint="Optional. Comma-separated authority traits to attach to this application."
-          placeholder="control:invoke"
-          value={traits}
-          onChange={(e) => setTraits(e.target.value)}
-        />
+        <div>
+          <Textarea
+            label="Traits"
+            hint="Optional. Comma-separated authority traits to attach to this application."
+            placeholder="control:invoke"
+            value={traits}
+            onChange={(e) => setTraits(e.target.value)}
+          />
+          {traitError ? (
+            <p className="mt-1 text-xs text-destructive">{traitError}</p>
+          ) : privileged.length > 0 ? (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              The {privileged.join(", ")} namespace requires global admin scope.
+            </p>
+          ) : null}
+        </div>
       </div>
     </Modal>
   );

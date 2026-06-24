@@ -148,9 +148,25 @@ export function PolicyEditorModal({
         <div>
           <div className="mb-1.5 flex items-center justify-between">
             <span className="text-sm font-medium text-foreground">Rego source</span>
-            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-              package caracal.authz
-            </span>
+            <label className="cursor-pointer font-mono text-[10px] uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground">
+              Load from file
+              <input
+                type="file"
+                accept=".rego,text/plain"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setContent(String(reader.result ?? ""));
+                    setValidation({ status: "idle" });
+                  };
+                  reader.readAsText(file);
+                }}
+              />
+            </label>
           </div>
           <textarea
             value={content}
