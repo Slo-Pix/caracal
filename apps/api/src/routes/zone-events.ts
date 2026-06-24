@@ -210,13 +210,13 @@ export const zoneEventsRoutes: FastifyPluginAsync = async (fastify) => {
       request_id: params.requestId,
       zone_id: params.zoneId,
       final_decision: events.some((event) => event.decision === 'deny') ? 'deny' : events.at(-1)?.decision ?? 'unknown',
-      denied: events.filter((event) => event.decision === 'deny').map((event) => ({
+      denied: rows.filter((event) => event.decision === 'deny').map((event) => ({
         event_id: event.id,
         event_type: event.event_type,
         evaluation_status: event.evaluation_status,
         determining_policies: event.determining_policies_json ?? [],
         diagnostics: event.diagnostics_json ?? [],
-        metadata: event.metadata_json ?? {},
+        metadata: redactSensitive(event.metadata_json) ?? {},
         policy_input: reconstructPolicyInput(params.zoneId, event.metadata_json),
       })),
       events,

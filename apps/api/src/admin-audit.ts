@@ -10,6 +10,26 @@ import { withTransaction } from './db.js'
 import type { DB } from './db.js'
 import type { Actor } from './auth.js'
 
+// Field names whose presence is recorded but whose values are never persisted to
+// the admin audit log, so a secret rotation is distinguishable from a rename
+// without the secret ever entering the audit record.
+const SECRET_FIELD_NAMES = new Set([
+  'client_secret', 'secret', 'password', 'token', 'private_key', 'api_key', 'assertion',
+])
+
+// changeSummary captures which top-level fields a mutation touched, never their
+// values, so a rename, a trait change, and a secret rotation are distinguishable
+// in the admin audit log while remaining secret-free.
+function changeSummary(method: string, body: unknown): { changed_fields: string[]; secret_rotated?: true } | null {
+  if (method === 'DELETE') return { changed_fields: [] }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null
+  const keys = Object.keys(body as Record<string, unknown>)
+  if (keys.length === 0) return null
+  const changed = keys.filter((key) => !SECRET_FIELD_NAMES.has(key.toLowerCase())).sort()
+  const secretRotated = keys.some((key) => SECRET_FIELD_NAMES.has(key.toLowerCase()))
+  return secretRotated ? { changed_fields: changed, secret_rotated: true } : { changed_fields: changed }
+}
+
 function zoneFromUrl(url: string): string | null {
   const match = url.match(/^\/v1\/zones\/([^/?]+)/)
   if (!match) return null

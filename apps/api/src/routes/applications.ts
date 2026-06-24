@@ -18,19 +18,21 @@ import { validateTraits } from '../traits.js'
 const DCR_DEFAULT_LIFETIME_SECONDS = 3600
 const DCR_MAX_LIFETIME_SECONDS = 3600
 
+const NAME_MAX_LENGTH = 200
+
 const AppBody = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(NAME_MAX_LENGTH),
   registration_method: z.literal('managed'),
   traits: z.array(z.string()).optional(),
 }).strict()
 
 const DCRBody = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(NAME_MAX_LENGTH),
   expires_in: z.number().int().positive().max(DCR_MAX_LIFETIME_SECONDS).default(DCR_DEFAULT_LIFETIME_SECONDS),
 }).strict()
 
 const PatchBody = z.object({
-  name: z.string().min(1).optional(),
+  name: z.string().min(1).max(NAME_MAX_LENGTH).optional(),
   client_secret: z.string().min(1).optional(),
   traits: z.array(z.string()).optional(),
 }).strict()
