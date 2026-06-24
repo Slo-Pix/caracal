@@ -11,6 +11,7 @@ import { CommandPalette } from "@/components/console/CommandPalette";
 import { CommandTrigger } from "@/components/console/CommandTrigger";
 import { GuidedSetup } from "@/components/console/GuidedSetup";
 import { PlatformStatus } from "@/components/console/PlatformStatus";
+import { NotificationsMenu } from "@/components/console/NotificationsMenu";
 import { LanguageMenu } from "@/components/console/LanguageMenu";
 import { Sidebar } from "@/components/console/Sidebar";
 import { cx } from "@/lib/cx";
@@ -107,6 +108,7 @@ export function ConsoleLayout() {
           </div>
 
           <div className="flex items-center gap-2">
+            <NotificationsMenu />
             <LanguageMenu />
           </div>
         </header>
