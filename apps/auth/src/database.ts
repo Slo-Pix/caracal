@@ -1,57 +1,53 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Database handle for the Community Edition authentication service: PostgreSQL in
-// production, local SQLite for development.
+// PostgreSQL database handle for the Community Edition authentication service.
 
 import type { BetterAuthOptions } from "better-auth";
-import { silenceSqliteExperimentalWarning } from "@caracalai/core";
+import pg from "pg";
 
-import { loadConfig } from "./config.ts";
+import { loadConfig, type PostgresSsl } from "./config.ts";
 
 const cfg = loadConfig();
 
-export type AuthDatabaseKind = "postgres" | "sqlite";
-
-interface AuthDatabase {
-  kind: AuthDatabaseKind;
-  // Better Auth detects the dialect from the handle: a pg.Pool (postgres) or a node:sqlite
-  // DatabaseSync (sqlite). Both satisfy the database option's structural contract.
-  handle: BetterAuthOptions["database"];
-  close: () => Promise<void>;
+function sslOption(ssl: PostgresSsl): pg.PoolConfig["ssl"] {
+  if (ssl === "disable") return undefined;
+  return { rejectUnauthorized: ssl === "require" };
 }
 
-async function createPostgres(url: string, ssl: "disable" | "require" | "no-verify"): Promise<AuthDatabase> {
-  const { Pool } = await import("pg");
-  const pool = new Pool({
-    connectionString: url,
-    ssl: ssl === "disable" ? undefined : { rejectUnauthorized: ssl === "require" },
-  });
-  return {
-    kind: "postgres",
-    handle: pool as unknown as BetterAuthOptions["database"],
-    close: () => pool.end(),
-  };
+function databaseName(url: string): string {
+  return decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
 }
 
-async function createSqlite(path: string): Promise<AuthDatabase> {
-  // node:sqlite emits its experimental warning when first loaded, so install the targeted
-  // filter before importing it. The dynamic import enforces that ordering.
-  silenceSqliteExperimentalWarning();
-  const { DatabaseSync } = await import("node:sqlite");
-  const db = new DatabaseSync(path);
-  return {
-    kind: "sqlite",
-    handle: db as unknown as BetterAuthOptions["database"],
-    close: async () => db.close(),
-  };
+// Better Auth runs the table migrations, but the database itself must exist first. Create it
+// idempotently through a maintenance connection so a fresh stack — or a post-purge run — comes
+// up without manual provisioning. This is best-effort: when the role cannot create databases
+// (a locked-down production role), the warning is logged and the main connection surfaces a
+// clear error if the database is genuinely absent.
+async function ensureDatabaseExists(url: string, ssl: PostgresSsl): Promise<void> {
+  const name = databaseName(url);
+  if (!name) return;
+  const maintenance = new URL(url);
+  maintenance.pathname = "/postgres";
+  const client = new pg.Client({ connectionString: maintenance.toString(), ssl: sslOption(ssl) });
+  try {
+    await client.connect();
+    const existing = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [name]);
+    if (existing.rowCount === 0) {
+      await client.query(`CREATE DATABASE "${name.replace(/"/g, '""')}"`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`caracal-auth: could not ensure database "${name}" exists: ${message}`);
+  } finally {
+    await client.end().catch(() => {});
+  }
 }
 
-const database =
-  cfg.database.kind === "postgres"
-    ? await createPostgres(cfg.database.url, cfg.database.ssl)
-    : await createSqlite(cfg.database.path);
+await ensureDatabaseExists(cfg.databaseUrl, cfg.ssl);
 
-export const authDatabase = database.handle;
-export const authDatabaseKind = database.kind;
-export const closeAuthDatabase = database.close;
+const pool = new pg.Pool({ connectionString: cfg.databaseUrl, ssl: sslOption(cfg.ssl) });
+
+// Better Auth detects the Postgres dialect from the pg.Pool's structural shape.
+export const authDatabase = pool as unknown as BetterAuthOptions["database"];
+export const closeAuthDatabase = (): Promise<void> => pool.end();

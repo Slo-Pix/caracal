@@ -16,5 +16,4 @@ export * from './audit.js';
 export * from './metrics.js';
 export * from './telemetry.js';
 export * from './scope.js';
-export * from './sqlite.js';
 export * from './url.js';
