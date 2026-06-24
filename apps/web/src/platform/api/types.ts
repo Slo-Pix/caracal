@@ -165,7 +165,30 @@ export interface PolicyValidateResult {
   error?: string;
   detail?: string;
   schema_version?: string;
-  preview?: unknown;
+  input_schema_version?: string;
+  output_contract?: {
+    package: string;
+    rule: string;
+    decision: string[];
+    evaluation_status: string[];
+  };
+  preview?: PolicyPreview | null;
+}
+
+export interface PolicyPreview {
+  package: string;
+  rules: string[];
+  default_result: boolean;
+  decisions: string[];
+  inputs_referenced: string[];
+  data_referenced: string[];
+}
+
+export interface PolicyTemplate {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
 }
 
 export interface PolicySet {

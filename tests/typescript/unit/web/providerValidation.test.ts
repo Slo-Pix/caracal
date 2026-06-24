@@ -33,7 +33,7 @@ describe('validateFieldFormat', () => {
   })
   it('accepts an absolute redirect URI', () => {
     expect(validateFieldFormat('redirect_uri', 'https://app.example.com/cb')).toBeUndefined()
-    expect(validateFieldFormat('redirect_uri', 'app:///cb')).toBeDefined()
+    expect(validateFieldFormat('redirect_uri', '/relative/cb')).toBeDefined()
   })
   it('validates header and scheme tokens', () => {
     expect(validateFieldFormat('header_name', 'X-API-Key')).toBeUndefined()

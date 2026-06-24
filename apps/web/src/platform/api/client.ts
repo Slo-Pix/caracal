@@ -37,6 +37,7 @@ import type {
   PolicySet,
   PolicySetDetail,
   PolicySetVersion,
+  PolicyTemplate,
   PolicyValidateResult,
   Provider,
   ProviderGrant,
@@ -426,6 +427,7 @@ export const consoleApi = {
         method: "POST",
         body: JSON.stringify({ content }),
       }),
+    templates: () => request<PolicyTemplate[]>(`/v1/policy-templates`),
     create: (zoneId: string, input: PolicyInput) =>
       request<{ id: string }>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`, {
         method: "POST",
