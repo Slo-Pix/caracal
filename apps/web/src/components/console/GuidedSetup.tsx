@@ -55,6 +55,20 @@ function PlayIcon({ className }: { className?: string }) {
   );
 }
 
+function CloseIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      className={className}
+    >
+      <path d="M6 6l12 12M6 18 18 6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 // Compact "you'll set" field list, two items max, one line each, so the card stays
 // scannable instead of becoming prose.
 function Fields({ items }: { items: { name: string; hint: string }[] }) {
@@ -272,10 +286,16 @@ export function GuidedSetup() {
     setPref(record);
   }, [pref]);
 
+  // Permanently retire the guide once the operator is done with it: either they walked the
+  // full tour (allComplete, incl. the verify bookend), or all four build tasks are finished
+  // and the panel is closed (so completing the last task on its real form auto-hides the
+  // launcher instead of leaving a stale circle behind). Manual dismissal also sets finished.
   useEffect(() => {
-    if (!pref || pref.finished || !allComplete) return;
-    updatePref({ dismissed: pref.dismissed, finished: true });
-  }, [pref, allComplete]);
+    if (!pref || pref.finished) return;
+    if (allComplete || (buildComplete && !open)) {
+      updatePref({ dismissed: pref.dismissed, finished: true });
+    }
+  }, [pref, allComplete, buildComplete, open]);
 
   if (!zoneId || !pref) return null;
   if (pref.finished) return null;
@@ -310,18 +330,28 @@ export function GuidedSetup() {
       />
 
       {!open && settled ? (
-        <button
-          onClick={() => setOpen(true)}
-          aria-label="Open guided setup"
-          className="group fixed bottom-4 right-4 z-[55] grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
-        >
-          <PlayIcon className="h-6 w-6" />
+        <div className="group fixed bottom-4 right-4 z-[55]">
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Open guided setup"
+            className="grid h-12 w-12 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:shadow-xl"
+          >
+            <PlayIcon className="h-6 w-6" />
+          </button>
           {buildDone > 0 && !buildComplete ? (
-            <span className="absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-card bg-emerald-500 text-[10px] font-bold text-white">
+            <span className="pointer-events-none absolute -right-0.5 -top-0.5 grid h-5 w-5 place-items-center rounded-full border-2 border-card bg-emerald-500 text-[10px] font-bold text-white transition-opacity group-hover:opacity-0 group-focus-within:opacity-0">
               {buildDone}
             </span>
           ) : null}
-        </button>
+          <button
+            onClick={() => updatePref({ dismissed: true, finished: true })}
+            aria-label="Hide setup guide"
+            title="Hide setup guide"
+            className="absolute -right-1 -top-1 grid h-5 w-5 place-items-center rounded-full border border-border bg-card text-muted-foreground opacity-0 shadow-sm outline-none transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/40 group-hover:opacity-100"
+          >
+            <CloseIcon className="h-3 w-3" />
+          </button>
+        </div>
       ) : null}
     </>
   );

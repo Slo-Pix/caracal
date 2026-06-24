@@ -99,20 +99,6 @@ function CheckIcon({ className }: { className?: string }) {
   );
 }
 
-function CircleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      className={className}
-    >
-      <circle cx="12" cy="12" r="9" />
-    </svg>
-  );
-}
-
 function ChevronLeftIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -594,79 +580,95 @@ export function InteractiveOnboardingChecklist({
     <>
       {open ? (
         <div
-          className="animate-slide-in-right fixed bottom-4 right-4 z-[55] flex max-h-[calc(100dvh-2rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl"
+          className="animate-slide-in-right fixed bottom-4 right-4 z-[55] flex max-h-[calc(100dvh-2rem)] w-80 max-w-[calc(100vw-2rem)] flex-col overflow-hidden border border-border bg-card shadow-xl"
           role="dialog"
           aria-label={title}
         >
-          <div className="border-b border-border p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <div className="flex flex-col gap-2.5 border-b border-border px-4 py-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                {title}
+              </h2>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Dismiss guided setup"
-                className="grid h-6 w-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="-mr-1 grid h-6 w-6 place-items-center text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <CloseIcon className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Progress</span>
-              <span className="font-medium text-foreground">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border">
+                <div
+                  className="h-px bg-foreground transition-[width] duration-300 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span className="flex-shrink-0 text-xs tabular-nums text-muted-foreground">
                 {listDone}/{listTotal}
               </span>
             </div>
-            <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-[width] duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
           </div>
 
-          <ul className="scrollbar-thin flex-1 overflow-y-auto p-3">
-            {listSteps.map((step) => {
+          <ul className="scrollbar-thin flex-1 overflow-y-auto py-1">
+            {listSteps.map((step, index) => {
               const isDone = completed.has(step.id);
               const isActive = activeId === step.id;
               return (
-                <li key={step.id} className="mb-2 last:mb-0">
+                <li key={step.id}>
                   <button
                     onClick={() => !isDone && setActiveId(step.id)}
                     disabled={isDone}
+                    aria-current={isActive ? "step" : undefined}
                     className={cx(
-                      "w-full rounded-lg border p-3 text-left transition-colors",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-                      isDone
-                        ? "cursor-default border-emerald-500/30 bg-emerald-500/10"
-                        : "border-border hover:bg-accent/50",
-                      isActive && !isDone ? "ring-2 ring-ring/50" : "",
+                      "group relative flex w-full items-start gap-3 px-4 py-2.5 text-left outline-none transition-colors",
+                      "focus-visible:bg-accent/60",
+                      isDone ? "cursor-default" : isActive ? "bg-accent" : "hover:bg-accent/50",
                     )}
                   >
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 flex-shrink-0">
-                        {isDone ? (
-                          <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white">
-                            <CheckIcon className="h-3 w-3" />
-                          </span>
-                        ) : (
-                          <CircleIcon className="h-5 w-5 text-muted-foreground" />
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1">
+                    {isActive && !isDone ? (
+                      <span className="absolute inset-y-0 left-0 w-0.5 bg-foreground" />
+                    ) : null}
+                    <span className="mt-px flex-shrink-0">
+                      {isDone ? (
+                        <span className="grid h-5 w-5 place-items-center bg-foreground text-background">
+                          <CheckIcon className="h-3 w-3" />
+                        </span>
+                      ) : (
                         <span
                           className={cx(
-                            "block text-sm font-medium",
-                            isDone ? "text-muted-foreground line-through" : "text-foreground",
+                            "grid h-5 w-5 place-items-center border text-[11px] font-medium tabular-nums transition-colors",
+                            isActive
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border text-muted-foreground group-hover:border-foreground/40 group-hover:text-foreground",
                           )}
                         >
-                          {step.title}
+                          {index + 1}
                         </span>
-                        {step.description ? (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">
-                            {step.description}
-                          </span>
-                        ) : null}
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={cx(
+                          "block text-sm leading-snug",
+                          isDone
+                            ? "text-muted-foreground line-through"
+                            : "font-medium text-foreground",
+                        )}
+                      >
+                        {step.title.replace(/^\d+\.\s*/, "")}
                       </span>
-                    </div>
+                      {step.description ? (
+                        <span
+                          className={cx(
+                            "mt-0.5 block text-xs leading-snug text-muted-foreground",
+                            isDone && "line-through opacity-70",
+                          )}
+                        >
+                          {step.description}
+                        </span>
+                      ) : null}
+                    </span>
                   </button>
                 </li>
               );
@@ -674,7 +676,7 @@ export function InteractiveOnboardingChecklist({
           </ul>
 
           {buildAllComplete ? (
-            <div className="border-t border-border p-4">
+            <div className="border-t border-border p-3">
               <Button
                 className="w-full"
                 onClick={() => {
