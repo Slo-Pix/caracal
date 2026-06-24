@@ -107,7 +107,10 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
   const lifecycle = useAgentLifecycle(zoneId);
 
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [confirm, setConfirm] = useState<{ agent: Agent; action: "terminate" } | null>(null);
+  const [confirm, setConfirm] = useState<{
+    agent: Agent;
+    action: "suspend" | "resume" | "terminate";
+  } | null>(null);
 
   const allRows = useMemo(() => query.data ?? [], [query.data]);
 
@@ -247,8 +250,8 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
               zoneId={zoneId}
               agent={a}
               busy={lifecycle.isPending}
-              onSuspend={() => runLifecycle(a, "suspend")}
-              onResume={() => runLifecycle(a, "resume")}
+              onSuspend={() => setConfirm({ agent: a, action: "suspend" })}
+              onResume={() => setConfirm({ agent: a, action: "resume" })}
               onTerminate={() => setConfirm({ agent: a, action: "terminate" })}
             />
           ),
@@ -258,12 +261,30 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
       <ConfirmDialog
         open={confirm !== null}
         onClose={() => setConfirm(null)}
-        title="Terminate agent session"
-        description={`Terminating this agent session ends it and revokes its authority immediately. Child sessions are cascaded. This cannot be undone.`}
-        confirmLabel="Terminate"
-        tone="danger"
+        title={
+          confirm?.action === "suspend"
+            ? "Suspend agent session"
+            : confirm?.action === "resume"
+              ? "Resume agent session"
+              : "Terminate agent session"
+        }
+        description={
+          confirm?.action === "suspend"
+            ? "Suspending pauses this agent's authority. In-flight work may fail until it is resumed."
+            : confirm?.action === "resume"
+              ? "Resuming restores this agent's authority and lets it act again."
+              : "Terminating this agent session ends it and revokes its authority immediately. Child sessions are cascaded. This cannot be undone."
+        }
+        confirmLabel={
+          confirm?.action === "suspend"
+            ? "Suspend"
+            : confirm?.action === "resume"
+              ? "Resume"
+              : "Terminate"
+        }
+        tone={confirm?.action === "terminate" ? "danger" : "primary"}
         onConfirm={async () => {
-          if (confirm) await runLifecycle(confirm.agent, "terminate");
+          if (confirm) await runLifecycle(confirm.agent, confirm.action);
         }}
       />
     </>

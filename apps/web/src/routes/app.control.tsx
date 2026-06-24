@@ -14,52 +14,34 @@ import {
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
-import { Badge, Tabs, useToast, type Column } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ConfirmDialog,
+  Field,
+  Modal,
+  Tabs,
+  useToast,
+  type Column,
+} from "@/components/ui";
 import { cx } from "@/lib/cx";
-import { ConsoleApiError } from "@/platform/api/client";
-import { useApplications } from "@/platform/api/hooks";
-import type { Application } from "@/platform/api/types";
+import {
+  CONTROL_MAX_TTL_SECONDS,
+  CONTROL_MIN_TTL_SECONDS,
+  CONTROL_PERMISSIONS,
+  ConsoleApiError,
+} from "@/platform/api/client";
+import {
+  useControlKeys,
+  useCreateControlKey,
+  useRevokeControlKey,
+  useRotateControlKey,
+} from "@/platform/api/hooks";
+import type { ControlKey, ControlKeyCreateResult } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/control")({
   component: ControlRoute,
 });
-
-const CONTROL_INVOKE_TRAIT = "control:invoke";
-const SCOPE_PREFIX = "control:scope:";
-const MAX_TTL_PREFIX = "control:max-ttl:";
-const EXPIRES_PREFIX = "control:expires:";
-
-interface ControlKey {
-  id: string;
-  name: string;
-  scopes: string[];
-  maxTtlSeconds?: number;
-  expiresAt?: string;
-  createdAt: string;
-}
-
-function isControlKey(app: Application): boolean {
-  return (app.traits ?? []).includes(CONTROL_INVOKE_TRAIT);
-}
-
-function toControlKey(app: Application): ControlKey {
-  const traits = app.traits ?? [];
-  const scopes = traits
-    .filter((t) => t.startsWith(SCOPE_PREFIX))
-    .map((t) => t.slice(SCOPE_PREFIX.length))
-    .sort();
-  const ttlTrait = traits.find((t) => t.startsWith(MAX_TTL_PREFIX));
-  const expiresTrait = traits.find((t) => t.startsWith(EXPIRES_PREFIX));
-  const ttl = ttlTrait ? Number.parseInt(ttlTrait.slice(MAX_TTL_PREFIX.length), 10) : undefined;
-  return {
-    id: app.id,
-    name: app.name,
-    scopes,
-    maxTtlSeconds: Number.isFinite(ttl) ? ttl : undefined,
-    expiresAt: expiresTrait ? expiresTrait.slice(EXPIRES_PREFIX.length) : undefined,
-    createdAt: app.created_at,
-  };
-}
 
 function ControlRoute() {
   return (
@@ -86,9 +68,8 @@ type TabId = "keys" | "auth" | "reference";
 
 function ControlPage({ zoneId, zoneSlug }: { zoneId: string; zoneSlug: string }) {
   const [tab, setTab] = useState<TabId>("keys");
-  const apps = useApplications(zoneId);
-
-  const keys = useMemo(() => (apps.data ?? []).filter(isControlKey).map(toControlKey), [apps.data]);
+  const keysQuery = useControlKeys(zoneId);
+  const keys = useMemo(() => keysQuery.data ?? [], [keysQuery.data]);
 
   const tabs = (
     <Tabs
@@ -107,8 +88,8 @@ function ControlPage({ zoneId, zoneSlug }: { zoneId: string; zoneSlug: string })
       <ControlKeysTab
         zoneId={zoneId}
         keys={keys}
-        loading={apps.isLoading}
-        error={apps.isError ? errorMessage(apps.error) : null}
+        loading={keysQuery.isLoading}
+        error={keysQuery.isError ? errorMessage(keysQuery.error) : null}
         headerExtra={tabs}
       />
     );
@@ -157,6 +138,14 @@ function ControlKeysTab({
   error: string | null;
   headerExtra: ReactNode;
 }) {
+  const toast = useToast();
+  const rotateKey = useRotateControlKey(zoneId);
+  const revokeKey = useRevokeControlKey(zoneId);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [secret, setSecret] = useState<{ id: string; name: string; secret: string } | null>(null);
+  const [rotateTarget, setRotateTarget] = useState<ControlKey | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<ControlKey | null>(null);
+
   const columns: Column<ControlKey>[] = [
     {
       id: "name",
@@ -201,44 +190,104 @@ function ControlKeysTab({
   ];
 
   return (
-    <ResourceWorkspace
-      title="Control API"
-      description="Programmatic, scoped automation of zone management."
-      breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Control API" }]}
-      headerExtra={
-        <div className="flex flex-col gap-4">
-          {headerExtra}
-          <IssuanceNotice />
-        </div>
-      }
-      rows={keys}
-      loading={loading}
-      columns={columns}
-      rowKey={(k) => k.id}
-      search={{
-        placeholder: "Search control keys…",
-        match: (k, q) =>
-          k.name.toLowerCase().includes(q) ||
-          k.id.toLowerCase().includes(q) ||
-          k.scopes.some((s) => s.toLowerCase().includes(q)),
-      }}
-      sortOptions={[
-        { id: "name", label: "Name" },
-        { id: "recent", label: "Newest" },
-      ]}
-      empty={{
-        title: error ? "Could not load control keys" : "No control keys yet",
-        description:
-          error ??
-          "Control keys are issued from the local Caracal console. Once issued, they appear here with their scoped permissions.",
-      }}
-      detail={{
-        title: (k) => k.name,
-        description: (k) => k.id,
-        width: "max-w-2xl",
-        render: (k) => <ControlKeyInspector keyRecord={k} zoneId={zoneId} />,
-      }}
-    />
+    <>
+      <ResourceWorkspace
+        title="Control API"
+        description="Programmatic, scoped automation of zone management."
+        breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Control API" }]}
+        primaryAction={{ label: "New control key", onClick: () => setCreateOpen(true) }}
+        headerExtra={
+          <div className="flex flex-col gap-4">
+            {headerExtra}
+            <IssuanceNotice />
+          </div>
+        }
+        rows={keys}
+        loading={loading}
+        columns={columns}
+        rowKey={(k) => k.id}
+        search={{
+          placeholder: "Search control keys…",
+          match: (k, q) =>
+            k.name.toLowerCase().includes(q) ||
+            k.id.toLowerCase().includes(q) ||
+            k.scopes.some((s) => s.toLowerCase().includes(q)),
+        }}
+        sortOptions={[
+          { id: "name", label: "Name" },
+          { id: "recent", label: "Newest" },
+        ]}
+        empty={{
+          title: error ? "Could not load control keys" : "No control keys yet",
+          description:
+            error ??
+            "Control keys grant scoped, zone-bound automation. Create one to drive zone management from the Control API.",
+          actionLabel: error ? undefined : "New control key",
+          onAction: error ? undefined : () => setCreateOpen(true),
+        }}
+        detail={{
+          title: (k) => k.name,
+          description: (k) => k.id,
+          width: "max-w-2xl",
+          render: (k) => (
+            <ControlKeyInspector
+              keyRecord={k}
+              zoneId={zoneId}
+              onRotate={() => setRotateTarget(k)}
+              onRevoke={() => setRevokeTarget(k)}
+            />
+          ),
+        }}
+      />
+
+      <CreateControlKeyModal
+        open={createOpen}
+        zoneId={zoneId}
+        onClose={() => setCreateOpen(false)}
+        onCreated={(result) => {
+          setCreateOpen(false);
+          setSecret({ id: result.id, name: result.name, secret: result.clientSecret });
+        }}
+      />
+
+      <ControlSecretModal secret={secret} onClose={() => setSecret(null)} />
+
+      <ConfirmDialog
+        open={rotateTarget !== null}
+        onClose={() => setRotateTarget(null)}
+        title="Rotate client secret"
+        description={`This immediately invalidates the current secret for "${rotateTarget?.name ?? ""}". Any automation using the old secret fails until updated with the new one.`}
+        confirmLabel="Rotate secret"
+        tone="danger"
+        onConfirm={async () => {
+          if (!rotateTarget) return;
+          try {
+            const res = await rotateKey.mutateAsync(rotateTarget.id);
+            setSecret({ id: rotateTarget.id, name: rotateTarget.name, secret: res.clientSecret });
+          } catch (err) {
+            toast({ tone: "error", title: "Rotation failed", description: errorMessage(err) });
+          }
+        }}
+      />
+
+      <ConfirmDialog
+        open={revokeTarget !== null}
+        onClose={() => setRevokeTarget(null)}
+        title="Revoke control key"
+        description={`Revoking "${revokeTarget?.name ?? ""}" permanently disables it. Any automation using it stops working immediately. This cannot be undone.`}
+        confirmLabel="Revoke key"
+        tone="danger"
+        onConfirm={async () => {
+          if (!revokeTarget) return;
+          try {
+            await revokeKey.mutateAsync(revokeTarget.id);
+            toast({ tone: "info", title: "Control key revoked", description: revokeTarget.name });
+          } catch (err) {
+            toast({ tone: "error", title: "Revoke failed", description: errorMessage(err) });
+          }
+        }}
+      />
+    </>
   );
 }
 
@@ -258,20 +307,289 @@ function IssuanceNotice() {
         <path d="M8 11V8a4 4 0 0 1 8 0v3" />
       </svg>
       <div className="min-w-0 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">
-          Keys are issued from the local console by design.
-        </span>{" "}
-        The one-time secret is shown only on the operator&apos;s machine and never travels through a
-        browser session. Issue one with <Mono>caracal control key create</Mono>; it appears here
-        once created.
+        <span className="font-medium text-foreground">The client secret is shown only once.</span>{" "}
+        It is generated in your browser, never stored, and cannot be retrieved later — copy it before
+        closing the dialog. The same key is also issuable with{" "}
+        <Mono>caracal control key create</Mono>.
       </div>
     </div>
   );
 }
 
-function ControlKeyInspector({ keyRecord, zoneId }: { keyRecord: ControlKey; zoneId: string }) {
+// Composes least-privilege control scopes from the permission catalog and optional TTL/
+// expiry guards. Every constraint is validated before submit so operators never discover
+// a rejected key after the fact.
+function CreateControlKeyModal({
+  open,
+  zoneId,
+  onClose,
+  onCreated,
+}: {
+  open: boolean;
+  zoneId: string;
+  onClose: () => void;
+  onCreated: (result: ControlKeyCreateResult) => void;
+}) {
+  const create = useCreateControlKey(zoneId);
+  const [name, setName] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [maxTtl, setMaxTtl] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof CONTROL_PERMISSIONS>();
+    for (const permission of CONTROL_PERMISSIONS) {
+      const list = map.get(permission.command) ?? [];
+      list.push(permission);
+      map.set(permission.command, list);
+    }
+    return [...map.entries()];
+  }, []);
+
+  function reset() {
+    setName("");
+    setSelected(new Set());
+    setMaxTtl("");
+    setExpiresAt("");
+    setError(null);
+  }
+
+  function close() {
+    reset();
+    onClose();
+  }
+
+  function toggle(scope: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(scope)) next.delete(scope);
+      else next.add(scope);
+      return next;
+    });
+  }
+
+  async function submit() {
+    setError(null);
+    if (!name.trim()) return setError("A key name is required.");
+    if (selected.size === 0) return setError("Select at least one permission.");
+    let maxTtlSeconds: number | undefined;
+    if (maxTtl.trim()) {
+      const parsed = Number.parseInt(maxTtl, 10);
+      if (
+        !Number.isInteger(parsed) ||
+        parsed < CONTROL_MIN_TTL_SECONDS ||
+        parsed > CONTROL_MAX_TTL_SECONDS
+      ) {
+        return setError(
+          `Max token TTL must be between ${CONTROL_MIN_TTL_SECONDS} and ${CONTROL_MAX_TTL_SECONDS} seconds.`,
+        );
+      }
+      maxTtlSeconds = parsed;
+    }
+    let expiresIso: string | undefined;
+    if (expiresAt.trim()) {
+      const ts = Date.parse(expiresAt);
+      if (!Number.isFinite(ts)) return setError("Expiry must be a valid date and time.");
+      if (ts <= Date.now()) return setError("Expiry must be in the future.");
+      expiresIso = new Date(ts).toISOString();
+    }
+    try {
+      const result = await create.mutateAsync({
+        name: name.trim(),
+        scopes: [...selected],
+        maxTtlSeconds,
+        expiresAt: expiresIso,
+      });
+      reset();
+      onCreated(result);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={close}
+      title="New control key"
+      description="Scoped, zone-bound automation credential."
+      footer={
+        <>
+          <Button variant="secondary" onClick={close}>
+            Cancel
+          </Button>
+          <Button onClick={submit} loading={create.isPending}>
+            Create key
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Field
+          label="Name"
+          placeholder="ci-deploy-bot"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+        />
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">
+              Permissions ({selected.size})
+            </span>
+            <button
+              type="button"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() =>
+                setSelected((prev) =>
+                  prev.size === CONTROL_PERMISSIONS.length
+                    ? new Set()
+                    : new Set(CONTROL_PERMISSIONS.map((p) => p.scope)),
+                )
+              }
+            >
+              {selected.size === CONTROL_PERMISSIONS.length ? "Clear all" : "Select all"}
+            </button>
+          </div>
+          <div className="flex flex-col gap-3">
+            {groups.map(([command, permissions]) => (
+              <div key={command} className="border border-border">
+                <div className="border-b border-border bg-muted/30 px-3 py-1.5 font-mono text-xs font-semibold text-foreground">
+                  {command}
+                </div>
+                <div className="flex flex-wrap gap-1.5 p-2">
+                  {permissions.map((permission) => {
+                    const on = selected.has(permission.scope);
+                    return (
+                      <button
+                        key={permission.scope}
+                        type="button"
+                        onClick={() => toggle(permission.scope)}
+                        title={permission.summary}
+                        className={cx(
+                          "rounded border px-2 py-1 font-mono text-[11px] transition-colors",
+                          on
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border text-muted-foreground hover:border-foreground/40",
+                        )}
+                      >
+                        {permission.verb}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <details className="border-t border-border pt-3">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+            Advanced — token guards
+          </summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field
+              label="Max token TTL (seconds)"
+              type="number"
+              min={CONTROL_MIN_TTL_SECONDS}
+              max={CONTROL_MAX_TTL_SECONDS}
+              placeholder="default"
+              hint={`${CONTROL_MIN_TTL_SECONDS}–${CONTROL_MAX_TTL_SECONDS}s`}
+              value={maxTtl}
+              onChange={(e) => setMaxTtl(e.target.value)}
+            />
+            <Field
+              label="Key expiry"
+              type="datetime-local"
+              hint="Optional. Key stops issuing tokens after this."
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.target.value)}
+            />
+          </div>
+        </details>
+
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      </div>
+    </Modal>
+  );
+}
+
+function ControlSecretModal({
+  secret,
+  onClose,
+}: {
+  secret: { id: string; name: string; secret: string } | null;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  return (
+    <Modal
+      open={secret !== null}
+      onClose={onClose}
+      title="Control key secret"
+      description="Copy the client secret now — it is never shown again."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {secret ? (
+        <div className="flex flex-col gap-4">
+          <DetailGroup title={secret.name}>
+            <DetailField label="Client ID">
+              <Mono>{secret.id}</Mono>
+            </DetailField>
+          </DetailGroup>
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-foreground">Client secret</span>
+            <div className="flex items-stretch gap-2">
+              <input
+                readOnly
+                value={secret.secret}
+                className="min-w-0 flex-1 border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-foreground"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(secret.secret);
+                  toast({ tone: "success", title: "Secret copied" });
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Store it in your automation&apos;s secret manager as{" "}
+            <Mono>CARACAL_CONTROL_SECRET</Mono>.
+          </p>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
+function ControlKeyInspector({
+  keyRecord,
+  zoneId,
+  onRotate,
+  onRevoke,
+}: {
+  keyRecord: ControlKey;
+  zoneId: string;
+  onRotate: () => void;
+  onRevoke: () => void;
+}) {
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="secondary" size="sm" onClick={onRotate}>
+          Rotate secret
+        </Button>
+        <Button variant="danger" size="sm" onClick={onRevoke}>
+          Revoke
+        </Button>
+      </div>
       <DetailGroup title="Key">
         <DetailField label="Name">{keyRecord.name}</DetailField>
         <DetailField label="Client ID">

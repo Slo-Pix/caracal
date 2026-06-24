@@ -70,6 +70,11 @@ function ZonesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Zone | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Zone | null>(null);
+  const [dcrShutdown, setDcrShutdown] = useState<{
+    zone: Zone;
+    input: ZonePatchInput;
+    liveCount: number;
+  } | null>(null);
   const activeId = getActiveZoneId();
 
   const zones = useMemo(() => zonesQuery.data ?? [], [zonesQuery.data]);
@@ -299,9 +304,20 @@ function ZonesPage() {
             slug: values.slug,
             dcr_enabled: values.dcrEnabled,
           };
-          // Disabling DCR on a zone with live dynamic clients keeps them running
-          // rather than silently revoking runtime sessions.
+          // Disabling DCR on a zone that still has live dynamic clients forces an
+          // explicit operator decision: keep them running through a drain window, or
+          // revoke them now. Only prompt when there is something to lose.
           if (editTarget.dcr_enabled && !values.dcrEnabled) {
+            let liveCount = 0;
+            try {
+              liveCount = (await consoleApi.zones.dcrStatus(editTarget.id)).live_dcr_applications;
+            } catch {
+              liveCount = 0;
+            }
+            if (liveCount > 0) {
+              setDcrShutdown({ zone: editTarget, input, liveCount });
+              return;
+            }
             input.dcr_shutdown = "keep_live";
           }
           try {
@@ -331,6 +347,30 @@ function ZonesPage() {
             toast({ tone: "info", title: "Zone deleted", description: deleteTarget.name });
           } catch (err) {
             toast({ tone: "error", title: "Delete failed", description: errorMessage(err) });
+          }
+        }}
+      />
+      <DcrShutdownDialog
+        request={dcrShutdown}
+        busy={updateZone.isPending}
+        onClose={() => setDcrShutdown(null)}
+        onChoose={async (mode) => {
+          if (!dcrShutdown) return;
+          const input: ZonePatchInput = { ...dcrShutdown.input, dcr_shutdown: mode };
+          try {
+            await updateZone.mutateAsync({ id: dcrShutdown.zone.id, input });
+            setDcrShutdown(null);
+            setEditTarget(null);
+            toast({
+              tone: mode === "revoke_live" ? "info" : "success",
+              title: "Zone updated",
+              description:
+                mode === "revoke_live"
+                  ? "Dynamic clients revoked."
+                  : "Dynamic clients kept live.",
+            });
+          } catch (err) {
+            toast({ tone: "error", title: "Update failed", description: errorMessage(err) });
           }
         }}
       />
@@ -584,6 +624,65 @@ function DeleteZoneDialog({
             />
           </>
         ) : null}
+      </div>
+    </Modal>
+  );
+}
+
+// Forces an explicit keep-or-revoke decision when DCR is turned off while dynamic
+// clients are still live, surfacing the runtime impact of each path before it commits.
+function DcrShutdownDialog({
+  request,
+  busy,
+  onClose,
+  onChoose,
+}: {
+  request: { zone: Zone; input: ZonePatchInput; liveCount: number } | null;
+  busy: boolean;
+  onClose: () => void;
+  onChoose: (mode: "keep_live" | "revoke_live") => void | Promise<void>;
+}) {
+  if (!request) return null;
+  const { zone, liveCount } = request;
+  const plural = liveCount === 1 ? "" : "s";
+  return (
+    <Modal
+      open={request !== null}
+      onClose={onClose}
+      title="Disable dynamic client registration"
+      description={`"${zone.name}" has ${liveCount} live dynamic client${plural}. Choose what happens to them.`}
+      footer={
+        <Button variant="secondary" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onChoose("keep_live")}
+          className="border border-border p-4 text-left transition-colors hover:border-foreground/40 disabled:opacity-60"
+        >
+          <div className="text-sm font-medium text-foreground">Keep existing clients live</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Blocks new registrations only. The {liveCount} live client{plural} keep working until
+            they expire or are revoked later. Use this for a graceful drain window.
+          </p>
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onChoose("revoke_live")}
+          className="border border-destructive/40 p-4 text-left transition-colors hover:border-destructive disabled:opacity-60"
+        >
+          <div className="text-sm font-medium text-destructive">Revoke all live clients now</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Archives the {liveCount} dynamic identit{liveCount === 1 ? "y" : "ies"}, revokes their
+            sessions, and terminates related ephemeral agents immediately. Use this to stop DCR
+            access at once.
+          </p>
+        </button>
       </div>
     </Modal>
   );
