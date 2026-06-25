@@ -155,7 +155,7 @@ function youtubeId(href: string): string | null {
     const url = new URL(href);
     const host = url.hostname.replace(/^www\./, "");
     if (host === "youtu.be") return url.pathname.slice(1) || null;
-    if (host.endsWith("youtube.com")) {
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
       if (url.pathname === "/watch") return url.searchParams.get("v");
       const parts = url.pathname.split("/").filter(Boolean);
       if (parts[0] === "embed" || parts[0] === "shorts") return parts[1] ?? null;

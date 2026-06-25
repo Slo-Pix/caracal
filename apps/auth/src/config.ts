@@ -12,11 +12,16 @@ export type PostgresSsl = "disable" | "require" | "no-verify";
 
 export interface AuthConfig {
   port: number;
+  host: string;
   baseURL: string;
   secret: string;
-  webOrigin: string;
+  webOrigins: string[];
+  webRoot?: string;
   databaseUrl: string;
   ssl: PostgresSsl;
+  production: boolean;
+  secureCookies: boolean;
+  autoProvisionDatabase: boolean;
 }
 
 function resolveDatabaseUrl(): string {
@@ -32,11 +37,13 @@ function resolveDatabaseUrl(): string {
   return url.trim();
 }
 
-function resolveSsl(): PostgresSsl {
+function resolveSsl(production: boolean): PostgresSsl {
   const value = (process.env.CARACAL_AUTH_DATABASE_SSL ?? "").toLowerCase();
   if (value === "require" || value === "true" || value === "verify") return "require";
   if (value === "no-verify" || value === "insecure") return "no-verify";
-  return "disable";
+  // Managed Postgres is the norm in production; default to a verified TLS channel unless an
+  // operator explicitly opts out. Local development keeps the plaintext default.
+  return production ? "require" : "disable";
 }
 
 function resolveSecret(): string {
@@ -53,16 +60,58 @@ function resolveSecret(): string {
   return secret.trim();
 }
 
+function originOf(value: string): string | undefined {
+  try {
+    return new URL(value).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+// The browser origins permitted to drive credentialed requests. In the same-origin
+// production image the SPA is served by this service, so its own origin is always trusted;
+// CARACAL_WEB_ORIGIN additionally accepts a comma-separated allowlist for split deployments
+// (apex+www, staging) and for local development where the Vite dev server is a separate origin.
+function resolveWebOrigins(baseURL: string): string[] {
+  const origins = new Set<string>();
+  const self = originOf(baseURL);
+  if (self) origins.add(self);
+  const configured = process.env.CARACAL_WEB_ORIGIN ?? "http://localhost:3001";
+  for (const entry of configured.split(",")) {
+    const origin = originOf(entry.trim());
+    if (origin) origins.add(origin);
+  }
+  return [...origins];
+}
+
 export function loadConfig(): AuthConfig {
+  const production = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
   const port = Number(process.env.CARACAL_AUTH_PORT ?? 3002);
+  const host = process.env.HOST ?? (production ? "0.0.0.0" : "127.0.0.1");
   const baseURL = process.env.CARACAL_AUTH_URL ?? `http://localhost:${port}`;
-  const webOrigin = process.env.CARACAL_WEB_ORIGIN ?? "http://localhost:3001";
+  // Cookies must carry Secure whenever the public edge is HTTPS. Production is HTTPS by
+  // contract (TLS terminates at the edge even when this process speaks HTTP internally), so
+  // default Secure on in production and honour an explicit override otherwise.
+  const secureCookies =
+    process.env.CARACAL_AUTH_SECURE_COOKIES !== undefined
+      ? /^(1|true|yes|on)$/i.test(process.env.CARACAL_AUTH_SECURE_COOKIES)
+      : production || baseURL.startsWith("https://");
+  const webRoot = process.env.CARACAL_WEB_ROOT?.trim() || undefined;
+  // Per-replica DDL (CREATE DATABASE + Better Auth migrations) races under horizontal scaling
+  // and needs an elevated role production deliberately withholds. Auto-provision only for local
+  // development; production runs migrations once through the dedicated migration job.
+  const autoProvisionDatabase = !production && process.env.CARACAL_AUTH_AUTO_MIGRATE !== "false";
   return {
     port,
+    host,
     baseURL,
-    webOrigin,
+    webOrigins: resolveWebOrigins(baseURL),
+    webRoot,
     databaseUrl: resolveDatabaseUrl(),
-    ssl: resolveSsl(),
+    ssl: resolveSsl(production),
+    production,
+    secureCookies,
+    autoProvisionDatabase,
     secret: resolveSecret(),
   };
 }

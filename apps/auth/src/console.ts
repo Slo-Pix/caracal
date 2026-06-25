@@ -16,6 +16,12 @@ import {
   type DoctorReport,
 } from '@caracalai/engine'
 import { resolveStsUrl } from '@caracalai/engine/runtime-config'
+import { downstreamHeaders } from './security.ts'
+import { logger } from './logger.ts'
+
+export interface ConsoleContext {
+  id: string
+}
 
 import { auth } from './auth.ts'
 
@@ -285,9 +291,23 @@ async function handleDiagnostics(res: ServerResponse, path: string): Promise<voi
   sendJson(res, 200, entry.payload)
 }
 
-async function forwardProxy(req: IncomingMessage, res: ServerResponse, target: string, token: string): Promise<void> {
+async function forwardProxy(
+  req: IncomingMessage,
+  res: ServerResponse,
+  target: string,
+  token: string,
+  id: string,
+): Promise<void> {
   const method = req.method ?? 'GET'
-  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    ...downstreamHeaders(id),
+  }
+
+  // Let the engine compress its response and pass the encoded bytes through untouched, so large
+  // admin lists travel compressed across the real network between the browser and the BFF.
+  const acceptEncoding = req.headers['accept-encoding']
+  if (typeof acceptEncoding === 'string' && acceptEncoding) headers['Accept-Encoding'] = acceptEncoding
 
   let body: Buffer | undefined
   if (method !== 'GET' && method !== 'HEAD') {
@@ -295,8 +315,12 @@ async function forwardProxy(req: IncomingMessage, res: ServerResponse, target: s
     if (body.length > 0) headers['Content-Type'] = 'application/json'
   }
 
+  // Abort the upstream request when the timeout elapses or the browser disconnects, so a
+  // navigated-away or cancelled request never keeps engine and database work alive.
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS)
+  const onClose = (): void => controller.abort()
+  req.once('close', onClose)
   try {
     const upstream = await fetch(target, {
       method,
@@ -304,30 +328,69 @@ async function forwardProxy(req: IncomingMessage, res: ServerResponse, target: s
       body: body && body.length > 0 ? body : undefined,
       signal: controller.signal,
     })
-    const text = await upstream.text()
+    const payload = Buffer.from(await upstream.arrayBuffer())
     res.statusCode = upstream.status
     res.setHeader('Content-Type', upstream.headers.get('content-type') ?? 'application/json')
     res.setHeader('Cache-Control', 'no-store')
+    // Pass the engine's compression through verbatim; the bytes are already encoded.
+    const encoding = upstream.headers.get('content-encoding')
+    if (encoding) {
+      res.setHeader('Content-Encoding', encoding)
+      res.setHeader('Vary', 'Accept-Encoding')
+    }
     // Surface keyset pagination to the browser. The control plane advertises the next
     // page through a same-origin Link header; without forwarding it the web client
     // silently truncates large lists at the server default page size.
     const link = upstream.headers.get('link')
     if (link) res.setHeader('Link', link)
-    res.end(text)
-  } catch {
+    res.end(payload)
+  } catch (err) {
+    if (res.writableEnded) return
+    // A client disconnect aborts the upstream fetch; that is expected teardown, not an error.
+    if (controller.signal.aborted && !res.headersSent && req.destroyed) return
+    logger.warn('proxy upstream failed', { id, path: targetPath(target), err })
     sendJson(res, 502, { error: 'upstream_unreachable' })
   } finally {
     clearTimeout(timer)
+    req.removeListener('close', onClose)
   }
 }
 
-async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: string): Promise<void> {
+function targetPath(target: string): string {
+  try {
+    return new URL(target).pathname
+  } catch {
+    return 'invalid'
+  }
+}
+
+// Validates that a proxied path stays within the engine's /v1 surface after URL normalization,
+// closing a prefix-check bypass (e.g. `/v1/../metrics`) that would otherwise reach operational
+// endpoints. Returns the safe absolute target, or undefined when the path escapes /v1.
+function safeApiTarget(base: string, rest: string): string | undefined {
+  if (rest.includes('..')) return undefined
+  let resolved: URL
+  try {
+    resolved = new URL(base + rest)
+  } catch {
+    return undefined
+  }
+  if (!resolved.pathname.startsWith('/v1/')) return undefined
+  return resolved.toString()
+}
+
+async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: string, id: string): Promise<void> {
   const token = adminToken()
   if (!token) {
     sendJson(res, 503, { error: 'control_plane_not_configured' })
     return
   }
-  await forwardProxy(req, res, `${apiUrl()}${rest}`, token)
+  const target = safeApiTarget(apiUrl(), rest)
+  if (!target) {
+    sendJson(res, 404, { error: 'not_found' })
+    return
+  }
+  await forwardProxy(req, res, target, token, id)
   // A successful write to the control plane can change what diagnostics reports (zone
   // inventory, resources, policy enforcement, …); drop cached reports so the next read
   // recomputes against the new state instead of surfacing a stale warning.
