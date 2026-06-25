@@ -24,6 +24,7 @@ export const SECRET_FILES: readonly SecretFile[] = [
   { envKey: 'REDIS_PASSWORD', fileName: 'redisPassword', bytes: 24 },
   { envKey: 'CARACAL_ADMIN_TOKEN', fileName: 'caracalAdminToken', bytes: 32 },
   { envKey: 'CARACAL_COORDINATOR_TOKEN', fileName: 'caracalCoordinatorToken', bytes: 32 },
+  { envKey: 'CARACAL_AUTH_SECRET', fileName: 'caracalAuthSecret', bytes: 32 },
   { envKey: 'METRICS_BEARER', fileName: 'metricsBearer', bytes: 32 },
   { envKey: 'ZONE_KEK', fileName: 'zoneKek', bytes: 32 },
   { envKey: 'AUDIT_HMAC_KEY', fileName: 'auditHmacKey', bytes: 32 },
@@ -44,6 +45,11 @@ const DERIVED_SECRETS: readonly DerivedSecret[] = [
     fileName: 'databaseUrl',
     render: (v) =>
       `postgres://${v.POSTGRES_USER ?? 'caracal'}:${v.POSTGRES_PASSWORD}@postgres:5432/${v.POSTGRES_DB ?? 'caracal'}`,
+  },
+  {
+    fileName: 'authDatabaseUrl',
+    render: (v) =>
+      `postgres://${v.POSTGRES_USER ?? 'caracal'}:${v.POSTGRES_PASSWORD}@postgres:5432/${v.POSTGRES_AUTH_DB ?? 'caracal_auth'}`,
   },
   {
     fileName: 'redisUrl',

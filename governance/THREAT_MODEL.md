@@ -63,7 +63,9 @@ Out of scope: enterprise-only code, customer deployments outside the provided de
 
 | Boundary | Decision |
 |---|---|
-| User, Console, and admin clients to API/coordinator | Treat all request input, headers, tokens, and trace data as untrusted; validate with schemas and authorization before mutation. |
+| Browser and the web backend-for-frontend (BFF) | The browser holds only a session cookie; the BFF (`apps/auth`) holds the admin/coordinator tokens server-side and serves the SPA same-origin. Treat all browser input as untrusted; enforce the request `Origin` on every state-changing proxied call, set hardened security headers and `Secure`/`SameSite` cookies, rate-limit credential endpoints, and never expose the admin token or internal error detail to the browser. |
+| Web BFF to API/coordinator | The BFF translates a signed-in session into privileged admin-API calls; it must validate the normalized proxied path stays within the intended surface, propagate request/trace correlation, and cancel upstream work when the client disconnects. |
+| Admin and automation clients to API/coordinator | Treat all request input, headers, tokens, and trace data as untrusted; validate with schemas and authorization before mutation. |
 | API/coordinator to PostgreSQL and Redis | PostgreSQL is the durable source of truth; Redis is transport/cache state and must not override database authority. |
 | STS to policy, signing keys, sessions, and step-up state | STS is the token-issuing choke point and must fail closed on policy, key, replay, revocation, and signing errors. |
 | Gateway to upstream resources | Gateway is the runtime enforcement point; it must exchange credentials per request, strip routing headers, enforce safe upstreams, and never trust caller-supplied destinations without bindings. |
@@ -200,6 +202,17 @@ Each threat (T1–T12) states the **problem** an adversary would exploit, **how 
   - *Blast radius is contained.* Distinct zone-scoped, per-operator admin tokens are mintable through the global-only `POST /v1/admin-tokens` route, reserving the shared global bootstrap token for break-glass; and each zone-scoped request binds Postgres `caracal.zone_id` so RLS becomes an enforced backstop the moment `FORCE ROW LEVEL SECURITY` (or non-owner roles) is enabled.
 - **How we verify.** `tests/typescript/unit/api/routes/{applications,resources,step-up-challenges,admin-tokens}.test.ts`, `api/app.test.ts`, `api/config.test.ts`, `api/admin-audit.test.ts`, and `api/zone-scope.test.ts`; confirm header spoofing cannot alter control-resource/trait visibility, the step-up approver is the actor, `/metrics` denies unauthenticated access in published mode, docs default off when published, admin-token minting is global-only, and admin-audit rows redact query strings and link a verifiable per-zone HMAC chain.
 - **Area & owner.** `apps/api`, `apps/coordinator`, `packages/admin`, admin tokens, admin audit ledger — API/coordinator maintainers.
+
+### T13 — Browser-tier session riding and BFF exposure
+
+- **Problem.** The web BFF (`apps/auth`) turns a signed-in operator session into privileged admin-API calls, so a forged cross-site request (CSRF), a clickjacked action, a leaked/insecure session cookie, or a brute-forced credential endpoint could drive control-plane mutations or expand a foothold using the BFF's server-side admin token.
+- **How Caracal handles it.**
+  - *Same-origin by construction.* The production image serves the SPA from the BFF itself, so the browser makes no cross-origin calls; there is no cross-site cookie or open CORS surface to abuse.
+  - *Explicit origin enforcement.* Every state-changing proxied request (`POST/PATCH/PUT/DELETE`) is rejected unless its `Origin` (or `Referer` origin) matches the trusted allowlist, independent of cookie `SameSite`, so CORS-permitted reads can never become forged writes.
+  - *Hardened browser surface.* All responses carry `Content-Security-Policy` (with `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, and HSTS when HTTPS; session cookies are `HttpOnly`, `Secure` (explicit, not inferred), and `SameSite`-pinned.
+  - *Abuse resistance and least exposure.* Credential endpoints are rate-limited; the proxied path is re-validated after normalization so it cannot escape the intended `/v1` (or coordinator) surface; internal error detail is logged server-side and never returned to the browser; only the web tier is intended for ingress, with the API and coordinator internal.
+- **How we verify.** `tests/typescript/unit/auth/security.test.ts` (origin enforcement, header hardening, path-normalization, request correlation) and the BFF static-serving and config tests; manual image verification that the SPA is same-origin, security headers are present, cross-site writes return 403, and readiness gates on the session store.
+- **Area & owner.** `apps/auth`, `apps/web` — Web/BFF maintainers.
 
 ## Review Triggers
 

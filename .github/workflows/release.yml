@@ -340,6 +340,10 @@ jobs:
             context: .
             dockerfile: infra/docker/Dockerfile.node-service
             build_args: ""
+          - name: web
+            context: .
+            dockerfile: infra/docker/Dockerfile.web
+            build_args: ""
           - name: postgres
             context: infra/postgres
             dockerfile: infra/postgres/Dockerfile

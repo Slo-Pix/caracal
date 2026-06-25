@@ -50,6 +50,12 @@
         "tier": "runtime"
       },
       {
+        "name": "web",
+        "context": ".",
+        "dockerfile": "infra/docker/Dockerfile.web",
+        "tier": "runtime"
+      },
+      {
         "name": "postgres",
         "context": "infra/postgres",
         "dockerfile": "infra/postgres/Dockerfile",
