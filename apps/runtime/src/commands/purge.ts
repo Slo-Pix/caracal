@@ -190,7 +190,7 @@ function purgeHelp(): never {
       '',
       'Cached images & binaries (artifacts):',
       '  images      Remove cached Caracal docker images (caracal/*, ghcr.io/garudex-labs/caracal-*)',
-      '  binary      Uninstall Caracal runtime, Console, and web console binaries from $CARACAL_INSTALL_DIR (default ~/.local/bin)',
+      '  binary      Uninstall Caracal runtime and web console binaries from $CARACAL_INSTALL_DIR (default ~/.local/bin)',
       '',
       'Aggregate:',
       '  all         Purge every applicable target (destructive: wipes volumes, runtime, config, web, examples, images, binary)',
