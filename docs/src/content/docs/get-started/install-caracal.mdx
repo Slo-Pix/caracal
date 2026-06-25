@@ -4,11 +4,17 @@ description: Install the released Caracal runtime CLI, then verify Docker for th
 pageType: workflow
 ---
 
-Install the released runtime when you want to run Caracal as a product. The `caracal` CLI owns local runtime lifecycle, workload execution, upgrades, and the `caracal web` launcher. The web console owns product management: zones, applications, resources, providers, policies, sessions, audit, diagnostics, and Control workflows.
+Install the released runtime when you want to run Caracal as a product. The `caracal` CLI owns local runtime lifecycle, workload execution, upgrades, and the local web development launcher. The packaged web console is a deployable production service in Compose and Helm; it owns product management: zones, applications, resources, providers, policies, sessions, audit, diagnostics, and Control workflows.
 
 ## Install the Runtime CLI
 
-Release assets include platform-specific `caracal-runtime-*` archives, `manifest.json`, and `SHA256SUMS`. Download the archive for your platform from the [Caracal releases](https://github.com/Garudex-Labs/caracal/releases), verify it, and place the `caracal` binary on your `PATH`.
+Release assets include platform-specific `caracal-runtime-*` archives, `manifest.json`, and `SHA256SUMS`. The `install.sh` installer installs the runtime-only CLI from those assets; it does not install source-tree development tooling. You can use the installer or download the archive for your platform from the [Caracal releases](https://github.com/Garudex-Labs/caracal/releases), verify it, and place the `caracal` binary on your `PATH`.
+
+To install with the release script on Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | sh
+```
 
 To verify a download yourself, or to verify archives and container images fetched directly, follow [Verify a Release](/security/verify-releases/).
 
@@ -55,7 +61,7 @@ caracal status --help
 caracal web --help
 ```
 
-Use `caracal` for local lifecycle, workload execution, upgrades, and launching the web console with `caracal web`. Use the web console for human product management.
+Use `caracal` for local lifecycle, workload execution, upgrades, and the local web development launcher. Use the packaged web console at `http://localhost:3001` after `caracal up` for the standard local product-management path.
 
 ## Verify Docker
 
@@ -71,7 +77,23 @@ On Windows PowerShell:
 docker compose version
 ```
 
-The local stack includes PostgreSQL and Redis containers. You do not need to install those databases separately for Get Started.
+The local stack includes PostgreSQL, Redis, and the packaged web console. You do not need to install those databases separately for Get Started.
+
+## Start the Local Stack
+
+```sh
+caracal up
+caracal status --ready
+```
+
+On Windows PowerShell:
+
+```powershell
+caracal up
+caracal status --ready
+```
+
+After readiness succeeds, open [http://localhost:3001](http://localhost:3001). Compose maps the host address `127.0.0.1:3001` to the web BFF container on port `3002`. Use `caracal web` only when you need the local development launcher backed by Vite.
 
 ## Platform Notes
 

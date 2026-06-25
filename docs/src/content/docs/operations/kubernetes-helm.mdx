@@ -4,17 +4,17 @@ description: Deploy Caracal on Kubernetes with the repository Helm chart.
 pageType: workflow
 ---
 
-The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes resources for API, STS, Gateway, Audit, Coordinator, and optional Control.
+The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes resources for API, STS, Gateway, Audit, Coordinator, the browser-facing web console BFF, and optional Control.
 
 ## Rendered Resources
 
 | Resource | Purpose |
 | --- | --- |
-| Deployment | API, Audit, Coordinator, and Control when enabled. |
+| Deployment | API, Audit, Coordinator, Web, and Control when enabled. |
 | StatefulSet | STS and Gateway when replay persistence is enabled. |
 | Job | Pre-install/pre-upgrade Postgres migrations. |
 | Service | ClusterIP service per enabled component. |
-| Ingress | Optional external API and Gateway endpoints. |
+| Ingress | Web console by default; optional external API and Gateway endpoints. |
 | NetworkPolicy | Default-deny with explicit internal, storage, DNS, OTLP, HTTPS, and custom egress controls. |
 | PDB/HPA | Availability and scaling controls per service. |
 | ServiceMonitor/PrometheusRule | Metrics scraping and built-in alert recipes. |
@@ -40,7 +40,7 @@ helm upgrade --install caracal infra/helm/caracal \
   --values infra/helm/caracal/values.production.yaml
 ```
 
-Before installing, provide the runtime Secret named by `secrets.runtimeSecretName` or set `secrets.create=true` with plaintext values only for a controlled evaluation environment.
+Before installing, provide the runtime Secret named by `secrets.runtimeSecretName` or set `secrets.create=true` with plaintext values only for a controlled evaluation environment. The runtime Secret must include `caracalAuthSecret` for Better Auth signing and `authDatabaseUrl` for the web console session database, alongside the standard database, Redis, admin, Coordinator, KEK, HMAC, and token keys.
 
 For a managed-cloud install with the runtime Secret provisioned by the External Secrets Operator, a production overlay, and cert-manager TLS ingress, follow [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/).
 
@@ -53,6 +53,7 @@ For a managed-cloud install with the runtime Secret provisioned by the External 
 | Gateway | `8081` |
 | Audit | `9090` |
 | Coordinator | `4000` |
+| Web Console BFF | `3002` |
 | Control | in-process in API (`3000`) when enabled |
 
 ## Production Values to Review
@@ -61,21 +62,44 @@ For a managed-cloud install with the runtime Secret provisioned by the External 
 | --- | --- |
 | Images | `global.registry`, `global.tag`, `global.imagePullPolicy`, `global.mode` |
 | Secrets | `secrets.runtimeSecretName`, `secrets.database.*`, `secrets.redis.*`, token secret refs |
-| Network | `networkPolicy.*`, `ingress.gateway.*`, `ingress.api.*` |
+| Network | `networkPolicy.*`, `ingress.web.*`, `ingress.gateway.*`, `ingress.api.*` |
 | Reliability | `services.<name>.replicas`, `pdb`, `hpa`, resource requests/limits |
 | Replay | `replayPersistence.enabled`, `storageClassName`, `size` |
 | Observability | `serviceMonitor.enabled`, `alertRules.enabled`, `global.otelExporterOtlpEndpoint` |
+
+## Web Console Deployment
+
+`services.web` is enabled in the default chart values with two replicas, image `caracal-web`, container port `3002`, PDB/HPA settings, resource requests and limits, `databaseSsl: require`, and `autoMigrate: "false"`. Set `services.web.publicUrl` to the external HTTPS origin browsers load; the template requires this value and passes it to `CARACAL_AUTH_URL` and `CARACAL_WEB_ORIGIN`.
+
+The web Deployment runs `/app/auth/dist/server.js` from the runtime-tier `caracal-web` image built by the release service-image matrix. The image serves the built SPA same-origin from `/app/auth/web` and proxies `/api/console/*` to the internal API and Coordinator Services. The browser should reach only the web Ingress in the default production shape; API and Gateway Ingress remain disabled unless an explicit deployment needs them.
+
+The web tier uses a dedicated Postgres database for sessions. In chart values, `secrets.authDatabase.name` defaults to `caracal_auth`; the runtime Secret key `authDatabaseUrl` points the BFF at that database, and `caracalAuthSecret` supplies the Better Auth signing secret.
+
+Keep `services.web.autoMigrate: "false"` for multi-replica deployments. Run the Better Auth migration once before rollout with the BFF image entrypoint:
+
+```bash
+node dist/migrate.js
+```
+
+Set `autoMigrate: "true"` only for single-replica evaluation installs where boot-time schema provisioning cannot race another web pod.
+
+## Ingress and NetworkPolicy
+
+`ingress.web.enabled` is `true` by default and `ingress.web.host` defaults to `caracal.example.com`. API and Gateway Ingress remain disabled by default to keep public exposure minimal. Add `ingress.web.tlsSecretName` and the ingress-class annotations required by the platform edge.
+
+When `networkPolicy.enabled=true`, browser-to-web traffic from the ingress controller is not admitted automatically. Add a `networkPolicy.extraIngress` rule that selects the ingress controller namespace or pods and permits port `3002` to the web pods.
 
 ## Validation Flow
 
 ```bash
 helm lint infra/helm/caracal
-helm template caracal infra/helm/caracal --values infra/helm/caracal/values.production.yaml >/tmp/caracal.yaml
+helm template caracal infra/helm/caracal --values infra/helm/caracal/values.production.yaml > caracal.rendered.yaml
+kubectl -n caracal rollout status deploy/caracal-web
 kubectl -n caracal rollout status deploy/caracal-api
 kubectl -n caracal get pods,svc
 ```
 
-Run readiness probes through the Service or Ingress endpoints after rollout.
+Run readiness probes through the Service or Ingress endpoints after rollout, then load the web console through the HTTPS web Ingress.
 
 ## Rollback
 
@@ -92,6 +116,7 @@ Migrations are forward-only. Rollbacks must use application versions compatible 
 | --- | --- |
 | Migration Job fails | Check database host, port, user, database name, password key, and `sslMode`. |
 | Pods fail readiness | Inspect dependency readiness, mounted secrets, and service-specific required env vars. |
+| Web Ingress returns 503 or times out | Confirm `services.web.publicUrl`, `authDatabaseUrl`, `caracalAuthSecret`, API/Coordinator readiness, and `networkPolicy.extraIngress` for the ingress controller. |
 | Gateway Ingress works but upstream calls fail | Check NetworkPolicy egress and upstream allowlist configuration. |
 | STS or Gateway loses audit replay | Ensure replay persistence is enabled and PVCs are not deleted during rollouts. |
 

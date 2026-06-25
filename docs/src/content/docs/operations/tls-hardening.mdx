@@ -10,13 +10,23 @@ Production Caracal should run in published mode (`CARACAL_MODE=stable`, or `rc` 
 
 | Area | Required stance |
 | --- | --- |
-| External TLS | Terminate TLS at ingress, load balancer, service mesh, or Gateway TLS files. |
+| External TLS | Terminate TLS at ingress, load balancer, service mesh, or Gateway TLS files. The web console public edge must be HTTPS. |
 | Internal services | Prefer private ClusterIP or bridge-network traffic. |
 | Secrets | Use mounted secret files, not inline env vars. |
 | Containers | Drop Linux capabilities, set no-new-privileges, use read-only filesystems where supported. |
-| NetworkPolicy | Admit only required ingress and egress. |
+| NetworkPolicy | Admit only required ingress and egress, including explicit ingress-controller traffic to the web tier. |
 | Gateway upstreams | Keep private upstreams disabled unless explicitly allowed and allowlisted. |
 | Runtime CLI | Do not expose product management as top-level runtime CLI commands. |
+
+## Web Console Edge
+
+The production web tier is a same-origin deployment: the `caracal-web` image serves the built SPA and the backend-for-frontend from the same HTTPS origin. The BFF proxies `/api/console/*` to the internal API and Coordinator, so browser traffic does not reach those services directly and no cross-origin CORS or CSRF surface is needed for the standard deployment.
+
+Use HTTPS at the public edge and set `CARACAL_AUTH_URL` to that origin. The BFF pins `Secure`, `HttpOnly`, and `SameSite` session cookies, sets hardened response headers (`Content-Security-Policy` with `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, and HSTS when HTTPS is in use), enforces the request `Origin` on state-changing proxied calls, rate-limits credential endpoints, and validates proxied paths.
+
+For a split deployment where the browser origin differs from the BFF origin, set `CARACAL_WEB_ORIGIN` to the trusted browser origins and use `SameSite=None; Secure` cookies. Keep this shape explicit; the packaged Helm and Compose paths serve the SPA same-origin.
+
+With Helm NetworkPolicy enabled, add a `networkPolicy.extraIngress` rule for the ingress controller to reach the web service on port `3002`. API, Coordinator, and Gateway should remain private unless a deployment requires their endpoints externally.
 
 ## Gateway Upstream Safety
 

@@ -6,24 +6,24 @@ pageType: reference
 
 Cloud-native Caracal deployments should use the Helm chart with externalized state: managed Postgres, managed Redis, platform secrets, ingress, NetworkPolicy, and cluster observability.
 
-For a concrete, copy-paste version of this profile — including External Secrets manifests, a production overlay, cert-manager TLS ingress, and a per-cloud (EKS/GKE/AKS) substitution table — see [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/).
+For a concrete, copy-paste version of this profile — including External Secrets manifests, a production overlay, cert-manager TLS web ingress, and a per-cloud (EKS/GKE/AKS) substitution table — see [Deploy on Managed Kubernetes](/operations/cloud-reference-deployments/).
 
 ## Profile Map
 
 | Profile | Values to adjust |
 | --- | --- |
 | Evaluation | `global.mode=rc`, short retention, limited replicas, temporary secrets, no public ingress unless required. |
-| Production | `global.mode=stable`, managed Postgres/Redis, TLS ingress, NetworkPolicy, PDB/HPA, ServiceMonitor, PrometheusRule. |
-| Private cluster | Disable public ingress; expose API/Gateway through internal load balancers or service mesh. |
+| Production | `global.mode=stable`, managed Postgres/Redis, HTTPS web ingress, NetworkPolicy, PDB/HPA, ServiceMonitor, PrometheusRule. |
+| Private cluster | Keep API/Gateway private; expose the web console through an internal load balancer, private ingress, or service mesh when operators need browser access. |
 | Regulated workload | Enforce external secret manager, immutable backups, audit export, restricted egress, and incident evidence retention. |
 
 ## Managed Dependency Contract
 
 | Dependency | Requirements |
 | --- | --- |
-| Postgres | TLS-capable connection, migration role, durable backups, point-in-time recovery, sufficient connection capacity. |
+| Postgres | TLS-capable connection, migration role, durable backups, point-in-time recovery, sufficient connection capacity, and a dedicated `caracal_auth` database for web sessions. |
 | Redis | Streams support, authentication, memory policy sized for audit/revocation/outbox traffic, persistence according to recovery goals. |
-| Secrets | Runtime Secret with database, Redis, admin, Coordinator, zone KEK, audit HMAC, stream HMAC, and Gateway-STS HMAC keys. |
+| Secrets | Runtime Secret with database, auth database, Redis, admin, Coordinator, Better Auth signing, zone KEK, audit HMAC, stream HMAC, and Gateway-STS HMAC keys. |
 | Observability | Metrics scraping for all services and alerts equivalent to the chart PrometheusRule. |
 
 ## Network Stance
@@ -46,12 +46,13 @@ Expose only the endpoints required by your environment:
 
 | Endpoint | When to expose |
 | --- | --- |
-| Gateway | Required for protected resource traffic through Caracal Gateway. |
-| API | Required for Console/Admin clients outside the cluster. |
+| Web Console | Default public entrypoint for browser operators. Set `services.web.publicUrl`, enable HTTPS, and allow the ingress controller through `networkPolicy.extraIngress`. |
+| Gateway | Expose only when protected resource traffic reaches Caracal Gateway from outside the private network. |
+| API | Prefer private access; expose only for Admin SDK or automation clients that cannot reach it privately. |
 | STS | Expose only when token exchange clients cannot reach it privately. |
-| Audit/Coordinator/Control | Prefer private access. |
+| Audit/Coordinator/Control | Keep private. |
 
-The chart currently has optional Ingress templates for Gateway and API.
+The chart renders Ingress for the web console by default. API and Gateway Ingress templates exist but remain disabled until a deployment opts in.
 
 ## Validation
 

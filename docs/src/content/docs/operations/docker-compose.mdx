@@ -11,22 +11,22 @@ Caracal ships two Compose shapes:
 | `infra/docker/docker-compose.yml` | Local development stack that builds repository images. |
 | `infra/docker/runtime-compose.yml` | Self-hosted runtime stack using versioned GHCR images. |
 
-Both stacks run Postgres, Redis, migrations, STS, API, Gateway, Audit, Coordinator, and optional Control.
+Both stacks run Postgres, Redis, migrations, STS, API, Gateway, Audit, Coordinator, the packaged web console BFF, and optional Control.
 
 ## Topology
 
 ```mermaid
 flowchart TB
-  User[Operator or workload] --> API[API :3000]
-  User --> STS[STS :8080]
-  User --> Gateway[Gateway :8081]
-  User --> Coordinator[Coordinator :4000]
-  Console[Console] --> API
-  Console --> Coordinator
+  Browser[Browser] --> Web[Web Console BFF :3001 -> :3002]
+  Workload[Operator or workload] --> STS[STS :8080]
+  Workload --> Gateway[Gateway :8081]
+  Web --> API[API :3000]
+  Web --> Coordinator[Coordinator :4000]
   API --> Postgres[(Postgres :5432)]
   STS --> Postgres
   Gateway --> Postgres
   Audit[Audit :9090] --> Postgres
+  Web --> AuthDb[(Postgres caracal_auth)]
   API --> Redis[(Redis :6379)]
   STS --> Redis
   Gateway --> Redis
@@ -34,7 +34,7 @@ flowchart TB
   Audit --> Redis
 ```
 
-Local ports are bound to `127.0.0.1` so the OSS stack does not expose services externally by default.
+The packaged `web` service is the browser entrypoint. It maps `127.0.0.1:3001` on the host to port `3002` in the container, serves the built SPA same-origin, and proxies `/api/console/*` to the internal API and Coordinator. It starts after Postgres, API, and Coordinator are healthy. API, Coordinator, Gateway, and STS remain bound to localhost; the web service is the only browser-facing service in the Compose topology.
 
 ## Prerequisites
 
@@ -51,7 +51,9 @@ caracal status --ready
 bash infra/scripts/smokeTest.sh
 ```
 
-`caracal up` builds local images in development mode. It writes operator secrets outside the repository under the managed dev secret directory, exports `CARACAL_SECRETS_DIR` to Compose, and keeps the host directory private so only the operator account can mount those files into services. `caracal status --ready` checks dependency readiness, and `smokeTest.sh` probes `/ready` for API, Gateway, STS, Audit, and Coordinator, plus the API `/health` liveness endpoint.
+`caracal up` builds local images in development mode, including `caracal-web` from `infra/docker/Dockerfile.web`; release builds publish the same image from the service-image matrix because `release.config.json` registers it as a runtime-tier container. It writes operator secrets outside the repository under the managed dev secret directory, exports `CARACAL_SECRETS_DIR` to Compose, and keeps the host directory private so only the operator account can mount those files into services. The secret set includes `authDatabaseUrl` for the dedicated `caracal_auth` session database and `caracalAuthSecret` for Better Auth signing. `caracal status --ready` checks dependency readiness, and `smokeTest.sh` probes `/ready` for API, Gateway, STS, Audit, and Coordinator, plus the API `/health` liveness endpoint.
+
+After readiness succeeds, open the packaged console at [http://localhost:3001](http://localhost:3001). Use `caracal web` only when you want the local development launcher backed by the Vite dev server instead of the packaged Compose web service.
 
 ## Self-Hosted Runtime Flow
 
@@ -62,13 +64,13 @@ docker compose -f infra/docker/runtime-compose.yml ps
 bash infra/scripts/smokeTest.sh
 ```
 
-The runtime compose file expects secrets under `./secrets/` relative to the compose file unless `CARACAL_SECRETS_DIR` points at a platform-managed secret mount. Keep the secret directory private to the operator account and never place inline secrets in the compose file.
+The runtime compose file expects secrets under `./secrets/` relative to the compose file unless `CARACAL_SECRETS_DIR` points at a platform-managed secret mount. It pulls `caracal-web:v<version>` from GHCR, maps `127.0.0.1:3001` to container port `3002`, and uses `CARACAL_WEB_URL` when the browser origin is not `http://localhost:3001`. Keep the secret directory private to the operator account and never place inline secrets in the compose file.
 
 To move an existing runtime onto a newer release, use `caracal upgrade`. It stages the pinned images, applies expand-phase migrations against the running database, then rolls the services and waits for readiness — no maintenance window. See [Upgrade Caracal](/operations/upgrade/).
 
 ## Operator Secret Boundary
 
-Admin, Coordinator, database, Redis, HMAC, and KEK material are operator secrets. Do not place those files in a source workspace, agent workspace, MCP tool workspace, or any directory mounted into untrusted agent containers.
+Admin, Coordinator, auth signing, database, Redis, HMAC, and KEK material are operator secrets. Do not place those files in a source workspace, agent workspace, MCP tool workspace, or any directory mounted into untrusted agent containers.
 
 | Deployment | Secret location |
 | --- | --- |
@@ -99,6 +101,7 @@ and credentials.
 | --- | --- |
 | Postgres or Redis never becomes healthy | Check secret files, mounted volumes, and host port conflicts on `5432` or `6379`. |
 | API ready fails | Confirm migrations completed and `DATABASE_URL_FILE`, `REDIS_URL_FILE`, and `CARACAL_ADMIN_TOKEN_FILE` resolve. |
+| Web console fails readiness | Confirm `authDatabaseUrl`, `caracalAuthSecret`, `caracalAdminToken`, and `caracalCoordinatorToken` are mounted, and that API and Coordinator are healthy. |
 | STS or Gateway fails in `rc`/`stable` | Confirm `AUDIT_HMAC_KEY`, `STREAMS_HMAC_KEY`, and `GATEWAY_STS_HMAC_KEY` are hex-encoded and at least 32 bytes. |
 | Gateway rejects upstreams | Operator-provisioned private upstreams are allowed by default; if set, confirm the host is in `UPSTREAM_HOST_ALLOWLIST`. Cloud metadata, loopback, CGNAT, and multicast are always blocked. |
 | Audit gaps appear after Redis outage | Keep STS and Gateway replay volumes intact and wait for replay metrics to drain. |

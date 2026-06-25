@@ -13,7 +13,7 @@ Use these terms consistently across docs, API names, web console labels, and exa
 | Agent session | Coordinator record representing one agent execution or child session. |
 | Application | Registered client in a zone; confidential applications can exchange credentials. |
 | Audit ledger | Append-only evidence stream and database records for decisions and operations. |
-| Console | Browser-based management UI launched with `caracal web`. |
+| Console | Browser-based management UI served by the packaged web tier in Compose and Helm; `caracal web` is the local development launcher. |
 | Control API | Optional authenticated automation surface for remote management dispatch. |
 | Delegation edge | Bounded authority from one agent session to another. |
 | Gateway | Reverse proxy that verifies inbound authority, exchanges with STS, and forwards to upstreams. |
@@ -37,7 +37,7 @@ Use these terms consistently across docs, API names, web console labels, and exa
 - Use `Caracal`, not informal product nicknames.
 - Use `mandate` for Caracal-issued JWT authority, not generic “token” when the distinction matters.
 - Use `web console` for the browser UI and `Control API` for automation.
-- Use top-level `caracal` only for runtime lifecycle, `caracal run`, and `caracal web`.
+- Use top-level `caracal` only for runtime lifecycle, `caracal run`, and the `caracal web` development launcher.
 
 ## Next Step
 

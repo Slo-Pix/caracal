@@ -13,7 +13,7 @@ Use this runbook for version upgrades, configuration changes, chart changes, sec
 | Source verification | Values, env vars, ports, and secrets match current chart and service config. |
 | Render validation | `helm lint` and `helm template` succeed with environment values. |
 | Migration safety | Migrations are forward-only and complete before service rollout. |
-| Readiness | API, STS, Gateway, Audit, and Coordinator `/ready` endpoints pass. |
+| Readiness | Web, API, STS, Gateway, Audit, and Coordinator readiness endpoints pass. |
 | Event health | Redis streams, outbox dispatch, audit ingestion, revocation propagation, and replay backlog are healthy. |
 | Rollback plan | Previous image tag, chart revision, values, and compatible schema plan are documented. |
 
@@ -38,6 +38,7 @@ sequenceDiagram
 ```bash
 helm -n caracal diff upgrade caracal infra/helm/caracal -f values.production.yaml
 helm -n caracal upgrade caracal infra/helm/caracal -f values.production.yaml
+kubectl -n caracal rollout status deploy/caracal-web
 kubectl -n caracal rollout status deploy/caracal-api
 kubectl -n caracal rollout status deploy/caracal-audit
 kubectl -n caracal rollout status deploy/caracal-coordinator
@@ -55,7 +56,7 @@ kubectl -n caracal rollout status statefulset/caracal-gateway
 Stop the rollout when any of these occur:
 
 - Migration Job fails.
-- STS or Gateway cannot prove readiness.
+- Web, STS, or Gateway cannot prove readiness.
 - Audit DLQ grows or replay backlog ages.
 - Gateway revocation snapshot becomes stale.
 - API outbox dead messages appear.
