@@ -49,3 +49,4 @@ spec:
 
 {{ include "caracal.ingress" (dict "root" . "name" "gateway") }}
 {{ include "caracal.ingress" (dict "root" . "name" "api") }}
+{{ include "caracal.ingress" (dict "root" . "name" "web") }}
