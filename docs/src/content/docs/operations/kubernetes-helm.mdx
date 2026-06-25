@@ -12,7 +12,7 @@ The Helm chart in `infra/helm/caracal` renders production-shaped Kubernetes reso
 | --- | --- |
 | Deployment | API, Audit, Coordinator, Web, and Control when enabled. |
 | StatefulSet | STS and Gateway when replay persistence is enabled. |
-| Job | Pre-install/pre-upgrade Postgres migrations. |
+| Job | Pre-install/pre-upgrade Postgres migrations for the control-plane and web session schemas. |
 | Service | ClusterIP service per enabled component. |
 | Ingress | Web console by default; optional external API and Gateway endpoints. |
 | NetworkPolicy | Default-deny with explicit internal, storage, DNS, OTLP, HTTPS, and custom egress controls. |
@@ -75,7 +75,9 @@ The web Deployment runs `/app/auth/dist/server.js` from the runtime-tier `caraca
 
 The web tier uses a dedicated Postgres database for sessions. In chart values, `secrets.authDatabase.name` defaults to `caracal_auth`; the runtime Secret key `authDatabaseUrl` points the BFF at that database, and `caracalAuthSecret` supplies the Better Auth signing secret.
 
-Keep `services.web.autoMigrate: "false"` for multi-replica deployments. Run the Better Auth migration once before rollout with the BFF image entrypoint:
+When `migrations.enabled` is `true`, the chart renders a `caracal-<release>-auth-migrate` Job as a `pre-install`/`pre-upgrade` hook. It runs the BFF image entrypoint `node dist/migrate.js`, which creates the `caracal_auth` database when absent and applies the Better Auth schema before any web pod starts. The Job retries while Postgres is still coming up and is idempotent across upgrades. The maintenance step that creates the database requires a Postgres role permitted to `CREATE DATABASE`; pre-create `caracal_auth` if your role cannot, and the Job applies the schema into it.
+
+Keep `services.web.autoMigrate: "false"` for multi-replica deployments so serving replicas never race schema changes. The same entrypoint can be run manually when needed:
 
 ```bash
 node dist/migrate.js

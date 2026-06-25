@@ -245,8 +245,9 @@ services:
     # credentialed requests. Required — set this to your public hostname.
     publicUrl: https://caracal.example.com
     databaseSsl: require
-    # Better Auth schema provisioning. Keep "false" for multi-replica deployments and run the
-    # migration once before rollout; set "true" only for a single-replica install.
+    # Better Auth schema provisioning. Keep "false" for multi-replica deployments: the
+    # caracal-*-auth-migrate hook Job creates the auth database and applies the schema once
+    # before rollout. Set "true" only for a single-replica install with no migration Job.
     autoMigrate: "false"
     resources:
       requests:
