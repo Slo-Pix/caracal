@@ -13,7 +13,7 @@ pickItems() {
     local selected=()
     local tty_state=''
 
-    [[ -t 0 ]] || { echo "interactive Console input is required" >&2; return 2; }
+    [[ -t 0 ]] || { echo "interactive terminal input is required" >&2; return 2; }
 
     for ((i = 0; i < n; i++)); do selected[i]=0; done
 
