@@ -243,13 +243,21 @@ def _seed_settlement(seed: str, i: int) -> dict:
     currency = rng.choice(("USD", "USD", "EUR", "GBP"))
     funded = base.now() - i * 7 * 86_400 - rng.randint(0, 6) * 86_400
     amount = _money(rng.uniform(80_000, 900_000), currency)
+    settlement_id = f"set_{rng.getrandbits(48):012x}"
     return {
-        "id": f"set_{rng.getrandbits(48):012x}",
+        "id": settlement_id,
         "object": "settlement",
+        "reference": "STMT-" + settlement_id.split("_")[-1].upper()[:10],
         "currency": currency,
         "amount": amount,
         "payoutCount": rng.randint(20, 400),
+        "method": "bank_transfer",
         "fundingSource": f"{currency} operating account",
+        "fundingInstruction": {
+            "beneficiary": "Quetzal Payouts Settlement",
+            "accountReference": f"QZL-{currency}-{rng.randint(100000, 999999)}",
+            "bic": f"QZPLUS{currency[:2]}XXX",
+        },
         "status": "funded" if i > 0 else "pending",
         "periodStart": funded - 7 * 86_400,
         "periodEnd": funded,
@@ -268,7 +276,8 @@ def seed(state: base.State) -> None:
     settlements = [_seed_settlement(ID, i) for i in range(0, 12)]
     state.tables["settlements"] = gen.index_by(settlements, key="id")
     state.tables["balances"] = {
-        cur: {"currency": cur, "available": amt, "reserved": 0.0, "object": "balance"}
+        cur: {"currency": cur, "available": amt, "reserved": 0.0, "pending": 0.0,
+              "object": "balance"}
         for cur, amt in (("USD", 5_000_000.0), ("EUR", 1_400_000.0),
                          ("GBP", 820_000.0), ("SGD", 600_000.0))
     }
@@ -293,22 +302,32 @@ def create_recipient(ctx: Ctx) -> dict:
 
     now = base.now()
     country = ctx.get("country", "US")
+    rtype = ctx.get("type", "business")
     rid = base.new_id("rcp")
     rec = {
         "id": rid,
         "object": "recipient",
-        "type": ctx.get("type", "business"),
+        "type": rtype,
         "name": ctx.payload["name"],
         "email": ctx.get("email"),
         "country": country,
         "currency": currency,
         "payoutMethod": method,
+        "supportedPayoutMethods": [method],
+        "defaultPurposeCode": _purpose_code(ctx.get("purpose") or "")
+        if ctx.get("purpose") else ("SUPP" if rtype == "business" else "SALA"),
+        "riskRating": "low",
         "status": "unverified",
         "verified": False,
+        "kyc": {"status": "not_started", "level": None, "verifiedAt": None, "method": None},
         "address": ctx.get("address"),
         "createdAt": now,
         "updatedAt": now,
     }
+    if rtype == "business" and ctx.get("registrationNumber"):
+        rec["registrationNumber"] = ctx.get("registrationNumber")
+    if rtype == "individual" and ctx.get("dateOfBirth"):
+        rec["dateOfBirth"] = ctx.get("dateOfBirth")
     if method == "bank_transfer" and ctx.get("bankAccount"):
         rec["bankAccount"] = ctx.get("bankAccount")
     recipients[rid] = rec
@@ -348,9 +367,12 @@ def verify_recipient(ctx: Ctx) -> dict:
         raise DomainError(404, "recipient_not_found", ctx.payload["recipientId"])
     if rec["status"] == "rejected":
         raise DomainError(422, "recipient_rejected", "recipient failed verification and cannot be reinstated")
+    now = base.now()
     rec["status"] = "verified"
     rec["verified"] = True
-    rec["updatedAt"] = base.now()
+    rec["kyc"] = {"status": "approved", "level": "standard",
+                  "verifiedAt": now, "method": "bank_account"}
+    rec["updatedAt"] = now
     return rec
 
 
@@ -380,21 +402,25 @@ def get_quote(ctx: Ctx) -> dict:
     fee = _fee(source_amount, source, method)
     now = base.now()
     delivery = _delivery(method, now)
+    qid = base.new_id("qt")
     quote = {
-        "id": base.new_id("qt"),
-        "quoteId": base.new_id("qt"),
+        "id": qid,
+        "quoteId": qid,
         "object": "quote",
         "sourceCurrency": source,
         "targetCurrency": target,
         "sourceAmount": source_amount,
         "targetAmount": target_amount,
         "rate": rate,
+        "rateType": "fixed",
         "midRate": round(_MID[target] / _MID[source], 6),
         "markupBps": _MARKUP_BPS,
         "fee": fee["total"],
         "feeBreakdown": fee["breakdown"],
         "totalCost": _money(source_amount + fee["total"], source),
         "payoutMethod": method,
+        "scheme": _scheme(method, source, target),
+        "allowedPayoutMethods": list(_METHODS),
         "deliveryEstimateHours": delivery["deliveryEstimateHours"],
         "estimatedDelivery": delivery["estimatedDelivery"],
         "rateExpiresAt": now + 1800,

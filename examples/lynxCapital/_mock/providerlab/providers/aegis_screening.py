@@ -814,7 +814,13 @@ def get_watchlist_hit(ctx: Ctx) -> dict:
 @base.op(ID, "list_watchlists")
 def list_watchlists(ctx: Ctx) -> dict:
     ctx.require_scope("screening.read")
-    return {"watchlists": list(ctx.state.table("watchlists").values())}
+    meta = _meta(ctx.state)
+    return {
+        "watchlists": list(ctx.state.table("watchlists").values()),
+        "scoreModel": meta["scoreModel"],
+        "matchModel": meta["matchModel"],
+        "programWeights": meta["programWeights"],
+    }
 
 
 @base.op(ID, "get_case")
@@ -824,7 +830,7 @@ def get_case(ctx: Ctx) -> dict:
     rec = ctx.state.table("cases").get(ctx.payload["caseId"])
     if rec is None:
         raise DomainError(404, "case_not_found", ctx.payload["caseId"])
-    return rec
+    return _with_sla(rec)
 
 
 @base.op(ID, "list_cases")
@@ -837,8 +843,12 @@ def list_cases(ctx: Ctx) -> dict:
         items = [c for c in items if c["priority"] == ctx.get("priority")]
     if ctx.get("assignee"):
         items = [c for c in items if c.get("assignee") == ctx.get("assignee")]
+    if ctx.get("riskBand"):
+        items = [c for c in items if c["riskBand"] == ctx.get("riskBand")]
     items.sort(key=lambda c: c["createdAt"], reverse=True)
-    return ctx.paginate(items)
+    page = ctx.paginate(items)
+    page["items"] = [_with_sla(c) for c in page["items"]]
+    return page
 
 
 @base.op(ID, "get_audit_trail")
@@ -866,8 +876,8 @@ def assign_case(ctx: Ctx) -> dict:
         raise DomainError(404, "case_not_found", ctx.payload["caseId"])
     if case["status"] in ("resolved", "closed"):
         raise DomainError(409, "case_closed", "cannot assign a closed case")
-    _assign(ctx.state, case, str(ctx.payload["assignee"]), _actor(ctx))
-    return case
+    _assign(ctx.state, case, str(ctx.payload["assignee"]), ctx)
+    return _with_sla(case)
 
 
 @base.op(ID, "add_case_note")
@@ -878,7 +888,7 @@ def add_case_note(ctx: Ctx) -> dict:
     if case is None:
         raise DomainError(404, "case_not_found", ctx.payload["caseId"])
     event = _audit(
-        ctx.state, case, "note_added", _actor(ctx), {"note": str(ctx.payload["note"])}
+        ctx.state, case, "note_added", ctx, {"note": str(ctx.payload["note"])}
     )
     case["updatedAt"] = _ts()
     return {"caseId": case["caseId"], "event": event}
@@ -898,9 +908,9 @@ def escalate_case(ctx: Ctx) -> dict:
         case,
         ctx.get("queue", "edd_l2"),
         ctx.get("reason", "Manual escalation requested."),
-        _actor(ctx),
+        ctx,
     )
-    return case
+    return _with_sla(case)
 
 
 @base.op(ID, "resolve_case")
@@ -925,17 +935,76 @@ def resolve_case(ctx: Ctx) -> dict:
             case,
             ctx.get("queue", "edd_l2"),
             ctx.get("reason", "Escalated on disposition."),
-            _actor(ctx),
+            ctx,
         )
-        return case
+        return _with_sla(case)
     _resolve(
         ctx.state,
         case,
         disposition,
         ctx.get("reason", "Disposition recorded by analyst."),
-        _actor(ctx),
+        ctx,
     )
-    return case
+    return _with_sla(case)
+
+
+@base.op(ID, "reopen_case")
+def reopen_case(ctx: Ctx) -> dict:
+    """Reopen a resolved case for further investigation when new information surfaces."""
+    ctx.require_scope("cases.write")
+    ctx.require("caseId")
+    case = ctx.state.table("cases").get(ctx.payload["caseId"])
+    if case is None:
+        raise DomainError(404, "case_not_found", ctx.payload["caseId"])
+    if case["status"] not in ("resolved", "closed"):
+        raise DomainError(409, "case_open", "only a resolved case can be reopened")
+    reason = ctx.get("reason", "New information requires re-investigation.")
+    case["status"] = "in_review" if case.get("assignee") else "open"
+    case["disposition"] = None
+    case["dispositionReason"] = None
+    case["resolvedAt"] = None
+    case["resolvedBy"] = None
+    case["reopenCount"] = case.get("reopenCount", 0) + 1
+    case["slaDueAt"] = _ts(_SLA_HOURS[case["priority"]] * 3600)
+    case["updatedAt"] = _ts()
+    for hit_ref in case["hits"]:
+        hit_ref["disposition"] = None
+        hit = ctx.state.table("watchlist_hits").get(hit_ref["hitId"])
+        if hit:
+            hit["status"] = "pending"
+    _audit(ctx.state, case, "case_reopened", ctx, {"reason": reason})
+    return _with_sla(case)
+
+
+@base.op(ID, "whitelist_match")
+def whitelist_match(ctx: Ctx) -> dict:
+    """Discount a confirmed false-positive match so future screenings of the same
+    subject name do not re-raise it, the way an analyst maintains a good-guy list."""
+    ctx.require_scope("cases.write")
+    ctx.require("subjectName", "matchedEntityId")
+    name = str(ctx.payload["subjectName"])
+    matched_id = str(ctx.payload["matchedEntityId"])
+    if matched_id not in ctx.state.table("entities"):
+        raise DomainError(404, "entity_not_found", matched_id)
+    key = _whitelist_key(name)
+    table = ctx.state.table("whitelist")
+    entry = table.get(key)
+    if entry is None:
+        entry = {
+            "whitelistId": base.new_id("wl"),
+            "subjectName": name,
+            "matchedEntityIds": [],
+            "reason": ctx.get("reason", "Confirmed false positive on secondary identifiers."),
+            "createdBy": _actor(ctx),
+            "delegation": _delegation(ctx),
+            "createdAt": _ts(),
+            "updatedAt": _ts(),
+        }
+        table[key] = entry
+    if matched_id not in entry["matchedEntityIds"]:
+        entry["matchedEntityIds"].append(matched_id)
+    entry["updatedAt"] = _ts()
+    return entry
 
 
 @base.op(ID, "create_monitor")
@@ -946,11 +1015,56 @@ def create_monitor(ctx: Ctx) -> dict:
     if entity is None:
         raise DomainError(404, "entity_not_found", ctx.payload["entityId"])
     frequency = ctx.get("frequency", "daily")
-    if frequency not in ("realtime", "daily", "weekly"):
+    if frequency not in _MONITOR_FREQUENCIES:
         raise DomainError(
-            422, "invalid_frequency", "frequency must be realtime, daily, or weekly"
+            422,
+            "invalid_frequency",
+            f"frequency must be one of {', '.join(_MONITOR_FREQUENCIES)}",
         )
-    return _create_monitor(ctx.state, entity, frequency, _actor(ctx))
+    return _create_monitor(ctx.state, entity, frequency, ctx)
+
+
+@base.op(ID, "run_monitor")
+def run_monitor(ctx: Ctx) -> dict:
+    """Execute an ongoing-monitoring sweep: re-screen the monitored entity against
+    current lists and raise a case if its decision has changed for the worse."""
+    ctx.require_scope("monitoring.write")
+    ctx.require("monitorId")
+    monitor = ctx.state.table("monitors").get(ctx.payload["monitorId"])
+    if monitor is None:
+        raise DomainError(404, "monitor_not_found", ctx.payload["monitorId"])
+    if monitor["status"] != "active":
+        raise DomainError(409, "monitor_inactive", "monitor is not active")
+    entity = ctx.state.table("entities").get(monitor["entityId"])
+    if entity is None:
+        raise DomainError(404, "entity_not_found", monitor["entityId"])
+    previous = monitor.get("lastDecision", "clear")
+    if entity.get("source") == "registry":
+        screening = _verify_entity(ctx.state, entity, ctx)
+    else:
+        screening = _persist_screen(
+            ctx.state, _subject_of(entity), "monitoring", ctx, entity_id=entity["entityId"]
+        )
+        entity["lastDecision"] = screening["decision"]
+    interval = _MONITOR_INTERVALS.get(monitor["frequency"], 86_400)
+    monitor["lastRunAt"] = _ts()
+    monitor["nextRunAt"] = _ts(interval)
+    monitor["lastDecision"] = screening["decision"]
+    monitor["runCount"] = monitor.get("runCount", 0) + 1
+    if screening["matchCount"]:
+        monitor["hitCount"] = monitor.get("hitCount", 0) + screening["matchCount"]
+    return {
+        "monitorId": monitor["monitorId"],
+        "entityId": entity["entityId"],
+        "previousDecision": previous,
+        "decision": screening["decision"],
+        "changed": previous != screening["decision"],
+        "matchCount": screening["matchCount"],
+        "screeningId": screening["screeningId"],
+        "caseId": screening.get("caseId"),
+        "ranAt": monitor["lastRunAt"],
+        "nextRunAt": monitor["nextRunAt"],
+    }
 
 
 @base.op(ID, "get_monitor")
@@ -976,8 +1090,23 @@ def list_monitors(ctx: Ctx) -> dict:
 # --------------------------------------------------------------------------- #
 # small helpers
 # --------------------------------------------------------------------------- #
-def _actor(ctx: Ctx) -> str:
-    return str(ctx.principal.get("principal") or "anonymous")
+def _entity_type(value) -> str:
+    """Normalize a caller-supplied entity type to the provider's vocabulary."""
+    if value is None:
+        return "organization"
+    alias = {
+        "business": "organization",
+        "company": "organization",
+        "org": "organization",
+        "person": "individual",
+        "natural_person": "individual",
+    }
+    normalized = alias.get(str(value).lower(), str(value).lower())
+    if normalized not in _ENTITY_TYPES:
+        raise DomainError(
+            422, "invalid_request", f"entityType must be one of {', '.join(_ENTITY_TYPES)}"
+        )
+    return normalized
 
 
 def _party_subject(party) -> dict:
@@ -986,12 +1115,25 @@ def _party_subject(party) -> dict:
     if isinstance(party, dict) and party.get("name"):
         return {
             "name": str(party["name"]),
-            "type": party.get("type", "organization"),
+            "type": _entity_type(party.get("entityType") or party.get("type")),
             "country": party.get("country"),
+            "dateOfBirth": party.get("dateOfBirth"),
+            "identifiers": party.get("identifiers", []),
         }
     raise DomainError(
         422, "invalid_request", "each party must be a name or an object with 'name'"
     )
+
+
+def _sla_breached(case: dict) -> bool:
+    due = case.get("slaDueAt")
+    if not due or case["status"] in ("resolved", "closed"):
+        return False
+    return _ts() > due
+
+
+def _with_sla(case: dict) -> dict:
+    return {**case, "slaBreached": _sla_breached(case)}
 
 
 def _batch_parties(state: base.State, batch_id: str) -> list[dict]:
@@ -1015,6 +1157,8 @@ def _resolve_entity(state: base.State, legal: str, country: str, payload: dict) 
         "country": country,
         "registrationNumber": payload.get("registrationNumber")
         or gen._aegis_registration(rng, country),
+        "taxId": payload.get("taxId"),
+        "incorporationType": payload.get("incorporationType"),
         "incorporationDate": payload.get("incorporationDate"),
         "registeredAddress": payload.get("registeredAddress", {}),
         "industryCode": payload.get("industryCode"),
@@ -1034,8 +1178,9 @@ def _resolve_entity(state: base.State, legal: str, country: str, payload: dict) 
 def _audit_intact(case_id: str, events: list[dict]) -> bool:
     prev = "genesis"
     for event in events:
+        edge = (event.get("delegation") or {}).get("delegationEdgeId") or "none"
         digest = hashlib.sha256(
-            f"{case_id}|{event['type']}|{event['actor']}|{event['at']}|{prev}".encode()
+            f"{case_id}|{event['type']}|{event['actor']}|{edge}|{event['at']}|{prev}".encode()
         ).hexdigest()[:16]
         if event.get("prevHash") != prev or event.get("hash") != digest:
             return False
