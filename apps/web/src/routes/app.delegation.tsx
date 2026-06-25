@@ -14,6 +14,7 @@ import {
   edgeStatusTone,
   shortId,
 } from "@/components/console/delegationFormat";
+import { FeedToolbar } from "@/components/console/FeedToolbar";
 import { Mono, ResourceWorkspace } from "@/components/console/ResourceWorkspace";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, type Column } from "@/components/ui";
@@ -131,22 +132,14 @@ function DelegationPage({ zoneId }: { zoneId: string }) {
       title="Delegation"
       description="Active delegation edges. Each edge grants one agent session authority to act on another's behalf within scope."
       breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Delegation" }]}
-      headerExtra={
-        <div className="flex items-center justify-between gap-3 border border-border bg-muted/20 px-3 py-2.5">
-          <span className="text-xs text-muted-foreground">
-            {rows.length} active edge{rows.length === 1 ? "" : "s"} loaded
-            {feed.hasNextPage ? " · more available" : ""}
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => feed.fetchNextPage()}
-            disabled={!feed.hasNextPage}
-            loading={feed.isFetchingNextPage}
-          >
-            {feed.hasNextPage ? "Load more" : "All loaded"}
-          </Button>
-        </div>
+      toolbarExtra={
+        <FeedToolbar
+          loaded={rows.length}
+          noun="edge"
+          hasMore={Boolean(feed.hasNextPage)}
+          fetchingMore={feed.isFetchingNextPage}
+          onLoadMore={() => feed.fetchNextPage()}
+        />
       }
       rows={rows}
       loading={feed.isLoading}

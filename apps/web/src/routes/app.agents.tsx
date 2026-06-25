@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 
 import { DelegationInspector } from "@/components/console/DelegationInspector";
 import { shortId } from "@/components/console/delegationFormat";
+import { FeedToolbar } from "@/components/console/FeedToolbar";
 import {
   DetailField,
   DetailGroup,
@@ -344,7 +345,7 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
         title="Agents"
         description="Live agent sessions, their authority, and delegation lineage in this zone."
         breadcrumbs={[{ label: "Console", to: "/app" }, { label: "Agents" }]}
-        headerExtra={
+        toolbarExtra={
           <AgentFilterBar
             status={status}
             lifecycle={lifecycleFilter}
@@ -373,7 +374,6 @@ function AgentsPage({ zoneId }: { zoneId: string }) {
             a.lifecycle.toLowerCase().includes(q) ||
             a.labels.some((l) => l.toLowerCase().includes(q)),
         }}
-        sortOptions={[{ id: "recent", label: "Most recent" }]}
         empty={{
           title: feed.isError ? "Could not load agents" : "No agent sessions",
           description: feed.isError
@@ -438,48 +438,43 @@ function AgentFilterBar({
   onLabel: (v: string) => void;
   onLoadMore: () => void;
 }) {
+  const activeFilters =
+    (status !== "all" ? 1 : 0) +
+    (lifecycle !== "all" ? 1 : 0) +
+    [application, label].filter((v) => v.trim()).length;
   return (
-    <div className="flex flex-col gap-3 border border-border bg-muted/20 p-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Select label="Status" value={status} onChange={(e) => onStatus(e.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-          <option value="terminated">Terminated</option>
-        </Select>
-        <Select label="Lifecycle" value={lifecycle} onChange={(e) => onLifecycle(e.target.value)}>
-          <option value="all">All lifecycles</option>
-          <option value="task">Task</option>
-          <option value="service">Service</option>
-        </Select>
-        <Field
-          label="Application"
-          placeholder="application id"
-          value={application}
-          onChange={(e) => onApplication(e.target.value)}
-        />
-        <Field
-          label="Label"
-          placeholder="exact label"
-          value={label}
-          onChange={(e) => onLabel(e.target.value)}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">
-          {loaded} agent{loaded === 1 ? "" : "s"} loaded{hasMore ? " · more available" : ""}
-        </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onLoadMore}
-          disabled={!hasMore}
-          loading={fetchingMore}
-        >
-          {hasMore ? "Load more" : "All loaded"}
-        </Button>
-      </div>
-    </div>
+    <FeedToolbar
+      activeFilters={activeFilters}
+      loaded={loaded}
+      noun="agent"
+      hasMore={hasMore}
+      fetchingMore={fetchingMore}
+      onLoadMore={onLoadMore}
+    >
+      <Select label="Status" value={status} onChange={(e) => onStatus(e.target.value)}>
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="suspended">Suspended</option>
+        <option value="terminated">Terminated</option>
+      </Select>
+      <Select label="Lifecycle" value={lifecycle} onChange={(e) => onLifecycle(e.target.value)}>
+        <option value="all">All lifecycles</option>
+        <option value="task">Task</option>
+        <option value="service">Service</option>
+      </Select>
+      <Field
+        label="Application"
+        placeholder="application id"
+        value={application}
+        onChange={(e) => onApplication(e.target.value)}
+      />
+      <Field
+        label="Label"
+        placeholder="exact label"
+        value={label}
+        onChange={(e) => onLabel(e.target.value)}
+      />
+    </FeedToolbar>
   );
 }
 

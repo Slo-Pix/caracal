@@ -1,0 +1,136 @@
+/*
+Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
+Caracal, a product of Garudex Labs
+
+This file provides the inline feed toolbar that aligns a Filters popover and cursor controls on the workspace search row.
+*/
+import { useEffect, useRef, useState, type ReactNode } from "react";
+
+import { Button } from "@/components/ui";
+import { cx } from "@/lib/cx";
+
+// An inline toolbar designed to sit on the same row as the workspace search box. It keeps
+// everything on one line: an optional leading control, a Filters button whose labeled fields
+// drop into a floating panel, and the loaded count plus cursor control pushed to the right.
+// When `live`/`onToggleLive` are supplied it also renders the live indicator and pause toggle.
+export function FeedToolbar({
+  leading,
+  activeFilters = 0,
+  loaded,
+  noun,
+  hasMore,
+  fetchingMore,
+  onLoadMore,
+  live,
+  onToggleLive,
+  children,
+}: {
+  leading?: ReactNode;
+  activeFilters?: number;
+  loaded: number;
+  noun: string;
+  hasMore: boolean;
+  fetchingMore: boolean;
+  onLoadMore: () => void;
+  live?: boolean;
+  onToggleLive?: () => void;
+  children?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointer, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <>
+      {leading}
+
+      {children ? (
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-haspopup="dialog"
+            className={cx(
+              "inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
+              open || activeFilters > 0
+                ? "border-foreground/20 bg-accent text-foreground"
+                : "border-border text-muted-foreground hover:bg-surface hover:text-foreground",
+            )}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M3 5h18l-7 8v5l-4 2v-7z" />
+            </svg>
+            Filters
+            {activeFilters > 0 ? (
+              <span className="grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
+                {activeFilters}
+              </span>
+            ) : null}
+          </button>
+          {open ? (
+            <div className="animate-pop-in absolute left-0 top-full z-[60] mt-1.5 w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-3 shadow-xl">
+              <div className="grid gap-2.5 sm:grid-cols-2">{children}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="ml-auto flex items-center gap-2">
+        <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
+          {live !== undefined ? (
+            <span
+              className={cx(
+                "h-1.5 w-1.5 rounded-full",
+                live ? "bg-emerald-500" : "bg-muted-foreground/40",
+              )}
+            />
+          ) : null}
+          {loaded} {noun}
+          {loaded === 1 ? "" : "s"}
+        </span>
+        {onToggleLive ? (
+          <button
+            onClick={onToggleLive}
+            className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {live ? "Pause" : "Resume"}
+          </button>
+        ) : null}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onLoadMore}
+          disabled={!hasMore}
+          loading={fetchingMore}
+        >
+          {hasMore ? "Load more" : "All loaded"}
+        </Button>
+      </div>
+    </>
+  );
+}
