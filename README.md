@@ -56,7 +56,7 @@ The installer provides the thin `caracal` runtime CLI. Manage Caracal from the b
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | \
-  sh -s -- --version v2026.06.22-rc.1
+  sh -s -- --version v2026.06.25-rc.1
 ```
 
 </details>
@@ -66,7 +66,7 @@ curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.s
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.sh | \
-  sh -s -- --version v2026.06.22-rc.1
+  sh -s -- --version v2026.06.25-rc.1
 ```
 
 </details>
@@ -77,7 +77,7 @@ curl -fsSL https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.s
 ```powershell
 $installer = "$env:TEMP\install.ps1"
 iwr -useb https://raw.githubusercontent.com/Garudex-Labs/caracal/main/install.ps1 -OutFile $installer
-powershell -ExecutionPolicy Bypass -File $installer -Version v2026.06.22-rc.1
+powershell -ExecutionPolicy Bypass -File $installer -Version v2026.06.25-rc.1
 ```
 
 </details>

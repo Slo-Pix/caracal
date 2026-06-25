@@ -85,10 +85,7 @@ describe('resolvePaths', () => {
 
     const paths = resolvePaths()
 
-    expect(paths.envFiles).toEqual([
-      join(repoRoot, 'infra', 'docker', 'dev.env'),
-      join(repoRoot, 'infra', 'docker', 'local.env'),
-    ])
+    expect(paths.envFiles).toEqual([join(repoRoot, 'infra', 'docker', 'dev.env'), join(repoRoot, 'infra', 'docker', 'local.env')])
   })
 
   it('honours CARACAL_COMPOSE_FILE in dev mode', () => {
@@ -189,33 +186,31 @@ describe('detectActiveLocalStackRuntime', () => {
   })
 
   it('detects the running local API stack mode, version, home, and secrets', () => {
-    spawnSyncMock
-      .mockReturnValueOnce({ status: 0, stdout: 'api-container\n' })
-      .mockReturnValueOnce({
-        status: 0,
-        stdout: JSON.stringify([{
+    spawnSyncMock.mockReturnValueOnce({ status: 0, stdout: 'api-container\n' }).mockReturnValueOnce({
+      status: 0,
+      stdout: JSON.stringify([
+        {
           Config: {
-            Image: 'ghcr.io/garudex-labs/caracal-node:v2026.06.22-rc.1',
+            Image: 'ghcr.io/garudex-labs/caracal-node:v2026.06.25-rc.1',
             Env: ['CARACAL_MODE=rc'],
             Labels: {
               'com.docker.compose.project.working_dir': '/home/raw/.config/caracal',
               'com.docker.compose.project.config_files': '/home/raw/.config/caracal/compose.yml',
             },
           },
-          Mounts: [
-            { Source: '/home/raw/.config/caracal/secrets/caracalAdminToken', Destination: '/run/secrets/caracalAdminToken' },
-          ],
+          Mounts: [{ Source: '/home/raw/.config/caracal/secrets/caracalAdminToken', Destination: '/run/secrets/caracalAdminToken' }],
           NetworkSettings: {
             Ports: {
               '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3000' }],
             },
           },
-        }]),
-      })
+        },
+      ]),
+    })
 
     expect(detectActiveLocalStackRuntime()).toEqual({
       mode: 'rc',
-      version: '2026.06.22-rc.1',
+      version: '2026.06.25-rc.1',
       registry: 'ghcr.io/garudex-labs/',
       home: '/home/raw/.config/caracal',
       repoRoot: undefined,
@@ -225,11 +220,10 @@ describe('detectActiveLocalStackRuntime', () => {
   })
 
   it('derives the dev repo root from the compose project directory, not the compose subdir', () => {
-    spawnSyncMock
-      .mockReturnValueOnce({ status: 0, stdout: 'api-container\n' })
-      .mockReturnValueOnce({
-        status: 0,
-        stdout: JSON.stringify([{
+    spawnSyncMock.mockReturnValueOnce({ status: 0, stdout: 'api-container\n' }).mockReturnValueOnce({
+      status: 0,
+      stdout: JSON.stringify([
+        {
           Config: {
             Image: 'caracal-node:dev',
             Env: ['CARACAL_MODE=dev'],
@@ -246,8 +240,9 @@ describe('detectActiveLocalStackRuntime', () => {
               '3000/tcp': [{ HostIp: '127.0.0.1', HostPort: '3000' }],
             },
           },
-        }]),
-      })
+        },
+      ]),
+    })
 
     expect(detectActiveLocalStackRuntime()).toEqual({
       mode: 'dev',
