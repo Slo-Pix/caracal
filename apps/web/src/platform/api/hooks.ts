@@ -518,8 +518,8 @@ export function useAgentChildren(zoneId: string | null, id: string | null) {
   });
 }
 
-// Per-agent delegation edges. The agent's authority flows through its subject session, so
-// inbound/outbound delegation views are keyed by subject_session_id.
+// Per-agent delegation edges. Delegation edges connect agent sessions, so inbound/outbound
+// delegation views are keyed by agent_session_id.
 export function useAgentInboundDelegations(zoneId: string | null, sessionId: string | null) {
   return useQuery({
     queryKey: ["console", "delegations-inbound", zoneId, sessionId],
@@ -599,7 +599,23 @@ export function useRevokeDelegation(zoneId: string | null) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => consoleApi.delegations.revoke(zoneId as string, id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: keys.delegationsActive(zoneId) }),
+    onSuccess: () => {
+      // Revocation cascades downstream, so refresh the active feed plus every per-session
+      // inbound/outbound list and agent authority envelope that may now be stale.
+      qc.invalidateQueries({ queryKey: keys.delegationsActive(zoneId) });
+      qc.invalidateQueries({
+        predicate: (q) => {
+          const k = q.queryKey;
+          if (!Array.isArray(k) || k[0] !== "console" || k[2] !== zoneId) return false;
+          return (
+            k[1] === "delegations-inbound" ||
+            k[1] === "delegations-outbound" ||
+            k[1] === "agent" ||
+            k[1] === "agents"
+          );
+        },
+      });
+    },
   });
 }
 
