@@ -469,6 +469,57 @@ def submit_vendor_document(ctx: Ctx) -> dict:
     return document
 
 
+@base.op(
+    ID, "get_vendor_document",
+    title="Get vendor document",
+    description="Retrieve the metadata for a single document on a vendor record.",
+    input_schema={"type": "object", "properties": {
+        "vendorId": {"type": "string"},
+        "documentId": {"type": "string"}},
+        "required": ["vendorId", "documentId"]},
+    annotations={"readOnlyHint": True, "idempotentHint": True})
+def get_vendor_document(ctx: Ctx) -> dict:
+    ctx.require("vendorId", "documentId")
+    vendor = _vendor(ctx)
+    document = next((d for d in vendor.get("documents", [])
+                     if d["documentId"] == ctx.payload["documentId"]), None)
+    if document is None:
+        raise DomainError(404, "document_not_found", ctx.payload["documentId"])
+    return document
+
+
+@base.op(
+    ID, "review_vendor_document",
+    title="Review vendor document",
+    description="Approve or reject a submitted vendor document during compliance review.",
+    input_schema={"type": "object", "properties": {
+        "vendorId": {"type": "string"},
+        "documentId": {"type": "string"},
+        "decision": {"type": "string", "enum": ["approve", "reject"]},
+        "note": {"type": "string"}},
+        "required": ["vendorId", "documentId", "decision"]},
+    annotations={"readOnlyHint": False, "idempotentHint": True})
+def review_vendor_document(ctx: Ctx) -> dict:
+    ctx.require("vendorId", "documentId", "decision")
+    vendor = _vendor(ctx)
+    decision = ctx.payload["decision"]
+    if decision not in ("approve", "reject"):
+        raise DomainError(422, "invalid_decision", decision)
+    document = next((d for d in vendor.get("documents", [])
+                     if d["documentId"] == ctx.payload["documentId"]), None)
+    if document is None:
+        raise DomainError(404, "document_not_found", ctx.payload["documentId"])
+    document["status"] = "verified" if decision == "approve" else "rejected"
+    document["reviewedAt"] = _now()
+    if ctx.get("note"):
+        document["reviewNote"] = ctx.payload["note"]
+    if document["type"] == "coi" and decision == "approve":
+        vendor["compliance"]["insurance"] = "current"
+    _record_event(vendor, f"document.{decision}d",
+                  f"Document {decision}d: {document['type']}", actor="compliance")
+    return document
+
+
 # --------------------------------------------------------------------------- #
 # Lifecycle and contracts
 # --------------------------------------------------------------------------- #
@@ -525,6 +576,37 @@ def get_contract_terms(ctx: Ctx) -> dict:
     if contract is None:
         raise DomainError(404, "contract_not_found", ctx.payload["contractId"])
     return contract
+
+
+# --------------------------------------------------------------------------- #
+# Taxonomy and audit history
+# --------------------------------------------------------------------------- #
+@base.op(
+    ID, "list_categories",
+    title="List vendor categories",
+    description="List the vendor commodity taxonomy (UNSPSC segment codes) the network "
+                "classifies vendors against.",
+    input_schema={"type": "object", "properties": {}},
+    annotations={"readOnlyHint": True, "idempotentHint": True})
+def list_categories(ctx: Ctx) -> dict:
+    items = list(ctx.state.table("categories").values())
+    return {"total": len(items), "items": items}
+
+
+@base.op(
+    ID, "list_vendor_events",
+    title="List vendor events",
+    description="Return the change-history / audit trail for a vendor, newest first.",
+    input_schema={"type": "object", "properties": {
+        "vendorId": {"type": "string"},
+        "page": _PAGE_PROPS["page"], "pageSize": _PAGE_PROPS["pageSize"]},
+        "required": ["vendorId"]},
+    annotations={"readOnlyHint": True, "idempotentHint": True})
+def list_vendor_events(ctx: Ctx) -> dict:
+    vendor = _vendor(ctx)
+    result = ctx.paginate(vendor.get("events", []), size_default=25)
+    result["vendorId"] = vendor["id"]
+    return result
 
 
 # --------------------------------------------------------------------------- #

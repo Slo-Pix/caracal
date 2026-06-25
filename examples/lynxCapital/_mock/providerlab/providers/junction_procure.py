@@ -408,8 +408,15 @@ def create_purchase_order(ctx: Ctx) -> dict:
     if supplier["status"] != "active":
         raise DomainError(409, "supplier_inactive",
                           f"supplier {supplier['supplierId']} is {supplier['status']}")
+    expired = [d["documentName"] for d in supplier.get("complianceDocuments", [])
+               if d.get("status") == "expired"]
+    if expired:
+        raise DomainError(409, "supplier_compliance_hold",
+                          f"supplier {supplier['supplierId']} has expired {', '.join(expired)}")
 
     now = base.now()
+    shipping = float(ctx.get("shippingAmount", 0.0) or 0.0)
+    po_type = "services" if req.get("purchaseType") == "services" else "standard"
     lines = [{
         "lineNumber": l["lineNumber"],
         "description": l["description"],
@@ -419,11 +426,14 @@ def create_purchase_order(ctx: Ctx) -> dict:
         "unitOfMeasure": l["unitOfMeasure"],
         "unitPrice": l["unitPrice"],
         "lineTotal": l["lineTotal"],
+        "costCenter": l.get("costCenter", req["costCenter"]),
         "glAccount": l["glAccount"],
     } for l in req["lines"]]
     po = {
         "poId": base.new_id("po"),
         "poNumber": f"PO-2026-{now}",
+        "poType": po_type,
+        "revision": 0,
         "requisitionId": req["requisitionId"],
         "supplierId": supplier["supplierId"],
         "supplierName": supplier["displayName"],
@@ -434,11 +444,13 @@ def create_purchase_order(ctx: Ctx) -> dict:
         "buyer": ctx.get("buyer", {"id": "EMP-2300", "name": "Lena Novak"}),
         "paymentTerms": supplier["paymentTerms"],
         "shipTo": req["shipTo"],
+        "billTo": gen._JUNCTION_BILL_TO,
         "lines": lines,
         "subtotal": req["subtotal"],
         "tax": req["estimatedTax"],
-        "total": req["total"],
-        "amount": req["total"],
+        "shippingAmount": round(shipping, 2),
+        "total": round(req["total"] + shipping, 2),
+        "amount": round(req["total"] + shipping, 2),
         "issuedAt": _iso(now),
         "acknowledgedAt": None,
         "expectedDeliveryDate": req["neededByDate"],

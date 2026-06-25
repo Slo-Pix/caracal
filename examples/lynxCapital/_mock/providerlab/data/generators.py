@@ -6992,6 +6992,18 @@ _SABRE_TAXID_RULES = {
         "pattern": r"^\d{9}(RT\d{4})?$",
         "source": "Canada Revenue Agency",
     },
+    "AU": {
+        "taxType": "ABN",
+        "format": "99 999 999 999",
+        "pattern": r"^\d{11}$",
+        "source": "Australian Business Register",
+    },
+    "MX": {
+        "taxType": "RFC",
+        "format": "XXX999999XXX",
+        "pattern": r"^[A-Z&Ñ]{3,4}\d{6}[A-Z0-9]{3}$",
+        "source": "SAT",
+    },
 }
 
 # US FDAP withholding constants and the 1042-S income-code map

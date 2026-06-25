@@ -1716,12 +1716,17 @@ def test_relay_catalog_and_resources():
         "get_execution",
         "signal_execution",
         "retry_execution",
+        "pause_execution",
+        "resume_execution",
         "cancel_execution",
         "get_execution_audit",
     } <= names
     by_name = {t["name"]: t for t in tools}
     assert by_name["cancel_execution"]["annotations"]["destructiveHint"] is True
     assert by_name["list_workflows"]["annotations"]["readOnlyHint"] is True
+
+    init = _mcp_call(c, "initialize", headers).json()["result"]
+    assert "workflow" in init["instructions"].lower()
 
     workflows = call("list_workflows")
     assert workflows["total"] == 6
