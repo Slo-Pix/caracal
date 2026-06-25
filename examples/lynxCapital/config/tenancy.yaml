@@ -217,11 +217,11 @@ providers:
     config:
       bearer_token: "${LYNX_PARTNER_VELA_NOTIFY_TOKEN}"
       auth_header: "X-Vela-Token"
-      auth_scheme: "Token"
+      auth_scheme: ""
     scopes:
       vela:send: ["send_message", "send_batch"]
-      vela:read: ["get_message", "list_messages", "get_message_events", "get_delivery_stats", "list_templates", "get_template", "render_template", "list_suppressions", "list_webhooks", "get_webhook"]
-      vela:manage: ["create_template", "create_suppression", "delete_suppression", "create_webhook"]
+      vela:read: ["get_message", "list_messages", "get_message_events", "get_delivery_stats", "list_templates", "get_template", "render_template", "list_message_streams", "get_message_stream", "list_suppressions", "list_webhooks", "get_webhook"]
+      vela:manage: ["create_template", "update_template", "create_suppression", "delete_suppression", "create_webhook", "update_webhook", "delete_webhook"]
   - id: "core-billing"
     name: "Core Billing"
     kind: "none"

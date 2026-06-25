@@ -675,7 +675,7 @@ def test_bearer_custom_header_scheme():
     token = seed("vela-notify")["bearerToken"]
     body = {"channel": "email", "to": "ops@lynx.example", "template": "remittance"}
     accepted = c.post(
-        "/api/send_message", json=body, headers={"X-Vela-Token": f"Token {token}"}
+        "/api/send_message", json=body, headers={"X-Vela-Token": token}
     )
     assert accepted.status_code in (200, 404)  # auth passes; template may be unseeded
     assert (
@@ -2614,9 +2614,9 @@ def test_bearer_pair_distinct_cases():
         "/api/post_entry", json={"lines": [{"debit": 10}, {"credit": 10}]}, headers=h
     )
     assert good.json()["data"]["status"] == "posted"
-    # Vela Notify: custom-scheme bearer, channel validation.
+    # Vela Notify: custom-header token (Postmark-style raw token), channel validation.
     mail = client("vela-notify")
-    mh = {"X-Vela-Token": f"Token {seed('vela-notify')['bearerToken']}"}
+    mh = {"X-Vela-Token": seed("vela-notify")["bearerToken"]}
     bad_ch = mail.post(
         "/api/send_message",
         json={"channel": "fax", "to": "x", "template": "t"},

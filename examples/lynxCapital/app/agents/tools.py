@@ -881,6 +881,34 @@ def track_message_delivery(run_id: str, agent_id: str, message_id: str) -> dict[
                 {"messageId": message_id})
 
 
+def get_notification_delivery_stats(run_id: str, agent_id: str,
+                                    channel: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    if channel:
+        payload["channel"] = channel
+    return _run(run_id, agent_id, "get_notification_delivery_stats", "vela-notify",
+                "get_delivery_stats", payload)
+
+
+def list_notification_templates(run_id: str, agent_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "list_notification_templates", "vela-notify",
+                "list_templates", {})
+
+
+def list_suppressed_recipients(run_id: str, agent_id: str,
+                               channel: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    if channel:
+        payload["channel"] = channel
+    return _run(run_id, agent_id, "list_suppressed_recipients", "vela-notify",
+                "list_suppressions", payload)
+
+
+def list_notification_streams(run_id: str, agent_id: str) -> dict[str, object]:
+    return _run(run_id, agent_id, "list_notification_streams", "vela-notify",
+                "list_message_streams", {})
+
+
 def apply_customer_payment(run_id: str, agent_id: str, invoice_id: str, amount: float) -> dict[str, object]:
     return _run(run_id, agent_id, "apply_customer_payment", "core-billing", "apply_payment",
                 {"invoiceId": invoice_id, "amount": amount})
