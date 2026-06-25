@@ -19,33 +19,57 @@ function databaseName(url: string): string {
   return decodeURIComponent(new URL(url).pathname.replace(/^\//, ''))
 }
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Tolerate Postgres still coming up: the migration job and a fresh local stack can both start
+// before the database accepts connections. Bounded retries mirror the SQL migrator so both
+// provisioning paths behave identically. A non-positive retry budget means "try once".
+const CONNECT_RETRIES = Math.max(0, Number(process.env.MIGRATION_CONNECT_RETRIES ?? 30))
+const CONNECT_SLEEP_MS = Math.max(0, Number(process.env.MIGRATION_CONNECT_SLEEP_SECONDS ?? 1)) * 1000
+
 // Better Auth runs the table migrations, but the database itself must exist first. Create it
-// idempotently through a maintenance connection so a fresh local stack — or a post-purge run —
-// comes up without manual provisioning. This is gated to local development: production runs N
-// replicas and provisions the schema once through the dedicated migration job, so no replica
-// performs DDL on boot.
+// idempotently through a maintenance connection so a fresh local stack, a post-purge run, or the
+// dedicated migration job comes up without manual provisioning. The connection phase is retried
+// so a not-yet-ready Postgres does not fail the run; a failure to create the database (already
+// present, or insufficient privilege) is non-fatal because the schema step that follows surfaces
+// any real problem loudly.
 async function ensureDatabaseExists(url: string, ssl: PostgresSsl): Promise<void> {
   const name = databaseName(url)
   if (!name) return
   const maintenance = new URL(url)
   maintenance.pathname = '/postgres'
-  const client = new pg.Client({ connectionString: maintenance.toString(), ssl: sslOption(ssl) })
-  try {
-    await client.connect()
-    const existing = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [name])
-    if (existing.rowCount === 0) {
-      await client.query(`CREATE DATABASE "${name.replace(/"/g, '""')}"`)
+  for (let attempt = 0; ; attempt++) {
+    const client = new pg.Client({ connectionString: maintenance.toString(), ssl: sslOption(ssl) })
+    let connected = false
+    try {
+      await client.connect()
+      connected = true
+      const existing = await client.query('SELECT 1 FROM pg_database WHERE datname = $1', [name])
+      if (existing.rowCount === 0) {
+        await client.query(`CREATE DATABASE "${name.replace(/"/g, '""')}"`)
+      }
+      return
+    } catch (err) {
+      if (!connected && attempt < CONNECT_RETRIES) {
+        await sleep(CONNECT_SLEEP_MS)
+        continue
+      }
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn(`caracal-auth: could not ensure database "${name}" exists: ${message}`)
+      return
+    } finally {
+      await client.end().catch(() => {})
     }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    console.warn(`caracal-auth: could not ensure database "${name}" exists: ${message}`)
-  } finally {
-    await client.end().catch(() => {})
   }
 }
 
+// Provision the auth database for the configured backend. The dedicated migration entrypoint
+// calls this unconditionally; local development invokes it on boot so a single node self-hosts
+// without manual setup. Production serving replicas leave it gated off and rely on the job.
+export const ensureAuthDatabase = (): Promise<void> => ensureDatabaseExists(cfg.databaseUrl, cfg.ssl)
+
 if (cfg.autoProvisionDatabase) {
-  await ensureDatabaseExists(cfg.databaseUrl, cfg.ssl)
+  await ensureAuthDatabase()
 }
 
 const pool = new pg.Pool({ connectionString: cfg.databaseUrl, ssl: sslOption(cfg.ssl) })

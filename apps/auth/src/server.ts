@@ -120,6 +120,15 @@ async function route(req: IncomingMessage, res: ServerResponse, id: string): Pro
   }
 
   if (url === '/account') {
+    // Account deletion is state-changing and cookie-authenticated, so it carries the same
+    // cross-site write risk as the console proxy: verify the browser Origin independently of
+    // cookie SameSite before mutating.
+    if (isCrossSiteWrite(req, cfg.webOrigins)) {
+      res.statusCode = 403
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'cross_site_request_blocked' }))
+      return
+    }
     await handleAccount(req, res)
     return
   }

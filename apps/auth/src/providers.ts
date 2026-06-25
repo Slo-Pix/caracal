@@ -3,6 +3,8 @@
 //
 // Resolves which authentication providers are configured for this installation.
 
+import { resolveFileSecrets } from "@caracalai/core";
+
 import type { AuthConfig } from "./config.ts";
 
 export interface SocialProviderCredentials {
@@ -15,6 +17,15 @@ export interface EnabledProviders {
   google: boolean;
   github: boolean;
 }
+
+// Provider client secrets follow the `_FILE` secret convention like every other credential, so
+// they can be delivered as mounted secret files rather than inline environment values.
+resolveFileSecrets([
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+]);
 
 export function googleCredentials(): SocialProviderCredentials | null {
   const clientId = process.env.GOOGLE_CLIENT_ID;
