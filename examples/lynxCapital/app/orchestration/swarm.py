@@ -1463,6 +1463,15 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
             _finish(w, {"status": status})
 
     @tool
+    def get_payment_dispute(dispute_id: str) -> str:
+        """Pull one chargeback dispute, its evidence window, and network reason code."""
+        w = _worker("receivables", f"dispute:{dispute_id}")
+        try:
+            return json.dumps(tool_fns.get_payment_dispute(run_id, w.id, dispute_id))
+        finally:
+            _finish(w, {"dispute_id": dispute_id})
+
+    @tool
     def respond_to_payment_dispute(dispute_id: str, product_description: str = "",
                                    customer_communication: str = "") -> str:
         """Contest a chargeback by submitting evidence before the dispute response deadline."""

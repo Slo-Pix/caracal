@@ -459,6 +459,34 @@ def submit_payout(run_id: str, agent_id: str, vendor_id: str, amount: float, cur
                  "reference": reference or vendor_id})
 
 
+def submit_payout_batch(run_id: str, agent_id: str, payouts: list[dict[str, object]], reference: str = "") -> dict[str, object]:
+    """Disburse many cross-border vendor payouts in one funded batch on the mass-payout
+    rail: KYC-verify each recipient, then submit a single batch the platform funds and
+    settles together. Each payout entry is {"vendorId", "amount", "currency"}."""
+    items: list[dict[str, object]] = []
+    for entry in payouts or []:
+        vendor_id = str(entry.get("vendorId") or entry.get("vendor_id") or "")
+        currency = str(entry.get("currency") or "USD")
+        rec = _run(run_id, agent_id, "submit_payout_batch", "quetzal-payouts", "create_recipient",
+                   {"name": vendor_id, "currency": currency, "method": "bank", "type": "business"})
+        data = rec.get("data") if isinstance(rec, dict) else None
+        recipient_id = data.get("id") if isinstance(data, dict) else None
+        if not recipient_id:
+            continue
+        _run(run_id, agent_id, "submit_payout_batch", "quetzal-payouts", "verify_recipient",
+             {"recipientId": recipient_id})
+        items.append({"recipientId": recipient_id, "amount": entry.get("amount"),
+                      "currency": "USD", "reference": vendor_id, "purpose": "supplier invoice"})
+    return _run(run_id, agent_id, "submit_payout_batch", "quetzal-payouts", "create_batch",
+                {"items": items, "sourceCurrency": "USD", "reference": reference})
+
+
+def get_payout_batch_status(run_id: str, agent_id: str, batch_id: str) -> dict[str, object]:
+    """Track a mass-payout batch to its funded, completed, or partially-completed disposition."""
+    return _run(run_id, agent_id, "get_payout_batch_status", "quetzal-payouts", "get_batch",
+                {"batchId": batch_id})
+
+
 def create_outbound_payment(run_id: str, agent_id: str, vendor_id: str, amount: float, currency: str, rail: str, reference: str) -> dict[str, object]:
     """Open-banking rail: draw from a currency-matched enabled account and pay the creditor."""
     accounts = _run(run_id, agent_id, "create_outbound_payment", "halcyon-bank", "list_accounts",
@@ -1059,6 +1087,8 @@ TOOLS: dict[str, Callable] = {
     "get_fx_settlement_status": get_fx_settlement_status,
     "submit_payment": submit_payment,
     "submit_payout": submit_payout,
+    "submit_payout_batch": submit_payout_batch,
+    "get_payout_batch_status": get_payout_batch_status,
     "create_outbound_payment": create_outbound_payment,
     "get_contract_terms": get_contract_terms,
     "get_payment_status": get_payment_status,

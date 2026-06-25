@@ -132,7 +132,7 @@ providers:
     scopes:
       aegis:verify: ["verify_business"]
       aegis:screen: ["screen_party", "screen_batch", "rescreen_entity", "get_screening", "list_screenings", "get_entity", "get_watchlist_hit", "list_watchlists", "get_audit_trail"]
-      aegis:case: ["get_case", "list_cases", "assign_case", "add_case_note", "escalate_case", "resolve_case", "create_monitor", "get_monitor", "list_monitors"]
+      aegis:case: ["get_case", "list_cases", "assign_case", "add_case_note", "escalate_case", "resolve_case", "reopen_case", "whitelist_match", "create_monitor", "run_monitor", "get_monitor", "list_monitors"]
   - id: "verafin-monitor"
     name: "Verafin Monitor"
     kind: "caracal_mandate"
@@ -171,8 +171,9 @@ providers:
     config:
       bearer_token: "${LYNX_PARTNER_ATLAS_VENDOR_TOKEN}"
     scopes:
-      atlas:read: ["search_vendors", "list_vendors", "get_vendor_profile", "list_vendor_contacts", "get_onboarding_status", "get_compliance_status", "list_vendor_documents", "list_contracts", "get_contract_terms"]
-      atlas:onboard: ["register_vendor", "advance_onboarding", "verify_vendor_banking", "submit_vendor_document", "set_vendor_status"]
+      atlas:read: ["search_vendors", "list_vendors", "get_vendor_profile", "list_vendor_contacts", "get_onboarding_status", "get_compliance_status", "list_vendor_documents", "get_vendor_document", "list_contracts", "get_contract_terms", "list_categories", "list_vendor_events"]
+      atlas:write: ["update_vendor_profile", "add_vendor_contact"]
+      atlas:onboard: ["register_vendor", "advance_onboarding", "verify_vendor_banking", "run_compliance_screening", "submit_vendor_document", "review_vendor_document", "set_vendor_status"]
   - id: "keystone-treasury"
     name: "Keystone Treasury"
     kind: "api_key"
@@ -251,8 +252,8 @@ providers:
       header_name: "X-Api-Key"
       api_key: "${LYNX_PARTNER_PULSE_MARKET_API_KEY}"
     scopes:
-      pulse:read: ["list_instruments", "get_instrument", "get_snapshot", "get_quotes", "get_bars", "get_market_status", "list_reference_rates", "get_reference_rate", "list_subscriptions", "get_subscription", "stream_rates"]
-      pulse:subscribe: ["create_subscription", "cancel_subscription"]
+      pulse:read: ["list_instruments", "get_instrument", "get_snapshot", "get_quotes", "convert", "get_bars", "list_movers", "get_market_status", "get_usage", "list_reference_rates", "get_reference_rate", "list_subscriptions", "get_subscription", "stream_rates"]
+      pulse:subscribe: ["create_subscription", "update_subscription", "cancel_subscription"]
   - id: "junction-procure"
     name: "Junction Procurement"
     kind: "bearer_token"
@@ -287,7 +288,7 @@ resources:
     name: "Intake · Atlas Vendor Network"
     application: "intake"
     provider: "atlas-vendor"
-    scopes: ["atlas:read", "atlas:onboard"]
+    scopes: ["atlas:read", "atlas:write", "atlas:onboard"]
   - id: "intake-cordoba"
     identifier: "resource://intake-cordoba"
     name: "Intake · Cordoba FX quotes"
