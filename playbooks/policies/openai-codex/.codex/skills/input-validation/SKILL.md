@@ -11,5 +11,6 @@ description: Use to validate Caracal policy input fields, schemas, sample inputs
 3. Verify resource identifier, scopes, principal, application, context, session, grant, and delegation fields.
 4. Mark undocumented or missing fields as unknown.
 5. Ask for clarification instead of inventing fields.
+6. If the requirement depends on unsupported fields, say so plainly and recommend a workaround or issue report.
 
 Only documented or supplied fields may appear in policy data.
