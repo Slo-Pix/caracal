@@ -367,6 +367,20 @@ def _seed_history(state: base.State) -> None:
             break
         _advance(state, showcase)
 
+    # Guarantee one execution held in a paused state for the active surface.
+    held = _new_execution(
+        state, _WORKFLOW_INDEX["statement_reconciliation"],
+        input_payload={"statement": "2026-05", "lines": 412},
+        trigger=_system_trigger("treasury-ops@lynx.example", "schedule"),
+        idempotency_key=None, priority="high", created_offset=-3600,
+    )
+    held["_outcome"] = "success"
+    held["_faultStep"] = None
+    _advance(state, held)
+    if held["status"] in _PAUSABLE:
+        _apply_pause(state, held, "treasury-ops@lynx.example",
+                     "Held pending bank file re-export.")
+
 
 def _run_to_completion(state: base.State, ex: dict, *, auto_signal: bool, rng) -> None:
     guard = 0
@@ -888,13 +902,20 @@ def get_execution_logs(ctx: Ctx) -> dict:
     description="Return the output and artifacts of a finished execution, or its current "
                 "disposition if it has not completed.",
     input_schema=_EXEC_REF,
+    output_schema={"type": "object", "properties": {
+        "executionId": {"type": "string"},
+        "status": {"type": "string", "enum": list(_TERMINAL + _ACTIVE)},
+        "output": {"type": ["object", "null"]}, "error": {"type": ["object", "null"]},
+        "attempts": {"type": "integer"}, "metrics": {"type": "object"}},
+        "required": ["executionId", "status"]},
     annotations={"readOnlyHint": True, "idempotentHint": True})
 def get_execution_result(ctx: Ctx) -> dict:
     ctx.require_scope(EXECUTIONS_READ)
     ex = _get_execution(ctx)
     return {"executionId": ex["executionId"], "workflowId": ex["workflowId"],
             "status": ex["status"], "output": ex["output"], "error": ex["error"],
-            "finishedAt": ex["finishedAt"], "metrics": ex["metrics"]}
+            "finishedAt": ex["finishedAt"], "attempts": ex["attempt"],
+            "attemptHistory": ex["attemptHistory"], "metrics": ex["metrics"]}
 
 
 @base.op(
@@ -936,6 +957,37 @@ def retry_execution(ctx: Ctx) -> dict:
 
 
 @base.op(
+    ID, "pause_execution",
+    title="Pause execution",
+    description="Pause an active execution so it stops advancing while it is held. "
+                "Resume it later with resume_execution. Terminal executions cannot be paused.",
+    input_schema={"type": "object", "properties": {
+        "executionId": {"type": "string"}, "reason": {"type": "string"}},
+        "required": ["executionId"]},
+    output_schema=_EXEC_OUTPUT,
+    annotations={"readOnlyHint": False, "idempotentHint": False})
+def pause_execution(ctx: Ctx) -> dict:
+    ctx.require_scope(EXECUTIONS_WRITE)
+    ex = _get_execution(ctx)
+    _apply_pause(ctx.state, ex, str(ctx.principal.get("principal") or "operator"), ctx.get("reason"))
+    return _public(ex)
+
+
+@base.op(
+    ID, "resume_execution",
+    title="Resume execution",
+    description="Resume a paused execution, returning it to the state it held before "
+                "it was paused so it continues from where it stopped.",
+    input_schema=_EXEC_REF, output_schema=_EXEC_OUTPUT,
+    annotations={"readOnlyHint": False, "idempotentHint": False})
+def resume_execution(ctx: Ctx) -> dict:
+    ctx.require_scope(EXECUTIONS_WRITE)
+    ex = _get_execution(ctx)
+    _apply_resume(ctx.state, ex, str(ctx.principal.get("principal") or "operator"))
+    return _public(ex)
+
+
+@base.op(
     ID, "cancel_execution",
     title="Cancel execution",
     description="Cancel an active execution. Terminal executions cannot be cancelled.",
@@ -959,6 +1011,7 @@ def cancel_execution(ctx: Ctx) -> dict:
             s["status"] = "skipped"
     _audit(ctx.state, ex, "execution_cancelled", str(ctx.principal.get("principal") or "operator"),
            {"reason": ctx.get("reason")}, at=at)
+    _record_attempt(ex, "cancelled", ex["currentStep"], at)
     return _public(ex)
 
 
@@ -993,9 +1046,14 @@ def list_queues(ctx: Ctx) -> dict:
 @base.op(
     ID, "get_queue",
     title="Get queue status",
-    description="Return depth, in-flight executions, and concurrency for one queue.",
+    description="Return depth, in-flight executions, and concurrency utilization for one queue.",
     input_schema={"type": "object", "properties": {
         "queue": {"type": "string"}}, "required": ["queue"]},
+    output_schema={"type": "object", "properties": {
+        "queue": {"type": "string"}, "concurrencyLimit": {"type": "integer"},
+        "running": {"type": "integer"}, "depth": {"type": "integer"},
+        "utilization": {"type": ["number", "null"]}},
+        "required": ["queue", "concurrencyLimit"]},
     annotations={"readOnlyHint": True, "idempotentHint": True})
 def get_queue(ctx: Ctx) -> dict:
     ctx.require("queue")
@@ -1007,12 +1065,19 @@ def get_queue(ctx: Ctx) -> dict:
 
 def _queue_state(state: base.State, queue: str) -> dict:
     runs = [e for e in state.table("executions").values() if e["queue"] == queue]
+    queued = [e for e in runs if e["status"] == "queued"]
+    running = sum(1 for e in runs if e["status"] in ("running", "retrying"))
+    limit = _QUEUES[queue]
     return {
         "queue": queue,
-        "concurrencyLimit": _QUEUES[queue],
-        "running": sum(1 for e in runs if e["status"] in ("running", "retrying")),
+        "concurrencyLimit": limit,
+        "running": running,
         "waiting": sum(1 for e in runs if e["status"] == "waiting_signal"),
-        "queued": sum(1 for e in runs if e["status"] == "queued"),
+        "paused": sum(1 for e in runs if e["status"] == "paused"),
+        "queued": len(queued),
+        "depth": len(queued),
+        "oldestQueuedAt": min((e["scheduledAt"] for e in queued), default=None),
+        "utilization": round(running / limit, 3) if limit else None,
         "workflows": [w["id"] for w in _WORKFLOWS if w["queue"] == queue],
     }
 
@@ -1028,7 +1093,7 @@ def _res_catalog(ctx: Ctx) -> dict:
 
 
 @base.resource(ID, uri="relay://executions/active", name="Active executions",
-               description="Executions that are queued, running, or waiting on a signal.")
+               description="Executions that are queued, running, paused, or waiting on a signal.")
 def _res_active(ctx: Ctx) -> dict:
     active = [_execution_summary(e) for e in ctx.state.table("executions").values()
               if e["status"] in _ACTIVE]

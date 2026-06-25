@@ -51,7 +51,10 @@ def _auth_error_response(exc: auth.AuthError, provider: catalog.Provider) -> JSO
     if provider.category in ("bearer_token", "oauth2_client_credentials",
                              "oauth2_authorization_code", "caracal_mandate"):
         headers["WWW-Authenticate"] = f'{provider.auth_scheme} error="{exc.code}"'
-    return JSONResponse(status_code=exc.status, content={"error": exc.code, "message": exc.message}, headers=headers)
+    body = {"error": exc.code, "message": exc.message}
+    if getattr(exc, "details", None):
+        body.update(exc.details)
+    return JSONResponse(status_code=exc.status, content=body, headers=headers)
 
 
 def build_app(provider: catalog.Provider) -> FastAPI:

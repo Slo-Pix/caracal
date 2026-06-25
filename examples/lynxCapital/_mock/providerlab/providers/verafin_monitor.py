@@ -768,11 +768,11 @@ def _note_count(record: dict) -> int:
     return sum(1 for e in record.get("auditTrail", []) if e.get("type") == "note_added")
 
 
-def _alert_tags(alert: dict) -> list[str]:
+def _alert_tags(alert: dict, high_risk: set[str]) -> list[str]:
     tags = ["aml", alert.get("typology", "unspecified")]
     if alert.get("riskBand") in ("high", "critical"):
         tags.append("priority_review")
-    if alert.get("country") and alert["country"] in _HIGH_RISK_TAG_CACHE:
+    if alert.get("country") in high_risk:
         tags.append("high_risk_geo")
     if alert.get("ctrReportable"):
         tags.append("ctr_reportable")
@@ -781,19 +781,14 @@ def _alert_tags(alert: dict) -> list[str]:
     return sorted(set(tags))
 
 
-# Populated lazily on first alert view so tag derivation stays cheap.
-_HIGH_RISK_TAG_CACHE: set[str] = set()
-
-
 def _view_alert(state: base.State, alert: dict) -> dict:
     """Return an alert with read-time aging and SLA posture a monitoring queue shows."""
-    _HIGH_RISK_TAG_CACHE.update(_meta(state)["highRisk"])
     pub = _public(alert)
     resolved = alert.get("status") in ("resolved", "escalated")
     due = alert.get("slaDueAt")
     pub["ageHours"] = _age_hours(alert.get("detectedAt"))
     pub["slaBreached"] = bool(due and not resolved and _ts() > due)
-    pub["tags"] = _alert_tags(alert)
+    pub["tags"] = _alert_tags(alert, _meta(state)["highRisk"])
     return pub
 
 

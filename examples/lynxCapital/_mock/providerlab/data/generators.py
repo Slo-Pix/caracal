@@ -3546,6 +3546,10 @@ def _keystone_hedge(seed: str, idx: int) -> dict:
         2 if settled else rng.choices((0, 1), weights=(1, 3))[0]
     ]
     mtm = round(notional * rng.uniform(-0.03, 0.03), 2)
+    counterparty = rng.choice(_KEYSTONE_COUNTERPARTIES)
+    designation = rng.choices(_KEYSTONE_HEDGE_DESIGNATIONS, weights=(5, 2, 1))[0]
+    # NDFs settle net in the reporting currency; deliverable products exchange both legs.
+    deliverable = instrument != "ndf"
     return {
         "hedgeId": f"hdg_{rng.getrandbits(48):012x}",
         "dealRef": f"FX{trade_date:%Y%m%d}-{1000 + idx}",
@@ -3562,12 +3566,23 @@ def _keystone_hedge(seed: str, idx: int) -> dict:
         "valueDate": value_date.date().isoformat(),
         "settlementDate": settlement.date().isoformat(),
         "tenorDays": tenor_days,
-        "counterparty": rng.choice(_KEYSTONE_COUNTERPARTIES),
+        "counterparty": counterparty,
+        "counterpartyRating": _KEYSTONE_CPTY_RATING.get(counterparty, "A"),
+        "isdaMasterAgreementRef": f"ISDA-{_slug(counterparty)[:6].upper()}-2024",
+        "csaId": f"csa_{_slug(counterparty)[:6]}",
+        "settlementType": "deliverable" if deliverable else "non_deliverable",
+        "fixingSource": None if deliverable else "WMR_LONDON_1600",
         "hedgeType": rng.choice(("cashflow", "balance_sheet")),
+        "accountingDesignation": designation,
+        "hedgeAccounting": designation != "fair_value_hedge",
+        "effectivenessRatio": round(rng.uniform(0.86, 0.99), 4),
+        "effectivenessMethod": "dollar_offset",
         "portfolio": rng.choice(("FX-CORE", "FX-INTERCO")),
         "status": status,
         "markToMarket": mtm,
         "markToMarketCurrency": "USD",
+        "markToMarketAsOf": _fx_iso(_KEYSTONE_EPOCH - timedelta(hours=rng.randint(1, 10))),
+        "realizedPnl": mtm if status == "settled" else 0.0,
     }
 
 

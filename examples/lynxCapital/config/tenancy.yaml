@@ -240,7 +240,7 @@ providers:
     config: {}
     scopes:
       relay:read: ["list_workflows", "get_workflow", "get_execution", "list_executions", "get_execution_logs", "get_execution_result", "list_queues", "get_queue", "get_execution_audit"]
-      relay:execute: ["start_execution", "signal_execution", "retry_execution", "cancel_execution"]
+      relay:execute: ["start_execution", "signal_execution", "retry_execution", "pause_execution", "resume_execution", "cancel_execution"]
   - id: "pulse-market"
     name: "Pulse Market Data"
     kind: "api_key"
