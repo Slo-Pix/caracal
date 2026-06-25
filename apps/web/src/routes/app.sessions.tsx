@@ -13,6 +13,7 @@ import {
   DetailGroup,
   ResourceWorkspace,
 } from "@/components/console/ResourceWorkspace";
+import { FeedToolbar } from "@/components/console/FeedToolbar";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, Field, Select, Tooltip, type Column } from "@/components/ui";
 import { cx } from "@/lib/cx";
@@ -177,7 +178,7 @@ function SessionsPage({ zoneId, initialSubject }: { zoneId: string; initialSubje
       loading={feed.isLoading}
       columns={columns}
       rowKey={(s) => s.id}
-      headerExtra={
+      toolbarExtra={
         <SessionFilterBar
           status={status}
           subject={subject}
@@ -236,42 +237,34 @@ function SessionFilterBar({
   onSubject: (v: string) => void;
   onLoadMore: () => void;
 }) {
+  const activeFilters = (status !== "all" ? 1 : 0) + (subject.trim() ? 1 : 0);
   return (
-    <div className="flex flex-col gap-3 border border-border bg-muted/20 p-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Select label="Status" value={status} onChange={(e) => onStatus(e.target.value)}>
-          <option value="all">All statuses</option>
-          <option value="active">Active</option>
-          <option value="revoked">Revoked</option>
-          <option value="expired">Expired</option>
-        </Select>
-        <Field
-          label="Subject"
-          placeholder="user@example.com"
-          value={subject}
-          onChange={(e) => onSubject(e.target.value)}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">
-          {loaded} session{loaded === 1 ? "" : "s"} loaded{hasMore ? " · more available" : ""}
-        </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onLoadMore}
-          disabled={!hasMore}
-          loading={fetchingMore}
-        >
-          {hasMore ? "Load more" : "All loaded"}
-        </Button>
-      </div>
-      <p className="text-[11px] text-muted-foreground">
+    <FeedToolbar
+      activeFilters={activeFilters}
+      loaded={loaded}
+      noun="session"
+      hasMore={hasMore}
+      fetchingMore={fetchingMore}
+      onLoadMore={onLoadMore}
+    >
+      <Select label="Status" value={status} onChange={(e) => onStatus(e.target.value)}>
+        <option value="all">All statuses</option>
+        <option value="active">Active</option>
+        <option value="revoked">Revoked</option>
+        <option value="expired">Expired</option>
+      </Select>
+      <Field
+        label="Subject"
+        placeholder="user@example.com"
+        value={subject}
+        onChange={(e) => onSubject(e.target.value)}
+      />
+      <p className="text-[11px] text-muted-foreground sm:col-span-2">
         Status filters by the stored value. A session stored as{" "}
         <span className="font-mono">active</span> whose expiry has passed shows as{" "}
         <span className="font-medium">expired</span> here because the runtime already rejects it.
       </p>
-    </div>
+    </FeedToolbar>
   );
 }
 

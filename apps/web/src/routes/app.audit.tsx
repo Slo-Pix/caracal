@@ -5,8 +5,9 @@ Caracal, a product of Garudex Labs
 This file defines the Audit route.
 */
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
+import { FeedToolbar } from "@/components/console/FeedToolbar";
 import {
   DetailField,
   DetailGroup,
@@ -15,7 +16,6 @@ import {
 } from "@/components/console/ResourceWorkspace";
 import { ZoneScopedPage } from "@/components/console/ZoneScope";
 import { Badge, Button, Field, Select, Skeleton, type Column } from "@/components/ui";
-import { cx } from "@/lib/cx";
 import { ConsoleApiError } from "@/platform/api/client";
 import { useAdminAuditFeed, useAuditFeed, useDecisionTrace } from "@/platform/api/hooks";
 import type {
@@ -94,96 +94,20 @@ function AuditToolbar({
   onLoadMore: () => void;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointer(e: PointerEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointer, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointer, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   return (
-    <>
-      <ModeTabs mode={mode} onMode={onMode} />
-
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-haspopup="dialog"
-          className={cx(
-            "inline-flex h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
-            open || activeFilters > 0
-              ? "border-foreground/20 bg-accent text-foreground"
-              : "border-border text-muted-foreground hover:bg-surface hover:text-foreground",
-          )}
-        >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M3 5h18l-7 8v5l-4 2v-7z" />
-          </svg>
-          Filters
-          {activeFilters > 0 ? (
-            <span className="grid h-4 min-w-4 place-items-center rounded-full bg-foreground px-1 text-[10px] font-semibold text-background">
-              {activeFilters}
-            </span>
-          ) : null}
-        </button>
-        {open ? (
-          <div className="animate-pop-in absolute left-0 top-full z-[60] mt-1.5 w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-border bg-popover p-3 shadow-xl">
-            <div className="grid gap-2.5 sm:grid-cols-2">{children}</div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="ml-auto flex items-center gap-2">
-        <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex">
-          <span
-            className={cx(
-              "h-1.5 w-1.5 rounded-full",
-              live ? "bg-emerald-500" : "bg-muted-foreground/40",
-            )}
-          />
-          {loaded} {noun}
-          {loaded === 1 ? "" : "s"}
-        </span>
-        <button
-          onClick={onToggleLive}
-          className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {live ? "Pause" : "Resume"}
-        </button>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={onLoadMore}
-          disabled={!hasMore}
-          loading={fetchingMore}
-        >
-          {hasMore ? "Load more" : "All loaded"}
-        </Button>
-      </div>
-    </>
+    <FeedToolbar
+      leading={<ModeTabs mode={mode} onMode={onMode} />}
+      activeFilters={activeFilters}
+      loaded={loaded}
+      noun={noun}
+      hasMore={hasMore}
+      fetchingMore={fetchingMore}
+      live={live}
+      onToggleLive={onToggleLive}
+      onLoadMore={onLoadMore}
+    >
+      {children}
+    </FeedToolbar>
   );
 }
 

@@ -207,7 +207,6 @@ function ControlKeysTab({
           <div className="flex flex-col gap-4">
             {headerExtra}
             <EndpointStatusBar />
-            <IssuanceNotice />
           </div>
         }
         rows={keys}
@@ -306,30 +305,6 @@ function ControlKeysTab({
 
       <TokenResultModal result={tokenResult} onClose={() => setTokenResult(null)} />
     </>
-  );
-}
-
-function IssuanceNotice() {
-  return (
-    <div className="flex items-start gap-3 border border-border bg-muted/30 px-4 py-3">
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        className="mt-0.5 shrink-0 text-muted-foreground"
-      >
-        <rect x="5" y="11" width="14" height="9" rx="2" />
-        <path d="M8 11V8a4 4 0 0 1 8 0v3" />
-      </svg>
-      <div className="min-w-0 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">The client secret is shown only once.</span>{" "}
-        It is generated in your browser, never stored, and cannot be retrieved later, so copy it
-        before closing the dialog.
-      </div>
-    </div>
   );
 }
 
