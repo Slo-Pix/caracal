@@ -5,6 +5,7 @@ Caracal, a product of Garudex Labs
 This file is the typed HTTP client the web app uses to reach the Caracal control plane through the session-guarded console backend.
 */
 import { config } from "@/platform/config";
+import { CONTROL_AUDIENCE, CONTROL_SCOPES } from "./controlCatalog";
 
 import type {
   Agent,
@@ -22,7 +23,9 @@ import type {
   ControlKey,
   ControlKeyCreateInput,
   ControlKeyCreateResult,
-  ControlPermission,
+  ControlEndpointStatus,
+  ControlTokenInput,
+  ControlTokenResult,
   CoordinatorList,
   DecisionTrace,
   DelegationEdge,
@@ -201,94 +204,14 @@ export const CONTROL_INVOKE_TRAIT = "control:invoke";
 export const CONTROL_SCOPE_PREFIX = "control:scope:";
 export const CONTROL_MAX_TTL_PREFIX = "control:max-ttl:";
 export const CONTROL_EXPIRES_PREFIX = "control:expires:";
-export const CONTROL_AUDIENCE = "caracal-control";
-export const CONTROL_MIN_TTL_SECONDS = 60;
-export const CONTROL_MAX_TTL_SECONDS = 900;
 
-// Authoritative catalog of Control API permissions, mirroring the remote surface the
-// engine exposes (control:<noun>:<verb>). Used to compose least-privilege key scopes
-// and to size the control resource that STS validates tokens against.
-export const CONTROL_PERMISSIONS: ControlPermission[] = [
-  {
-    command: "agent",
-    verb: "read",
-    action: "read",
-    scope: "control:agent:read",
-    summary: "List and inspect agent sessions.",
-  },
-  {
-    command: "agent",
-    verb: "write",
-    action: "write",
-    scope: "control:agent:write",
-    summary: "Suspend and resume sessions.",
-  },
-  {
-    command: "agent",
-    verb: "delete",
-    action: "delete",
-    scope: "control:agent:delete",
-    summary: "Terminate agent sessions.",
-  },
-  {
-    command: "app",
-    verb: "read",
-    action: "read",
-    scope: "control:app:read",
-    summary: "List and inspect applications.",
-  },
-  {
-    command: "app",
-    verb: "write",
-    action: "write",
-    scope: "control:app:write",
-    summary: "Create and update applications.",
-  },
-  {
-    command: "app",
-    verb: "delete",
-    action: "delete",
-    scope: "control:app:delete",
-    summary: "Delete applications.",
-  },
-  {
-    command: "resource",
-    verb: "read",
-    action: "read",
-    scope: "control:resource:read",
-    summary: "List and inspect resources.",
-  },
-  {
-    command: "resource",
-    verb: "write",
-    action: "write",
-    scope: "control:resource:write",
-    summary: "Create and update resources.",
-  },
-  {
-    command: "resource",
-    verb: "delete",
-    action: "delete",
-    scope: "control:resource:delete",
-    summary: "Delete resources.",
-  },
-  {
-    command: "delegation",
-    verb: "read",
-    action: "read",
-    scope: "control:delegation:read",
-    summary: "Inspect delegation edges.",
-  },
-  {
-    command: "delegation",
-    verb: "delete",
-    action: "delete",
-    scope: "control:delegation:delete",
-    summary: "Revoke delegation edges.",
-  },
-];
-
-const CONTROL_SCOPES = CONTROL_PERMISSIONS.map((permission) => permission.scope).sort();
+export {
+  CONTROL_MIN_TTL_SECONDS,
+  CONTROL_MAX_TTL_SECONDS,
+  CONTROL_PERMISSIONS,
+  CONTROL_NOUN_DESCRIPTIONS,
+} from "./controlCatalog";
+export { CONTROL_AUDIENCE, CONTROL_SCOPES };
 
 function controlKeyFromApplication(app: Application): ControlKey {
   const traits = app.traits ?? [];
@@ -728,11 +651,21 @@ export const consoleApi = {
         `/v1/zones/${encodeURIComponent(zoneId)}/applications/${encodeURIComponent(id)}`,
         { method: "DELETE" },
       ),
+    status: () => request<ControlEndpointStatus>("/control/status"),
+    enable: () => request<ControlEndpointStatus>("/control/enable", { method: "POST", body: "{}" }),
+    disable: () =>
+      request<ControlEndpointStatus>("/control/disable", { method: "POST", body: "{}" }),
+    issueToken: (zoneId: string, input: ControlTokenInput) =>
+      request<ControlTokenResult>("/control/token", {
+        method: "POST",
+        body: JSON.stringify({ zoneId, ...input }),
+      }),
   },
 };
 
-// Ensures the zone-bound control resource exists with the full permission surface so STS
-// can validate control tokens. Mirrors the engine's ensureControlResource for the browser.
+// Ensures the zone-bound control resource carries at least the full permission surface so
+// STS can validate every control token. Scopes are unioned, never replaced, so a resource
+// already widened by the Console (or a superset deployment) is never silently shrunk.
 async function ensureControlResource(zoneId: string): Promise<void> {
   const resources = (
     await fetchAllPages<Resource>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`)
@@ -749,14 +682,15 @@ async function ensureControlResource(zoneId: string): Promise<void> {
     });
     return;
   }
+  const desired = [...new Set([...current.scopes, ...CONTROL_SCOPES])].sort();
   const currentScopes = [...current.scopes].sort();
   const matches =
-    currentScopes.length === CONTROL_SCOPES.length &&
-    CONTROL_SCOPES.every((scope, index) => scope === currentScopes[index]);
+    currentScopes.length === desired.length &&
+    desired.every((scope, index) => scope === currentScopes[index]);
   if (!matches) {
     await request<Resource>(
       `/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(current.id)}`,
-      { method: "PATCH", body: JSON.stringify({ scopes: CONTROL_SCOPES }) },
+      { method: "PATCH", body: JSON.stringify({ scopes: desired }) },
     );
   }
 }

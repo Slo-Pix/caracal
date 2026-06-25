@@ -18,6 +18,7 @@ import type {
   AgentQuery,
   AuditQuery,
   ControlKeyCreateInput,
+  ControlTokenInput,
   DiagnosticsOptions,
   DiagnosticsReport,
   DiagnosticStatus,
@@ -685,6 +686,38 @@ export function useRevokeControlKey(zoneId: string | null) {
       qc.invalidateQueries({ queryKey: controlKeysKey(zoneId) });
       qc.invalidateQueries({ queryKey: keys.applications(zoneId) });
     },
+  });
+}
+
+const controlStatusKey = ["console", "control-status"] as const;
+
+export function useControlStatus() {
+  return useQuery({
+    queryKey: controlStatusKey,
+    queryFn: () => consoleApi.control.status(),
+  });
+}
+
+export function useEnableControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => consoleApi.control.enable(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: controlStatusKey }),
+  });
+}
+
+export function useDisableControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => consoleApi.control.disable(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: controlStatusKey }),
+  });
+}
+
+export function useIssueControlToken(zoneId: string | null) {
+  return useMutation({
+    mutationFn: (input: ControlTokenInput) =>
+      consoleApi.control.issueToken(zoneId as string, input),
   });
 }
 

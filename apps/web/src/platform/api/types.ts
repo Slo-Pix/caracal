@@ -487,6 +487,38 @@ export interface ControlKeyCreateResult {
   expiresAt?: string;
 }
 
+export interface ControlEndpointStatus {
+  manageable: boolean;
+  reason?: string;
+  state?: "enabled" | "disabled";
+  service?: "ok" | "down" | "gated";
+  enabled?: boolean;
+  endpoint?: string;
+  invokeUrl?: string;
+  healthUrl?: string;
+  readyUrl?: string;
+  marker?: string;
+  detail?: string;
+  lifecycle?: string;
+  optimization?: string;
+}
+
+export interface ControlTokenInput {
+  keyId: string;
+  clientSecret: string;
+  scopes: string[];
+  ttlSeconds: number;
+}
+
+export interface ControlTokenResult {
+  clientId: string;
+  accessToken: string;
+  tokenType: string;
+  resource: string;
+  scopes: string[];
+  invokePath: string;
+}
+
 /* ------------------------------- Pagination -------------------------------- */
 
 export interface Paged<T> {
