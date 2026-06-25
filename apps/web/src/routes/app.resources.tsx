@@ -219,8 +219,6 @@ function ResourcesPage({ zoneId }: { zoneId: string }) {
           description: query.isError
             ? errorMessage(query.error)
             : "Register a protected upstream so the Gateway can authorize requests to it.",
-          actionLabel: query.isError ? undefined : "New resource",
-          onAction: query.isError ? undefined : () => setCreateOpen(true),
         }}
         detail={{
           title: (r) => r.name,

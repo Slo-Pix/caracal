@@ -4,7 +4,7 @@ Caracal, a product of Garudex Labs
 
 This file provides the shared presentational primitives for the Console UI.
 */
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
@@ -15,6 +15,12 @@ import type {
 
 import { cx } from "@/lib/cx";
 import { InfoHint } from "./InfoHint";
+
+// The dithering backdrop pulls in a WebGL shader library, so it is code-split and only
+// fetched when an empty state actually renders, keeping the shared primitives chunk lean.
+const DitherBackdrop = lazy(() =>
+  import("./neon-dither").then((m) => ({ default: m.DitherBackdrop })),
+);
 
 export function Spinner({ className }: { className?: string }) {
   return (
@@ -368,18 +374,34 @@ export function EmptyState({
   description,
   action,
   icon,
+  decorated = true,
+  bordered = true,
 }: {
   title: string;
   description: string;
   action?: ReactNode;
   icon?: ReactNode;
+  decorated?: boolean;
+  bordered?: boolean;
 }) {
   return (
-    <div className="flex animate-fade-in flex-col items-center justify-center border border-dashed border-border bg-card/40 px-6 py-16 text-center">
-      {icon ? <div className="mb-4 text-muted-foreground">{icon}</div> : null}
-      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
-      {action ? <div className="mt-5">{action}</div> : null}
+    <div
+      className={cx(
+        "relative flex h-full min-h-full flex-1 animate-fade-in flex-col items-center justify-center overflow-hidden px-6 py-16 text-center",
+        bordered && "border border-dashed border-border bg-card/40",
+      )}
+    >
+      {decorated ? (
+        <Suspense fallback={null}>
+          <DitherBackdrop />
+        </Suspense>
+      ) : null}
+      <div className="relative flex flex-col items-center">
+        {icon ? <div className="mb-4 text-muted-foreground">{icon}</div> : null}
+        <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
+        {action ? <div className="mt-5">{action}</div> : null}
+      </div>
     </div>
   );
 }
