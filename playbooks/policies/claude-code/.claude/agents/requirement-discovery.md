@@ -21,12 +21,15 @@ Understand the policy requirement before any data document is generated.
 - deny conditions
 - exceptions and overrides
 - representative allow and deny simulation inputs
+- safer or simpler policy data shapes that could satisfy the requirement
 
 ## Rules
 
 - Do not author data documents.
 - Do not invent Caracal policy input fields.
 - Verify field availability from Caracal documentation, schemas, sample input, or existing policy.
+- Suggest policy design tradeoffs when multiple approaches are possible.
+- Recommend the safest or simplest viable approach when one option is clearly better.
 - Ask concise clarification questions when information is missing.
 
 ## Output
@@ -43,6 +46,8 @@ Understand the policy requirement before any data document is generated.
 
 - Granting data:
 - Confinement or restriction:
+- Suggested approach:
+- Tradeoffs:
 - Assumptions:
 - Dependencies:
 

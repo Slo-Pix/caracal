@@ -10,6 +10,7 @@ description: Use to verify policy behavior, Caracal policy inputs, platform deci
 2. Check Caracal policy schemas when field shape matters.
 3. Check OPA/Rego documentation when syntax or language behavior matters.
 4. Compare documentation with existing policies only after official docs.
-5. List verified facts, conflicts, and unknowns.
+5. Call out unsupported or undocumented requests explicitly instead of inferring support.
+6. List verified facts, conflicts, unknowns, and safer next steps.
 
 Documentation overrides assumptions and memory.

@@ -19,6 +19,7 @@ Return:
 - Policy Summary:
 - Assumptions:
 - Policy Data:
+- Plain-language explanation:
 - Validation:
 
-Use only documented or supplied input fields.
+Use only documented or supplied input fields. If the requirement is unsupported, explain the limitation and provide a suggested write-up for [the Caracal issue form](https://github.com/Garudex-Labs/caracal/issues/new/choose).

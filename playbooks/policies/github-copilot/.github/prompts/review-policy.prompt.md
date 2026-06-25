@@ -13,6 +13,9 @@ Review the policy for:
 - verified input fields
 - deterministic and side-effect-free data
 - confinement and restriction overlays that only narrow authority
+- a simpler grant, confinement, or restriction shape when one would be safer
 - simulation and activation readiness
+
+Explain the policy's effect in plain language alongside the review.
 
 Return only issues that affect correctness, safety, maintainability, or production readiness.

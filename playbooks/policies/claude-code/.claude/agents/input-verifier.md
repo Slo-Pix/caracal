@@ -28,6 +28,7 @@ Verify which policy input fields are available and safe to use.
 - Use Caracal documentation and schemas first.
 - Treat pasted sample input as user-provided evidence.
 - Flag fields that are undocumented, missing, or ambiguous.
+- Say plainly when the requested policy behavior depends on unsupported or unavailable fields.
 - Do not infer fields from business language alone.
 - Never repeat raw secrets or sensitive identifiers.
 
@@ -37,4 +38,5 @@ Verify which policy input fields are available and safe to use.
 - Missing fields:
 - Ambiguous fields:
 - Unsafe assumptions:
+- Unsupported requirements:
 - Recommended clarification:

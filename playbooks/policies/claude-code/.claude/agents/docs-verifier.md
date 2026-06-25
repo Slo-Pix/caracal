@@ -33,4 +33,5 @@ Check policy guidance against documentation before policy authoring or review.
 - Verified facts:
 - Conflicts:
 - Unknowns:
+- Unsupported requests:
 - Recommended next step:

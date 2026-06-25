@@ -13,6 +13,7 @@ description: "Use to review Caracal policy data documents for data document shap
 5. Check actor, subject, session, grant, and delegation conditions.
 6. Identify undocumented input fields.
 7. Identify nondeterministic or side-effecting logic.
-8. Recommend validation, simulation, policy-set activation, and audit checks.
+8. Identify cases where a simpler grant, confinement, or restriction shape would be safer.
+9. Recommend validation, simulation, policy-set activation, and audit checks.
 
 Only report issues that affect correctness, safety, maintainability, or production readiness.

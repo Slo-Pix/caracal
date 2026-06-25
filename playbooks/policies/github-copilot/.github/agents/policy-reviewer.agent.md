@@ -21,12 +21,15 @@ Review a Caracal policy without rewriting it unless a focused correction is need
 - deterministic and side-effect-free data
 - duplicated or unnecessary data documents
 - invented or undocumented input fields
+- policy shape that is more complex than necessary for the stated requirement
+- unsupported behavior implied by the data design
 
 ## Output
 
 - Contract compliance:
 - Authorization behavior:
 - Least-privilege review:
+- Simpler or safer alternative:
 - Input assumptions:
 - Determinism:
 - Simulation cases:

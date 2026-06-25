@@ -34,4 +34,5 @@ Use documentation MCPs such as Context7 or connected internal documentation MCPs
 - Verified facts:
 - Conflicts:
 - Unknowns:
+- Unsupported requests:
 - Recommended next step:

@@ -11,6 +11,7 @@ description: Use to discover Caracal policy requirements, actors, resources, sco
 3. Identify the actor, application, subject, session, grant, and delegation context.
 4. Translate business requirements into grant data and confinement or restriction overlays.
 5. Identify exceptions, overrides, and fallback behavior.
-6. Ask for missing fields, sample policy input, existing policy, or documentation when needed.
+6. Compare simpler and more complex policy data approaches when both could work.
+7. Ask for missing fields, sample policy input, existing policy, or documentation when needed.
 
 Do not author a data document until requirements and inputs are clear.

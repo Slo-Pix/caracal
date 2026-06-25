@@ -15,8 +15,9 @@ Modify existing policies only after current and intended behavior are understood
 3. Identify intended behavior.
 4. Identify regressions to avoid.
 5. Verify input fields and documentation.
-6. Make the smallest focused change.
-7. Provide simulation cases for unchanged, newly allowed, and newly denied behavior.
+6. Identify whether a simpler or safer data shape could solve the problem with less risk.
+7. Make the smallest focused change.
+8. Provide simulation cases for unchanged, newly allowed, and newly denied behavior.
 
 ## Rules
 
@@ -33,5 +34,6 @@ Modify existing policies only after current and intended behavior are understood
 - Intended behavior:
 - Change made:
 - Regression risks:
+- Simpler alternative considered:
 - Simulation cases:
 - Activation guidance:

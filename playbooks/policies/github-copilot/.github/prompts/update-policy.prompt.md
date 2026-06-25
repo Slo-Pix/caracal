@@ -17,5 +17,6 @@ Then make the smallest safe change and return:
 - Current behavior:
 - Intended behavior:
 - Change made:
+- Simpler alternative considered:
 - Simulation cases:
 - Activation guidance:

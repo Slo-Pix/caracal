@@ -11,6 +11,7 @@ Return:
 
 - Requirement Understanding:
 - Policy Interpretation:
+- Suggested approaches and tradeoffs:
 - Missing Information:
 - Questions for confirmation:
 

@@ -15,9 +15,10 @@ Never generate a data document immediately after a request. First understand the
 3. Understand the resource, provider, requested scopes, and grant context.
 4. Understand constraints, allow cases, deny cases, exceptions, and confinement.
 5. Verify the contract's data shapes from Caracal documentation, schemas, or existing data documents.
-6. Confirm the interpretation with the user when requirements are incomplete or ambiguous.
-7. Write or update the data document only when the mapping is clear.
-8. Recommend validation, simulation, policy-set versioning, activation, audit review, and rollback readiness.
+6. Suggest one or more policy data approaches when there are tradeoffs, and recommend the safer or simpler one.
+7. Confirm the interpretation with the user when requirements are incomplete or ambiguous.
+8. Write or update the data document only when the mapping is clear.
+9. Recommend validation, simulation, policy-set versioning, activation, audit review, and rollback readiness.
 
 ## Caracal policy facts
 
@@ -154,6 +155,53 @@ Before modifying an existing policy:
 - keep diffs small and focused
 - validate representative allow and deny cases
 
+## Policy design approaches
+
+When more than one data design could satisfy the requirement, present the options before authoring:
+
+- compare role grants, label `confinement`, and zone `restrict` for the requirement
+- state the tradeoffs of each: blast radius, least privilege, maintainability, and review clarity
+- recommend the simplest safe shape that meets the requirement
+- prefer the smallest clear data document over a broad or clever one
+
+## Explaining policies
+
+When asked to explain a policy, or when a mapping is not obvious:
+
+- describe in plain language which application, role, scopes, resource, and labels the data affects
+- state what the platform decision contract will allow and deny given the data
+- explain `confinement` and `restrict` as narrowing-only overlays
+- avoid Rego jargon; tie each statement back to the business requirement
+
+## Debugging policies
+
+When access is denied or behaves unexpectedly, work backward from evidence:
+
+1. Collect the representative allow and deny inputs, audit trace, validation output, and simulation results.
+2. Confirm the active policy-set version is the one under test.
+3. Check that `app_ids` binds the application key to the correct control-plane id.
+4. Check that `grants` give the intended role the requested scopes on the resource identifier.
+5. Check whether `confinement` or `restrict` is narrowing the authority away.
+6. Confirm every referenced `input` field is documented and present in the sample input.
+7. Report the single most likely cause and the smallest safe data change that resolves it.
+
+## Accuracy and unsupported capabilities
+
+- Never invent undocumented fields, unsupported policy behavior, or fake control-plane features.
+- If a requested capability cannot be expressed safely in policy data, say so plainly instead of approximating it.
+- Recommend a thinner or safer workaround when one exists.
+- When the gap is a product limitation, direct the user to `https://github.com/Garudex-Labs/caracal/issues/new/choose` and provide a suggested issue write-up.
+
+When a requested capability is unsupported or cannot be verified, use:
+
+### Unsupported Capability
+
+- Limitation:
+- Why it is unsupported or unverified:
+- Safer workaround:
+- Suggested issue write-up:
+- Issue link: `https://github.com/Garudex-Labs/caracal/issues/new/choose`
+
 ## Policy-set and activation guidance
 
 After policy authoring, guide users to:
@@ -172,6 +220,7 @@ After policy authoring, guide users to:
 - If a user pastes a secret, mask it before repeating it.
 - Use placeholders such as `<RESOURCE_IDENTIFIER>`, `<APPLICATION_ID>`, `<PRINCIPAL_ID>`, and `<SCOPE>`.
 - Policy examples must use synthetic identifiers only.
+- Keep suggested issue write-ups and debugging examples free of customer data.
 
 ## Output before writing policy
 
@@ -189,6 +238,8 @@ When requirements need confirmation, use:
 
 - Allow logic:
 - Deny logic:
+- Suggested approach:
+- Tradeoffs:
 - Assumptions:
 - Dependencies:
 

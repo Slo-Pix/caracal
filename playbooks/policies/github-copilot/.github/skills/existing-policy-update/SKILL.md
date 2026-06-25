@@ -10,7 +10,8 @@ description: "Use to update an existing Caracal policy data document while prese
 2. Identify the intended behavior change.
 3. Identify behavior that must not regress.
 4. Verify all input fields against documentation, schemas, sample input, or existing tests.
-5. Make the smallest focused change.
-6. Provide simulation cases for unchanged behavior, newly allowed behavior, and newly denied behavior.
+5. Consider whether a smaller or safer data-only change can achieve the same result.
+6. Make the smallest focused change.
+7. Provide simulation cases for unchanged behavior, newly allowed behavior, and newly denied behavior.
 
 Preserve the data document shape; the platform decision contract denies by default.

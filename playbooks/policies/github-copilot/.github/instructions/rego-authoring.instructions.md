@@ -12,5 +12,6 @@ description: "Use when authoring production-ready Caracal policy data documents 
 - Keep `confinement` and `restrict` deny-only so they never widen authority.
 - Keep data static, deterministic, and side-effect free.
 - Provide representative allow and deny simulation cases.
+- Explain the document's effect in simple language when the mapping is not obvious.
 
 Do not use network calls, wall-clock time, random values, runtime filesystem access, or invented fields.
