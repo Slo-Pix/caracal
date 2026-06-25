@@ -296,8 +296,9 @@ export const consoleApi = {
     ),
 
   zones: {
-    list: async () => (await fetchAllPages<Zone>("/v1/zones")).rows,
-    get: (id: string) => request<Zone>(`/v1/zones/${encodeURIComponent(id)}`),
+    list: async (signal?: AbortSignal) => (await fetchAllPages<Zone>("/v1/zones", signal)).rows,
+    get: (id: string, signal?: AbortSignal) =>
+      request<Zone>(`/v1/zones/${encodeURIComponent(id)}`, { signal }),
     dcrStatus: (id: string) =>
       request<ZoneDcrStatus>(`/v1/zones/${encodeURIComponent(id)}/dcr-status`),
     create: (input: ZoneInput) =>
@@ -312,8 +313,8 @@ export const consoleApi = {
   },
 
   applications: {
-    list: async (zoneId: string) =>
-      (await fetchAllPages<Application>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`))
+    list: async (zoneId: string, signal?: AbortSignal) =>
+      (await fetchAllPages<Application>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`, signal))
         .rows,
     create: (zoneId: string, input: ApplicationInput) =>
       request<Application>(`/v1/zones/${encodeURIComponent(zoneId)}/applications`, {
@@ -333,8 +334,8 @@ export const consoleApi = {
   },
 
   resources: {
-    list: async (zoneId: string) =>
-      (await fetchAllPages<Resource>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`)).rows,
+    list: async (zoneId: string, signal?: AbortSignal) =>
+      (await fetchAllPages<Resource>(`/v1/zones/${encodeURIComponent(zoneId)}/resources`, signal)).rows,
     get: (zoneId: string, id: string) =>
       request<Resource>(
         `/v1/zones/${encodeURIComponent(zoneId)}/resources/${encodeURIComponent(id)}`,
@@ -356,8 +357,8 @@ export const consoleApi = {
   },
 
   providers: {
-    list: async (zoneId: string) =>
-      (await fetchAllPages<Provider>(`/v1/zones/${encodeURIComponent(zoneId)}/providers`)).rows,
+    list: async (zoneId: string, signal?: AbortSignal) =>
+      (await fetchAllPages<Provider>(`/v1/zones/${encodeURIComponent(zoneId)}/providers`, signal)).rows,
     get: (zoneId: string, id: string) =>
       request<Provider>(
         `/v1/zones/${encodeURIComponent(zoneId)}/providers/${encodeURIComponent(id)}`,
@@ -379,8 +380,8 @@ export const consoleApi = {
   },
 
   policies: {
-    list: async (zoneId: string) =>
-      (await fetchAllPages<Policy>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`)).rows,
+    list: async (zoneId: string, signal?: AbortSignal) =>
+      (await fetchAllPages<Policy>(`/v1/zones/${encodeURIComponent(zoneId)}/policies`, signal)).rows,
     get: (zoneId: string, id: string) =>
       request<PolicyDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policies/${encodeURIComponent(id)}`,
@@ -408,8 +409,8 @@ export const consoleApi = {
   },
 
   policySets: {
-    list: async (zoneId: string) =>
-      (await fetchAllPages<PolicySet>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`)).rows,
+    list: async (zoneId: string, signal?: AbortSignal) =>
+      (await fetchAllPages<PolicySet>(`/v1/zones/${encodeURIComponent(zoneId)}/policy-sets`, signal)).rows,
     get: (zoneId: string, id: string) =>
       request<PolicySetDetail>(
         `/v1/zones/${encodeURIComponent(zoneId)}/policy-sets/${encodeURIComponent(id)}`,

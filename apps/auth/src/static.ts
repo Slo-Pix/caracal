@@ -34,18 +34,21 @@ function contentType(path: string): string {
   return CONTENT_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";
 }
 
-// Vite emits content-hashed files under /assets; those are safe to cache forever. Everything
-// else (notably index.html, the SPA shell) must revalidate so a deploy is picked up immediately.
-function cacheControl(urlPath: string): string {
-  return urlPath.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache";
-}
-
-function resolveWithinRoot(root: string, urlPath: string): string | undefined {
+// Maps a request path to an absolute path confined to the web root. Returns undefined when the
+// normalized path would escape the root (directory traversal), which is the security-critical
+// guard for static serving.
+export function resolveStaticPath(root: string, urlPath: string): string | undefined {
   const clean = normalize(decodeURIComponent(urlPath.split("?")[0])).replace(/^(\.\.[/\\])+/, "");
   const candidate = resolve(root, "." + (clean.startsWith("/") ? clean : "/" + clean));
   const rootResolved = resolve(root);
   if (candidate !== rootResolved && !candidate.startsWith(rootResolved + sep)) return undefined;
   return candidate;
+}
+
+// Asset cache policy: content-hashed files under /assets are immutable; everything else (notably
+// the SPA shell) must revalidate so a deploy is reflected immediately.
+export function cacheControlFor(urlPath: string): string {
+  return urlPath.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "no-cache";
 }
 
 async function fileSize(path: string): Promise<number | undefined> {
@@ -71,7 +74,7 @@ export async function serveStatic(
   acceptEncoding: string,
   secure: boolean,
 ): Promise<ServeOutcome> {
-  const direct = resolveWithinRoot(root, urlPath);
+  const direct = resolveStaticPath(root, urlPath);
   if (direct && extname(direct) && (await fileSize(direct)) !== undefined) {
     sendFile(res, direct, urlPath, acceptEncoding, secure);
     return { served: true };
@@ -92,7 +95,7 @@ function sendFile(
   const isHtml = extname(filePath).toLowerCase() === ".html";
   applySecurityHeaders(res, { html: isHtml, secure });
   res.setHeader("Content-Type", contentType(filePath));
-  res.setHeader("Cache-Control", cacheControl(urlPath));
+  res.setHeader("Cache-Control", cacheControlFor(urlPath));
 
   // Precompressed siblings (vite can emit .br/.gz) are served verbatim with the matching
   // Content-Encoding when the client advertises support, avoiding per-request compression.

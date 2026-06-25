@@ -39,6 +39,7 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      { find: /^@\/(.*)$/, replacement: src('./apps/web/src/$1') },
       { find: /^@caracalai\/engine\/runtime-config$/, replacement: src('./packages/engine/src/runtimeConfig.ts') },
       { find: /^@caracalai\/engine\/commands$/, replacement: src('./packages/engine/src/commands.ts') },
       { find: /^@caracalai\/engine\/crash$/, replacement: src('./packages/engine/src/crash.ts') },

@@ -101,7 +101,7 @@ export function useDiagnostics(options: DiagnosticsOptions = {}) {
 }
 
 export function useZones() {
-  return useQuery({ queryKey: keys.zones, queryFn: () => consoleApi.zones.list() });
+  return useQuery({ queryKey: keys.zones, queryFn: ({ signal }) => consoleApi.zones.list(signal) });
 }
 
 // Zone create/update/delete change the zone inventory the diagnostics report walks, so
@@ -160,7 +160,7 @@ export function useDeleteZone() {
 export function useApplications(zoneId: string | null) {
   return useQuery({
     queryKey: keys.applications(zoneId),
-    queryFn: () => consoleApi.applications.list(zoneId as string),
+    queryFn: ({ signal }) => consoleApi.applications.list(zoneId as string, signal),
     enabled: Boolean(zoneId),
   });
 }
@@ -205,7 +205,7 @@ export function useDeleteApplication(zoneId: string | null) {
 export function useResources(zoneId: string | null) {
   return useQuery({
     queryKey: keys.resources(zoneId),
-    queryFn: () => consoleApi.resources.list(zoneId as string),
+    queryFn: ({ signal }) => consoleApi.resources.list(zoneId as string, signal),
     enabled: Boolean(zoneId),
   });
 }
@@ -249,7 +249,7 @@ export function useDeleteResource(zoneId: string | null) {
 export function useProviders(zoneId: string | null) {
   return useQuery({
     queryKey: keys.providers(zoneId),
-    queryFn: () => consoleApi.providers.list(zoneId as string),
+    queryFn: ({ signal }) => consoleApi.providers.list(zoneId as string, signal),
     enabled: Boolean(zoneId),
   });
 }
@@ -305,7 +305,7 @@ export function useDeleteProvider(zoneId: string | null) {
 export function usePolicies(zoneId: string | null) {
   return useQuery({
     queryKey: keys.policies(zoneId),
-    queryFn: () => consoleApi.policies.list(zoneId as string),
+    queryFn: ({ signal }) => consoleApi.policies.list(zoneId as string, signal),
     enabled: Boolean(zoneId),
   });
 }
@@ -313,7 +313,7 @@ export function usePolicies(zoneId: string | null) {
 export function usePolicySets(zoneId: string | null) {
   return useQuery({
     queryKey: keys.policySets(zoneId),
-    queryFn: () => consoleApi.policySets.list(zoneId as string),
+    queryFn: ({ signal }) => consoleApi.policySets.list(zoneId as string, signal),
     enabled: Boolean(zoneId),
   });
 }
