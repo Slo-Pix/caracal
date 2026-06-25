@@ -244,6 +244,7 @@ function ApplicationsPage({ zoneId, zoneName }: { zoneId: string; zoneName: stri
           title: (app) => app.name,
           description: (app) => app.id,
           width: "max-w-xl",
+          icon: (app) => <IdentityAvatar seed={app.id || app.name} size="lg" />,
           render: (app) => (
             <ApplicationDetail
               app={app}

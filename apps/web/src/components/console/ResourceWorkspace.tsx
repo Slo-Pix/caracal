@@ -85,6 +85,8 @@ export function ResourceWorkspace<T>({
     description?: (row: T) => string;
     render: (row: T) => ReactNode;
     width?: string;
+    // Optional custom leading icon for the drawer header. Defaults to an initials monogram.
+    icon?: (row: T) => ReactNode;
   };
   headerExtra?: ReactNode;
   // Inline controls rendered in the toolbar (search) row itself, after the filter/sort
@@ -259,7 +261,11 @@ export function ResourceWorkspace<T>({
           onClose={() => setSelected(null)}
           title={selected ? detail.title(selected) : ""}
           description={selected && detail.description ? detail.description(selected) : undefined}
-          icon={selected ? <Monogram label={detail.title(selected)} /> : undefined}
+          icon={
+            selected
+              ? (detail.icon?.(selected) ?? <Monogram label={detail.title(selected)} />)
+              : undefined
+          }
           width={detail.width}
         >
           {selected ? detail.render(selected) : null}
