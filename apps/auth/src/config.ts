@@ -41,6 +41,7 @@ function resolveSsl(production: boolean): PostgresSsl {
   const value = (process.env.CARACAL_AUTH_DATABASE_SSL ?? "").toLowerCase();
   if (value === "require" || value === "true" || value === "verify") return "require";
   if (value === "no-verify" || value === "insecure") return "no-verify";
+  if (value === "disable" || value === "false" || value === "off") return "disable";
   // Managed Postgres is the norm in production; default to a verified TLS channel unless an
   // operator explicitly opts out. Local development keeps the plaintext default.
   return production ? "require" : "disable";
@@ -98,9 +99,13 @@ export function loadConfig(): AuthConfig {
       : production || baseURL.startsWith("https://");
   const webRoot = process.env.CARACAL_WEB_ROOT?.trim() || undefined;
   // Per-replica DDL (CREATE DATABASE + Better Auth migrations) races under horizontal scaling
-  // and needs an elevated role production deliberately withholds. Auto-provision only for local
-  // development; production runs migrations once through the dedicated migration job.
-  const autoProvisionDatabase = !production && process.env.CARACAL_AUTH_AUTO_MIGRATE !== "false";
+  // and needs an elevated role production deliberately withholds. Default it on for local
+  // development and off for production, where the dedicated migration job owns schema changes.
+  // An explicit CARACAL_AUTH_AUTO_MIGRATE wins either way, so a single-node self-host can opt in.
+  const autoProvisionDatabase =
+    process.env.CARACAL_AUTH_AUTO_MIGRATE !== undefined
+      ? /^(1|true|yes|on)$/i.test(process.env.CARACAL_AUTH_AUTO_MIGRATE)
+      : !production;
   return {
     port,
     host,

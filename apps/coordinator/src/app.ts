@@ -95,6 +95,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: CoordinatorDeps) 
       },
     },
     requestTimeout: cfg.requestTimeoutMs,
+    keepAliveTimeout: cfg.keepAliveTimeoutMs,
     trustProxy: cfg.trustProxy,
   })
   app.decorate('db', db)

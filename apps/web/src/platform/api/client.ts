@@ -85,20 +85,45 @@ export class ConsoleApiError extends Error {
   get unreachable(): boolean {
     return this.code === "control_plane_unreachable";
   }
+
+  get timedOut(): boolean {
+    return this.code === "timeout";
+  }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+// Browser-side ceiling on a single request. The BFF caps upstream calls at 30s; this fails a
+// little later so a wedged or rotating BFF surfaces as a clean timeout error instead of an
+// indefinite spinner. Composed with any caller signal (React Query cancellation), so navigating
+// away or unmounting also aborts the in-flight fetch and the upstream work behind it.
+const REQUEST_TIMEOUT_MS = 35_000;
+
+function requestSignal(caller?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  return caller ? AbortSignal.any([caller, timeout]) : timeout;
+}
+
+function abortError(caller: AbortSignal | undefined): ConsoleApiError {
+  // A caller-initiated cancellation (navigation/unmount) is not a failure to surface; only a
+  // timeout is a real, reportable error.
+  if (caller?.aborted) throw new DOMException("aborted", "AbortError");
+  return new ConsoleApiError(0, "timeout");
+}
+
+async function request<T>(path: string, init?: RequestInit & { signal?: AbortSignal }): Promise<T> {
+  const caller = init?.signal;
   let res: Response;
   try {
     res = await fetch(`${config.consoleBaseUrl}${path}`, {
       ...init,
+      signal: requestSignal(caller),
       credentials: "include",
       headers:
         init?.body !== undefined
           ? { "Content-Type": "application/json", ...init?.headers }
           : init?.headers,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw abortError(caller);
     throw new ConsoleApiError(0, "network_error");
   }
 
@@ -141,13 +166,18 @@ function parseNextCursor(linkHeader: string | null): string | null {
 
 // Issues a list request and returns both the parsed rows and the next cursor
 // advertised by the control plane through the (proxied) Link header.
-async function requestList<T>(path: string): Promise<{ rows: T[]; nextCursor: string | null }> {
+async function requestList<T>(
+  path: string,
+  signal?: AbortSignal,
+): Promise<{ rows: T[]; nextCursor: string | null }> {
   let res: Response;
   try {
     res = await fetch(`${config.consoleBaseUrl}${path}`, {
       credentials: "include",
+      signal: requestSignal(signal),
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw abortError(signal);
     throw new ConsoleApiError(0, "network_error");
   }
   const text = await res.text();
@@ -176,13 +206,18 @@ const ADMIN_PAGE_SIZE = 500;
 
 // Follows keyset pagination to assemble a complete admin list. Returns the rows plus
 // a flag indicating the safety cap was hit so the UI can prompt for server-side search.
-async function fetchAllPages<T>(basePath: string): Promise<{ rows: T[]; truncated: boolean }> {
+// A caller signal aborts the whole pagination loop, so navigating away mid-walk stops the
+// remaining requests instead of fanning out dozens of now-unwanted calls to the control plane.
+async function fetchAllPages<T>(
+  basePath: string,
+  signal?: AbortSignal,
+): Promise<{ rows: T[]; truncated: boolean }> {
   const sep = basePath.includes("?") ? "&" : "?";
   let cursor: string | null = null;
   const rows: T[] = [];
   for (let page = 0; page < MAX_AUTO_PAGES; page++) {
     const path: string = `${basePath}${sep}limit=${ADMIN_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-    const result: { rows: T[]; nextCursor: string | null } = await requestList<T>(path);
+    const result: { rows: T[]; nextCursor: string | null } = await requestList<T>(path, signal);
     rows.push(...result.rows);
     if (!result.nextCursor) return { rows, truncated: false };
     cursor = result.nextCursor;
