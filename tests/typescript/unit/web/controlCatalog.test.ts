@@ -7,11 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import { controlPermissions, controlScopes } from '@caracalai/engine'
 
-import {
-  CONTROL_NOUN_DESCRIPTIONS,
-  CONTROL_PERMISSIONS,
-  CONTROL_SCOPES,
-} from '../../../../apps/web/src/platform/api/controlCatalog.ts'
+import { CONTROL_NOUN_DESCRIPTIONS, CONTROL_PERMISSIONS, CONTROL_SCOPES } from '../../../../apps/web/src/platform/api/controlCatalog.ts'
 
 describe('web control catalog parity with engine', () => {
   it('exposes exactly the engine control scopes', () => {
@@ -33,12 +29,8 @@ describe('web control catalog parity with engine', () => {
   })
 
   it('matches the engine command/action pairing for every scope', () => {
-    const enginePairs = new Set(
-      controlPermissions().map((permission) => `${permission.command}:${permission.action}`),
-    )
-    const webPairs = new Set(
-      CONTROL_PERMISSIONS.map((permission) => `${permission.command}:${permission.action}`),
-    )
+    const enginePairs = new Set(controlPermissions().map((permission) => `${permission.command}:${permission.action}`))
+    const webPairs = new Set(CONTROL_PERMISSIONS.map((permission) => `${permission.command}:${permission.action}`))
     expect(webPairs).toEqual(enginePairs)
   })
 
