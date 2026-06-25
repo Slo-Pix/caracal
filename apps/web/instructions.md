@@ -3,7 +3,7 @@
 ## Scope
 
 - Covers the `@caracalai/web` React single-page application under `apps/web/`.
-- Serves the marketing surface today and is the foundation for the browser-based Console that replaces the terminal Console.
+- Serves the marketing surface and the browser-based web console, the primary management interface for Caracal.
 
 ## Architecture Design
 

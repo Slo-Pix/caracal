@@ -73,7 +73,7 @@ pnpm caracal run -- node agent.mjs
 
 #### Control API (optional)
 
-The Console is the primary management interface for Caracal. The Control API is an optional OAuth-protected endpoint for approved external automation and can be managed from the **Caracal Console → Runtime → Control** item.
+The web console is the primary management interface for Caracal. The Control API is an optional OAuth-protected endpoint for approved external automation and can be managed from the **web console → Runtime → Control** item.
 
 
 ## Tests

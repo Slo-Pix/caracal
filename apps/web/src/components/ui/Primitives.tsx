@@ -111,8 +111,8 @@ export function IconButton({
 const fieldBase =
   "w-full rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25 disabled:cursor-not-allowed disabled:opacity-50";
 
-// A field label with an optional info tooltip, so every form control can carry the same
-// inline help the console TUI surfaces on its fields.
+// A field label with an optional info tooltip, so every form control can carry consistent
+// inline help on its fields.
 export function FieldLabel({ label, info }: { label?: string; info?: string }) {
   if (!label) return null;
   return (

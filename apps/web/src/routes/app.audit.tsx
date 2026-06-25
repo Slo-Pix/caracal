@@ -203,9 +203,9 @@ function decisionTone(decision: string | null): "success" | "danger" | "warning"
   return "muted";
 }
 
-// Accepts the same inputs the Console TUI honors: the literal "now", a relative
-// window (e.g. 30s, 15m, 2h, 7d, 2w), a canonical ISO timestamp, or any other
-// date the platform can parse. Returns an ISO string the control plane understands,
+// Accepts a literal "now", a relative window (e.g. 30s, 15m, 2h, 7d, 2w), a canonical ISO
+// timestamp, or any other date the platform can parse. Returns an ISO string the control
+// plane understands,
 // or undefined when the field is blank or the value cannot be parsed.
 const TIME_UNIT_MS: Record<string, number> = {
   s: 1_000,
@@ -493,8 +493,8 @@ function AuditFilterBar({
   );
 }
 
-// Copies the raw backend payload to the clipboard, matching the Console TUI's
-// copy-page action so operators can paste full audit evidence into tickets.
+// Copies the raw backend payload to the clipboard so operators can paste full audit
+// evidence into tickets.
 function CopyJsonButton({ value, label = "Copy JSON" }: { value: unknown; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (

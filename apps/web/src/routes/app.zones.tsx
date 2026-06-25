@@ -635,8 +635,8 @@ function useZoneDependencies(zone: Zone | null): {
   return { deps, loading, error };
 }
 
-// The clickable zone detail panel, mirroring the entity detail the console TUI opens on
-// Enter: identity, configuration, and a live inventory of what the zone contains, with the
+// The clickable zone detail panel, opened on Enter: identity, configuration, and a live
+// inventory of what the zone contains, with the
 // same switch/edit/delete actions surfaced inline.
 function ZoneDetailDrawer({
   zone,

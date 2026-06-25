@@ -1,6 +1,6 @@
 # Caracal Web
 
-React single-page application for [Caracal](https://github.com/Garudex-Labs/caracal). It serves the marketing and enterprise surface today and is the foundation for the browser-based Console that replaces the terminal Console.
+React single-page application for [Caracal](https://github.com/Garudex-Labs/caracal). It serves the marketing and enterprise surface and the browser-based web console, the primary management interface for Caracal.
 
 ## Stack
 
