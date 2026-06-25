@@ -101,7 +101,7 @@ Step-up is expressed as a diagnostic such as `{"step_up_required": "mfa"}`. The 
 ## Authoring Rules
 
 - Author data documents only; mark each with `# caracal:data-document`. The platform decision contract owns every `result`.
-- Validate through the Console or Admin API before activation — a data document must define data and must not define `result`.
+- Validate through the web console or Admin API before activation — a data document must define data and must not define `result`.
 - Activate through a policy set version, not by editing active content in place.
 - Keep `grants`, `app_ids`, `confinement`, and `restrict` in separate documents so ownership and review stay clear.
 - Tighten authority through `confinement` and `restrict`; neither can widen what the contract already allows.

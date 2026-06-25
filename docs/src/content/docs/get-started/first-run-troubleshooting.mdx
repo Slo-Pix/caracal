@@ -53,12 +53,12 @@ $env:CARACAL_CONFIG = "C:\path\to\caracal.toml"
 If guided setup does not write files:
 
 1. Copy the generated TOML profile from the result view.
-2. Save it at the profile path shown by the Console.
-3. Copy the one-time app client secret into the secret-file path shown by the Console.
+2. Save it at the profile path shown by the web console.
+3. Copy the one-time app client secret into the secret-file path shown by the web console.
 4. Restrict the secret file so only the current user can read it.
 5. Rerun the first-success command from the result view.
 
-The app client secret is shown once for newly created apps. If you lose it, create a new secret from the Console and update the profile.
+The app client secret is shown once for newly created apps. If you lose it, create a new secret from the web console and update the profile.
 
 ## STS 403
 
@@ -70,7 +70,7 @@ An STS 403 means the workload authenticated but did not receive a mandate.
 | Resource ID | Use the resource ID from the guided setup result view. |
 | Scopes | Request only scopes covered by the starter policy. |
 | App secret | Regenerate the app secret if the configured secret file no longer matches the app. |
-| Audit request ID | Open Console **audit** or **explain** with the request ID to see the policy diagnostic. |
+| Audit request ID | Open web console **Audit** or **explain** with the request ID to see the policy diagnostic. |
 
 ## Gateway 403
 
@@ -91,16 +91,16 @@ A Gateway 403 means the Gateway rejected the request before forwarding it upstre
 | Connection refused | The upstream service is not listening, or the Gateway cannot reach that host and port. |
 | DNS failure | Use a hostname visible from the Gateway container, not only from the host shell. |
 | Demo upstream missing | Start `caracalDemoUpstream` on the `caracalData` Docker network or use your own reachable service. |
-| Wrong path | Use the first request path from the Console result view before trying custom paths. |
+| Wrong path | Use the first request path from the web console result view before trying custom paths. |
 
 ## Missing Audit Events
 
 | Check | Fix |
 | --- | --- |
-| Wrong request ID | Copy the request ID from the STS, Gateway, SDK, or Console output. |
+| Wrong request ID | Copy the request ID from the STS, Gateway, SDK, or web console output. |
 | Wrong zone | Select the zone used by guided setup. |
 | Request never reached STS or Gateway | Confirm the workload used the generated profile and the Gateway URL from that profile. |
-| Audit ingestion lag | Wait briefly and refresh the Console audit view. |
+| Audit ingestion lag | Wait briefly and refresh the web console audit view. |
 
 ## Next Step
 

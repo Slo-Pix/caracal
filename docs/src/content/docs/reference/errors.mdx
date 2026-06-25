@@ -15,7 +15,7 @@ Caracal packages and services use a shared machine-readable error shape.
 }
 ```
 
-`details` appears only when a service or package provides structured context. The same code can be emitted by different surfaces — an `access_denied` from STS is a policy decision, while an `access_denied` surfaced by an in-process verifier is a missing scope on an otherwise valid mandate. Use the `requestId` with Console **request trace** to confirm which surface produced the error before acting.
+`details` appears only when a service or package provides structured context. The same code can be emitted by different surfaces — an `access_denied` from STS is a policy decision, while an `access_denied` surfaced by an in-process verifier is a missing scope on an otherwise valid mandate. Use the `requestId` with web console **Request Traces** to confirm which surface produced the error before acting.
 
 ## Well-Known Codes
 
@@ -38,7 +38,7 @@ The **Likely source** column names the surface that most often emits the code, a
 | `operation_not_permitted` | The Gateway operation is not declared on an enforced resource, or its required scope is absent from the mandate. | STS native operation floor, on Gateway-authenticated mandate use. | Declare the operation on the resource (`operations`), or set `operation_enforcement` to `transport_uniform`; confirm the mandate carries the operation's scope. |
 | `agent_identity_required` | A verifier requires an agent identity. | In-process verifier or MCP transport. | Run the call from an agent session, not a bare subject session. |
 | `delegation_required` | A verifier requires delegated authority. | In-process verifier. | Confirm the call carries a delegation edge granting the required scopes. |
-| `chain_mismatch` | Delegation chain does not contain a required application/session. | Verifier delegation check. | Inspect the delegation edge in the Console; confirm the chain includes the required hop. |
+| `chain_mismatch` | Delegation chain does not contain a required application/session. | Verifier delegation check. | Inspect the delegation edge in the web console; confirm the chain includes the required hop. |
 | `hop_count_exceeded` | Delegation hop count exceeds the allowed maximum. | Coordinator or verifier. | Reduce delegation depth or raise the configured hop limit. |
 | `http_request_failed` | HTTP call failed before a valid response could be used. | SDK or Gateway upstream call. | Confirm endpoint URL, network reachability, and upstream allowlist. |
 | `config_missing` | Runtime or service configuration is missing. | SDK or service startup. | Confirm the runtime profile, secret file, and required environment variables. |

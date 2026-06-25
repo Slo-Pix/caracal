@@ -20,8 +20,8 @@ Use these web console sections:
 
 | Entry | Use it for |
 | --- | --- |
-| **audit** | Find recent authorization and action-result events. |
-| **request trace** | Explain one request ID. |
+| **Audit** | Find recent authorization and action-result events. |
+| **Request Traces** | Explain one request ID. |
 | **agent session** | Find the tracked agent session for the selected zone. |
 | **authority session** | Inspect underlying authority sessions and parent relationships. |
 
@@ -42,7 +42,7 @@ If you see authorization events without matching action-result events, check whe
 
 ## 3. Trace the Decision
 
-Pick an audit event with a request ID. Press the trace action on the selected event in **audit**, or open **Request Traces** and paste the request ID.
+Pick an audit event with a request ID. Press the trace action on the selected event in **Audit**, or open **Request Traces** and paste the request ID.
 
 The request trace should show:
 
@@ -57,7 +57,7 @@ Use the request trace as the source of truth for why a request got its result. I
 
 ## 4. Check Delegation Context
 
-If the request used delegated authority, open **delegation** and inspect the edge:
+If the request used delegated authority, open **Delegation** and inspect the edge:
 
 | Field | Why it matters |
 | --- | --- |
