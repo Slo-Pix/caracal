@@ -394,7 +394,7 @@ describe('resolveRuntimeConfigPath', () => {
     })
   })
 
-  it('does not treat a Console-only zone env var as runtime config', () => {
+  it('does not treat a web-console-only zone env var as runtime config', () => {
     process.env.CARACAL_ZONE_ID = 'zone1'
     process.env.CARACAL_ZONE_URL = 'https://sts.example.com'
 
@@ -491,7 +491,7 @@ describe('resolveServiceUrl', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 
-  it('treats unset NODE_ENV as development for local runtime and Console runs', () => {
+  it('treats unset NODE_ENV as development for local runtime and web console runs', () => {
     expect(resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)).toBe(DEFAULT_API_URL)
   })
 

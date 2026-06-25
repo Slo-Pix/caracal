@@ -229,22 +229,6 @@ jobs:
           CARACAL_DEV_SHA: ${{ needs.context.outputs.sha }}
         run: pnpm --dir apps/runtime build
 
-      - name: Stamp Console
-        env:
-          CARACAL_RELEASE_VERSION: ${{ needs.context.outputs.version }}
-          CARACAL_DEV_SHA: ${{ needs.context.outputs.sha }}
-        run: |
-          set -euo pipefail
-          node apps/console/scripts/stampRelease.mjs
-          jq --arg v "$CARACAL_RELEASE_VERSION" '.version = $v' apps/console/package.json > apps/console/package.json.tmp
-          mv apps/console/package.json.tmp apps/console/package.json
-
-      - name: Build Console
-        env:
-          CARACAL_RELEASE_VERSION: ${{ needs.context.outputs.version }}
-          CARACAL_DEV_SHA: ${{ needs.context.outputs.sha }}
-        run: pnpm --dir apps/console build
-
       - name: Package archives
         env:
           RELEASE_TAG: ${{ needs.context.outputs.releaseTag }}
@@ -252,7 +236,7 @@ jobs:
           set -euo pipefail
           mkdir -p release-dist
           source_date_epoch="$(git log -1 --format=%ct)"
-          targets='runtime:linux:amd64:x64 runtime:linux:arm64:arm64 runtime:darwin:amd64:x64 runtime:darwin:arm64:arm64 runtime:windows:amd64:x64 console:linux:amd64:x64 console:linux:arm64:arm64 console:darwin:amd64:x64 console:darwin:arm64:arm64 console:windows:amd64:x64'
+          targets='runtime:linux:amd64:x64 runtime:linux:arm64:arm64 runtime:darwin:amd64:x64 runtime:darwin:arm64:arm64 runtime:windows:amd64:x64'
           for entry in $targets; do
             IFS=: read -r kind os arch bunArch <<EOF
           ${entry}
@@ -261,7 +245,6 @@ jobs:
             [ "$os" = windows ] && ext='.exe'
             case "$kind" in
               runtime) srcDir=apps/runtime/dist; srcBase=caracal; binName=caracal ;;
-              console) srcDir=apps/console/dist; srcBase=caracal-console; binName=caracal-console ;;
             esac
             src="${srcDir}/${srcBase}-${os}-${bunArch}${ext}"
             [ -f "$src" ] || { echo "::error::missing source binary: ${src}"; exit 1; }
@@ -279,7 +262,6 @@ jobs:
             rm -rf "$stage"
           done
           cp "releases/${RELEASE_TAG}/manifest.json" release-dist/manifest.json
-          cp install-console.sh install-console.ps1 release-dist/
           ls -la release-dist/
 
       - name: Verify reproducibility
@@ -288,7 +270,7 @@ jobs:
         run: |
           set -euo pipefail
           source_date_epoch="$(git log -1 --format=%ct)"
-          for entry in runtime:apps/runtime/dist:caracal console:apps/console/dist:caracal-console; do
+          for entry in runtime:apps/runtime/dist:caracal; do
             IFS=: read -r kind srcDir binName <<EOF
           ${entry}
           EOF
@@ -311,17 +293,10 @@ jobs:
           work="$(mktemp -d)"
           tar -xzf "release-dist/caracal-runtime-linux-amd64-${RELEASE_TAG}.tar.gz" -C "$work"
           "${work}/caracal" --help
-          tar -xzf "release-dist/caracal-console-linux-amd64-${RELEASE_TAG}.tar.gz" -C "$work"
-          "${work}/caracal-console" --help
-          console_exit=0
-          "${work}/caracal-console" 2>/tmp/console-stderr || console_exit=$?
-          console_msg="$(cat /tmp/console-stderr)"
-          [ "$console_exit" = "1" ] || { echo "::error::Console exited with code ${console_exit} (expected 1)"; exit 1; }
-          echo "$console_msg" | grep -q "not a TTY" || { echo "::error::Console missing expected no-TTY message; got: ${console_msg}"; exit 1; }
 
       - name: Generate checksums
         working-directory: release-dist
-        run: sha256sum caracal-runtime-*.tar.gz caracal-runtime-*.zip caracal-console-*.tar.gz caracal-console-*.zip manifest.json install-console.sh install-console.ps1 > SHA256SUMS
+        run: sha256sum caracal-runtime-*.tar.gz caracal-runtime-*.zip manifest.json > SHA256SUMS
 
       - name: Verify assets
         env:
@@ -340,7 +315,6 @@ jobs:
         with:
           subject-path: |
             release-dist/caracal-runtime-*
-            release-dist/caracal-console-*
 
   serviceImages:
     name: Build service images
@@ -537,11 +511,8 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             dist/caracal-runtime-*
-            dist/caracal-console-*
             dist/manifest.json
             dist/SHA256SUMS
-            dist/install-console.sh
-            dist/install-console.ps1
 
   dryRunSummary:
     name: Dry-run summary
