@@ -5,7 +5,17 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { discoverAdminToken, discoverCoordinatorToken } from "@caracalai/core";
-import { runDoctorDiagnostics, type DoctorReport } from "@caracalai/engine";
+import {
+  applyControlLifecycleAction,
+  controlKeyRecord,
+  controlServiceStatus,
+  credentialRead,
+  runDoctorDiagnostics,
+  CONTROL_INVOKE_TRAIT,
+  DEFAULT_CONTROL_AUDIENCE,
+  type DoctorReport,
+} from "@caracalai/engine";
+import { resolveStsUrl } from "@caracalai/engine/runtime-config";
 
 import { auth } from "./auth.ts";
 
@@ -333,6 +343,184 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: stri
   }
 }
 
+function controlAudience(): string {
+  return process.env.CONTROL_AUDIENCE ?? DEFAULT_CONTROL_AUDIENCE;
+}
+
+function errorText(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// Reports the local Control endpoint gate state. The interactive-Console TTY guard is
+// replaced here by the session gate already enforced upstream, so manageability is decided
+// by whether this host holds the managed admin secret. A failure is reported as unmanageable
+// rather than an error so the UI can degrade gracefully on remote or unprivileged hosts.
+async function handleControlStatus(res: ServerResponse): Promise<void> {
+  try {
+    const status = await controlServiceStatus({ requireTty: false, accessEnv: process.env });
+    sendJson(res, 200, { manageable: true, ...status });
+  } catch (err) {
+    sendJson(res, 200, { manageable: false, reason: errorText(err) });
+  }
+}
+
+async function handleControlLifecycle(
+  res: ServerResponse,
+  action: "enable" | "disable",
+): Promise<void> {
+  try {
+    const result = await applyControlLifecycleAction({
+      action,
+      requireTty: false,
+      accessEnv: process.env,
+    });
+    invalidateDiagnostics();
+    sendJson(res, 200, { manageable: true, ...result });
+  } catch (err) {
+    sendJson(res, 409, { error: "control_lifecycle_failed", detail: errorText(err) });
+  }
+}
+
+interface ControlTokenRequest {
+  zoneId?: unknown;
+  keyId?: unknown;
+  clientSecret?: unknown;
+  scopes?: unknown;
+  ttlSeconds?: unknown;
+}
+
+// Exchanges a control key for a short-lived STS invocation token. Mirrors the Console token
+// flow exactly: the requested scopes must be a subset of the key's grant and the TTL must not
+// exceed the key maximum, both checked before the secret is exchanged at STS.
+async function handleControlToken(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const token = adminToken();
+  if (!token) {
+    sendJson(res, 503, { error: "control_plane_not_configured" });
+    return;
+  }
+  let body: ControlTokenRequest;
+  try {
+    const raw = (await readBody(req)).toString("utf8");
+    body = raw ? (JSON.parse(raw) as ControlTokenRequest) : {};
+  } catch {
+    sendJson(res, 400, { error: "invalid_request" });
+    return;
+  }
+  const zoneId = typeof body.zoneId === "string" ? body.zoneId : "";
+  const keyId = typeof body.keyId === "string" ? body.keyId : "";
+  const clientSecret = typeof body.clientSecret === "string" ? body.clientSecret : "";
+  const scopes = Array.isArray(body.scopes) ? body.scopes.filter((s): s is string => typeof s === "string") : [];
+  const ttlSeconds = typeof body.ttlSeconds === "number" ? body.ttlSeconds : Number.NaN;
+  if (!zoneId || !keyId) {
+    sendJson(res, 400, { error: "zone_and_key_required" });
+    return;
+  }
+  if (!clientSecret) {
+    sendJson(res, 400, { error: "client_secret_required" });
+    return;
+  }
+  if (scopes.length === 0) {
+    sendJson(res, 400, { error: "at_least_one_permission_required" });
+    return;
+  }
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
+    sendJson(res, 400, { error: "invalid_ttl" });
+    return;
+  }
+
+  let application: Parameters<typeof controlKeyRecord>[0];
+  try {
+    const upstream = await fetch(
+      `${apiUrl()}/v1/zones/${encodeURIComponent(zoneId)}/applications/${encodeURIComponent(keyId)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (upstream.status === 404) {
+      sendJson(res, 404, { error: "control_key_not_found" });
+      return;
+    }
+    if (!upstream.ok) {
+      sendJson(res, 502, { error: "upstream_unreachable" });
+      return;
+    }
+    application = (await upstream.json()) as Parameters<typeof controlKeyRecord>[0];
+  } catch {
+    sendJson(res, 502, { error: "upstream_unreachable" });
+    return;
+  }
+
+  const traits = application.traits ?? [];
+  if (!traits.includes(CONTROL_INVOKE_TRAIT)) {
+    sendJson(res, 400, { error: "not_a_control_key" });
+    return;
+  }
+  const record = controlKeyRecord(application);
+  const allowed = new Set(record.allowed_scopes);
+  for (const scope of scopes) {
+    if (!allowed.has(scope)) {
+      sendJson(res, 400, { error: "scope_not_granted", detail: scope });
+      return;
+    }
+  }
+  if (record.max_ttl_seconds !== undefined && ttlSeconds > record.max_ttl_seconds) {
+    sendJson(res, 400, { error: "ttl_exceeds_key_maximum", detail: String(record.max_ttl_seconds) });
+    return;
+  }
+
+  const resource = controlAudience();
+  let accessToken: string;
+  try {
+    accessToken = await credentialRead({
+      cfg: {
+        zone_url: resolveStsUrl(),
+        zone_id: zoneId,
+        application_id: keyId,
+        app_client_secret: clientSecret,
+      },
+      resource,
+      scopes,
+      ttlSeconds,
+    });
+  } catch (err) {
+    sendJson(res, 502, { error: "token_exchange_failed", detail: errorText(err) });
+    return;
+  }
+  sendJson(res, 200, {
+    clientId: keyId,
+    accessToken,
+    tokenType: "Bearer",
+    resource,
+    scopes,
+    invokePath: "/v1/control/invoke",
+  });
+}
+
+// Routes the local-only Control management surface (endpoint gate + token exchange) that the
+// Console exposes, so the web client reaches functional parity without a TTY.
+async function handleControl(
+  req: IncomingMessage,
+  res: ServerResponse,
+  path: string,
+): Promise<boolean> {
+  const method = (req.method ?? "GET").toUpperCase();
+  if (path === "/control/status" && method === "GET") {
+    await handleControlStatus(res);
+    return true;
+  }
+  if (path === "/control/enable" && method === "POST") {
+    await handleControlLifecycle(res, "enable");
+    return true;
+  }
+  if (path === "/control/disable" && method === "POST") {
+    await handleControlLifecycle(res, "disable");
+    return true;
+  }
+  if (path === "/control/token" && method === "POST") {
+    await handleControlToken(req, res);
+    return true;
+  }
+  return false;
+}
+
 // Proxies the agent and delegation runtime surfaces served by the Coordinator.
 async function handleCoordProxy(
   req: IncomingMessage,
@@ -370,6 +558,11 @@ export async function handleConsole(req: IncomingMessage, res: ServerResponse): 
   }
   if (path === "/diagnostics" || path.startsWith("/diagnostics?")) {
     await handleDiagnostics(res, path);
+    return true;
+  }
+  if (path.startsWith("/control/")) {
+    if (await handleControl(req, res, path)) return true;
+    sendJson(res, 404, { error: "not_found" });
     return true;
   }
   if (path.startsWith("/v1/")) {

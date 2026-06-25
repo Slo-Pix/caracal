@@ -5,7 +5,7 @@ Caracal, a product of Garudex Labs
 This file defines the Control API developer workspace: keys, scopes, authentication, and usage.
 */
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   DetailField,
@@ -28,16 +28,21 @@ import { cx } from "@/lib/cx";
 import {
   CONTROL_MAX_TTL_SECONDS,
   CONTROL_MIN_TTL_SECONDS,
+  CONTROL_NOUN_DESCRIPTIONS,
   CONTROL_PERMISSIONS,
   ConsoleApiError,
 } from "@/platform/api/client";
 import {
   useControlKeys,
+  useControlStatus,
   useCreateControlKey,
+  useDisableControl,
+  useEnableControl,
+  useIssueControlToken,
   useRevokeControlKey,
   useRotateControlKey,
 } from "@/platform/api/hooks";
-import type { ControlKey, ControlKeyCreateResult } from "@/platform/api/types";
+import type { ControlKey, ControlKeyCreateResult, ControlTokenResult } from "@/platform/api/types";
 
 export const Route = createFileRoute("/app/control")({
   component: ControlRoute,
@@ -145,6 +150,8 @@ function ControlKeysTab({
   const [secret, setSecret] = useState<{ id: string; name: string; secret: string } | null>(null);
   const [rotateTarget, setRotateTarget] = useState<ControlKey | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<ControlKey | null>(null);
+  const [issueTarget, setIssueTarget] = useState<ControlKey | null>(null);
+  const [tokenResult, setTokenResult] = useState<ControlTokenResult | null>(null);
 
   const columns: Column<ControlKey>[] = [
     {
@@ -199,6 +206,7 @@ function ControlKeysTab({
         headerExtra={
           <div className="flex flex-col gap-4">
             {headerExtra}
+            <EndpointStatusBar />
             <IssuanceNotice />
           </div>
         }
@@ -230,9 +238,9 @@ function ControlKeysTab({
           render: (k) => (
             <ControlKeyInspector
               keyRecord={k}
-              zoneId={zoneId}
               onRotate={() => setRotateTarget(k)}
               onRevoke={() => setRevokeTarget(k)}
+              onIssueToken={() => setIssueTarget(k)}
             />
           ),
         }}
@@ -285,6 +293,18 @@ function ControlKeysTab({
           }
         }}
       />
+
+      <IssueTokenModal
+        zoneId={zoneId}
+        keyRecord={issueTarget}
+        onClose={() => setIssueTarget(null)}
+        onIssued={(result) => {
+          setIssueTarget(null);
+          setTokenResult(result);
+        }}
+      />
+
+      <TokenResultModal result={tokenResult} onClose={() => setTokenResult(null)} />
     </>
   );
 }
@@ -307,8 +327,7 @@ function IssuanceNotice() {
       <div className="min-w-0 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">The client secret is shown only once.</span>{" "}
         It is generated in your browser, never stored, and cannot be retrieved later, so copy it
-        before closing the dialog. The same key is also issuable with{" "}
-        <Mono>caracal control key create</Mono>.
+        before closing the dialog.
       </div>
     </div>
   );
@@ -569,14 +588,14 @@ function ControlSecretModal({
 
 function ControlKeyInspector({
   keyRecord,
-  zoneId,
   onRotate,
   onRevoke,
+  onIssueToken,
 }: {
   keyRecord: ControlKey;
-  zoneId: string;
   onRotate: () => void;
   onRevoke: () => void;
+  onIssueToken: () => void;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -644,15 +663,344 @@ function ControlKeyInspector({
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           Exchange for an invocation token
         </h3>
-        <CodeBlock
-          code={`curl -s https://sts.caracal.run/token \\
-  -d grant_type=client_credentials \\
-  -d client_id=${keyRecord.id} \\
-  -d client_secret=$CARACAL_CONTROL_SECRET \\
-  -d 'scope=${keyRecord.scopes[0] ?? "control:agent:read"}' \\
-  -d zone=${zoneId}`}
-        />
+        <p className="mt-2 text-sm text-muted-foreground">
+          Paste the key&apos;s one-time secret to mint a short-lived, least-privilege STS token
+          scoped to this key. The token is generated on demand and never stored.
+        </p>
+        <div className="mt-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={onIssueToken}
+            disabled={keyRecord.scopes.length === 0}
+          >
+            Issue token
+          </Button>
+          {keyRecord.scopes.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              This key grants no scopes, so it can authenticate but invoke nothing.
+            </p>
+          ) : null}
+        </div>
       </section>
+    </div>
+  );
+}
+
+function IssueTokenModal({
+  zoneId,
+  keyRecord,
+  onClose,
+  onIssued,
+}: {
+  zoneId: string;
+  keyRecord: ControlKey | null;
+  onClose: () => void;
+  onIssued: (result: ControlTokenResult) => void;
+}) {
+  const issue = useIssueControlToken(zoneId);
+  const [clientSecret, setClientSecret] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [ttl, setTtl] = useState("300");
+  const [error, setError] = useState<string | null>(null);
+
+  const keyScopes = keyRecord?.scopes ?? [];
+  const keyId = keyRecord?.id ?? null;
+  // Reset the form whenever the targeted key changes (including close/reopen) so a stale
+  // secret or scope set never leaks across keys.
+  useEffect(() => {
+    setClientSecret("");
+    setSelected(new Set(keyScopes));
+    setTtl("300");
+    setError(null);
+    // keyScopes is derived from keyId; keying the effect on keyId is sufficient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyId]);
+
+  const ttlOptions = ["300", "600", "900"].filter(
+    (option) => !keyRecord?.maxTtlSeconds || Number.parseInt(option, 10) <= keyRecord.maxTtlSeconds,
+  );
+  const effectiveTtls =
+    ttlOptions.length > 0 ? ttlOptions : [String(keyRecord?.maxTtlSeconds ?? 300)];
+
+  function toggle(scope: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(scope)) next.delete(scope);
+      else next.add(scope);
+      return next;
+    });
+  }
+
+  async function submit() {
+    if (!keyRecord) return;
+    setError(null);
+    if (!clientSecret.trim()) return setError("Paste the key's client secret.");
+    if (selected.size === 0) return setError("Select at least one permission.");
+    const ttlSeconds = Number.parseInt(effectiveTtls.includes(ttl) ? ttl : effectiveTtls[0], 10);
+    try {
+      const result = await issue.mutateAsync({
+        keyId: keyRecord.id,
+        clientSecret: clientSecret.trim(),
+        scopes: [...selected],
+        ttlSeconds,
+      });
+      onIssued(result);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  return (
+    <Modal
+      open={keyRecord !== null}
+      onClose={onClose}
+      title="Issue invocation token"
+      description={keyRecord ? `Mint a token for "${keyRecord.name}".` : ""}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={submit} loading={issue.isPending}>
+            Issue token
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <Field
+          label="Client secret"
+          type="password"
+          placeholder="cs_…"
+          hint="The one-time secret shown when the key was created or rotated."
+          value={clientSecret}
+          onChange={(e) => setClientSecret(e.target.value)}
+          autoFocus
+        />
+        <div>
+          <span className="mb-2 block text-sm font-medium text-foreground">
+            Permissions ({selected.size})
+          </span>
+          <div className="flex flex-wrap gap-1.5">
+            {keyScopes.map((scope) => {
+              const on = selected.has(scope);
+              return (
+                <button
+                  key={scope}
+                  type="button"
+                  onClick={() => toggle(scope)}
+                  className={cx(
+                    "rounded border px-2 py-1 font-mono text-[11px] transition-colors",
+                    on
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border text-muted-foreground hover:border-foreground/40",
+                  )}
+                >
+                  {scope}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            A token can never exceed the scopes granted to its key.
+          </p>
+        </div>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-foreground">Token TTL (seconds)</span>
+          <select
+            value={effectiveTtls.includes(ttl) ? ttl : effectiveTtls[0]}
+            onChange={(e) => setTtl(e.target.value)}
+            className="border border-border bg-background px-3 py-2 text-sm text-foreground"
+          >
+            {effectiveTtls.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      </div>
+    </Modal>
+  );
+}
+
+function TokenResultModal({
+  result,
+  onClose,
+}: {
+  result: ControlTokenResult | null;
+  onClose: () => void;
+}) {
+  const toast = useToast();
+  return (
+    <Modal
+      open={result !== null}
+      onClose={onClose}
+      title="Invocation token"
+      description="Copy the token now. It is short-lived and never shown again."
+      footer={<Button onClick={onClose}>Done</Button>}
+    >
+      {result ? (
+        <div className="flex flex-col gap-4">
+          <DetailGroup title="Token">
+            <DetailField label="Resource">
+              <Mono>{result.resource}</Mono>
+            </DetailField>
+            <DetailField label="Type">{result.tokenType}</DetailField>
+            <DetailField label="Invoke path">
+              <Mono>{result.invokePath}</Mono>
+            </DetailField>
+          </DetailGroup>
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-foreground">Access token</span>
+            <div className="flex items-stretch gap-2">
+              <input
+                readOnly
+                value={result.accessToken}
+                className="min-w-0 flex-1 border border-border bg-muted/40 px-3 py-2 font-mono text-xs text-foreground"
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(result.accessToken);
+                  toast({ tone: "success", title: "Token copied" });
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+          </div>
+          <div>
+            <span className="mb-1.5 block text-sm font-medium text-foreground">
+              Scopes ({result.scopes.length})
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {result.scopes.map((scope) => (
+                <span
+                  key={scope}
+                  className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+                >
+                  {scope}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </Modal>
+  );
+}
+
+function EndpointStatusBar() {
+  const toast = useToast();
+  const statusQuery = useControlStatus();
+  const enable = useEnableControl();
+  const disable = useDisableControl();
+  const [confirmAction, setConfirmAction] = useState<"enable" | "disable" | null>(null);
+  const status = statusQuery.data;
+
+  if (statusQuery.isLoading) {
+    return (
+      <div className="border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+        Checking Control endpoint…
+      </div>
+    );
+  }
+  if (!status || !status.manageable) {
+    return (
+      <div className="border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+        Control endpoint management is unavailable on this host. Keys can still be created and used
+        against a running Control endpoint.
+      </div>
+    );
+  }
+
+  const enabled = status.enabled === true;
+  const runtimeTone =
+    status.service === "ok" ? "success" : status.service === "down" ? "danger" : "neutral";
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center justify-between gap-3 border border-border bg-muted/30 px-4 py-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <Badge tone={enabled ? "success" : "neutral"}>
+              {enabled ? "Endpoint enabled" : "Endpoint disabled"}
+            </Badge>
+            {enabled ? <Badge tone={runtimeTone}>{status.service ?? "unknown"}</Badge> : null}
+          </div>
+          <span className="truncate font-mono text-xs text-muted-foreground">
+            {enabled ? status.invokeUrl : `not exposed (${status.invokeUrl ?? "—"})`}
+          </span>
+        </div>
+        <Button
+          size="sm"
+          variant={enabled ? "danger" : "primary"}
+          loading={enable.isPending || disable.isPending}
+          onClick={() => setConfirmAction(enabled ? "disable" : "enable")}
+        >
+          {enabled ? "Disable endpoint" : "Enable endpoint"}
+        </Button>
+      </div>
+
+      <details className="border border-t-0 border-border bg-muted/30 px-4 pb-3">
+        <summary className="cursor-pointer py-2 text-xs font-medium text-muted-foreground">
+          Endpoint details
+        </summary>
+        <dl className="grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+          <StatusRow label="Lifecycle" value={status.lifecycle} />
+          <StatusRow label="Runtime" value={status.service} />
+          <StatusRow label="Health" value={status.detail} />
+          <StatusRow label="Optimization" value={status.optimization} />
+          <StatusRow label="Health URL" value={status.healthUrl} mono />
+          <StatusRow label="Ready URL" value={status.readyUrl} mono />
+          <StatusRow label="Gate file" value={status.marker} mono />
+        </dl>
+      </details>
+
+      <ConfirmDialog
+        open={confirmAction !== null}
+        onClose={() => setConfirmAction(null)}
+        title={confirmAction === "disable" ? "Disable Control endpoint" : "Enable Control endpoint"}
+        description={
+          confirmAction === "disable"
+            ? "Closes the local Control endpoint gate. Automation calling the Control API stops working until re-enabled."
+            : "Opens the local Control endpoint gate so authenticated automation can call the Control API. The API service must be running."
+        }
+        confirmLabel={confirmAction === "disable" ? "Disable" : "Enable"}
+        tone={confirmAction === "disable" ? "danger" : "primary"}
+        onConfirm={async () => {
+          const action = confirmAction;
+          try {
+            if (action === "disable") await disable.mutateAsync();
+            else await enable.mutateAsync();
+            toast({
+              tone: "success",
+              title:
+                action === "disable" ? "Control endpoint disabled" : "Control endpoint enabled",
+            });
+          } catch (err) {
+            toast({
+              tone: "error",
+              title: "Control action failed",
+              description: errorMessage(err),
+            });
+          }
+        }}
+      />
+    </>
+  );
+}
+
+function StatusRow({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
+  if (!value) return null;
+  return (
+    <div className="flex gap-2 py-0.5">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className={cx("min-w-0 truncate text-foreground", mono && "font-mono")}>{value}</dd>
     </div>
   );
 }
@@ -665,12 +1013,14 @@ function AuthTab({ zoneId }: { zoneId: string }) {
       <Panel title="How control authentication works">
         <ol className="flex flex-col gap-3 text-sm text-muted-foreground">
           <Step n={1}>
-            Issue a control key locally with <Mono>caracal control key create</Mono>. The one-time
-            secret stays on your machine.
+            Create a control key in the <span className="font-medium text-foreground">Keys</span>{" "}
+            tab. The one-time secret is shown once, in your browser.
           </Step>
           <Step n={2}>
             Exchange the key for a short-lived, least-privilege STS token scoped as{" "}
-            <Mono>control:&lt;noun&gt;:&lt;verb&gt;</Mono>.
+            <Mono>control:&lt;noun&gt;:&lt;verb&gt;</Mono> — use{" "}
+            <span className="font-medium text-foreground">Issue token</span> on a key, or the STS
+            client-credentials grant shown below.
           </Step>
           <Step n={3}>
             Call the Control API with the STS token. Every call is zone-bound and recorded in Audit.
@@ -679,8 +1029,8 @@ function AuthTab({ zoneId }: { zoneId: string }) {
       </Panel>
       <Panel title="Invoke an endpoint">
         <CodeBlock
-          code={`# 1. Exchange key -> STS token (see Keys tab)
-TOKEN=$(caracal control token --zone ${zoneId})
+          code={`# 1. Issue a token from the Keys tab (or exchange at STS directly)
+TOKEN=...
 
 # 2. Call the Control API
 curl -s https://gateway.caracal.run/v1/control/invoke \\
@@ -738,43 +1088,30 @@ interface SurfaceGroup {
   actions: { verb: string; scope: string; summary: string }[];
 }
 
-const SURFACE: SurfaceGroup[] = [
-  {
-    noun: "agent",
-    description: "Inspect and manage agent sessions.",
-    actions: [
-      { verb: "read", scope: "control:agent:read", summary: "List and inspect agent sessions." },
-      { verb: "write", scope: "control:agent:write", summary: "Suspend and resume sessions." },
-      { verb: "delete", scope: "control:agent:delete", summary: "Terminate agent sessions." },
-    ],
-  },
-  {
-    noun: "app",
-    description: "Manage agent application identities.",
-    actions: [
-      { verb: "read", scope: "control:app:read", summary: "List and inspect applications." },
-      { verb: "write", scope: "control:app:write", summary: "Create and update applications." },
-      { verb: "delete", scope: "control:app:delete", summary: "Delete applications." },
-    ],
-  },
-  {
-    noun: "resource",
-    description: "Manage protected resources.",
-    actions: [
-      { verb: "read", scope: "control:resource:read", summary: "List and inspect resources." },
-      { verb: "write", scope: "control:resource:write", summary: "Create and update resources." },
-      { verb: "delete", scope: "control:resource:delete", summary: "Delete resources." },
-    ],
-  },
-  {
-    noun: "delegation",
-    description: "Manage delegated authority edges.",
-    actions: [
-      { verb: "read", scope: "control:delegation:read", summary: "Inspect delegation edges." },
-      { verb: "delete", scope: "control:delegation:delete", summary: "Revoke delegation edges." },
-    ],
-  },
-];
+// Derived from the single permission catalog so the reference can never drift from the
+// scopes a key can actually be granted.
+function buildSurface(): SurfaceGroup[] {
+  const groups = new Map<string, SurfaceGroup>();
+  for (const permission of CONTROL_PERMISSIONS) {
+    let group = groups.get(permission.command);
+    if (!group) {
+      group = {
+        noun: permission.command,
+        description: CONTROL_NOUN_DESCRIPTIONS[permission.command] ?? "",
+        actions: [],
+      };
+      groups.set(permission.command, group);
+    }
+    group.actions.push({
+      verb: permission.verb,
+      scope: permission.scope,
+      summary: permission.summary,
+    });
+  }
+  return [...groups.values()];
+}
+
+const SURFACE: SurfaceGroup[] = buildSurface();
 
 function ReferenceTab({ zoneSlug }: { zoneSlug: string }) {
   return (
