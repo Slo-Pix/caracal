@@ -146,9 +146,7 @@ function generateAccountId(): string {
   const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
   const pick = () =>
     Array.from(
-      typeof crypto !== "undefined" && crypto.getRandomValues
-        ? crypto.getRandomValues(new Uint8Array(4))
-        : [0, 0, 0, 0].map(() => Math.floor(Math.random() * 256)),
+      crypto.getRandomValues(new Uint8Array(4)),
       (byte) => alphabet[byte % alphabet.length],
     ).join("");
   return `CRC-${pick()}-${pick()}-${pick()}`;
