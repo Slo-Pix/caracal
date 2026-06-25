@@ -71,7 +71,7 @@ ROLES: dict[str, RoleDef] = {
     "payment-execution": RoleDef(
         name="payment-execution",
         scope_template="payment:{reference}",
-        allowed_tools=("submit_payment",),
+        allowed_tools=("submit_payment", "submit_payout_batch"),
         emits=WORKER_EMITS,
     ),
     "audit": RoleDef(

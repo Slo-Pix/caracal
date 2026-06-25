@@ -20,6 +20,8 @@ _ONBOARDING_STEPS = ("profile", "tax", "kyb", "banking", "documents", "approval"
 _STEP_LABELS = ("Company profile captured", "Tax identification validated",
                 "KYB / sanctions screening cleared", "Bank account verified",
                 "Required documents collected", "Final approval and activation")
+_PROFILE_FIELDS = ("displayName", "category", "paymentTerms", "website", "currency")
+_SCREENING_PROVIDER = "ComplyAdvantage"
 
 _VENDOR_REF = {"type": "object", "properties": {
     "vendorId": {"type": "string", "description": "Vendor identifier, e.g. VEND-00042"}},
@@ -28,6 +30,15 @@ _VENDOR_OUTPUT = {"type": "object", "properties": {
     "id": {"type": "string"}, "legalName": {"type": "string"},
     "status": {"type": "string"}, "lifecycleStage": {"type": "string"},
     "riskTier": {"type": "string"}}, "required": ["id", "legalName", "status"]}
+_COMPLIANCE_OUTPUT = {"type": "object", "properties": {
+    "vendorId": {"type": "string"}, "riskTier": {"type": "string"},
+    "riskScore": {"type": "integer"}, "clearedToPay": {"type": "boolean"},
+    "blockingChecks": {"type": "array", "items": {"type": "string"}},
+    "compliance": {"type": "object"}},
+    "required": ["vendorId", "clearedToPay", "blockingChecks"]}
+_ONBOARDING_OUTPUT = {"type": "object", "properties": {
+    "vendorId": {"type": "string"}, "onboarding": {"type": "object"},
+    "progress": {"type": "object"}}, "required": ["vendorId", "onboarding"]}
 _PAGE_PROPS = {
     "page": {"type": "integer", "minimum": 1, "default": 1},
     "pageSize": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20}}
@@ -37,11 +48,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _record_event(vendor: dict, kind: str, summary: str, *, actor: str = "api") -> dict:
+    """Append a change-history entry to the vendor record, newest first."""
+    events = vendor.setdefault("events", [])
+    entry = {"eventId": f"EVT-{vendor['id'].split('-')[-1]}-{len(events) + 1:03d}",
+             "type": kind, "summary": summary, "actor": actor, "occurredAt": _now()}
+    events.insert(0, entry)
+    vendor["updatedAt"] = entry["occurredAt"]
+    return entry
+
+
 @base.seeder(ID)
 def seed(state: base.State) -> None:
     vendors = gen.atlas_vendors(ID, 240)
     state.tables["vendors"] = gen.index_by(vendors)
     state.tables["contracts"] = gen.atlas_contracts(ID, vendors)
+    state.tables["categories"] = {c["code"]: c for c in gen.atlas_categories()}
 
 
 def _vendor(ctx: Ctx) -> dict:

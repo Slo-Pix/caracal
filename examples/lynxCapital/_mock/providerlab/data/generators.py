@@ -2229,6 +2229,37 @@ _PO_STATUSES = (
     "fullyBilled",
     "closed",
 )
+# Foreign-to-base (USD) exchange rates carried on every multi-currency transaction.
+_FX_TO_USD = {
+    "USD": 1.0,
+    "EUR": 1.08,
+    "GBP": 1.27,
+    "BRL": 0.20,
+    "SGD": 0.74,
+    "JPY": 0.0067,
+    "CAD": 0.73,
+}
+_INCOTERMS = ("DAP", "DDP", "FOB", "CIF", "EXW")
+_SHIP_METHODS = ("Ground", "Air Freight", "Ocean Freight", "Courier")
+_VENDOR_PAYMENT_METHODS = ("ACH", "Wire", "Check", "Virtual Card")
+_ERP_BUYERS = (
+    {"id": "EMP-1100", "name": "Dana Whitfield"},
+    {"id": "EMP-1140", "name": "Hassan Haddad"},
+    {"id": "EMP-1185", "name": "Priya Okafor"},
+)
+_ERP_LOCATIONS = ("HQ - Austin", "EMEA - London", "APAC - Singapore")
+_ERP_CLASSES = ("Operating", "Capital", "Internal")
+_ERP_AP_CLERK = {"id": "EMP-1205", "name": "Lena Novak"}
+# Early-payment discount a vendor's terms entitle the buyer to (2/10 net 30 style).
+_DISCOUNT_PCT_BY_TERM = {"NET15": 0.0, "NET30": 0.02, "NET45": 0.01, "NET60": 0.01}
+# AP control account and the operating bank vendor payments draw on.
+_AP_CONTROL_ACCOUNT = "ACCT-2000"
+_BANK_ACCOUNT_BY_CURRENCY = {"EUR": "ACCT-1010"}
+_DEFAULT_BANK_ACCOUNT = "ACCT-1000"
+
+
+def _fx_rate(currency: str) -> float:
+    return _FX_TO_USD.get(currency, 1.0)
 
 
 def _term_days(term: str) -> int:
@@ -2573,6 +2604,15 @@ _JUNCTION_SHIP_TO = (
         "country": "SG",
     },
 )
+_JUNCTION_BILL_TO = {
+    "name": "LynxCapital Accounts Payable",
+    "addr1": "500 Congress Ave, Floor 12",
+    "city": "Austin",
+    "region": "TX",
+    "postalCode": "78701",
+    "country": "US",
+    "email": "ap@lynxcapital.example",
+}
 _JUNCTION_FINANCE_PARTNER = {"id": "EMP-2201", "name": "Priya Okafor"}
 _JUNCTION_CFO = {"id": "EMP-1000", "name": "Marco Bianchi"}
 _JUNCTION_REQ_STATUS = ("draft", "pending_approval", "approved", "ordered", "rejected")
@@ -7539,6 +7579,8 @@ def _vela_templates(seed: str) -> dict[str, dict]:
             "templateId": _vela_id(rng, "tmpl"),
             "alias": spec["alias"],
             "name": spec["name"],
+            "templateType": "Standard",
+            "layoutTemplate": None,
             "channels": list(spec["channels"]),
             "messageStream": spec["stream"],
             "category": spec["category"],
@@ -7555,13 +7597,63 @@ def _vela_templates(seed: str) -> dict[str, dict]:
     return out
 
 
-def _vela_recipient(rng: random.Random, channel: str) -> tuple[str, str]:
-    """Return (display name, address) for the given channel."""
+# Message streams the way Postmark separates transactional, broadcast, and inbound
+# traffic so delivery, suppression, and webhook behavior can differ per stream.
+_VELA_STREAM_DEFS: tuple[dict, ...] = (
+    {
+        "id": "outbound-transactional",
+        "name": "Transactional",
+        "description": "One-to-one transactional mail and SMS: receipts, confirmations, "
+                       "remittance advice, dunning, and verification codes.",
+        "messageStreamType": "Transactional",
+        "unsubscribeHandlingType": "None",
+    },
+    {
+        "id": "broadcast",
+        "name": "Broadcast",
+        "description": "Bulk informational mail such as monthly statement-ready notices.",
+        "messageStreamType": "Broadcast",
+        "unsubscribeHandlingType": "List",
+    },
+    {
+        "id": "inbound",
+        "name": "Inbound",
+        "description": "Inbound replies and bounce processing routed back to LynxCapital.",
+        "messageStreamType": "Inbound",
+        "unsubscribeHandlingType": "None",
+    },
+)
+
+
+def _vela_message_streams(seed: str) -> dict[str, dict]:
+    """Build the message-stream catalogue keyed by stream id."""
+    out: dict[str, dict] = {}
+    for idx, spec in enumerate(_VELA_STREAM_DEFS):
+        rng = _rng(seed, "vela-stream", spec["id"])
+        out[spec["id"]] = {
+            "streamId": spec["id"],
+            "name": spec["name"],
+            "description": spec["description"],
+            "messageStreamType": spec["messageStreamType"],
+            "unsubscribeHandlingType": spec["unsubscribeHandlingType"],
+            "subscriptionManagementConfiguration": {
+                "unsubscribeHandlingType": spec["unsubscribeHandlingType"],
+            },
+            "createdAt": _instant(rng, 200, 300),
+            "updatedAt": _instant(rng, 60, 120),
+            "archivedAt": None,
+        }
+    return out
+
+
+def _vela_recipient(rng: random.Random, channel: str) -> tuple[str, str, str | None]:
+    """Return (display name, address, region) for the given channel."""
     name = _person(rng)
     if channel == "sms":
-        return name, _phone(rng, rng.choice(("US", "GB", "DE", "SG")))
+        region = rng.choice(("US", "GB", "DE", "SG"))
+        return name, _phone(rng, region), region
     first, last = name.lower().split(" ")
-    return name, f"{first}.{last}@{rng.choice(_ROOTS).lower()}.example"
+    return name, f"{first}.{last}@{rng.choice(_ROOTS).lower()}.example", None
 
 
 # Status plan per seeded message: (channel, template alias, terminal status, with_open).
@@ -7575,6 +7667,7 @@ _VELA_MESSAGE_PLAN: tuple[tuple[str, str, str, bool], ...] = (
     ("email", "dunning_second_notice", "delivered", True),
     ("email", "dunning_final_notice", "bounced", False),
     ("email", "dunning_reminder", "bounced", False),
+    ("email", "remittance_advice", "softbounce", False),
     ("email", "statement_ready", "spam", False),
     ("email", "remittance_advice", "sent", False),
     ("email", "payment_confirmation", "queued", False),
@@ -7582,7 +7675,7 @@ _VELA_MESSAGE_PLAN: tuple[tuple[str, str, str, bool], ...] = (
     ("sms", "dunning_reminder", "delivered", False),
     ("sms", "otp_verification", "delivered", False),
     ("sms", "dunning_second_notice", "undelivered", False),
-    ("sms", "dunning_final_notice", "undelivered", False),
+    ("sms", "dunning_final_notice", "carrier_rejected", False),
     ("sms", "otp_verification", "sending", False),
     ("sms", "payment_confirmation", "queued", False),
 )
@@ -7592,9 +7685,25 @@ _VELA_BOUNCE_DETAIL = {
     "code": 1,
     "description": "The recipient's mail server permanently rejected the message.",
 }
+_VELA_SOFTBOUNCE_DETAIL = {
+    "type": "SoftBounce",
+    "code": 4,
+    "description": "The recipient's mailbox is full; delivery will be retried.",
+}
 _VELA_SMS_ERRORS = {
     "undelivered": (30003, "Unreachable destination handset"),
+    "carrier_rejected": (30007, "Message filtered by carrier"),
 }
+_VELA_SMS_CARRIERS = ("Verizon", "AT&T", "Vodafone", "Deutsche Telekom", "Singtel")
+_VELA_SMS_PRICE = {"US": 0.0079, "GB": 0.04, "DE": 0.075, "SG": 0.045}
+
+
+def _vela_segments(text: str | None) -> int:
+    """SMS segment count: 160 GSM-7 chars per single part, 153 per concatenated part."""
+    length = len(text or "")
+    if length <= 160:
+        return 1
+    return (length + 152) // 153
 
 
 def _vela_messages(

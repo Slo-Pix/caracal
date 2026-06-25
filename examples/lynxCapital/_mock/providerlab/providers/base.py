@@ -142,12 +142,32 @@ def op(provider_id: str, name: str, *, title: str | None = None,
 
 
 def resource(provider_id: str, *, uri: str, name: str, description: str,
-             mime_type: str = "application/json") -> Callable:
+             title: str | None = None, mime_type: str = "application/json") -> Callable:
     """Register an MCP resource backed by a hidden read handler keyed by its URI."""
     def deco(fn: Callable[[Ctx], dict]) -> Callable[[Ctx], dict]:
         HANDLERS.setdefault(provider_id, {})[uri] = fn
-        RESOURCES.setdefault(provider_id, []).append(
-            {"uri": uri, "name": name, "description": description, "mimeType": mime_type})
+        entry = {"uri": uri, "name": name, "description": description, "mimeType": mime_type}
+        if title:
+            entry["title"] = title
+        RESOURCES.setdefault(provider_id, []).append(entry)
+        return fn
+    return deco
+
+
+def resource_template(provider_id: str, *, uri_template: str, name: str, description: str,
+                      title: str | None = None, mime_type: str = "application/json") -> Callable:
+    """Register an MCP resource template (RFC 6570) backed by a read handler.
+
+    The handler is keyed by the template string. At read time the transport
+    matches a concrete URI against the template, extracts the path variables,
+    and passes them as the request payload."""
+    def deco(fn: Callable[[Ctx], dict]) -> Callable[[Ctx], dict]:
+        HANDLERS.setdefault(provider_id, {})[uri_template] = fn
+        entry = {"uriTemplate": uri_template, "name": name,
+                 "description": description, "mimeType": mime_type}
+        if title:
+            entry["title"] = title
+        RESOURCE_TEMPLATES.setdefault(provider_id, []).append(entry)
         return fn
     return deco
 

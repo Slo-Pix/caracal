@@ -206,6 +206,10 @@ def get_position(ctx: Ctx) -> dict:
     available = _money(sum(a["availableBalance"] for a in accounts), currency)
     value_dated = _money(sum(a["valueDatedBalance"] for a in accounts), currency)
     projected = _money(sum(a["projectedBalance"] for a in accounts), currency)
+    float_amount = _money(sum(a.get("floatAmount", 0.0) for a in accounts), currency)
+    investable = _money(sum(a.get("investableSurplus", 0.0) for a in accounts), currency)
+    minimum = _money(sum(a.get("minimumOperatingBalance", 0.0) for a in accounts), currency)
+    accrued = _money(sum(a.get("accruedInterestMtd", 0.0) for a in accounts), currency)
     as_of = max(a["asOf"] for a in accounts)
     return {
         "currency": currency,
@@ -215,12 +219,19 @@ def get_position(ctx: Ctx) -> dict:
         "availableBalance": available,
         "valueDatedBalance": value_dated,
         "projectedBalance": projected,
+        "floatAmount": float_amount,
+        "minimumOperatingBalance": minimum,
+        "investableSurplus": investable,
+        "accruedInterestMtd": accrued,
         "reportingCurrency": _REPORTING_CCY,
         "availableBalanceBase": round(gen.keystone_usd(available, currency), 2),
+        "investableSurplusBase": round(gen.keystone_usd(investable, currency), 2),
         "accounts": [
             {"accountId": a["accountId"], "legalEntity": a["legalEntity"],
              "bankName": a["bankName"], "purpose": a["purpose"],
-             "availableBalance": a["availableBalance"]}
+             "availableBalance": a["availableBalance"],
+             "investableSurplus": a.get("investableSurplus", 0.0),
+             "sweepEligible": a.get("sweepEligible", False)}
             for a in sorted(accounts, key=lambda x: x["legalEntityId"])
         ],
     }
@@ -242,21 +253,28 @@ def get_position_summary(ctx: Ctx) -> dict:
     accounts = list(ctx.state.table("positions").values())
     by_currency: dict[str, dict] = {}
     total_base = 0.0
+    total_investable_base = 0.0
     for a in accounts:
         ccy = a["currency"]
         bucket = by_currency.setdefault(ccy, {"currency": ccy, "accountCount": 0,
-                                               "availableBalance": 0.0, "ledgerBalance": 0.0})
+                                               "availableBalance": 0.0, "ledgerBalance": 0.0,
+                                               "investableSurplus": 0.0})
         bucket["accountCount"] += 1
         bucket["availableBalance"] = _money(bucket["availableBalance"] + a["availableBalance"], ccy)
         bucket["ledgerBalance"] = _money(bucket["ledgerBalance"] + a["ledgerBalance"], ccy)
+        bucket["investableSurplus"] = _money(bucket["investableSurplus"] + a.get("investableSurplus", 0.0), ccy)
     for ccy, bucket in by_currency.items():
         base_eq = round(gen.keystone_usd(bucket["availableBalance"], ccy), 2)
+        investable_base = round(gen.keystone_usd(bucket["investableSurplus"], ccy), 2)
         bucket["availableBalanceBase"] = base_eq
+        bucket["investableSurplusBase"] = investable_base
         total_base += base_eq
+        total_investable_base += investable_base
     return {
         "reportingCurrency": _REPORTING_CCY,
         "asOf": _iso(_now()),
         "totalAvailableBase": round(total_base, 2),
+        "totalInvestableSurplusBase": round(total_investable_base, 2),
         "currencyCount": len(by_currency),
         "accountCount": len(accounts),
         "byCurrency": sorted(by_currency.values(), key=lambda b: b["availableBalanceBase"], reverse=True),
