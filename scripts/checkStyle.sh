@@ -50,7 +50,7 @@ py_files=()
 for file in "${files[@]}"; do
   [[ -f "$file" ]] || continue
   case "$file" in
-    node_modules/*|*/node_modules/*|dist/*|*/dist/*|build/*|*/build/*|coverage/*|*/coverage/*|packages/engine/src/embedded.ts|apps/runtime/src/runtime/version.gen.ts|apps/console/src/version.gen.ts)
+    node_modules/*|*/node_modules/*|dist/*|*/dist/*|build/*|*/build/*|coverage/*|*/coverage/*|packages/engine/src/embedded.ts|apps/runtime/src/runtime/version.gen.ts)
       continue
       ;;
   esac

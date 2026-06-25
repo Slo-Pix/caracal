@@ -34,7 +34,7 @@ describe('authorizeControlManagementAccess', () => {
   it('passes when the local token matches the default source', () => {
     writeLocalToken('secret-token')
     expect(() =>
-      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir }, requireTty: false }),
+      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } }),
     ).not.toThrow()
   })
 
@@ -43,7 +43,6 @@ describe('authorizeControlManagementAccess', () => {
     expect(() =>
       authorizeControlManagementAccess({
         env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir, CARACAL_ADMIN_TOKEN: 'match-me' },
-        requireTty: false,
       }),
     ).not.toThrow()
   })
@@ -53,7 +52,6 @@ describe('authorizeControlManagementAccess', () => {
     expect(() =>
       authorizeControlManagementAccess({
         env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir, CARACAL_ADMIN_TOKEN: 'different' },
-        requireTty: false,
       }),
     ).toThrow(/does not match the local managed secret/)
   })
@@ -65,7 +63,6 @@ describe('authorizeControlManagementAccess', () => {
     expect(() =>
       authorizeControlManagementAccess({
         env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir, CARACAL_ADMIN_TOKEN_FILE: tokenFile },
-        requireTty: false,
       }),
     ).not.toThrow()
   })
@@ -75,38 +72,13 @@ describe('authorizeControlManagementAccess', () => {
     expect(() =>
       authorizeControlManagementAccess({
         env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir, CARACAL_ADMIN_TOKEN_FILE: join(dir, 'missing.token') },
-        requireTty: false,
       }),
     ).toThrow(/empty or missing/)
   })
 
   it('throws when no local managed token exists', () => {
     expect(() =>
-      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir }, requireTty: false }),
+      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } }),
     ).toThrow(/requires the local managed admin token/)
-  })
-
-  it('throws when an interactive TTY session is required but absent', () => {
-    writeLocalToken('local')
-    expect(() =>
-      authorizeControlManagementAccess({
-        env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir },
-        requireTty: true,
-        stdinIsTTY: false,
-        stdoutIsTTY: true,
-      }),
-    ).toThrow(/interactive Console session/)
-  })
-
-  it('passes the TTY check when both streams are interactive', () => {
-    writeLocalToken('local')
-    expect(() =>
-      authorizeControlManagementAccess({
-        env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir },
-        requireTty: true,
-        stdinIsTTY: true,
-        stdoutIsTTY: true,
-      }),
-    ).not.toThrow()
   })
 })

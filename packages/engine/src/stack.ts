@@ -191,7 +191,6 @@ export interface ControlLifecycleOpts {
   home?: string
   accessEnv?: NodeJS.ProcessEnv
   timeoutMs?: number
-  requireTty?: boolean
 }
 
 export interface ControlLifecycleResult {
@@ -246,7 +245,7 @@ function controlResult(
 }
 
 export async function applyControlLifecycleAction(opts: ControlLifecycleOpts): Promise<ControlLifecycleResult> {
-  authorizeControlManagementAccess({ env: opts.accessEnv, requireTty: opts.requireTty })
+  authorizeControlManagementAccess({ env: opts.accessEnv })
   const settings = controlRuntimeSettings({ home: opts.home })
   if (opts.action === 'disable') {
     setControlEnabled(false, { home: opts.home })
@@ -265,7 +264,6 @@ export interface ControlServiceStatusOpts {
   home?: string
   timeoutMs?: number
   accessEnv?: NodeJS.ProcessEnv
-  requireTty?: boolean
 }
 
 export interface ControlServiceStatus {
@@ -306,7 +304,7 @@ function controlStatus(
 }
 
 export async function controlServiceStatus(opts: ControlServiceStatusOpts = {}): Promise<ControlServiceStatus> {
-  authorizeControlManagementAccess({ env: opts.accessEnv, requireTty: opts.requireTty })
+  authorizeControlManagementAccess({ env: opts.accessEnv })
   const settings = controlRuntimeSettings({ home: opts.home })
   if (!isControlEnabled(opts.home)) {
     return controlStatus('disabled', 'gated', 'endpoint disabled', settings, opts.home)

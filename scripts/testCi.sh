@@ -72,7 +72,7 @@ if $run_smoke; then
   step "smoke: pnpm install"
   pnpm install --frozen-lockfile --prefer-offline
   if ! command -v bun >/dev/null 2>&1; then
-    say_error "bun is required for pnpm -r build (apps/runtime, apps/console)."
+    say_error "bun is required for pnpm -r build (apps/runtime)."
     say_label "Install: npm install --global bun@1.3.14"
     exit 1
   fi
@@ -123,7 +123,6 @@ if $run_ts; then
     tests/typescript/integration/api
   ts_run apps/coordinator coordinator tests/typescript/unit/orchestration/coordinator
   ts_run apps/runtime runtime tests/typescript/unit/runtime
-  ts_run apps/console Console tests/typescript/unit/console
   ts_run packages/core/ts core tests/typescript/unit/shared
   ts_run packages/admin/ts admin tests/typescript/unit/admin
   ts_run packages/sdk/ts sdk tests/typescript/unit/sdk/client.test.ts

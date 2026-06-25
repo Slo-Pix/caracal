@@ -351,13 +351,13 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// Reports the local Control endpoint gate state. The interactive-Console TTY guard is
-// replaced here by the session gate already enforced upstream, so manageability is decided
-// by whether this host holds the managed admin secret. A failure is reported as unmanageable
-// rather than an error so the UI can degrade gracefully on remote or unprivileged hosts.
+// Reports the local Control endpoint gate state. Manageability is decided by whether this
+// host holds the managed admin secret, behind the session gate already enforced upstream.
+// A failure is reported as unmanageable rather than an error so the UI can degrade
+// gracefully on remote or unprivileged hosts.
 async function handleControlStatus(res: ServerResponse): Promise<void> {
   try {
-    const status = await controlServiceStatus({ requireTty: false, accessEnv: process.env });
+    const status = await controlServiceStatus({ accessEnv: process.env });
     sendJson(res, 200, { manageable: true, ...status });
   } catch (err) {
     sendJson(res, 200, { manageable: false, reason: errorText(err) });
@@ -371,7 +371,6 @@ async function handleControlLifecycle(
   try {
     const result = await applyControlLifecycleAction({
       action,
-      requireTty: false,
       accessEnv: process.env,
     });
     invalidateDiagnostics();
