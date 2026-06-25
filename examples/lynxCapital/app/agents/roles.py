@@ -126,7 +126,8 @@ ROLES: dict[str, RoleDef] = {
         scope_template="close:{subject}",
         allowed_tools=(
             "post_journal_entry", "list_ledger_accounts", "reconcile_account",
-            "compute_accrual", "get_trial_balance", "close_period",
+            "compute_accrual", "list_accrual_schedules", "get_trial_balance",
+            "close_period", "reopen_accounting_period",
         ),
         emits=WORKER_EMITS,
     ),

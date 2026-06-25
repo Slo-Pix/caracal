@@ -1115,6 +1115,16 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
             _finish(w, {"from": from_currency, "to": to_currency})
 
     @tool
+    def settle_fx_hedge(hedge_id: str) -> str:
+        """Settle a booked FX hedge at maturity, realizing its mark-to-market.
+        Use this to close out a hedge placed earlier in the workflow."""
+        w = _worker("treasury", f"settle:{hedge_id}")
+        try:
+            return json.dumps(tool_fns.settle_fx_hedge(run_id, w.id, hedge_id))
+        finally:
+            _finish(w, {"hedgeId": hedge_id})
+
+    @tool
     async def transfer_funds(
         from_region: str, to_region: str, amount_usd: float
     ) -> str:
@@ -1140,6 +1150,17 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
             )
         finally:
             _finish(w, {"from": from_region, "to": to_region})
+
+    @tool
+    def approve_fund_transfer(transfer_id: str) -> str:
+        """Release an intercompany transfer that is held for second-pair-of-eyes
+        approval. Large transfers return status 'pending_approval' and only move
+        once approved here (maker-checker control)."""
+        w = _worker("treasury", f"approve:{transfer_id}")
+        try:
+            return json.dumps(tool_fns.approve_fund_transfer(run_id, w.id, transfer_id))
+        finally:
+            _finish(w, {"transferId": transfer_id})
 
     @tool
     def list_ledger_accounts(account_type: str = "") -> str:
@@ -1269,6 +1290,30 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
             )
         finally:
             _finish(w, {"filing_id": filing_id})
+
+    @tool
+    def amend_regulatory_filing(filing_id: str, reason: str) -> str:
+        """Correct an already-submitted SAR/CTR filing. `filing_id` is the acknowledged
+        filingId; `reason` explains the correction. Returns the corrected filing draft,
+        which must then be submitted with submit_regulatory_filing."""
+        w = _worker("compliance", f"amend:{filing_id}")
+        try:
+            return json.dumps(
+                tool_fns.amend_regulatory_filing(run_id, w.id, filing_id, reason)
+            )
+        finally:
+            _finish(w, {"filing_id": filing_id})
+
+    @tool
+    def aml_monitoring_summary() -> str:
+        """Summarize the AML program posture: open alerts and cases, SLA breaches,
+        filing obligations against their regulator deadlines, control attestation
+        status, and audit-chain integrity."""
+        w = _worker("compliance", "aml:summary")
+        try:
+            return json.dumps(tool_fns.aml_monitoring_summary(run_id, w.id))
+        finally:
+            _finish(w, {})
 
     @tool
     def attest_control(control_id: str, effectiveness: str = "effective") -> str:
@@ -1816,8 +1861,10 @@ def _build_workflow_domain_tools(run_id, runner, parent, workflow_id, board):
         list_ledger_accounts,
         reconcile_account,
         compute_accrual,
+        list_accrual_schedules,
         get_trial_balance,
         close_period,
+        reopen_accounting_period,
         aml_monitor_transaction,
         sanctions_screen_batch,
         prepare_regulatory_filing,

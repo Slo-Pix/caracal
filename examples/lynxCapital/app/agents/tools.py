@@ -248,6 +248,34 @@ def netsuite_get_ap_account(run_id: str, agent_id: str) -> dict[str, object]:
                 {"accountId": "2000"})
 
 
+def netsuite_receive_purchase_order(run_id: str, agent_id: str,
+                                    purchase_order_id: str) -> dict[str, object]:
+    """Book an item receipt against a NetSuite purchase order."""
+    return _run(run_id, agent_id, "netsuite_receive_purchase_order", "ironbark-erp",
+                "receive_purchase_order", {"purchaseOrderId": purchase_order_id})
+
+
+def netsuite_pay_vendor_bill(run_id: str, agent_id: str, bill_id: str,
+                             amount: float | None = None,
+                             payment_method: str | None = None) -> dict[str, object]:
+    """Settle an approved, open vendor bill in NetSuite via a vendor payment."""
+    payload: dict[str, object] = {"billId": bill_id}
+    if amount is not None:
+        payload["amount"] = amount
+    if payment_method:
+        payload["paymentMethod"] = payment_method
+    return _run(run_id, agent_id, "netsuite_pay_vendor_bill", "ironbark-erp", "pay_bill", payload)
+
+
+def netsuite_get_ap_aging(run_id: str, agent_id: str,
+                          vendor_id: str | None = None) -> dict[str, object]:
+    """Pull the NetSuite accounts-payable aging summary across standard buckets."""
+    payload: dict[str, object] = {}
+    if vendor_id:
+        payload["vendorId"] = vendor_id
+    return _run(run_id, agent_id, "netsuite_get_ap_aging", "ironbark-erp", "get_ap_aging", payload)
+
+
 def quickbooks_match_bill(run_id: str, agent_id: str, vendor_id: str, invoice_id: str, amount: float, currency: str) -> dict[str, object]:
     """Record a vendor bill in QuickBooks then match it to its purchase reference."""
     created = _run(run_id, agent_id, "quickbooks_match_bill", "tallyhall-books", "create_bill",
@@ -1196,7 +1224,9 @@ TOOLS: dict[str, Callable] = {
     "forecast_liquidity": forecast_liquidity,
     "get_fx_exposure": get_fx_exposure,
     "place_fx_hedge": place_fx_hedge,
+    "settle_fx_hedge": settle_fx_hedge,
     "transfer_funds": transfer_funds,
+    "approve_fund_transfer": approve_fund_transfer,
     "post_journal_entry": post_journal_entry,
     "list_ledger_accounts": list_ledger_accounts,
     "reconcile_account": reconcile_account,

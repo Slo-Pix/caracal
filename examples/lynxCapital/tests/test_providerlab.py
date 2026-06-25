@@ -1964,6 +1964,90 @@ def test_mcp_onboarding_lifecycle():
     assert profile["status"] == "active"
 
 
+def _atlas_call(c, headers):
+    def call(name, args):
+        result = _mcp_call(
+            c, "tools/call", headers, {"name": name, "arguments": args}
+        ).json()["result"]
+        if result.get("isError"):
+            return {"_error": result["content"][0]["text"]}
+        return result["structuredContent"]
+    return call
+
+
+def test_mcp_resource_templates_listed_and_read():
+    c = client("atlas-vendor")
+    token = seed("atlas-vendor")["bearerToken"]
+    headers = {"Authorization": f"Bearer {token}"}
+    templates = _mcp_call(c, "resources/templates/list", headers).json()["result"][
+        "resourceTemplates"
+    ]
+    uris = {t["uriTemplate"] for t in templates}
+    assert "atlas://vendors/{vendorId}" in uris
+    assert "atlas://vendors/{vendorId}/compliance" in uris
+    read = _mcp_call(
+        c, "resources/read", headers, {"uri": "atlas://vendors/VEND-00001"}
+    ).json()["result"]
+    body = json.loads(read["contents"][0]["text"])
+    assert body["id"] == "VEND-00001"
+    assert "beneficialOwners" in body and "classifications" in body
+
+
+def test_mcp_categories_and_events_discoverable():
+    c = client("atlas-vendor")
+    token = seed("atlas-vendor")["bearerToken"]
+    call = _atlas_call(c, {"Authorization": f"Bearer {token}"})
+    categories = call("list_categories", {})
+    assert categories["total"] == 10 and categories["items"][0]["code"]
+    events = call("list_vendor_events", {"vendorId": "VEND-00001"})
+    assert events["vendorId"] == "VEND-00001" and "items" in events
+
+
+def test_mcp_profile_update_and_contact():
+    c = client("atlas-vendor")
+    token = seed("atlas-vendor")["bearerToken"]
+    call = _atlas_call(c, {"Authorization": f"Bearer {token}"})
+    updated = call("update_vendor_profile", {"vendorId": "VEND-00002", "paymentTerms": "NET60"})
+    assert updated["paymentTerms"] == "NET60"
+    contact = call(
+        "add_vendor_contact",
+        {"vendorId": "VEND-00002", "name": "Ada Vendor", "email": "ada@vendor.example",
+         "primary": True},
+    )
+    assert contact["primary"] is True
+    assert call("update_vendor_profile", {"vendorId": "VEND-00002"})["_error"]
+
+
+def test_mcp_compliance_screening_and_document_review():
+    c = client("atlas-vendor")
+    token = seed("atlas-vendor")["bearerToken"]
+    call = _atlas_call(c, {"Authorization": f"Bearer {token}"})
+    screened = call("run_compliance_screening", {"vendorId": "VEND-00003"})
+    assert "clearedToPay" in screened
+    doc = call(
+        "submit_vendor_document",
+        {"vendorId": "VEND-00003", "type": "coi", "fileName": "coi.pdf"},
+    )
+    assert doc["status"] == "pending_review"
+    reviewed = call(
+        "review_vendor_document",
+        {"vendorId": "VEND-00003", "documentId": doc["documentId"], "decision": "approve"},
+    )
+    assert reviewed["status"] == "verified"
+
+
+def test_mcp_register_duplicate_rejected():
+    c = client("atlas-vendor")
+    token = seed("atlas-vendor")["bearerToken"]
+    call = _atlas_call(c, {"Authorization": f"Bearer {token}"})
+    first = call("register_vendor", {"legalName": "Helios Optics", "country": "US"})
+    assert first["status"] == "pending_review"
+    dup = call("register_vendor", {"legalName": "Helios Optics", "country": "US"})
+    assert "vendor_exists" in dup["_error"]
+    bad = call("register_vendor", {"legalName": "Bad Country", "country": "USA"})
+    assert "invalid_country" in bad["_error"]
+
+
 def test_mcp_mandate_guarded():
     c = client("relay-automation")
     token = seed("relay-automation")["mandate"]
