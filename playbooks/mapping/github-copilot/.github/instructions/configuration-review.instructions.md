@@ -1,5 +1,5 @@
 ---
-description: "Use when reviewing pasted Provider configuration, Resource configuration, screenshot text, field lists, or completed Caracal Console setups."
+description: "Use when reviewing pasted Provider configuration, Resource configuration, screenshot text, field lists, or completed Caracal web console setups."
 ---
 
 # Configuration Review

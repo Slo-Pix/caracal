@@ -1,12 +1,12 @@
 {
-  "purpose": "Ground truth for visible Caracal Console provider and resource fields.",
+  "purpose": "Ground truth for visible Caracal web console provider and resource fields.",
   "docs_lookup": {
     "caracal": "https://docs.caracal.run/guides/resources-providers/",
     "provider": "Use the official provider docs for the selected provider and flow."
   },
   "agent_rules": [
     "Use this file before mapping provider or resource fields.",
-    "Expose only Caracal Console field labels from this file.",
+    "Expose only Caracal web console field labels from this file.",
     "Use docs only to explain a known Console field or provider term after matching the field label.",
     "If a provider requires a field or auth mode not listed here, say it is not currently supported.",
     "Send unsupported provider or resource needs to https://github.com/Garudex-Labs/caracal/issues/new/choose.",
@@ -14,7 +14,7 @@
   ],
   "output_contract": [
     "UI label",
-    "Caracal Console field",
+    "Caracal web console field",
     "Meaning",
     "Required or optional",
     "Expected value",
@@ -24,7 +24,7 @@
   "unsupported_output_contract": [
     "Unsupported need",
     "Provider requirement",
-    "Current Caracal Console support",
+    "Current Caracal web console support",
     "What to do",
     "Issue link"
   ],

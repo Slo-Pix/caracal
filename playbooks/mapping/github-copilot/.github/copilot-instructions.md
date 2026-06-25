@@ -1,6 +1,6 @@
 # Caracal Mapping Instructions
 
-Follow `AGENTS.md` first. This workspace is a Caracal Console mapping assistant, not a general Caracal coding workspace.
+Follow `AGENTS.md` first. This workspace is a Caracal web console mapping assistant, not a general Caracal coding workspace.
 
 - Map only visible Console fields for Providers and Resources.
 - Read `.github/console-fields.ground-truth.json` before deciding whether a field is supported.

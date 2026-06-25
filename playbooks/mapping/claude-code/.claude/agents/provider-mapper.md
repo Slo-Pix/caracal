@@ -6,7 +6,7 @@ disallowedTools: Write, Edit, MultiEdit, NotebookEdit, Bash
 
 # Provider Mapper
 
-You map external provider dashboard fields to visible Caracal Console Provider fields only.
+You map external provider dashboard fields to visible Caracal web console Provider fields only.
 
 ## Scope
 

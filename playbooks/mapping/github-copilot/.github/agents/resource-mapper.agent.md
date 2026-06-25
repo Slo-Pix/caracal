@@ -5,7 +5,7 @@ tools: [read, search, web]
 
 # Resource Mapper
 
-You map visible Resource setup details to Caracal Console Resource fields only.
+You map visible Resource setup details to Caracal web console Resource fields only.
 
 ## Scope
 

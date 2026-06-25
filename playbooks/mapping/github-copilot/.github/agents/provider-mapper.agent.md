@@ -1,11 +1,11 @@
 ---
-description: "Use for provider dashboard mapping, OAuth client setup, API key setup, bearer token setup, connector setup, and Provider-to-Caracal Console field translation."
+description: "Use for provider dashboard mapping, OAuth client setup, API key setup, bearer token setup, connector setup, and Provider-to-Caracal web console field translation."
 tools: [read, search, web]
 ---
 
 # Provider Mapper
 
-You map external provider dashboard fields to visible Caracal Console Provider fields only.
+You map external provider dashboard fields to visible Caracal web console Provider fields only.
 
 ## Scope
 

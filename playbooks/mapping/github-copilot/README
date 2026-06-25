@@ -1,8 +1,8 @@
 # GitHub Copilot Mapping Playbook
 
-Copy this folder into the root of a project where GitHub Copilot will help configure Caracal Console Provider and Resource fields.
+Copy this folder into the root of a project where GitHub Copilot will help configure Caracal web console Provider and Resource fields.
 
-This setup is mapping-first. It helps Copilot translate provider dashboards, copied configuration, documentation snippets, and screenshots into visible Caracal Console fields while checking the ground-truth schema and masking secrets.
+This setup is mapping-first. It helps Copilot translate provider dashboards, copied configuration, documentation snippets, and screenshots into visible Caracal web console fields while checking the ground-truth schema and masking secrets.
 
 ## Use
 
