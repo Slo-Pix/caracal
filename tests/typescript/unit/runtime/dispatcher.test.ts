@@ -14,9 +14,15 @@ function makeOpts(run: Executor) {
   return { binary: 'caracal', version: '0.0.0', mode: 'dev' as const, registry }
 }
 
-const exitSpy = () => vi.spyOn(process, 'exit').mockImplementation(((code?: number) => { throw new Error(`exit:${code ?? 0}`) }) as never)
+const exitSpy = () =>
+  vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+    throw new Error(`exit:${code ?? 0}`)
+  }) as never)
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs() })
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 
 describe('dispatch', () => {
   it('routes a valid command to its executor', async () => {
@@ -86,20 +92,17 @@ describe('dispatch', () => {
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
     const executors = Object.fromEntries(SHELL_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
     const registry = buildRegistry(SHELL_COMMANDS, executors)
-    await expect(
-      dispatch({ binary: 'caracal web', version: '0.0.0', mode: 'dev', registry }, ['--help']),
-    ).rejects.toThrow('exit:0')
+    await expect(dispatch({ binary: 'caracal web', version: '0.0.0', mode: 'dev', registry }, ['--help'])).rejects.toThrow('exit:0')
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
     expect(out).toContain('Usage: caracal web')
   })
 
-  it('keeps runtime help limited to visible commands and global options', async () => {    exitSpy()
+  it('keeps runtime help limited to visible commands and global options', async () => {
+    exitSpy()
     const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true)
     const executors = Object.fromEntries(MANAGEMENT_COMMANDS.map((c) => [c.name, vi.fn() as Executor]))
     const registry = buildRegistry(MANAGEMENT_COMMANDS, executors)
-    await expect(
-      dispatch({ binary: 'caracal', version: '0.0.0', mode: 'dev', registry }, ['--help']),
-    ).rejects.toThrow('exit:0')
+    await expect(dispatch({ binary: 'caracal', version: '0.0.0', mode: 'dev', registry }, ['--help'])).rejects.toThrow('exit:0')
     const out = stdout.mock.calls.map((c) => String(c[0])).join('')
     expect(out).toContain('zone')
     expect(out).toContain('control')
@@ -126,7 +129,13 @@ describe('dispatch', () => {
   it('still requires config for a normal run invocation', async () => {
     vi.stubEnv('CARACAL_CONFIG', undefined)
     vi.stubEnv('XDG_CONFIG_HOME', '/nonexistent-caracal-config')
-    for (const key of ['CARACAL_APPLICATION_ID', 'CARACAL_APP_CLIENT_SECRET', 'CARACAL_APP_CLIENT_SECRET_FILE', 'CARACAL_RUN_CREDENTIALS', 'CARACAL_RUN_CREDENTIALS_FILE']) {
+    for (const key of [
+      'CARACAL_APPLICATION_ID',
+      'CARACAL_APP_CLIENT_SECRET',
+      'CARACAL_APP_CLIENT_SECRET_FILE',
+      'CARACAL_RUN_CREDENTIALS',
+      'CARACAL_RUN_CREDENTIALS_FILE',
+    ]) {
       vi.stubEnv(key, undefined)
     }
     const exit = exitSpy()

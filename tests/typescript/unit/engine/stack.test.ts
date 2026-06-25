@@ -46,23 +46,28 @@ describe('stack probes', () => {
   })
 
   it('returns status details for ok, JSON error, text error, and fetch failures', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
-      const url = String(input)
-      if (url.endsWith('/ok')) return new Response(null, { status: 204 })
-      if (url.endsWith('/json')) return new Response(JSON.stringify({ error: 'booting' }), { status: 503 })
-      if (url.endsWith('/text')) return new Response('not ready\nmore', { status: 503 })
-      throw new Error('connection refused')
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.endsWith('/ok')) return new Response(null, { status: 204 })
+        if (url.endsWith('/json')) return new Response(JSON.stringify({ error: 'booting' }), { status: 503 })
+        if (url.endsWith('/text')) return new Response('not ready\nmore', { status: 503 })
+        throw new Error('connection refused')
+      }),
+    )
 
-    await expect(stackStatus({
-      timeoutMs: 50,
-      probes: [
-        { name: 'ok', url: 'http://svc/ok', port: 1 },
-        { name: 'json', url: 'http://svc/json', port: 2 },
-        { name: 'text', url: 'http://svc/text', port: 3 },
-        { name: 'fail', url: 'http://svc/fail', port: 4 },
-      ],
-    })).resolves.toEqual([
+    await expect(
+      stackStatus({
+        timeoutMs: 50,
+        probes: [
+          { name: 'ok', url: 'http://svc/ok', port: 1 },
+          { name: 'json', url: 'http://svc/json', port: 2 },
+          { name: 'text', url: 'http://svc/text', port: 3 },
+          { name: 'fail', url: 'http://svc/fail', port: 4 },
+        ],
+      }),
+    ).resolves.toEqual([
       expect.objectContaining({ name: 'ok', ok: true, detail: '204' }),
       expect.objectContaining({ name: 'json', ok: false, detail: '503 booting' }),
       expect.objectContaining({ name: 'text', ok: false, detail: '503 not ready' }),
@@ -79,20 +84,10 @@ describe('stack cleanup helpers', () => {
   it('filters Docker image output to Caracal repositories', () => {
     spawnSyncMock.mockReturnValueOnce({
       status: 0,
-      stdout: [
-        'caracal/api:dev',
-        'localhost/caracal-sts:dev',
-        'ghcr.io/garudex-labs/caracal-gateway:stable',
-        'postgres:16',
-        '',
-      ].join('\n'),
+      stdout: ['caracal/api:dev', 'localhost/caracal-sts:dev', 'ghcr.io/garudex-labs/caracal-gateway:stable', 'postgres:16', ''].join('\n'),
     })
 
-    expect(listCaracalImages()).toEqual([
-      'caracal/api:dev',
-      'localhost/caracal-sts:dev',
-      'ghcr.io/garudex-labs/caracal-gateway:stable',
-    ])
+    expect(listCaracalImages()).toEqual(['caracal/api:dev', 'localhost/caracal-sts:dev', 'ghcr.io/garudex-labs/caracal-gateway:stable'])
   })
 
   it('returns an empty image list when Docker fails', () => {
@@ -121,15 +116,24 @@ describe('stack cleanup helpers', () => {
     writeFileSync(join(extra, 'caracal-web'), '')
     const events: string[] = []
 
-    expect(caracalBinaries(install, [extra])).toEqual([
-      join(install, 'caracal'),
-      join(extra, 'caracal-web'),
-    ])
+    expect(caracalBinaries(install, [extra])).toEqual([join(install, 'caracal'), join(extra, 'caracal-web')])
 
     await stackPurge({
       steps: [
-        { id: 'one', label: 'One', run: async () => { events.push('run:one') } },
-        { id: 'two', label: 'Two', run: async () => { events.push('run:two') } },
+        {
+          id: 'one',
+          label: 'One',
+          run: async () => {
+            events.push('run:one')
+          },
+        },
+        {
+          id: 'two',
+          label: 'Two',
+          run: async () => {
+            events.push('run:two')
+          },
+        },
       ],
       onStep: (step, phase) => events.push(`${phase}:${step.id}`),
     })

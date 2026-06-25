@@ -33,9 +33,7 @@ afterEach(() => {
 describe('authorizeControlManagementAccess', () => {
   it('passes when the local token matches the default source', () => {
     writeLocalToken('secret-token')
-    expect(() =>
-      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } }),
-    ).not.toThrow()
+    expect(() => authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } })).not.toThrow()
   })
 
   it('passes when an env token matches the local token', () => {
@@ -77,8 +75,8 @@ describe('authorizeControlManagementAccess', () => {
   })
 
   it('throws when no local managed token exists', () => {
-    expect(() =>
-      authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } }),
-    ).toThrow(/requires the local managed admin token/)
+    expect(() => authorizeControlManagementAccess({ env: { CARACAL_SECRETS_DIR: dir, CARACAL_HOME: dir } })).toThrow(
+      /requires the local managed admin token/,
+    )
   })
 })

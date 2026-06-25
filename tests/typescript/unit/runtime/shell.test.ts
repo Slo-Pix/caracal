@@ -74,13 +74,16 @@ describe('runtime shell entrypoint', () => {
 
     expect(state.installCrashHandlers).toHaveBeenCalledWith('caracal')
     expect(state.webInterfaceAvailable).toHaveBeenCalledOnce()
-    expect(state.dispatch).toHaveBeenCalledWith(expect.objectContaining({
-      binary: 'caracal',
-      version: '0.0.0-test',
-      mode: 'dev',
-      sha: 'sha-test',
-      loadConfig: true,
-    }), process.argv.slice(2))
+    expect(state.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        binary: 'caracal',
+        version: '0.0.0-test',
+        mode: 'dev',
+        sha: 'sha-test',
+        loadConfig: true,
+      }),
+      process.argv.slice(2),
+    )
     expect(opts.registry.byName.has('web')).toBe(true)
   })
 
