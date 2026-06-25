@@ -20,7 +20,8 @@ EXECUTIONS_READ = "relay.executions.read"
 EXECUTIONS_WRITE = "relay.executions.write"
 
 _TERMINAL = ("succeeded", "failed", "cancelled", "timed_out")
-_ACTIVE = ("queued", "running", "waiting_signal", "retrying")
+_ACTIVE = ("queued", "running", "waiting_signal", "retrying", "paused")
+_PAUSABLE = ("queued", "running", "waiting_signal", "retrying")
 
 # Per-execution outcome bands drawn from a deterministic RNG. Most runs succeed;
 # the rest model the failure modes a real automation platform surfaces.
@@ -211,6 +212,41 @@ def _ts(offset_seconds: int = 0) -> str:
     return moment.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _cron_field(token: str, value: int) -> bool:
+    """Match one cron field (minute/hour/dom/month/dow) against a value, honoring
+    ``*``, single values, comma lists, ``a-b`` ranges, and ``*/n`` steps."""
+    if token == "*":
+        return True
+    for part in token.split(","):
+        if part.startswith("*/"):
+            if value % int(part[2:]) == 0:
+                return True
+        elif "-" in part:
+            lo, hi = (int(x) for x in part.split("-"))
+            if lo <= value <= hi:
+                return True
+        elif int(part) == value:
+            return True
+    return False
+
+
+def _next_run(schedule: str | None, after: datetime | None = None) -> str | None:
+    """Compute the next fire time for a five-field cron schedule, the way an
+    automation scheduler surfaces a workflow's upcoming run."""
+    if not schedule:
+        return None
+    minute, hour, dom, month, dow = schedule.split()
+    cursor = (after or datetime.now(timezone.utc)).replace(second=0, microsecond=0) \
+        + timedelta(minutes=1)
+    for _ in range(366 * 24 * 60):
+        if (_cron_field(minute, cursor.minute) and _cron_field(hour, cursor.hour)
+                and _cron_field(dom, cursor.day) and _cron_field(month, cursor.month)
+                and _cron_field(dow, cursor.isoweekday() % 7)):
+            return cursor.isoformat().replace("+00:00", "Z")
+        cursor += timedelta(minutes=1)
+    return None
+
+
 def _trigger(ctx: Ctx) -> dict:
     """Capture the mandate principal so every run is traceable to the Caracal
     subject, session lineage, and delegation edge that dispatched it."""
@@ -261,6 +297,19 @@ def _chain_intact(execution: dict) -> bool:
             return False
         prev = event["hash"]
     return True
+
+
+def _record_attempt(execution: dict, status: str, step_id: str | None, at: str) -> None:
+    """Append a per-attempt outcome to the execution's attempt history, the run-level
+    trail an automation platform keeps alongside its step log."""
+    execution["attemptHistory"].append({
+        "attempt": execution["attempt"],
+        "status": status,
+        "step": step_id,
+        "error": dict(execution["error"]) if execution["error"] else None,
+        "startedAt": execution["startedAt"],
+        "finishedAt": at,
+    })
 
 
 # --------------------------------------------------------------------------- #
@@ -387,18 +436,22 @@ def _new_execution(state: base.State, wf: dict, *, input_payload: dict, trigger:
         "maxAttempts": wf["retryPolicy"]["maxAttempts"],
         "currentStep": None,
         "steps": steps,
+        "tags": list(wf["tags"]),
         "correlationId": base.new_id("corr"),
         "idempotencyKey": idempotency_key,
         "trigger": trigger,
         "metrics": {"totalSteps": len(steps), "completedSteps": 0, "retries": 0, "durationMs": 0},
+        "attemptHistory": [],
         "_outcome": outcome,
         "_faultStep": fault_step,
         "_planKey": plan_key,
         "_clock": created_offset,
         "_startClock": created_offset,
+        "_resumeStatus": None,
         "scheduledAt": created,
         "startedAt": None if queued else created,
         "finishedAt": None,
+        "pausedAt": None,
         "updatedAt": created,
         "slaDueAt": _ts(created_offset + wf["timeoutSeconds"]),
         "expiresAt": _ts(created_offset + wf["timeoutSeconds"]),
@@ -502,6 +555,7 @@ def _fail_step(state: base.State, execution: dict, idx: int, at: str) -> dict:
                {"step": step["stepId"], "code": code, "retryable": retryable}, at=at)
     execution["finishedAt"] = at
     execution["updatedAt"] = at
+    _record_attempt(execution, execution["status"], step["stepId"], at)
     return execution
 
 
@@ -520,6 +574,7 @@ def _finish_success(state: base.State, execution: dict) -> dict:
     execution["metrics"]["durationMs"] = max(0, execution["_clock"] - execution["_startClock"]) * 1000
     _audit(state, execution, "execution_succeeded", "relay",
            {"completedSteps": execution["metrics"]["completedSteps"]}, at=at)
+    _record_attempt(execution, "succeeded", None, at)
     return execution
 
 
@@ -548,6 +603,7 @@ def _apply_signal(state: base.State, execution: dict, decision: str, actor: str,
         execution["updatedAt"] = at
         execution["error"] = {"code": "approval_rejected", "step": step["stepId"], "message": note}
         _audit(state, execution, "approval_rejected", actor, {"step": step["stepId"], "note": note}, at=at)
+        _record_attempt(execution, "cancelled", step["stepId"], at)
     return execution
 
 
@@ -577,6 +633,32 @@ def _apply_retry(state: base.State, execution: dict, actor: str) -> dict:
     return execution
 
 
+def _apply_pause(state: base.State, execution: dict, actor: str, reason: str | None) -> dict:
+    if execution["status"] not in _PAUSABLE:
+        raise DomainError(409, "not_pausable", f"cannot pause a {execution['status']} execution")
+    execution["_resumeStatus"] = execution["status"]
+    execution["status"] = "paused"
+    at = _ts(execution["_clock"])
+    execution["pausedAt"] = at
+    execution["updatedAt"] = at
+    _audit(state, execution, "execution_paused", actor,
+           {"from": execution["_resumeStatus"], "reason": reason}, at=at)
+    return execution
+
+
+def _apply_resume(state: base.State, execution: dict, actor: str) -> dict:
+    if execution["status"] != "paused":
+        raise DomainError(409, "not_paused", "execution is not paused")
+    resume_to = execution.get("_resumeStatus") or "running"
+    execution["status"] = resume_to
+    execution["_resumeStatus"] = None
+    at = _ts(execution["_clock"])
+    execution["pausedAt"] = None
+    execution["updatedAt"] = at
+    _audit(state, execution, "execution_resumed", actor, {"to": resume_to}, at=at)
+    return execution
+
+
 # --------------------------------------------------------------------------- #
 # projections
 # --------------------------------------------------------------------------- #
@@ -584,17 +666,24 @@ def _workflow_summary(state: base.State, wf: dict) -> dict:
     runs = [e for e in state.table("executions").values() if e["workflowId"] == wf["id"]]
     finished = [e for e in runs if e["status"] in _TERMINAL]
     succeeded = sum(1 for e in finished if e["status"] == "succeeded")
+    failed = [e for e in finished if e["status"] in ("failed", "timed_out")]
+    durations = [e["metrics"]["durationMs"] for e in finished
+                 if e["status"] == "succeeded" and e["metrics"]["durationMs"]]
     last = max((e["updatedAt"] for e in runs), default=None)
     return {
         "id": wf["id"], "name": wf["name"], "description": wf["description"],
         "version": wf["version"], "status": "enabled", "queue": wf["queue"],
         "priority": wf["priority"], "triggerTypes": wf["triggerTypes"],
-        "schedule": wf["schedule"], "stepCount": len(wf["steps"]), "tags": wf["tags"],
-        "owner": wf["owner"],
+        "schedule": wf["schedule"], "nextRunAt": _next_run(wf["schedule"]),
+        "stepCount": len(wf["steps"]), "tags": wf["tags"], "owner": wf["owner"],
         "stats": {"totalRuns": len(runs),
                   "successRate": round(succeeded / len(finished), 3) if finished else None,
+                  "failureRate": round(len(failed) / len(finished), 3) if finished else None,
+                  "avgDurationMs": round(sum(durations) / len(durations)) if durations else None,
                   "activeRuns": sum(1 for e in runs if e["status"] in _ACTIVE),
-                  "lastRunAt": last},
+                  "lastRunAt": last,
+                  "lastFailureAt": max((e["finishedAt"] for e in failed if e["finishedAt"]),
+                                       default=None)},
     }
 
 
@@ -604,7 +693,8 @@ def _execution_summary(ex: dict) -> dict:
         "workflowName": ex["workflowName"], "status": ex["status"],
         "priority": ex["priority"], "queue": ex["queue"], "attempt": ex["attempt"],
         "currentStep": ex["currentStep"], "correlationId": ex["correlationId"],
-        "subject": ex["trigger"]["subject"], "createdAt": ex["scheduledAt"],
+        "subject": ex["trigger"]["subject"], "tags": ex["tags"],
+        "createdAt": ex["scheduledAt"],
         "startedAt": ex["startedAt"], "finishedAt": ex["finishedAt"],
         "updatedAt": ex["updatedAt"],
         "progress": {"completed": ex["metrics"]["completedSteps"],

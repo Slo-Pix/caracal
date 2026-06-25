@@ -3693,77 +3693,150 @@ def keystone_dataset(seed: str) -> dict[str, dict]:
 # --------------------------------------------------------------------------- #
 
 # Chart of accounts: (number, name, type, subtype, normalBalance).
+# Chart of accounts modeled on Sage Intacct / NetSuite GL master records:
+# (accountNo, name, type, subtype, normalBalance, parentAccountNo, description).
 _SLATE_CHART = (
-    ("1000", "Cash - Operating USD", "asset", "bank", "debit"),
-    ("1010", "Cash - Operating EUR", "asset", "bank", "debit"),
-    ("1020", "Cash - Payroll", "asset", "bank", "debit"),
-    ("1100", "Accounts Receivable", "asset", "accounts_receivable", "debit"),
-    ("1200", "Prepaid Expenses", "asset", "other_current_asset", "debit"),
-    ("1210", "Prepaid Insurance", "asset", "other_current_asset", "debit"),
-    ("1500", "Fixed Assets", "asset", "fixed_asset", "debit"),
-    ("1510", "Accumulated Depreciation", "asset", "fixed_asset", "credit"),
-    ("2000", "Accounts Payable", "liability", "accounts_payable", "credit"),
-    ("2100", "Accrued Liabilities", "liability", "other_current_liability", "credit"),
-    ("2110", "Accrued Payroll", "liability", "other_current_liability", "credit"),
-    ("2200", "Sales Tax Payable", "liability", "other_current_liability", "credit"),
-    ("2300", "Deferred Revenue", "liability", "other_current_liability", "credit"),
-    ("3000", "Common Stock", "equity", "equity", "credit"),
-    ("3900", "Retained Earnings", "equity", "equity", "credit"),
-    ("4000", "Subscription Revenue", "income", "income", "credit"),
-    ("4100", "Services Revenue", "income", "income", "credit"),
-    ("5000", "Cost of Revenue", "expense", "cost_of_goods_sold", "debit"),
-    ("6000", "Salaries & Wages", "expense", "expense", "debit"),
-    ("6100", "Facilities & Rent", "expense", "expense", "debit"),
-    ("6200", "Software Subscriptions", "expense", "expense", "debit"),
-    ("6300", "Professional Fees", "expense", "expense", "debit"),
-    ("6400", "Depreciation Expense", "expense", "expense", "debit"),
-    ("6900", "Insurance Expense", "expense", "expense", "debit"),
+    ("1000", "Cash - Operating USD", "asset", "bank", "debit", None,
+     "Primary USD operating bank account"),
+    ("1010", "Cash - Operating EUR", "asset", "bank", "debit", None,
+     "EUR operating bank account, revalued at period end"),
+    ("1020", "Cash - Payroll", "asset", "bank", "debit", None,
+     "Dedicated payroll disbursement account"),
+    ("1100", "Accounts Receivable", "asset", "accounts_receivable", "debit", None,
+     "Trade receivables control account"),
+    ("1200", "Prepaid Expenses", "asset", "other_current_asset", "debit", None,
+     "Prepaid expenses amortized over their service period"),
+    ("1210", "Prepaid Insurance", "asset", "other_current_asset", "debit", "1200",
+     "Prepaid insurance premiums"),
+    ("1500", "Fixed Assets", "asset", "fixed_asset", "debit", None,
+     "Property, plant, and equipment at cost"),
+    ("1510", "Accumulated Depreciation", "asset", "fixed_asset", "credit", "1500",
+     "Contra-asset accumulating depreciation"),
+    ("2000", "Accounts Payable", "liability", "accounts_payable", "credit", None,
+     "Trade payables control account"),
+    ("2100", "Accrued Liabilities", "liability", "other_current_liability", "credit", None,
+     "Accrued expenses awaiting invoicing"),
+    ("2110", "Accrued Payroll", "liability", "other_current_liability", "credit", "2100",
+     "Accrued wages, bonuses, and benefits"),
+    ("2200", "Sales Tax Payable", "liability", "other_current_liability", "credit", None,
+     "Sales and use tax collected and owed"),
+    ("2300", "Deferred Revenue", "liability", "other_current_liability", "credit", None,
+     "Unearned revenue from billed-in-advance contracts"),
+    ("3000", "Common Stock", "equity", "equity", "credit", None,
+     "Par value of issued common shares"),
+    ("3900", "Retained Earnings", "equity", "equity", "credit", None,
+     "Cumulative earnings retained in the business"),
+    ("4000", "Subscription Revenue", "income", "income", "credit", None,
+     "Recurring subscription revenue"),
+    ("4100", "Services Revenue", "income", "income", "credit", None,
+     "Professional and implementation services revenue"),
+    ("5000", "Cost of Revenue", "expense", "cost_of_goods_sold", "debit", None,
+     "Direct cost of delivering the product"),
+    ("6000", "Salaries & Wages", "expense", "expense", "debit", None,
+     "Employee compensation"),
+    ("6100", "Facilities & Rent", "expense", "expense", "debit", None,
+     "Office rent, utilities, and facilities"),
+    ("6200", "Software Subscriptions", "expense", "expense", "debit", None,
+     "SaaS and cloud infrastructure subscriptions"),
+    ("6300", "Professional Fees", "expense", "expense", "debit", None,
+     "Legal, audit, and consulting fees"),
+    ("6400", "Depreciation Expense", "expense", "expense", "debit", None,
+     "Periodic depreciation of fixed assets"),
+    ("6900", "Insurance Expense", "expense", "expense", "debit", None,
+     "Insurance expense recognized from prepaids"),
 )
 
-# Recurring accrual templates a close team carries period to period.
+# Balance-sheet vs income-statement classification, the way GL platforms tag
+# accounts to drive the trial balance and financial statements.
+_SLATE_STATEMENT = {
+    "asset": "balance_sheet",
+    "liability": "balance_sheet",
+    "equity": "balance_sheet",
+    "income": "income_statement",
+    "expense": "income_statement",
+}
+
+# Recurring accrual templates a close team carries period to period:
+# (description, expenseAccount, liabilityAccount, frequency).
 _SLATE_ACCRUAL_TEMPLATES = (
-    ("Cloud infrastructure", "6200", "2100"),
-    ("External audit fees", "6300", "2100"),
-    ("Annual insurance", "6900", "1210"),
-    ("Bonus accrual", "6000", "2110"),
+    ("Cloud infrastructure", "6200", "2100", "monthly"),
+    ("External audit fees", "6300", "2100", "quarterly"),
+    ("Annual insurance", "6900", "1210", "monthly"),
+    ("Bonus accrual", "6000", "2110", "monthly"),
 )
 
-# Standard close checklist, mirroring a FloQast/BlackLine task list.
+# Standard close checklist, mirroring a FloQast / BlackLine task list with
+# owners, dependencies, and sign-off: (taskKey, name, category, owner, dependsOn).
 _SLATE_CLOSE_TASKS = (
-    "Post recurring accruals",
-    "Reconcile cash accounts",
-    "Reconcile accounts payable",
-    "Review trial balance",
-    "Sub-ledger cutoff",
+    ("post_accruals", "Post recurring accruals", "accruals",
+     "staff-accountant@slate-ledger.test", ()),
+    ("recon_cash", "Reconcile cash accounts", "reconciliation",
+     "staff-accountant@slate-ledger.test", ("post_accruals",)),
+    ("recon_ap", "Reconcile accounts payable", "reconciliation",
+     "staff-accountant@slate-ledger.test", ("post_accruals",)),
+    ("review_tb", "Review trial balance", "review",
+     "controller@slate-ledger.test", ("recon_cash", "recon_ap")),
+    ("subledger_cutoff", "Sub-ledger cutoff", "cutoff",
+     "controller@slate-ledger.test", ()),
 )
+
+# Statement-line categories that drive a bank/sub-ledger reconciliation, the
+# reconciling-item taxonomy BlackLine and FloQast expose.
+_SLATE_RECON_TYPE = {
+    "bank": "bank",
+    "accounts_receivable": "subledger",
+    "accounts_payable": "subledger",
+}
 
 
 def _slate_period_id(d: date) -> str:
     return d.strftime("%Y-%m")
 
 
+def _slate_period_end(first: date) -> date:
+    if first.month == 12:
+        return date(first.year, 12, 31)
+    return date(first.year, first.month + 1, 1) - timedelta(days=1)
+
+
 def slate_dataset(seed: str) -> dict[str, dict]:
     """Build a coherent general ledger: a chart of accounts with running
     balances, posted double-entry journals across a fiscal calendar, monthly
-    periods with a close checklist, reconciliations with matched and
-    outstanding items, and recurring accrual schedules."""
+    periods with an owned close checklist, bank and sub-ledger reconciliations
+    with matched and outstanding items and maker-checker sign-off, and recurring
+    accrual schedules. Wire shapes follow Sage Intacct / NetSuite GL records and
+    FloQast / BlackLine close and reconciliation objects."""
     accounts: dict[str, dict] = {}
-    for number, name, acct_type, subtype, normal in _SLATE_CHART:
+    for number, name, acct_type, subtype, normal, parent, description in _SLATE_CHART:
+        is_bank = subtype == "bank"
+        created = _instant(_rng(seed, "acct", number), -400, -360)
         accounts[number] = {
             "accountId": number,
             "accountNo": number,
             "name": name,
+            "description": description,
             "type": acct_type,
             "subtype": subtype,
+            "classification": _SLATE_STATEMENT[acct_type],
             "normalBalance": normal,
+            "parentAccountNo": parent,
             "currency": "EUR" if number == "1010" else "USD",
             "status": "active",
             "isControlAccount": number in ("1100", "2000"),
+            "isBankAccount": is_bank,
+            "bankAccountLast4": f"{_rng(seed, 'bank', number).randint(0, 9999):04d}"
+            if is_bank
+            else None,
+            "reconciliationRequired": is_bank or number in ("1100", "2000"),
+            "openingBalance": 0.0,
             "balance": 0.0,
+            "lastReconciledAt": None,
+            "createdAt": created,
+            "updatedAt": created,
         }
 
-    expense_accounts = [n for n, _, t, _, _ in _SLATE_CHART if t == "expense"]
-    revenue_accounts = [n for n, _, t, _, _ in _SLATE_CHART if t == "income"]
+    expense_accounts = [n for n, _, t, *_ in _SLATE_CHART if t == "expense"]
+    revenue_accounts = [n for n, _, t, *_ in _SLATE_CHART if t == "income"]
 
     periods: dict[str, dict] = {}
     month_first_days = [date(2025, 11, 1), date(2025, 12, 1)] + [
@@ -3771,25 +3844,38 @@ def slate_dataset(seed: str) -> dict[str, dict]:
     ]
     for first in month_first_days:
         pid = _slate_period_id(first)
+        end = _slate_period_end(first)
         closed = first.year == 2025
+        locked = pid == "2025-11"
+        crng = _rng(seed, "close", pid)
         periods[pid] = {
             "periodId": pid,
             "name": first.strftime("%B %Y"),
+            "periodType": "month",
             "fiscalYear": first.year,
+            "quarter": f"{first.year}-Q{(first.month - 1) // 3 + 1}",
             "startDate": first.isoformat(),
-            "status": "closed" if closed else "open",
+            "endDate": end.isoformat(),
+            "dueDate": (end + timedelta(days=5)).isoformat(),
+            "status": ("locked" if locked else "closed") if closed else "open",
+            "closeType": "hard" if closed else None,
             "checklist": [
                 {
-                    "task": t,
+                    "taskId": f"{pid}-{key}",
+                    "task": label,
+                    "category": category,
+                    "owner": owner,
+                    "dependsOn": [f"{pid}-{d}" for d in depends],
                     "status": "complete" if closed else "pending",
-                    "owner": "Finance",
+                    "completedAt": _instant(crng, -38, -31) if closed else None,
+                    "signOffBy": owner if closed else None,
                 }
-                for t in _SLATE_CLOSE_TASKS
+                for key, label, category, owner, depends in _SLATE_CLOSE_TASKS
             ],
-            "closedAt": _instant(_rng(seed, "close", pid), -40, -30)
-            if closed
-            else None,
+            "closedAt": _instant(crng, -40, -30) if closed else None,
             "closedBy": "controller@slate-ledger.test" if closed else None,
+            "reopenedAt": None,
+            "reopenedBy": None,
         }
 
     entries: dict[str, dict] = {}
@@ -3814,9 +3900,11 @@ def slate_dataset(seed: str) -> dict[str, dict]:
             total_credit += credit
             lines.append(
                 {
+                    "lineId": f"GL{seq:06d}-{ln}",
                     "lineNo": ln,
                     "accountNo": acct,
                     "accountName": accounts[acct]["name"],
+                    "accountType": accounts[acct]["type"],
                     "debit": debit,
                     "credit": credit,
                     "department": rng.choice(_DEPARTMENTS),
@@ -3827,6 +3915,7 @@ def slate_dataset(seed: str) -> dict[str, dict]:
             delta = (debit - credit) if normal == "debit" else (credit - debit)
             accounts[acct]["balance"] = round(accounts[acct]["balance"] + delta, 2)
         jid = f"JE-{period_id.replace('-', '')}-{seq:04d}"
+        posted_at = _instant(rng, -120, -1)
         entry = {
             "journalId": jid,
             "entryNo": f"GL{seq:06d}",
@@ -3834,16 +3923,25 @@ def slate_dataset(seed: str) -> dict[str, dict]:
             "source": source,
             "period": period_id,
             "currency": "USD",
+            "exchangeRate": 1.0,
+            "reportingCurrency": "USD",
             "description": description,
             "reference": f"REF-{rng.randint(10000, 99999)}",
+            "externalId": None,
+            "tags": [source],
+            "attachments": [],
             "lines": lines,
             "totalDebit": round(total_debit, 2),
             "totalCredit": round(total_credit, 2),
             "status": "posted",
+            "approvalStatus": "approved",
+            "approvedBy": "controller@slate-ledger.test",
             "reversalOf": None,
             "reversedBy": None,
             "postedBy": "gl-bot@slate-ledger.test",
-            "postedAt": _instant(rng, -120, -1),
+            "postedAt": posted_at,
+            "createdAt": posted_at,
+            "updatedAt": posted_at,
         }
         entries[jid] = entry
         return entry
@@ -3900,6 +3998,7 @@ def slate_dataset(seed: str) -> dict[str, dict]:
     recon_targets = (("1000", 0.0), ("1010", 0.0), ("1020", 142.50), ("2000", 0.0))
     for idx, (acct, residual) in enumerate(recon_targets, start=1):
         rng = _rng(seed, "recon", acct)
+        subtype = accounts[acct]["subtype"]
         gl_balance = accounts[acct]["balance"]
         statement_balance = round(gl_balance + residual, 2)
         outstanding = []
@@ -3912,43 +4011,74 @@ def slate_dataset(seed: str) -> dict[str, dict]:
                     "memo": "Late deposit not yet on statement",
                 }
             )
+        matched_total = round(abs(gl_balance), 2)
+        prepared_at = _instant(rng, -20, -8)
+        reviewed = not residual
         rid = f"REC-2026-{idx:04d}"
         reconciliations[rid] = {
             "reconciliationId": rid,
             "accountNo": acct,
             "accountName": accounts[acct]["name"],
+            "reconciliationType": _SLATE_RECON_TYPE.get(subtype, "balance_sheet"),
+            "frequency": "monthly",
             "period": posted_periods[0],
             "glBalance": gl_balance,
             "statementBalance": statement_balance,
             "outstandingItems": outstanding,
             "outstandingTotal": round(residual, 2),
+            "matchedItems": [
+                {"itemId": f"MT-{idx:03d}", "type": "cleared", "amount": matched_total}
+            ]
+            if matched_total
+            else [],
+            "matchedTotal": matched_total,
             "adjustedBalance": round(statement_balance - residual, 2),
             "difference": round(statement_balance - residual - gl_balance, 2),
+            "tolerance": 1.00,
+            "withinTolerance": not residual,
             "status": "balanced" if not residual else "exception",
+            "reviewStatus": "reviewed" if reviewed else "pending_review",
             "preparedBy": "staff-accountant@slate-ledger.test",
+            "reviewedBy": "controller@slate-ledger.test" if reviewed else None,
+            "preparedAt": prepared_at,
+            "reviewedAt": _instant(rng, -7, -2) if reviewed else None,
             "reconciledAt": _instant(rng, -20, -2),
+            "dueDate": (_EPOCH + timedelta(days=5)).isoformat(),
         }
+        accounts[acct]["lastReconciledAt"] = reconciliations[rid]["reconciledAt"]
 
     accruals: dict[str, dict] = {}
-    for idx, (name, expense_acct, liability_acct) in enumerate(
+    start_period = posted_periods[0]
+    for idx, (name, expense_acct, liability_acct, frequency) in enumerate(
         _SLATE_ACCRUAL_TEMPLATES, start=1
     ):
         rng = _rng(seed, "accrual", name)
         total = round(rng.uniform(24_000, 180_000), 2)
         periods_count = rng.choice((3, 6, 12))
+        per_period = round(total / periods_count, 2)
+        posted_count = rng.randint(0, periods_count - 1)
+        created = _instant(rng, -90, -40)
         aid = f"ACR-2026-{idx:04d}"
         accruals[aid] = {
             "accrualId": aid,
             "description": name,
             "expenseAccount": expense_acct,
+            "expenseAccountName": accounts[expense_acct]["name"],
             "liabilityAccount": liability_acct,
+            "liabilityAccountName": accounts[liability_acct]["name"],
             "totalAmount": total,
             "periods": periods_count,
-            "perPeriod": round(total / periods_count, 2),
-            "postedPeriods": rng.randint(0, periods_count - 1),
+            "perPeriod": per_period,
+            "postedPeriods": posted_count,
+            "remainingPeriods": periods_count - posted_count,
+            "remainingAmount": round(total - per_period * posted_count, 2),
+            "frequency": frequency,
             "currency": "USD",
+            "startPeriod": start_period,
+            "nextPostPeriod": start_period,
             "status": "active",
-            "createdAt": _instant(rng, -90, -40),
+            "createdAt": created,
+            "updatedAt": created,
         }
 
     return {

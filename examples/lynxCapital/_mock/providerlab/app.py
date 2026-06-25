@@ -191,8 +191,10 @@ def build_app(provider: catalog.Provider) -> FastAPI:
             data = domain.dispatch(provider, state, operation, payload, principal)
         except domain.DomainError as exc:
             activity.record(str(principal.get("principal")), principal.get("auth"), operation, exc.status)
-            return JSONResponse(status_code=exc.status,
-                                content={"error": exc.code, "message": exc.message})
+            body = {"error": exc.code, "message": exc.message}
+            if exc.details:
+                body.update(exc.details)
+            return JSONResponse(status_code=exc.status, content=body)
         activity.record(str(principal.get("principal")), principal.get("auth"), operation, 200)
         return JSONResponse({"provider": provider.id, "operation": operation, "data": data})
 
