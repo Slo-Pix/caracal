@@ -29,6 +29,9 @@ import type {
 
 export const Route = createFileRoute("/app/audit")({
   component: AuditRoute,
+  validateSearch: (search: Record<string, unknown>): { focus?: string } => ({
+    focus: typeof search.focus === "string" ? search.focus : undefined,
+  }),
 });
 
 type AuditMode = "decisions" | "admin";

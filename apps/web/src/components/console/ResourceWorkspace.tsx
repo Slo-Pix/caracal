@@ -4,7 +4,9 @@ Caracal, a product of Garudex Labs
 
 This file provides the reusable list-and-detail workspace used by Console object pages.
 */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+
+import { useSearch } from "@tanstack/react-router";
 
 import { ModulePage } from "@/components/console/ModulePage";
 import {
@@ -94,7 +96,11 @@ export function ResourceWorkspace<T>({
   // controls that belong on the same line as search rather than in a separate block.
   toolbarExtra?: ReactNode;
 }) {
-  const [query, setQuery] = useState("");
+  // A citation or guided link can arrive with ?focus=<slug>, which pre-fills the search so
+  // the page opens narrowed to the exact item the operator was sent to.
+  const focusParam = useSearch({ strict: false }) as { focus?: string };
+  const initialFocus = typeof focusParam.focus === "string" ? focusParam.focus : "";
+  const [query, setQuery] = useState(initialFocus);
   const [sortChoice, setSortChoice] = useState(sortOptions?.[0]?.id ?? "");
   const [sort, setSort] = useState<SortState | undefined>(initialSort);
   const [page, setPage] = useState(1);
@@ -117,6 +123,17 @@ export function ResourceWorkspace<T>({
     if (!query.trim()) return rows;
     return rows.filter((row) => search.match(row, query.toLowerCase()));
   }, [rows, query, search]);
+
+  // When a focus link narrows the list to a single item, open its detail once so the page
+  // lands the reader directly on the cited item rather than just its filtered row.
+  const focusOpened = useRef(false);
+  useEffect(() => {
+    if (focusOpened.current || !initialFocus || loading || !detail) return;
+    if (filtered.length === 1) {
+      setSelected(filtered[0]);
+      focusOpened.current = true;
+    }
+  }, [initialFocus, loading, detail, filtered]);
 
   const sorted = useMemo(() => {
     const accessor = sort ? sortValues?.[sort.column] : undefined;
