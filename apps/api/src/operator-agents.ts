@@ -112,9 +112,20 @@ export function buildPlannerMessages(message: string, context: AgentContext): Ga
   ]
 }
 
-// Produces a proposed plan from intent. The output is parsed against the same
-// ProposedPlan contract the rest of the pipeline uses; anything else fails closed,
-// so a malformed or hallucinated plan never leaves this function as a success.
+// The planner may legitimately return zero steps when nothing maps to a capability, so
+// it is parsed against a schema that permits an empty plan. The strict ProposedPlan used
+// by the governed /plan endpoint still requires at least one step; an empty plan here is
+// simply surfaced as "no actionable plan" by the orchestrator.
+const PlannerPlan = z
+  .object({
+    summary: z.string().min(1).max(2000),
+    steps: z.array(ProposedPlan.shape.steps.element).max(50),
+  })
+  .strict()
+
+// Produces a proposed plan from intent. The output is parsed against the planner schema;
+// anything malformed fails closed, so a hallucinated plan never leaves this function as a
+// success. An empty steps array is a valid "nothing maps" result.
 export async function runPlanner(gateway: Gateway, message: string, context: AgentContext): Promise<AgentResult<ProposedPlanInput>> {
   const completion = await gateway.complete(buildPlannerMessages(message, context), {
     maxTokens: PLANNER_MAX_TOKENS,
@@ -122,7 +133,7 @@ export async function runPlanner(gateway: Gateway, message: string, context: Age
   })
   const json = extractJson(completion.text)
   if (json === null) return { ok: false, error: 'planner did not return JSON' }
-  const parsed = ProposedPlan.safeParse(json)
+  const parsed = PlannerPlan.safeParse(json)
   if (!parsed.success) return { ok: false, error: 'planner returned a plan that failed the schema' }
   return { ok: true, value: parsed.data }
 }

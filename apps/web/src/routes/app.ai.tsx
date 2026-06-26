@@ -146,19 +146,19 @@ const DitherBackdrop = lazy(() =>
 type Glyph = (props: { className?: string }) => ReactNode;
 
 const SUGGESTIONS: { title: string; hint: string; icon: Glyph }[] = [
-  { title: "Connect GitHub", hint: "Set GitHub up as a provider", icon: LinkGlyph },
+  { title: "Create a zone for the payments team", hint: "Spin up a new zone", icon: PlugGlyph },
   {
-    title: "Give the finance agent read-only access",
-    hint: "Grant scoped, read-only access",
+    title: "Register an application called Worker",
+    hint: "Register a managed application",
+    icon: LinkGlyph,
+  },
+  {
+    title: "Give the finance app read-only access to invoices",
+    hint: "Grant scoped access",
     icon: KeyGlyph,
   },
-  {
-    title: "Create a provider for our internal API",
-    hint: "Register a new provider",
-    icon: PlugGlyph,
-  },
-  { title: "Rotate credentials", hint: "Rotate a provider's credentials", icon: RotateGlyph },
-  { title: "Remove unused permissions", hint: "Prune access nobody uses", icon: TrimGlyph },
+  { title: "Rotate an application's credentials", hint: "Issue a fresh secret", icon: RotateGlyph },
+  { title: "What zones do I have?", hint: "Read current state", icon: TrimGlyph },
   { title: "Why was that request denied?", hint: "Explain a policy decision", icon: HelpGlyph },
 ];
 

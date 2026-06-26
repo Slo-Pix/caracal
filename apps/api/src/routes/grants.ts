@@ -330,6 +330,41 @@ function sendOAuthCallback(
   return reply.code(status).send(body)
 }
 
+// Creates an active delegated grant after validating the application and resource exist
+// and the requested scopes are within the resource's scopes. Shared by the grants route
+// and the Operator executor so both authorize and persist a grant identically. Returns a
+// typed error rather than throwing so each caller maps it to its own surface.
+export type CreateGrantError = 'application_not_found' | 'resource_not_found' | 'grant_scopes_exceed_resource'
+
+export async function createDelegatedGrant(
+  db: { query: <T = unknown>(text: string, params?: unknown[]) => Promise<{ rows: T[] }> },
+  zoneId: string,
+  input: { application_id: string; user_id: string; resource_id: string; scopes: string[] },
+): Promise<{ ok: true; row: Record<string, unknown> } | { ok: false; error: CreateGrantError }> {
+  const { rows: refs } = await db.query<{ application_exists: boolean; resource_scopes: string[] | null }>(
+    `SELECT
+       EXISTS (
+         SELECT 1 FROM applications
+         WHERE id = $2 AND zone_id = $1 AND archived_at IS NULL
+           AND (expires_at IS NULL OR expires_at > now())
+       ) AS application_exists,
+       (SELECT scopes FROM resources WHERE id = $3 AND zone_id = $1 AND archived_at IS NULL) AS resource_scopes`,
+    [zoneId, input.application_id, input.resource_id],
+  )
+  if (!refs[0]?.application_exists) return { ok: false, error: 'application_not_found' }
+  if (!refs[0].resource_scopes) return { ok: false, error: 'resource_not_found' }
+  if (!scopesAllowed(input.scopes, refs[0].resource_scopes)) {
+    return { ok: false, error: 'grant_scopes_exceed_resource' }
+  }
+  const { rows } = await db.query<Record<string, unknown>>(
+    `INSERT INTO delegated_grants (id, zone_id, application_id, user_id, resource_id, scopes, status)
+     VALUES ($1, $2, $3, $4, $5, $6, 'active')
+     RETURNING id, zone_id, application_id, user_id, resource_id, scopes, status, created_at`,
+    [uuidv7(), zoneId, input.application_id, input.user_id, input.resource_id, input.scopes],
+  )
+  return { ok: true, row: rows[0] }
+}
+
 export const grantsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/zones/:zoneId/grants', async (req, reply) => {
     const params = parseParams(ZoneParams, req, reply)
@@ -405,33 +440,12 @@ export const grantsRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.code(404).send({ error: 'zone_not_found' })
     }
     const body = GrantBody.parse(req.body)
-    const { rows: refs } = await fastify.db.query(
-      `SELECT
-         EXISTS (
-           SELECT 1 FROM applications
-           WHERE id = $2 AND zone_id = $1 AND archived_at IS NULL
-             AND (expires_at IS NULL OR expires_at > now())
-         ) AS application_exists,
-         (SELECT scopes FROM resources WHERE id = $3 AND zone_id = $1 AND archived_at IS NULL) AS resource_scopes`,
-      [params.zoneId, body.application_id, body.resource_id],
-    )
-    if (!refs[0]?.application_exists) {
-      return reply.code(404).send({ error: 'application_not_found' })
+    const result = await createDelegatedGrant(fastify.db, params.zoneId, body)
+    if (!result.ok) {
+      const status = result.error === 'grant_scopes_exceed_resource' ? 403 : 404
+      return reply.code(status).send({ error: result.error })
     }
-    if (!refs[0].resource_scopes) {
-      return reply.code(404).send({ error: 'resource_not_found' })
-    }
-    if (!scopesAllowed(body.scopes, refs[0].resource_scopes)) {
-      return reply.code(403).send({ error: 'grant_scopes_exceed_resource' })
-    }
-    const id = uuidv7()
-    const { rows } = await fastify.db.query(
-      `INSERT INTO delegated_grants (id, zone_id, application_id, user_id, resource_id, scopes, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'active')
-       RETURNING id, zone_id, application_id, user_id, resource_id, scopes, status, created_at`,
-      [id, params.zoneId, body.application_id, body.user_id, body.resource_id, body.scopes],
-    )
-    return reply.code(201).send(rows[0])
+    return reply.code(201).send(result.row)
   })
 
   fastify.post('/zones/:zoneId/provider-grants', async (req, reply) => {
