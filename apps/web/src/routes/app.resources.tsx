@@ -42,8 +42,9 @@ import type { Application, Provider, Resource, ResourceInput } from "@/platform/
 
 export const Route = createFileRoute("/app/resources")({
   component: ResourcesRoute,
-  validateSearch: (search: Record<string, unknown>): { create?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { create?: string; focus?: string } => ({
     create: typeof search.create === "string" ? search.create : undefined,
+    focus: typeof search.focus === "string" ? search.focus : undefined,
   }),
 });
 
