@@ -124,7 +124,22 @@ describe('runExplainer', () => {
   it('returns the model answer text', async () => {
     const { gateway } = gatewayReturning('  Your agent was denied because it lacks the scope.  ')
     const result = await runExplainer(gateway, 'why was it denied', { facts: null, state: null })
-    expect(result).toEqual({ ok: true, value: 'Your agent was denied because it lacks the scope.' })
+    expect(result).toEqual({ ok: true, value: { text: 'Your agent was denied because it lacks the scope.', reasoning: undefined } })
+  })
+
+  it('surfaces the model reasoning when the gateway exposes it', async () => {
+    const complete = vi.fn().mockResolvedValueOnce({
+      text: 'It lacks the scope.',
+      reasoning: 'The grant only covers read, the request needs write.',
+      provider: 'test',
+      model: 'm',
+    } satisfies CompletionResult)
+    const gateway = { status: () => ({ enabled: true, providers: [] }), complete } as unknown as Gateway
+    const result = await runExplainer(gateway, 'why was it denied', { facts: null, state: null })
+    expect(result).toEqual({
+      ok: true,
+      value: { text: 'It lacks the scope.', reasoning: 'The grant only covers read, the request needs write.' },
+    })
   })
 
   it('fails closed on an empty answer', async () => {

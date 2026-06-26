@@ -172,6 +172,43 @@ describe('GET /v1/zones/:zoneId/operator-conversations', () => {
     expect(res.statusCode).toBe(400)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_query' })
   })
+
+  it('lists archived conversations when status=archived', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [{ ...conversationRow, status: 'archived' }] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/operator-conversations?status=archived',
+    })
+    expect(res.statusCode).toBe(200)
+    expect(db.query.mock.calls[0][0]).toContain('archived_at IS NOT NULL')
+  })
+
+  it('lists every conversation when status=all', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rows: [conversationRow] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/operator-conversations?status=all',
+    })
+    expect(res.statusCode).toBe(200)
+    const sql = db.query.mock.calls[0][0]
+    expect(sql).not.toContain('archived_at IS NULL')
+    expect(sql).not.toContain('archived_at IS NOT NULL')
+  })
+
+  it('rejects an unknown status', async () => {
+    const { app } = buildApp()
+    await app.ready()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones/z1/operator-conversations?status=bogus',
+    })
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_query' })
+  })
 })
 
 describe('GET /v1/zones/:zoneId/operator-conversations/:id', () => {
@@ -210,6 +247,28 @@ describe('PATCH /v1/zones/:zoneId/operator-conversations/:id', () => {
     expect(res.statusCode).toBe(200)
     expect(JSON.parse(res.body)).toMatchObject({ status: 'archived' })
     expect(db.query.mock.calls[0][1]).toEqual(['conv-1', 'z1', null, 'archived'])
+  })
+})
+
+describe('DELETE /v1/zones/:zoneId/operator-conversations/:id', () => {
+  it('removes the conversation and its turns', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rowCount: 1, rows: [] })
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/operator-conversations/conv-1' })
+    expect(res.statusCode).toBe(204)
+    const [sql, values] = db.query.mock.calls[0]
+    expect(sql).toContain('DELETE FROM operator_conversations')
+    expect(values).toEqual(['conv-1', 'z1'])
+  })
+
+  it('returns 404 when the conversation is absent', async () => {
+    const { app, db } = buildApp()
+    db.query.mockResolvedValueOnce({ rowCount: 0, rows: [] })
+    await app.ready()
+    const res = await app.inject({ method: 'DELETE', url: '/v1/zones/z1/operator-conversations/conv-x' })
+    expect(res.statusCode).toBe(404)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'conversation_not_found' })
   })
 })
 
@@ -979,7 +1038,7 @@ describe('operator AI gateway routes', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/operator/ai/status' })
     const body = JSON.parse(res.body)
     expect(body.enabled).toBe(true)
-    expect(body.providers).toEqual([{ id: 'primary', model: 'gpt-x', available: true }])
+    expect(body.providers).toEqual([{ id: 'primary', model: 'gpt-x', available: true, contextWindow: 0 }])
     expect(res.body).not.toContain('sk-secret')
   })
 
@@ -1232,6 +1291,56 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     expect(body.model).toBe('gpt-x')
     expect(body.max_tokens).toBe(128000)
     expect(body.usage).toEqual({ input_tokens: 520, output_tokens: 64, total_tokens: 584 })
+  })
+
+  it('rejects a message naming an unknown provider', async () => {
+    const { app } = buildApp(true, { aiProviders: [provider] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'connect github', provider: 'nope' },
+    })
+    expect(res.statusCode).toBe(400)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'invalid_provider' })
+  })
+
+  it('routes the message to the chosen provider and reports it', async () => {
+    const first = { ...provider, id: 'first', model: 'model-a' }
+    const second = { ...provider, id: 'second', model: 'model-b', contextWindow: 64000 }
+    const fetchImpl = fetchReturning('{"intent":"explain"}', 'Routed through model-b.')
+    const { app, clientQuery, db } = buildApp(true, {
+      aiProviders: [first, second],
+      fetchImpl,
+    })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1 }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'note' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'why was my agent denied', provider: 'second' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body.provider).toBe('second')
+    expect(body.model).toBe('model-b')
+    expect(body.max_tokens).toBe(64000)
   })
 
   it('returns 502 ai_unreachable when the model call fails', async () => {

@@ -368,6 +368,14 @@ describe('operator conversation lifecycle', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'connect github' })
   })
 
+  it('includes the provider when one is chosen for the message', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(201, { intent: 'explain', ok: true, text: 'hi', turn: null }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await consoleApi.operator.sendMessage('z1', 'conv-1', 'why denied', 'anthropic')
+    const [, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'why denied', provider: 'anthropic' })
+  })
+
   it('maps a disabled AI tier on message to a ConsoleApiError', async () => {
     globalThis.fetch = vi.fn(async () => jsonResponse(409, { error: 'ai_unavailable' })) as unknown as typeof fetch
     await expect(consoleApi.operator.sendMessage('z1', 'conv-1', 'hi')).rejects.toMatchObject({

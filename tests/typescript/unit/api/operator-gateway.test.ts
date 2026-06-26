@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   createGateway,
   withUsage,
+  preferProvider,
   GatewayUnavailableError,
   GatewayError,
   type ProviderConfig,
@@ -34,8 +35,8 @@ describe('gateway status', () => {
     const status = gateway.status()
     expect(status.enabled).toBe(true)
     expect(status.providers).toEqual([
-      { id: 'primary', model: 'gpt-x', available: true },
-      { id: 'broken', model: 'gpt-x', available: false },
+      { id: 'primary', model: 'gpt-x', available: true, contextWindow: 0 },
+      { id: 'broken', model: 'gpt-x', available: false, contextWindow: 0 },
     ])
     // The serialized status must never contain the key.
     expect(JSON.stringify(status)).not.toContain('sk-secret')
@@ -124,6 +125,34 @@ describe('gateway complete', () => {
   })
 })
 
+describe('gateway reasoning', () => {
+  it('captures the reasoning_content channel and keeps the answer clean', async () => {
+    const body = JSON.stringify({
+      choices: [{ message: { content: 'It lacks the write scope.', reasoning_content: 'The grant only covers read.' } }],
+    })
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200, headers: { 'content-type': 'application/json' } }))
+    const gateway = createGateway([provider()], fetchMock as unknown as typeof fetch)
+    const result = await gateway.complete([{ role: 'user', content: 'why' }])
+    expect(result).toMatchObject({ text: 'It lacks the write scope.', reasoning: 'The grant only covers read.' })
+  })
+
+  it('extracts an inline <think> block and strips it from the answer', async () => {
+    const fetchMock = vi.fn(async () => chatResponse('<think>Weigh read vs write.</think>It lacks the write scope.'))
+    const gateway = createGateway([provider()], fetchMock as unknown as typeof fetch)
+    const result = await gateway.complete([{ role: 'user', content: 'why' }])
+    expect(result.text).toBe('It lacks the write scope.')
+    expect(result.reasoning).toBe('Weigh read vs write.')
+  })
+
+  it('leaves reasoning undefined when the model exposes none', async () => {
+    const fetchMock = vi.fn(async () => chatResponse('Plain answer.'))
+    const gateway = createGateway([provider()], fetchMock as unknown as typeof fetch)
+    const result = await gateway.complete([{ role: 'user', content: 'why' }])
+    expect(result.text).toBe('Plain answer.')
+    expect(result.reasoning).toBeUndefined()
+  })
+})
+
 describe('gateway active model', () => {
   it('reports no active model when no provider is configured', () => {
     expect(createGateway([]).active()).toBeNull()
@@ -158,5 +187,38 @@ describe('withUsage', () => {
     const { gateway, usage } = withUsage(createGateway([provider()], fetchMock as unknown as typeof fetch))
     await gateway.complete([{ role: 'user', content: 'a' }])
     expect(usage()).toEqual({ inputTokens: 0, outputTokens: 0 })
+  })
+})
+
+describe('provider preference', () => {
+  it('tries the preferred provider before the failover order', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse('OK'))
+    const gateway = createGateway([provider({ id: 'first' }), provider({ id: 'second' })], fetchMock as unknown as typeof fetch)
+    const result = await gateway.complete([{ role: 'user', content: 'hi' }], {
+      preferredProvider: 'second',
+    })
+    expect(result.provider).toBe('second')
+  })
+
+  it('ignores a preference for an unknown provider and uses the normal order', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse('OK'))
+    const gateway = createGateway([provider({ id: 'first' }), provider({ id: 'second' })], fetchMock as unknown as typeof fetch)
+    const result = await gateway.complete([{ role: 'user', content: 'hi' }], {
+      preferredProvider: 'missing',
+    })
+    expect(result.provider).toBe('first')
+  })
+
+  it('preferProvider injects the preference into every completion', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(chatResponse('OK'))
+    const base = createGateway([provider({ id: 'first' }), provider({ id: 'second' })], fetchMock as unknown as typeof fetch)
+    const preferred = preferProvider(base, 'second')
+    const result = await preferred.complete([{ role: 'user', content: 'hi' }])
+    expect(result.provider).toBe('second')
+  })
+
+  it('preferProvider with a null id is a passthrough', () => {
+    const base = createGateway([provider()])
+    expect(preferProvider(base, null)).toBe(base)
   })
 })
