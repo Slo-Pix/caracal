@@ -23,7 +23,7 @@ Use the development launcher only when working on the console or auth BFF locall
 caracal web
 ```
 
-The launcher prints its URLs on startup and defaults to the UI on [http://localhost:3011](http://localhost:3011) and the backend-for-frontend on `3002`. The dev UI deliberately runs on `3011`, not the packaged console's `3001`, so the development launcher and the packaged Compose console can run at the same time without contending for the port.
+The launcher serves on the same port as the packaged console ([http://localhost:3001](http://localhost:3001)), with the backend-for-frontend on `3002`. While it runs it stops the packaged web container so the two never contend for the port. Stopping the launcher (Ctrl+C) tears down both the UI and the backend; the packaged web container stays stopped, so run `caracal up` to bring the packaged console back.
 
 Use `--allow-offline` with the development launcher when you only need sign-in or UI-only checks and the stack is not ready:
 
@@ -35,7 +35,7 @@ caracal web --allow-offline
 
 | Option | Purpose |
 | --- | --- |
-| `--web-port <port>` | Bind the browser UI to a specific port (default `3011`). |
+| `--web-port <port>` | Bind the browser UI to a specific port (default `3001`). |
 | `--auth-port <port>` | Bind the session/auth backend to a specific port (default `3002`). |
 | `--build` | Build the web assets before launching. |
 | `--allow-offline` | Start the UI even when local Caracal services are not ready. |
@@ -60,6 +60,7 @@ Open the packaged or development URL in a browser, sign in to the session-guarde
 | Section | What it manages |
 | --- | --- |
 | **Guided setup** | First zone, agent app, provider, resource, access policy, and runtime profile. |
+| **Caracal Operator** | Operate the control plane from natural-language intent: describe a change, review the resolved plan, and apply it within your operator scope. |
 | **Zones** | Zone records and active zone selection. |
 | **Applications** | Confidential agent applications and one-time client secrets. |
 | **Providers** | Gateway upstream auth modes for Caracal mandates, OAuth 2.0 authorization code, OAuth 2.0 client credentials, API-key, and bearer-token upstreams. |
@@ -87,6 +88,53 @@ The session, agent, and delegation pages observe the runtime identity objects. A
 An **authority session** is the root credential a principal holds after a token exchange. An **agent session** is one spawned agent under an application; a *delegated* session is an agent session with an inbound delegation edge. A **delegation** edge connects two agent sessions, so inbound and outbound edges are anchored on the agent session id.
 
 The **Agents** page supports filtering by `status` (active, suspended, terminated), `lifecycle` (task, service), `application`, and `label`. The lease fields surface task TTL deadlines and service heartbeat deadlines. Use the session detail pages to view inbound and outbound delegation edges.
+
+## Caracal Operator
+
+Caracal Operator is a Community Edition console capability that lets you operate the control plane by describing what you want instead of navigating each page by hand. It turns intent into a reviewed plan, then applies it through the same guarded APIs you use manually — within your operator scope and recorded in the audit log. Every change it makes is one you could have made yourself; it introduces no new authority.
+
+The Operator works against a capability catalog: the set of control-plane actions it can take, grouped by the objects you operate — zones, applications, providers, resources, access, and policy. Each capability is classified as read-only or state-changing, so a request that only inspects state is always distinguishable from one that changes it.
+
+The Operator is a workspace, not a chat box. Each session shows an execution timeline of everything that has happened — your messages, the plans it proposed, your approvals, and the result of each applied step. A proposed plan appears as a card with its steps and effects; you approve, reject, or apply it inline, and the card updates to show progress as each step runs.
+
+Work happens in a session — an auditable conversation scoped to the active zone. Within a session the Operator follows a governed lifecycle:
+
+1. **Propose.** Intent becomes a plan whose every step is validated against the capability catalog. A step that names an unknown action or invalid arguments is rejected before anything runs.
+2. **Preview.** The plan is resolved against your live state as a read-only dry run, so each step is marked as a create, an update, a no-op against an object that already exists, or blocked when a referenced object is missing. Nothing is written.
+3. **Decide.** You approve or reject the plan. A plan is decided once, and only an approved plan is eligible to apply.
+4. **Apply.** An approved plan is executed step by step. Before any write, the plan is re-validated and re-previewed against current state so drift since approval cannot apply a stale change. Every step runs in a single transaction: if one step fails, the whole plan rolls back and the failure is recorded, leaving the plan ready to retry. Each applied step is written to the conversation as an execution record, and one-time material such as a newly issued client secret is returned to you once and never stored.
+
+A plan applies only once. Any one-time secret it produces is surfaced in the apply response and is never written to the conversation or the audit log.
+
+### Operator authority and isolation
+
+The Operator runs under its own reserved identity, distinct from the human operator who approves a plan. When a plan is applied, your approval is recorded in the admin audit log, while the execution record names the Operator's reserved principal as the authority that actually made the change — the Operator's authority is a delegated, attenuated form of your own.
+
+That delegated authority is least-privilege: the Operator may execute only the capabilities explicitly granted to it, and the grant defaults to the small set of state-changing capabilities it is built to apply. A plan that asks the Operator to execute a capability outside its grant is refused as forbidden, before execution and regardless of whether a handler exists. The grant governs state-changing capabilities only; read-only capabilities change nothing and are always available.
+
+The Operator is also bounded by a zone isolation boundary. An administrator can mark zones as system zones; the Operator will not open a session in, or execute against, a system zone at all, keeping its authority away from the infrastructure that runs Caracal itself.
+
+Because the Operator acts within a delegated subset of your operator authority and never outside the active zone, the same row-level zone isolation and audit trail that govern manual changes also govern Operator changes. Nothing is applied until you approve the plan, every applied change is attributed to you, and the executing authority is the Operator's own least-privilege identity.
+
+### Natural-language provider
+
+Turning your words into a plan needs a language model, and that model is something you supply. The Operator talks to any OpenAI-compatible endpoint, so you can bring a hosted provider key, point at a local model server, or list several providers that are tried in order for resilience. Keys are read from the API service environment and never stored in or returned by the console.
+
+The provider layer is optional and off by default. With nothing configured, the Operator runs without natural-language assistance and consumes no AI resources; the rest of the console — including everything you would do by hand — is unaffected. When you do configure providers, the AI panel shows them in failover order, and a connectivity check confirms a real request reaches your model before you rely on it.
+
+Configure providers through the API service's `API_OPERATOR_AI_*` settings: list the provider ids in failover order, then give each one a base URL, a model, and, for hosted providers, a key.
+
+### From words to a governed plan
+
+When you send a message, the Operator routes it to the right handler: a request to change something becomes a plan, and a question becomes an explanation. For a change, the language model proposes a plan, but it holds no authority — its proposal is only a draft. Caracal then validates that draft against the capability catalog, normalizes it to the catalog's own definitions, and previews it against your live state, exactly as it would a plan you wrote by hand. A proposal that names an unknown action, supplies bad arguments, or cannot be realized is recorded as a failed attempt, never as something you can approve.
+
+The result is that natural language only ever produces a draft that enters the same propose → preview → decide → apply lifecycle. The model accelerates describing what you want; every safety property — validation, least-privilege authority, approval, audit — is enforced by Caracal, not by the model.
+
+Explanations are read-only. The assistant answers from the current conversation and state, never makes a change, and will tell you to ask for a change so it can be planned and approved.
+
+### Memory across a long session
+
+A session can run long, so the Operator does not re-read the whole transcript each time. It keeps the recent activity in full and compresses everything before it into a small set of facts: which earlier plans were decided and how they turned out, how many changes have been applied, and which operations you have already rejected. This keeps the Operator's context accurate and its cost bounded no matter how long the conversation grows, and it means the Operator remembers your decisions — it will not re-propose an operation you have turned down unless you ask for it again.
 
 ## Guided Setup
 

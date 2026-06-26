@@ -7,6 +7,7 @@ import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { loadEnvFile } from 'node:process'
 import { getenv, mustGetenv, intEnv, boolEnv, resolveFileSecrets, isPublished } from '@caracalai/core'
+import type { ProviderConfig } from './operator-gateway.js'
 
 function loadEnvChain(): void {
   const seen = new Set<string>()
@@ -80,6 +81,10 @@ export interface Config {
   readyOutboxDeadMax: number
   trustProxy: boolean
   enableDocs: boolean
+  operatorEnabled: boolean
+  operatorAllowedCapabilities: string[] | null
+  operatorSystemZones: string[]
+  operatorAiProviders: ProviderConfig[]
   metricsBearer: string | null
   control: ControlConfig | null
 }
@@ -115,6 +120,50 @@ function loadControlConfig(port: number): ControlConfig | null {
 
 function deriveWorkerId(): string {
   return process.env.WORKER_ID ?? `${process.env.HOSTNAME ?? 'api'}:${process.pid}`
+}
+
+// Parses a comma-separated env list into trimmed, non-empty entries, returning null
+// when unset so callers can fall back to a default rather than an empty grant.
+function csvEnv(key: string): string[] | null {
+  const raw = process.env[key]
+  if (raw === undefined || raw.trim() === '') return null
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+}
+
+const PROVIDER_ID_PATTERN = /^[A-Za-z0-9_]{1,32}$/
+const DEFAULT_PROVIDER_TIMEOUT_MS = 30_000
+
+// Resolves the ordered Operator AI provider list from the environment. The order of
+// API_OPERATOR_AI_PROVIDERS is the failover order. Each provider id X is configured
+// through API_OPERATOR_AI_X_BASE_URL / _MODEL / _API_KEY / _TIMEOUT_MS, where the key
+// is optional so local backends that need no credential are supported. A provider id
+// without a base URL or model is a configuration error and fails closed.
+function loadOperatorAiProviders(): ProviderConfig[] {
+  const ids = csvEnv('API_OPERATOR_AI_PROVIDERS')
+  if (!ids) return []
+  const providers: ProviderConfig[] = []
+  for (const id of ids) {
+    if (!PROVIDER_ID_PATTERN.test(id)) {
+      throw new Error(`Invalid AI provider id '${id}': must match ${PROVIDER_ID_PATTERN}`)
+    }
+    const upper = id.toUpperCase()
+    const baseUrl = process.env[`API_OPERATOR_AI_${upper}_BASE_URL`]
+    const model = process.env[`API_OPERATOR_AI_${upper}_MODEL`]
+    if (!baseUrl || !model) {
+      throw new Error(`AI provider '${id}' requires API_OPERATOR_AI_${upper}_BASE_URL and _MODEL`)
+    }
+    providers.push({
+      id,
+      baseUrl: baseUrl.replace(/\/+$/, ''),
+      model,
+      apiKey: process.env[`API_OPERATOR_AI_${upper}_API_KEY`] || undefined,
+      timeoutMs: intEnv(`API_OPERATOR_AI_${upper}_TIMEOUT_MS`, DEFAULT_PROVIDER_TIMEOUT_MS, 1),
+    })
+  }
+  return providers
 }
 
 export function loadConfig(): Config {
@@ -171,6 +220,10 @@ export function loadConfig(): Config {
     readyOutboxDeadMax: intEnv('API_READY_OUTBOX_DEAD_MAX', 0, 0),
     trustProxy: boolEnv('TRUST_PROXY', false),
     enableDocs: boolEnv('API_ENABLE_DOCS', !isPublished()),
+    operatorEnabled: boolEnv('API_OPERATOR_ENABLED', true),
+    operatorAllowedCapabilities: csvEnv('API_OPERATOR_ALLOWED_CAPABILITIES'),
+    operatorSystemZones: csvEnv('API_OPERATOR_SYSTEM_ZONES') ?? [],
+    operatorAiProviders: loadOperatorAiProviders(),
     metricsBearer: process.env.METRICS_BEARER ?? null,
     control,
   }
