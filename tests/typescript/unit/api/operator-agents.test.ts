@@ -113,10 +113,10 @@ describe('runPlanner', () => {
     expect(result).toMatchObject({ ok: false })
   })
 
-  it('fails closed when the JSON does not match the plan schema', async () => {
-    const { gateway } = gatewayReturning('{"summary":"x"}')
-    const result = await runPlanner(gateway, 'connect github', { facts: null, state: null })
-    expect(result).toMatchObject({ ok: false })
+  it('accepts an empty plan as a valid "nothing maps" result', async () => {
+    const { gateway } = gatewayReturning('{"summary":"No matching action","steps":[]}')
+    const result = await runPlanner(gateway, 'order me a pizza', { facts: null, state: null })
+    expect(result).toEqual({ ok: true, value: { summary: 'No matching action', steps: [] } })
   })
 })
 

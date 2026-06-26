@@ -69,7 +69,7 @@ describe('operator enablement gating', () => {
     const body = JSON.parse(status.body)
     expect(body).toMatchObject({ enabled: true, principal: 'system:caracal-operator' })
     // The least-privilege grant exposes only executable mutating capabilities by default.
-    expect(body.allowed_capabilities).toEqual(['createZone', 'registerApplication'])
+    expect(body.allowed_capabilities).toEqual(['createZone', 'grantAccess', 'registerApplication', 'rotateApplicationSecret'])
     const caps = await app.inject({ method: 'GET', url: '/v1/operator/capabilities' })
     expect(caps.statusCode).toBe(200)
   })
@@ -746,14 +746,14 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/plan/execute', () =>
   it('refuses an approved plan the Operator is not authorized to execute', async () => {
     const { app, clientQuery } = buildApp()
     const grantPlan = {
-      summary: 'Grant',
+      summary: 'Connect',
       steps: [
         {
           id: 's1',
-          capability: 'grantAccess',
-          summary: 'Grant access',
+          capability: 'connectProvider',
+          summary: 'Connect a provider',
           mutating: true,
-          args: { application_id: 'app-1', user_id: 'user-1', resource_id: 'res-1', scopes: ['invoices:read'] },
+          args: { name: 'GitHub', kind: 'oauth2_authorization_code' },
         },
       ],
     }
@@ -770,13 +770,13 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/plan/execute', () =>
       url: '/v1/zones/z1/operator-conversations/conv-1/plan/execute',
       payload: { plan_seq: 2 },
     })
-    // Authority is the primary boundary: grantAccess is outside the least-privilege
+    // Authority is the primary boundary: connectProvider is outside the least-privilege
     // grant, so it is forbidden before executability is even considered.
     expect(res.statusCode).toBe(403)
     const body = JSON.parse(res.body)
     expect(body.error).toBe('capability_forbidden')
     expect(body.principal).toBe('system:caracal-operator')
-    expect(body.steps[0]).toMatchObject({ step_id: 's1', capability: 'grantAccess', code: 'capability_forbidden' })
+    expect(body.steps[0]).toMatchObject({ step_id: 's1', capability: 'connectProvider', code: 'capability_forbidden' })
   })
 
   it('executes an approved createZone plan and records an execution turn', async () => {
@@ -819,6 +819,31 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/plan/execute', () =>
     const insertExec = clientQuery.mock.calls[9]
     expect(insertExec[1][6]).toContain('succeeded')
     expect(insertExec[1][6]).toContain('system:caracal-operator')
+  })
+
+  it('refuses to execute a create plan whose target already exists, applying nothing', async () => {
+    const { app, clientQuery } = buildApp()
+    clientQuery
+      .mockResolvedValueOnce(undefined) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 5 }] }) // conv FOR UPDATE
+      .mockResolvedValueOnce({ rows: [{ content: planContent }] }) // plan content
+      .mockResolvedValueOnce({ rows: [{ kind: 'approval' }] }) // approved
+      .mockResolvedValueOnce({ rows: [] }) // not executed
+      .mockResolvedValueOnce({ rows: [{ one: 1 }] }) // preview: zone name now TAKEN -> exists
+      .mockResolvedValueOnce(undefined) // ROLLBACK
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/plan/execute',
+      payload: { plan_seq: 2 },
+    })
+    expect(res.statusCode).toBe(409)
+    const body = JSON.parse(res.body)
+    expect(body.error).toBe('plan_already_satisfied')
+    expect(body.steps[0]).toMatchObject({ step_id: 's1', capability: 'createZone' })
+    // Nothing was written: the only statements were the lookups, the preview, and the rollback.
+    const wroteZone = clientQuery.mock.calls.some((c) => String(c[0]).includes('INSERT INTO zones'))
+    expect(wroteZone).toBe(false)
   })
 
   it('rolls back and records an error turn when a step fails', async () => {

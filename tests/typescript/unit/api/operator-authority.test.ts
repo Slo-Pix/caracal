@@ -16,7 +16,12 @@ describe('buildOperatorAuthority', () => {
   it('defaults to the executable mutating capabilities only', () => {
     const authority = buildOperatorAuthority()
     expect(authority.principal).toBe(OPERATOR_PRINCIPAL)
-    expect([...authority.allowedCapabilities].sort()).toEqual(['createZone', 'registerApplication'])
+    expect([...authority.allowedCapabilities].sort()).toEqual([
+      'createZone',
+      'grantAccess',
+      'registerApplication',
+      'rotateApplicationSecret',
+    ])
     expect(authority.systemZones.size).toBe(0)
   })
 
@@ -53,7 +58,7 @@ describe('authorizeCapability', () => {
   })
 
   it('forbids a mutating capability outside the grant', () => {
-    const decision = authorizeCapability(authority, 'grantAccess')
+    const decision = authorizeCapability(authority, 'connectProvider')
     expect(decision.ok).toBe(false)
     expect(decision.code).toBe('capability_forbidden')
   })
@@ -76,10 +81,10 @@ describe('authorizePlanSteps', () => {
 
     const denials = authorizePlanSteps(authority, [
       { id: 's1', capability: 'createZone' },
-      { id: 's2', capability: 'grantAccess' },
+      { id: 's2', capability: 'connectProvider' },
       { id: 's3', capability: 'defineResource' },
     ])
     expect(denials.map((d) => d.step_id)).toEqual(['s2', 's3'])
-    expect(denials[0]).toMatchObject({ capability: 'grantAccess', code: 'capability_forbidden' })
+    expect(denials[0]).toMatchObject({ capability: 'connectProvider', code: 'capability_forbidden' })
   })
 })
