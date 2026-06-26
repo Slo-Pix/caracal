@@ -245,7 +245,7 @@ def _caracal_steps() -> list[dict[str, object]]:
         {
             "step": "01",
             "title": "Create the zone",
-            "path": "Go to Caracal Console > Zones > New",
+            "path": "Web console: Zones > New",
             "consoleFields": [
                 {"label": "Name", "value": f"\"{cfg.company}\""},
                 {"label": "Zone ID", "value": zone},
@@ -257,7 +257,7 @@ def _caracal_steps() -> list[dict[str, object]]:
         {
             "step": "02",
             "title": "Create one managed application per permission boundary",
-            "path": f"Go to Applications > New in the \"{cfg.company}\" zone",
+            "path": f"Web console: Applications > New in the \"{cfg.company}\" zone",
             "consoleFields": [
                 {"label": "Names", "value": app_names},
                 {"label": "Registration method", "value": "managed"},

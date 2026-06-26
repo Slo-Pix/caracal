@@ -31,7 +31,7 @@ async def validate_setup():
         "identity",
         "Zone",
         "passed" if zone_ok else "missing",
-        "The zone is set." if zone_ok else "Add CARACAL_ZONE_ID from the Caracal Console.",
+        "The zone is set." if zone_ok else "Add CARACAL_ZONE_ID from the Caracal web console.",
     ))
 
     credentialed = [
