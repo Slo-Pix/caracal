@@ -14,6 +14,9 @@ export interface MessageItem {
   seq: number;
   role: TimelineRole;
   text: string;
+  // The model's chain of thought, present when a reasoning model exposed it on an
+  // operator note. Absent for user messages and answers with no reasoning.
+  reasoning?: string;
 }
 
 export interface PlanStepView {
@@ -21,6 +24,7 @@ export interface PlanStepView {
   capability: string;
   summary: string;
   mutating: boolean;
+  args: Record<string, unknown>;
   status: "pending" | "succeeded" | "failed";
   detail?: string;
 }
@@ -62,6 +66,7 @@ interface RawPlanStep {
   capability: string;
   summary: string;
   mutating: boolean;
+  args: Record<string, unknown>;
 }
 
 function readPlanSteps(content: Record<string, unknown>): RawPlanStep[] {
@@ -73,6 +78,7 @@ function readPlanSteps(content: Record<string, unknown>): RawPlanStep[] {
       capability: asString(step.capability),
       summary: asString(step.summary),
       mutating: step.mutating === true,
+      args: asRecord(step.args),
     };
   });
 }
@@ -97,12 +103,15 @@ export function buildTimeline(turns: OperatorTurn[]): {
 
   for (const turn of ordered) {
     if (turn.kind === "message" || turn.kind === "note") {
+      const content = asRecord(turn.content);
+      const reasoning = asString(content.reasoning);
       items.push({
         kind: turn.kind,
         id: turn.id,
         seq: turn.seq,
         role: turn.role,
-        text: asString(asRecord(turn.content).text),
+        text: asString(content.text),
+        reasoning: reasoning.length > 0 ? reasoning : undefined,
       });
     } else if (turn.kind === "error") {
       items.push({
@@ -160,6 +169,7 @@ function resolvePlan(
       capability: step.capability,
       summary: step.summary,
       mutating: step.mutating,
+      args: step.args,
       status: exec?.status ?? "pending",
       ...(exec?.detail ? { detail: exec.detail } : {}),
     };

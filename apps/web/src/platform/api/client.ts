@@ -513,12 +513,17 @@ export const consoleApi = {
     conversations: {
       list: async (
         zoneId: string,
-        options: { q?: string; signal?: AbortSignal } = {},
+        options: {
+          q?: string;
+          status?: "active" | "archived" | "all";
+          signal?: AbortSignal;
+        } = {},
       ): Promise<OperatorConversation[]> =>
         (
           await fetchAllPages<OperatorConversation>(
             `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations${queryString({
               q: options.q,
+              status: options.status,
             })}`,
             options.signal,
           )
@@ -532,6 +537,21 @@ export const consoleApi = {
         request<OperatorConversation>(
           `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations`,
           { method: "POST", body: JSON.stringify({ title }) },
+        ),
+      rename: (zoneId: string, id: string, title: string) =>
+        request<OperatorConversation>(
+          `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations/${encodeURIComponent(id)}`,
+          { method: "PATCH", body: JSON.stringify({ title }) },
+        ),
+      restore: (zoneId: string, id: string) =>
+        request<OperatorConversation>(
+          `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations/${encodeURIComponent(id)}`,
+          { method: "PATCH", body: JSON.stringify({ status: "active" }) },
+        ),
+      delete: (zoneId: string, id: string) =>
+        request<void>(
+          `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations/${encodeURIComponent(id)}`,
+          { method: "DELETE" },
         ),
       archive: (zoneId: string, id: string) =>
         request<OperatorConversation>(
@@ -607,12 +627,12 @@ export const consoleApi = {
         )}/plan/execute`,
         { method: "POST", body: JSON.stringify({ plan_seq: planSeq }) },
       ),
-    sendMessage: (zoneId: string, conversationId: string, message: string) =>
+    sendMessage: (zoneId: string, conversationId: string, message: string, provider?: string) =>
       request<OperatorMessageResult>(
         `/v1/zones/${encodeURIComponent(zoneId)}/operator-conversations/${encodeURIComponent(
           conversationId,
         )}/message`,
-        { method: "POST", body: JSON.stringify({ message }) },
+        { method: "POST", body: JSON.stringify(provider ? { message, provider } : { message }) },
       ),
   },
 

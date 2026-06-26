@@ -798,6 +798,7 @@ export interface OperatorAiProviderStatus {
   id: string;
   model: string;
   available: boolean;
+  contextWindow: number;
 }
 
 export interface OperatorAiStatus {
@@ -812,7 +813,20 @@ export interface OperatorAiCheckResult {
   latency_ms: number;
 }
 
-export type OperatorMessageResult =
+export interface OperatorUsage {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+}
+
+export interface OperatorUsageMeta {
+  usage?: OperatorUsage;
+  model?: string | null;
+  provider?: string | null;
+  max_tokens?: number;
+}
+
+export type OperatorMessageResult = (
   | {
       intent: "plan";
       ok: true;
@@ -821,4 +835,6 @@ export type OperatorMessageResult =
       preview: { ok: boolean; mutating: boolean; steps: OperatorValidatedStep[] };
     }
   | { intent: "plan"; ok: false; error: string; turn: OperatorTurn | null }
-  | { intent: "explain"; ok: boolean; text: string; turn: OperatorTurn | null };
+  | { intent: "explain"; ok: boolean; text: string; reasoning?: string; turn: OperatorTurn | null }
+) &
+  OperatorUsageMeta;
