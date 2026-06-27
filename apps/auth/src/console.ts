@@ -17,6 +17,7 @@ import {
 } from '@caracalai/engine'
 import { resolveStsUrl } from '@caracalai/engine/runtime-config'
 import { downstreamHeaders, safeTarget } from './security.ts'
+import { selectProxyCredential, shouldRetryWithFallback } from './proxyCredential.ts'
 import { logger } from './logger.ts'
 
 export interface ConsoleContext {
@@ -364,7 +365,7 @@ async function forwardProxy(
         signal: controller.signal,
       })
     let upstream = await attempt(token)
-    if (upstream.status === 401 && fallbackToken && fallbackToken !== token) {
+    if (shouldRetryWithFallback(upstream.status, token, fallbackToken) && fallbackToken) {
       logger.warn('read token rejected; retrying with admin token', { id, path: targetPath(target) })
       // Release the rejected response's body so its connection is not held until GC.
       await upstream.body?.cancel().catch(() => {})
@@ -421,20 +422,16 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: stri
     return
   }
   // Reads present the least-privilege read-only token and fall back to the admin token only if
-  // it is not recognized; writes always use the admin token, since the read token is denied
-  // any mutating request at the API. This keeps the god token off the dominant read path
-  // without ever risking a read failing closed.
+  // it is not recognized; writes always use the admin token, since the read token is denied any
+  // mutating request at the API. This keeps the god token off the dominant read path without
+  // ever risking a read failing closed.
   const method = (req.method ?? 'GET').toUpperCase()
-  const isRead = method === 'GET' || method === 'HEAD'
-  if (isRead) {
-    await forwardProxy(req, res, target, consoleReadToken() ?? token, id, token)
-    return
-  }
-  await forwardProxy(req, res, target, token, id)
+  const credential = selectProxyCredential(method, token, consoleReadToken())
+  await forwardProxy(req, res, target, credential.token, id, credential.fallbackToken)
   // A successful write to the control plane can change what diagnostics reports (zone
   // inventory, resources, policy enforcement, …); drop cached reports so the next read
   // recomputes against the new state instead of surfacing a stale warning.
-  if (res.statusCode < 400) {
+  if (method !== 'GET' && method !== 'HEAD' && res.statusCode < 400) {
     invalidateDiagnostics()
   }
 }
