@@ -28,7 +28,7 @@ import {
   type Gateway,
   type ProviderConfig,
 } from '../operator-gateway.js'
-import { type AgentContext } from '../operator-agents.js'
+import { type AgentContext, type SecurityAdvisory } from '../operator-agents.js'
 import { createOrchestrator } from '../operator-orchestrator.js'
 import { createStateResearcher } from '../operator-research.js'
 import { summarizeHistory, type ConversationFacts } from '../operator-memory.js'
@@ -173,8 +173,8 @@ async function writeTurnLocked(
 // so a stored plan can never claim a capability or effect the catalog does not
 // grant. Shared by the plan endpoint and the message orchestrator so a plan from
 // natural language and a plan from a direct call are stored identically.
-function buildPlanContentJson(summary: string, validation: PlanValidation): string {
-  return JSON.stringify({
+function buildPlanContentJson(summary: string, validation: PlanValidation, advisory?: SecurityAdvisory): string {
+  const content: Record<string, unknown> = {
     summary,
     steps: validation.steps.map((step) => ({
       id: step.id,
@@ -183,7 +183,12 @@ function buildPlanContentJson(summary: string, validation: PlanValidation): stri
       mutating: step.mutating,
       args: step.args,
     })),
-  })
+  }
+  // A composed plan may carry an advisory security review. It is persisted with the plan so the
+  // human sees it when deciding and it stays in the audit record; it is informational only and
+  // never read as authority — execution re-derives the plan from summary and steps alone.
+  if (advisory) content.advisory = advisory
+  return JSON.stringify(content)
 }
 
 // Bounds the context reducer's working set: the latest plan plus its decision and
@@ -1066,13 +1071,17 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
         }
 
         const preview = await previewPlan(fastify.db, params.zoneId, planned.value)
+        // A composed plan carries an advisory security review; the route persists it with the
+        // plan and surfaces it to the human. It is informational only — the plan is still
+        // governed by validation, preview, and approval, never by this advisory.
+        const advisory = outcome.advisory
         const turn = await appendTurnTx(
           fastify.db,
           params.id,
           params.zoneId,
           'operator',
           'plan',
-          buildPlanContentJson(planned.value.summary, validation),
+          buildPlanContentJson(planned.value.summary, validation, advisory),
           req.actor.id,
         )
         if (!turn.ok) {
@@ -1080,7 +1089,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
             .code(turn.reason === 'archived' ? 409 : 404)
             .send({ error: turn.reason === 'archived' ? 'conversation_archived' : 'conversation_not_found' })
         }
-        return reply.code(201).send({ intent: 'plan', tier, ok: true, turn: turn.turn, validation, preview, ...meta() })
+        return reply.code(201).send({ intent: 'plan', tier, ok: true, turn: turn.turn, validation, preview, advisory, ...meta() })
       }
 
       const explained = outcome.result

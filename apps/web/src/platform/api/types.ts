@@ -830,6 +830,23 @@ export interface OperatorUsageMeta {
   tier?: "conversational" | "read" | "change" | "compound";
 }
 
+// The advisory severity of a single security finding. Advisory only: it informs the human who
+// approves the plan and never gates it.
+export type OperatorAdvisorySeverity = "info" | "caution" | "warning";
+
+export interface OperatorAdvisoryFinding {
+  severity: OperatorAdvisorySeverity;
+  concern: string;
+}
+
+// The advisory security review a composed plan may carry: a plain-language summary and any
+// findings about over-grant, least-privilege, or blast-radius. It is informational only — the
+// plan is governed by validation, preview, and approval, never by this review.
+export interface OperatorSecurityAdvisory {
+  summary: string;
+  findings: OperatorAdvisoryFinding[];
+}
+
 export type OperatorMessageResult = (
   | {
       intent: "plan";
@@ -837,6 +854,8 @@ export type OperatorMessageResult = (
       turn: OperatorTurn;
       validation: OperatorPlanValidation;
       preview: { ok: boolean; mutating: boolean; steps: OperatorValidatedStep[] };
+      // Present only for a composed (compound) plan; absent for a single change.
+      advisory?: OperatorSecurityAdvisory;
     }
   | { intent: "plan"; ok: false; error: string; turn: OperatorTurn | null }
   | { intent: "explain"; ok: boolean; text: string; reasoning?: string; turn: OperatorTurn | null }

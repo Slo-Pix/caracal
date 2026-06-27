@@ -7,12 +7,15 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   buildPlannerMessages,
   buildExplainerMessages,
+  buildSecurityAnalystMessages,
   buildTriageMessages,
   runTriage,
   tierPlans,
   tierReadsState,
+  tierComposes,
   runPlanner,
   runExplainer,
+  runSecurityAnalyst,
 } from '../../../../apps/api/src/operator-agents.js'
 import type { Gateway, CompletionResult, CompletionObjectResult } from '../../../../apps/api/src/operator-gateway.js'
 
@@ -173,6 +176,74 @@ describe('tierReadsState', () => {
     expect(tierReadsState('conversational')).toBe(false)
     expect(tierReadsState('change')).toBe(false)
     expect(tierReadsState('compound')).toBe(false)
+  })
+})
+
+describe('tierComposes', () => {
+  it('composes specialists only for the compound tier', () => {
+    expect(tierComposes('compound')).toBe(true)
+    expect(tierComposes('change')).toBe(false)
+    expect(tierComposes('read')).toBe(false)
+    expect(tierComposes('conversational')).toBe(false)
+  })
+})
+
+describe('buildSecurityAnalystMessages', () => {
+  const plan = {
+    summary: 'Grant Finance read-only Stripe invoices',
+    steps: [{ id: 's1', capability: 'grantAccess', args: { application_id: 'app-1', resource_id: 'res-1', scopes: ['invoices:read'] } }],
+  }
+
+  it('renders the plan steps and arguments for review', () => {
+    const messages = buildSecurityAnalystMessages(plan, { facts: null, state: null })
+    const content = messages[1].content
+    expect(content).toContain('grantAccess')
+    expect(content).toContain('invoices:read')
+    // The review is framed as advisory and never blocking.
+    expect(messages[0].content).toContain('advisory')
+    expect(messages[0].content).toContain('over-grant')
+  })
+
+  it('includes live state evidence so the review judges against current state', () => {
+    const messages = buildSecurityAnalystMessages(plan, {
+      facts: null,
+      state: null,
+      evidence: [{ capability: 'listResources', domain: 'resource', ok: true, count: 1, names: ['Stripe invoices'] }],
+    })
+    expect(messages[1].content).toContain('Live state (read just now)')
+    expect(messages[1].content).toContain('Stripe invoices')
+  })
+})
+
+describe('runSecurityAnalyst', () => {
+  const plan = { summary: 'Grant access', steps: [{ id: 's1', capability: 'grantAccess', args: {} }] }
+
+  it('returns the advisory summary and findings', async () => {
+    const { gateway } = gatewayProducing({
+      summary: 'The grant is broader than the request implies.',
+      findings: [{ severity: 'caution', concern: 'Write scope requested where read would suffice.' }],
+    })
+    const result = await runSecurityAnalyst(gateway, plan, { facts: null, state: null })
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        summary: 'The grant is broader than the request implies.',
+        findings: [{ severity: 'caution', concern: 'Write scope requested where read would suffice.' }],
+      },
+    })
+  })
+
+  it('accepts a clean review with no findings', async () => {
+    const { gateway } = gatewayProducing({ summary: 'The plan is least-privilege and well-scoped.', findings: [] })
+    const result = await runSecurityAnalyst(gateway, plan, { facts: null, state: null })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.findings).toEqual([])
+  })
+
+  it('fails closed when the review is off-schema, so no advisory is attached', async () => {
+    const { gateway } = gatewayProducing(new Error('schema validation failed'))
+    const result = await runSecurityAnalyst(gateway, plan, { facts: null, state: null })
+    expect(result.ok).toBe(false)
   })
 })
 

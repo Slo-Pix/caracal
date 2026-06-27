@@ -127,6 +127,7 @@ import {
 } from "@/platform/api/hooks";
 import {
   buildTimeline,
+  type PlanAdvisoryView,
   type PlanItem,
   type PlanStepView,
   type TimelineItem,
@@ -1839,6 +1840,41 @@ function planConfirmationState(plan: PlanItem): ToolState {
   return plan.executed ? "output-available" : "approval-responded";
 }
 
+// Maps an advisory severity to a badge tone. The review is informational, so even a warning is a
+// caution to weigh, not a block — the human still decides.
+function advisoryTone(severity: PlanAdvisoryView["findings"][number]["severity"]): BadgeTone {
+  if (severity === "warning") return "danger";
+  if (severity === "caution") return "warning";
+  return "muted";
+}
+
+// The advisory security review surfaced above the approval controls, so the reviewer weighs
+// over-grant and blast-radius before approving. It never gates the decision — the approve and
+// reject controls are unchanged whether or not findings are present.
+function PlanAdvisory({ advisory }: { advisory: PlanAdvisoryView }) {
+  return (
+    <div className="border-t border-border bg-surface px-3.5 py-2.5">
+      <div className="flex items-center gap-2">
+        <AlertGlyph className="h-3 w-3 text-muted-foreground" />
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Security review
+        </span>
+      </div>
+      <p className="mt-1.5 text-xs text-foreground">{advisory.summary}</p>
+      {advisory.findings.length > 0 ? (
+        <ul className="mt-2 flex flex-col gap-1.5">
+          {advisory.findings.map((finding, index) => (
+            <li key={index} className="flex items-start gap-2">
+              <Badge tone={advisoryTone(finding.severity)}>{finding.severity}</Badge>
+              <span className="text-xs text-muted-foreground">{finding.concern}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 // The active execution plan rendered as a first-class operational artifact: steps,
 // per-step effect, live progress, and the approve / reject / apply controls.
 function PlanArtifact({
@@ -1896,6 +1932,8 @@ function PlanArtifact({
           </Tool>
         ))}
       </div>
+
+      {plan.advisory ? <PlanAdvisory advisory={plan.advisory} /> : null}
 
       {plan.canDecide || plan.decision !== "pending" ? (
         <Confirmation approval={planApproval(plan)} state={planConfirmationState(plan)}>

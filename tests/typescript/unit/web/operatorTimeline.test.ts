@@ -100,4 +100,66 @@ describe('buildTimeline', () => {
     const { latestPlan } = buildTimeline([turn({ seq: 1, kind: 'message', content: { text: 'hi' } })])
     expect(latestPlan).toBeNull()
   })
+
+  it('surfaces a persisted advisory security review on the plan', () => {
+    const advisory = {
+      summary: 'The grant is scoped to read; low blast-radius.',
+      findings: [
+        { severity: 'caution', concern: 'Confirm the resource selector is not wider than intended.' },
+        { severity: 'info', concern: 'No write scopes are requested.' },
+      ],
+    }
+    const { latestPlan } = buildTimeline([
+      turn({
+        seq: 1,
+        kind: 'plan',
+        role: 'operator',
+        content: {
+          summary: 'Grant Finance read-only Stripe',
+          steps: [{ id: 's1', capability: 'grantAccess', summary: 'Grant', mutating: true }],
+          advisory,
+        },
+      }),
+    ])
+    expect(latestPlan?.advisory?.summary).toBe(advisory.summary)
+    expect(latestPlan?.advisory?.findings).toEqual(advisory.findings)
+  })
+
+  it('drops malformed advisory findings and omits an advisory with no summary', () => {
+    const { items } = buildTimeline([
+      turn({
+        seq: 1,
+        kind: 'plan',
+        role: 'operator',
+        content: {
+          summary: 'Plan A',
+          steps: [{ id: 's1', capability: 'createZone', summary: 'Create', mutating: true }],
+          advisory: {
+            summary: 'Reviewed.',
+            findings: [
+              { severity: 'bogus', concern: 'x' },
+              { severity: 'warning', concern: '' },
+              { severity: 'warning', concern: 'Real concern.' },
+            ],
+          },
+        },
+      }),
+      turn({
+        seq: 2,
+        kind: 'plan',
+        role: 'operator',
+        content: {
+          summary: 'Plan B',
+          steps: [{ id: 's1', capability: 'createZone', summary: 'Create', mutating: true }],
+          advisory: { summary: '', findings: [] },
+        },
+      }),
+    ])
+    const planA = items.find((i) => i.kind === 'plan' && i.seq === 1)
+    const planB = items.find((i) => i.kind === 'plan' && i.seq === 2)
+    // Only the well-formed finding survives; the unknown severity and the empty concern are dropped.
+    expect(planA && planA.kind === 'plan' ? planA.advisory?.findings : null).toEqual([{ severity: 'warning', concern: 'Real concern.' }])
+    // An advisory with no summary is treated as absent.
+    expect(planB && planB.kind === 'plan' ? planB.advisory : 'missing').toBeUndefined()
+  })
 })

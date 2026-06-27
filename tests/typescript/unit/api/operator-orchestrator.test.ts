@@ -28,6 +28,17 @@ function planningGateway(tier: 'change' | 'compound', plan: object): Gateway {
   return { status: () => ({ enabled: true, providers: [] }), completeObject } as unknown as Gateway
 }
 
+// A gateway for the compound composition: structured completions return, in order, the compound
+// triage tier, the planner's plan, then the security analyst's advisory.
+function composingGateway(plan: object, advisory: object): Gateway {
+  const completeObject = vi
+    .fn()
+    .mockResolvedValueOnce({ value: { tier: 'compound' }, provider: 't', model: 'm' })
+    .mockResolvedValueOnce({ value: plan, provider: 't', model: 'm' })
+    .mockResolvedValueOnce({ value: advisory, provider: 't', model: 'm' })
+  return { status: () => ({ enabled: true, providers: [] }), completeObject } as unknown as Gateway
+}
+
 describe('createSkillRegistry', () => {
   it('maps change and compound tiers to the planning skill', () => {
     const registry = createSkillRegistry()
@@ -157,5 +168,62 @@ describe('createOrchestrator', () => {
     // A researcher failure degrades to no evidence; the turn still answers rather than erroring.
     expect(result.outcome.kind).toBe('answer')
     expect(seen).toBeUndefined()
+  })
+
+  it('composes a compound tier: gathers evidence, plans against it, and attaches an advisory', async () => {
+    const plan = { summary: 'Grant Finance read-only Stripe', steps: [{ id: 's1', capability: 'grantAccess', args: {} }] }
+    const advisory = { summary: 'Scoped to read; low blast-radius.', findings: [] }
+    const evidence = [{ capability: 'listResources', domain: 'resource', ok: true, count: 1, names: ['Stripe invoices'] }]
+    const researcher = { gather: vi.fn().mockResolvedValue({ evidence }) }
+    const result = await createOrchestrator().handle(
+      composingGateway(plan, advisory),
+      'give finance read-only stripe and tidy permissions',
+      emptyContext,
+      { researcher },
+    )
+    expect(result.tier).toBe('compound')
+    // A compound request inspects state before planning.
+    expect(researcher.gather).toHaveBeenCalledTimes(1)
+    expect(result.outcome.kind).toBe('plan')
+    if (result.outcome.kind === 'plan') {
+      // The plan is still produced and still requires approval — the advisory does not gate it.
+      expect(result.outcome.result.ok).toBe(true)
+      expect(result.outcome.advisory).toEqual(advisory)
+    }
+  })
+
+  it('attaches no advisory when a compound plan proposes no steps', async () => {
+    const emptyPlan = { summary: 'Nothing maps', steps: [] }
+    // Only triage + planner complete; the analyst is never called because there is nothing to review.
+    const completeObject = vi
+      .fn()
+      .mockResolvedValueOnce({ value: { tier: 'compound' }, provider: 't', model: 'm' })
+      .mockResolvedValueOnce({ value: emptyPlan, provider: 't', model: 'm' })
+    const gateway = { status: () => ({ enabled: true, providers: [] }), completeObject } as unknown as Gateway
+    const researcher = { gather: vi.fn().mockResolvedValue({ evidence: [] }) }
+    const result = await createOrchestrator().handle(gateway, 'do something unmappable', emptyContext, { researcher })
+    expect(result.outcome.kind).toBe('plan')
+    if (result.outcome.kind === 'plan') expect(result.outcome.advisory).toBeUndefined()
+    // Exactly two structured calls: triage + planner. No advisory review on an empty plan.
+    expect(completeObject).toHaveBeenCalledTimes(2)
+  })
+
+  it('still returns the compound plan when the advisory review fails', async () => {
+    const plan = { summary: 'Grant access', steps: [{ id: 's1', capability: 'grantAccess', args: {} }] }
+    const completeObject = vi
+      .fn()
+      .mockResolvedValueOnce({ value: { tier: 'compound' }, provider: 't', model: 'm' })
+      .mockResolvedValueOnce({ value: plan, provider: 't', model: 'm' })
+      .mockRejectedValueOnce(new Error('advisory off-schema'))
+    const gateway = { status: () => ({ enabled: true, providers: [] }), completeObject } as unknown as Gateway
+    const result = await createOrchestrator().handle(gateway, 'grant finance and cleanup', emptyContext, {
+      researcher: { gather: vi.fn().mockResolvedValue({ evidence: [] }) },
+    })
+    // A failed advisory attaches nothing but never blocks the plan.
+    expect(result.outcome.kind).toBe('plan')
+    if (result.outcome.kind === 'plan') {
+      expect(result.outcome.result.ok).toBe(true)
+      expect(result.outcome.advisory).toBeUndefined()
+    }
   })
 })

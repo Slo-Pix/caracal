@@ -1413,6 +1413,65 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     expect(body.preview.steps[0]).toMatchObject({ effect: 'create' })
   })
 
+  it('composes a compound request: attaches and persists an advisory security review with the plan', async () => {
+    const plan = {
+      summary: 'Connect GitHub for the finance team',
+      steps: [{ id: 's1', capability: 'connectProvider', args: { name: 'GitHub', kind: 'oauth2_authorization_code' } }],
+    }
+    const advisory = {
+      summary: 'The connection is scoped to a single provider; low blast-radius.',
+      findings: [{ severity: 'caution', concern: 'Confirm the OAuth app is restricted to the finance org.' }],
+    }
+    // No control identity, so the researcher is absent and the compound path degrades to no
+    // evidence — but it still plans and still runs the advisory review. Three model calls in
+    // order: triage (compound), planner, security analyst.
+    const fetchImpl = fetchReturning('{"tier":"compound"}', JSON.stringify(plan), JSON.stringify(advisory))
+    const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1, kind: 'message' }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ seq: 1, role: 'user', kind: 'message', content: { text: 'connect github for finance' } }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }) // previewPlan: provider name free
+    let persistedContent: string | undefined
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockImplementationOnce((_sql: string, args: unknown[]) => {
+        // The plan turn INSERT carries the content JSON as its 7th parameter (after id,
+        // conversation, zone, seq, role, kind); capture it to prove the advisory is persisted
+        // with the plan, not only returned in the response.
+        persistedContent = String(args[6])
+        return Promise.resolve({ rows: [{ id: 'turn-2', seq: 2, kind: 'plan' }] })
+      })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'connect github for finance and keep it least privilege' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body).toMatchObject({ intent: 'plan', tier: 'compound', ok: true })
+    // The advisory is returned with the plan and never gates it — the plan is still validated,
+    // previewed, and awaiting approval.
+    expect(body.advisory).toEqual(advisory)
+    expect(body.validation.ok).toBe(true)
+    // The advisory is persisted in the plan turn content for durable, audited human review.
+    expect(persistedContent).toBeDefined()
+    expect(JSON.parse(persistedContent!).advisory).toEqual(advisory)
+    // Three model calls: triage + planner + security analyst.
+    expect((fetchImpl as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(3)
+  })
+
   it('records an error turn when the model cannot produce a usable plan', async () => {
     const fetchImpl = fetchReturning('{"tier":"change"}', 'I cannot help with that.')
     const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })

@@ -17,6 +17,7 @@ import type { Gateway, GatewayMessage } from './operator-gateway.js'
 const TRIAGE_MAX_TOKENS = 16
 const PLANNER_MAX_TOKENS = 800
 const EXPLAINER_MAX_TOKENS = 600
+const SECURITY_ANALYST_MAX_TOKENS = 500
 
 // The handling tier a request is triaged into: the smallest sufficient path, so a simple turn
 // never pays the planning pipeline. conversational and read are answered directly as text;
@@ -39,6 +40,15 @@ export function tierPlans(tier: OperatorTier): boolean {
 // and capability questions that need no state read, so it pays nothing.
 export function tierReadsState(tier: OperatorTier): boolean {
   return tier === 'read'
+}
+
+// Whether a tier composes multiple specialists rather than running a single skill. compound is a
+// request that combines several changes or needs investigation first, so it gathers live state
+// evidence to plan against and runs an advisory security review over the proposed plan. change is
+// a single-domain request and stays the cheap single-skill path; both still require human
+// approval before anything is applied.
+export function tierComposes(tier: OperatorTier): boolean {
+  return tier === 'compound'
 }
 
 const TriageOutput = z.object({ tier: z.enum(['conversational', 'read', 'change', 'compound']) }).strict()
@@ -201,4 +211,75 @@ export async function runExplainer(
   const text = completion.text.trim()
   if (text.length === 0) return { ok: false, error: 'explainer returned an empty answer' }
   return { ok: true, value: { text, reasoning: completion.reasoning } }
+}
+
+// The advisory severity of a single security finding. Advisory only: it informs the human who
+// approves the plan and never gates authority, which stays with validation, the Operator's
+// least-privilege grant, preview, and approval.
+export type AdvisorySeverity = 'info' | 'caution' | 'warning'
+
+export interface AdvisoryFinding {
+  severity: AdvisorySeverity
+  concern: string
+}
+
+// The security analyst's advisory review of a proposed plan: a short plain-language summary and
+// any findings about over-grant, least-privilege, or blast-radius. It carries no authority — a
+// plan is approved or denied by the deterministic spine and the human, never by this review — so
+// it can only inform, never block or widen what a plan may do.
+export interface SecurityAdvisory {
+  summary: string
+  findings: AdvisoryFinding[]
+}
+
+const SecurityAdvisorySchema = z
+  .object({
+    summary: z.string().min(1).max(1000),
+    findings: z.array(z.object({ severity: z.enum(['info', 'caution', 'warning']), concern: z.string().min(1).max(500) }).strict()).max(20),
+  })
+  .strict()
+
+// Renders a proposed plan compactly for review: its summary and one line per step naming the
+// capability and its arguments, so the analyst reasons over exactly what the plan would do.
+function describePlanForReview(plan: ProposedPlanInput): string {
+  const steps = plan.steps.map((step) => `- ${step.id}: ${step.capability} ${JSON.stringify(step.args)}`).join('\n')
+  return `Summary: ${plan.summary}\nSteps:\n${steps}`
+}
+
+export function buildSecurityAnalystMessages(plan: ProposedPlanInput, context: AgentContext): GatewayMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        'You are a security reviewer for a proposed Caracal change plan. Review it for over-grant, ' +
+        'least-privilege violations, and blast-radius — for example a grant broader than the request ' +
+        'implies, a write scope where a read would suffice, or a change that affects more than ' +
+        'intended. When the context includes live state read just now, judge the plan against it. ' +
+        'Reply with ONLY a JSON object {"summary": string, "findings": [{"severity": ' +
+        '"info"|"caution"|"warning", "concern": string}]}. Your review is advisory: it informs the ' +
+        'human who approves the plan and never blocks it. Report an empty findings array when the ' +
+        'plan is least-privilege and well-scoped.',
+    },
+    { role: 'user', content: `Context:\n${describeContext(context)}\n\nProposed plan:\n${describePlanForReview(plan)}` },
+  ]
+}
+
+// Reviews a proposed plan and returns advisory findings. The answer is generated as a
+// schema-validated object, so a malformed or off-schema review fails closed as an error rather
+// than a guessed verdict; the orchestrator then simply attaches no advisory. The review never
+// gates the plan — it only informs the human — so a failed review never blocks a change.
+export async function runSecurityAnalyst(
+  gateway: Gateway,
+  plan: ProposedPlanInput,
+  context: AgentContext,
+): Promise<AgentResult<SecurityAdvisory>> {
+  try {
+    const completion = await gateway.completeObject(buildSecurityAnalystMessages(plan, context), SecurityAdvisorySchema, {
+      maxTokens: SECURITY_ANALYST_MAX_TOKENS,
+      temperature: 0,
+    })
+    return { ok: true, value: completion.value }
+  } catch {
+    return { ok: false, error: 'security review did not produce a usable advisory' }
+  }
 }

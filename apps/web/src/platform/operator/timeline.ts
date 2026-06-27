@@ -29,6 +29,20 @@ export interface PlanStepView {
   detail?: string;
 }
 
+export type AdvisorySeverity = "info" | "caution" | "warning";
+
+export interface AdvisoryFindingView {
+  severity: AdvisorySeverity;
+  concern: string;
+}
+
+// The advisory security review a composed plan may carry. Informational only — it is surfaced to
+// the reviewer and never changes whether the plan can be approved or applied.
+export interface PlanAdvisoryView {
+  summary: string;
+  findings: AdvisoryFindingView[];
+}
+
 export interface PlanItem {
   kind: "plan";
   id: string;
@@ -42,6 +56,8 @@ export interface PlanItem {
   // rejected; an approved, not-yet-executed plan can be applied.
   canDecide: boolean;
   canExecute: boolean;
+  // The advisory security review, present only for a composed plan that carried one.
+  advisory?: PlanAdvisoryView;
 }
 
 export interface ErrorItem {
@@ -83,6 +99,29 @@ function readPlanSteps(content: Record<string, unknown>): RawPlanStep[] {
   });
 }
 
+// Reads the advisory security review from a plan turn's content, when present. Only the recognized
+// severities are kept and a finding must carry a concern, so a malformed advisory degrades to
+// nothing rather than rendering noise. Returns undefined when the plan carried no advisory.
+function readPlanAdvisory(content: Record<string, unknown>): PlanAdvisoryView | undefined {
+  const advisory = asRecord(content.advisory);
+  const summary = asString(advisory.summary);
+  if (summary.length === 0) return undefined;
+  const rawFindings = Array.isArray(advisory.findings) ? advisory.findings : [];
+  const findings: AdvisoryFindingView[] = [];
+  for (const raw of rawFindings) {
+    const finding = asRecord(raw);
+    const severity = finding.severity;
+    const concern = asString(finding.concern);
+    if (
+      (severity === "info" || severity === "caution" || severity === "warning") &&
+      concern.length > 0
+    ) {
+      findings.push({ severity, concern });
+    }
+  }
+  return { summary, findings };
+}
+
 // Builds the display timeline from the ordered turn ledger and resolves the latest
 // plan's reviewable state by folding the approval, rejection, and execution turns
 // that reference it. The presenter is the single place the UI learns whether a plan
@@ -122,7 +161,13 @@ export function buildTimeline(turns: OperatorTurn[]): {
       });
     } else if (turn.kind === "plan") {
       const content = asRecord(turn.content);
-      const plan = resolvePlan(turn, readPlanSteps(content), asString(content.summary), ordered);
+      const plan = resolvePlan(
+        turn,
+        readPlanSteps(content),
+        asString(content.summary),
+        readPlanAdvisory(content),
+        ordered,
+      );
       items.push(plan);
       if (turn.seq === latestPlanSeq) latestPlan = plan;
     }
@@ -135,6 +180,7 @@ function resolvePlan(
   planTurn: OperatorTurn,
   steps: RawPlanStep[],
   summary: string,
+  advisory: PlanAdvisoryView | undefined,
   ordered: OperatorTurn[],
 ): PlanItem {
   let decision: PlanItem["decision"] = "pending";
@@ -186,5 +232,6 @@ function resolvePlan(
     executed,
     canDecide: decision === "pending",
     canExecute: decision === "approved" && !executed,
+    ...(advisory ? { advisory } : {}),
   };
 }
