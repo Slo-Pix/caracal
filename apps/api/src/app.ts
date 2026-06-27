@@ -18,6 +18,9 @@ import { redisMinuteBucket } from './redis.js'
 import { adminAuthPlugin } from './auth.js'
 import { registerAdminAuditHook } from './admin-audit.js'
 import { controlPlugin } from './control/plugin.js'
+import { AdminClient } from '@caracalai/admin'
+import { provisionSystemZone } from './system-zone.js'
+import type { OperatorControlIdentity } from './config.js'
 import {
   isPublished,
   getTraceContext,
@@ -29,6 +32,7 @@ import {
   withTimeout,
   CaracalError,
   pathOnly,
+  createLogger,
 } from '@caracalai/core'
 import { zonesRoutes } from './routes/zones.js'
 import { applicationsRoutes } from './routes/applications.js'
@@ -272,17 +276,49 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
   await app.register(policyTemplatesRoutes, { prefix: '/v1' })
   await app.register(zoneEventsRoutes, { prefix: '/v1' })
   await app.register(adminTokensRoutes, { prefix: '/v1' })
+  // Mutable holder for the Operator's resolved control identity. Populated by the system
+  // zone provisioner after the server is listening, when the control plane is reachable over
+  // loopback; until then the getter returns null and governed execution stays unconfigured.
+  const operatorControlIdentity: { current: OperatorControlIdentity | null } = { current: null }
+
   await app.register(operatorRoutes, {
     prefix: '/v1',
     enabled: cfg.operatorEnabled,
     allowedCapabilities: cfg.operatorAllowedCapabilities,
     systemZones: cfg.operatorSystemZones,
     aiProviders: cfg.operatorAiProviders,
-    controlIdentity: cfg.operatorControl,
+    resolveControlIdentity: () => operatorControlIdentity.current,
     controlEndpoints: cfg.control
       ? { stsUrl: cfg.stsUrl, audience: cfg.control.audience, controlUrl: cfg.control.apiUrl, controlEnabled: true }
       : null,
   })
+
+  // When self-governance is enabled, provision the reserved caracal.sys system zone and the
+  // Operator's least-privilege control identity once the server is listening — the only
+  // point the in-process admin client can reach the control plane over loopback. The
+  // Operator then governs that one zone. Provisioning failure leaves governed execution
+  // unconfigured rather than crashing the API; a later restart retries.
+  if (cfg.control && cfg.operatorSelfGovern && cfg.operatorControlSecret) {
+    const secret = cfg.operatorControlSecret
+    const provisionLog = createLogger('api-system-zone', cfg.logLevel as 'info')
+    const admin = new AdminClient({ apiUrl: cfg.control.apiUrl, adminToken: cfg.control.apiToken })
+    app.addHook('onListen', async () => {
+      try {
+        const identity = await provisionSystemZone(admin, secret)
+        operatorControlIdentity.current = {
+          applicationId: identity.operatorApplicationId,
+          clientSecret: secret,
+          zoneId: identity.zoneId,
+        }
+        provisionLog.info('system zone provisioned', {
+          zone_id: identity.zoneId,
+          operator_application_id: identity.operatorApplicationId,
+        })
+      } catch (err) {
+        provisionLog.error('system zone provisioning failed', { error: err instanceof Error ? err.message : String(err) })
+      }
+    })
+  }
 
   if (cfg.control) {
     await app.register(controlPlugin, {

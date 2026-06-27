@@ -51,7 +51,7 @@ function buildApp(
     allowedCapabilities: authorityOpts.allowedCapabilities ?? null,
     systemZones: authorityOpts.systemZones ?? null,
     aiProviders: authorityOpts.aiProviders,
-    controlIdentity: authorityOpts.controlIdentity ?? null,
+    resolveControlIdentity: () => authorityOpts.controlIdentity ?? null,
     controlEndpoints: authorityOpts.controlEndpoints ?? null,
     fetchImpl: authorityOpts.fetchImpl,
   })

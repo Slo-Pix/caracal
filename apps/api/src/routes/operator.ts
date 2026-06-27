@@ -298,10 +298,12 @@ export interface OperatorRoutesOptions {
   allowedCapabilities?: string[] | null
   systemZones?: string[] | null
   aiProviders?: ProviderConfig[]
-  // Internal-only: the Operator's reserved caracal.sys control identity used to execute
-  // through the governed control plane. Null leaves governed execution unconfigured. Never
-  // an end-user surface; supplied by sealed platform config.
-  controlIdentity?: OperatorControlIdentity | null
+  // Internal-only: resolves the Operator's reserved caracal.sys control identity at request
+  // time. Returns null until the system zone is provisioned (or when self-governance is
+  // disabled), which leaves governed execution unconfigured. A getter rather than a static
+  // value because the identity is resolved after the server is listening, when the
+  // provisioner can reach the control plane over loopback. Never an end-user surface.
+  resolveControlIdentity?: () => OperatorControlIdentity | null
   // The deployment's control endpoints (STS plus the loopback control plane) the Operator's
   // governed client talks to. Null when the control plane is disabled, which leaves governed
   // execution unconfigured.
@@ -324,13 +326,17 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
   // performs no work, so the AI tier costs nothing until an operator brings a key.
   const gateway: Gateway = createGateway(opts.aiProviders ?? [], opts.fetchImpl)
 
-  // The Operator's governed control client, built once from its reserved identity and the
-  // deployment's control endpoints. Null when governed execution is not fully configured —
-  // no identity, or the control plane is disabled — in which case execution refuses rather
-  // than falling back to any other authority.
-  const controlClient: ControlClient | null = opts.controlEndpoints
-    ? buildOperatorControlClient(opts.controlIdentity ?? null, opts.controlEndpoints, opts.fetchImpl)
-    : null
+  // Builds the Operator's governed control client for the currently resolved identity, or
+  // null when governed execution is not fully configured — no identity, or the control
+  // plane is disabled. Resolved per request because the identity is populated after the
+  // system zone is provisioned at startup; constructing the client is cheap. A null result
+  // means execution refuses rather than falling back to any other authority.
+  const resolveControlClient = (): { client: ControlClient; identity: OperatorControlIdentity } | null => {
+    const identity = opts.resolveControlIdentity?.() ?? null
+    if (!identity || !opts.controlEndpoints) return null
+    const client = buildOperatorControlClient(identity, opts.controlEndpoints, opts.fetchImpl)
+    return client ? { client, identity } : null
+  }
 
   // Always cheap and always present so the console can render a precise enabled/disabled
   // state without inferring it from a missing route. When enabled it also exposes the
@@ -338,6 +344,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
   // the least-privilege boundary is visible rather than implicit.
   fastify.get('/operator/status', async () => {
     if (!opts.enabled) return { enabled: false }
+    const identity = opts.resolveControlIdentity?.() ?? null
     return {
       enabled: true,
       principal: authority.principal,
@@ -345,7 +352,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
       // Whether the Operator's governed-execution identity is provisioned, and the single
       // zone it governs. Surfaced so an operator can confirm the dogfooding identity is
       // configured without inspecting secrets; the credential itself is never exposed.
-      governed_execution: opts.controlIdentity ? { configured: true, zone_id: opts.controlIdentity.zoneId } : { configured: false },
+      governed_execution: identity ? { configured: true, zone_id: identity.zoneId } : { configured: false },
     }
   })
 
@@ -731,9 +738,11 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
     // zone — it can only govern the one zone the identity is bound to. A conversation in
     // any other zone has no governed identity, so execution refuses rather than applying
     // changes in the wrong zone or as any other authority. There is no admin-actor fallback.
-    if (!controlClient || opts.controlIdentity?.zoneId !== params.zoneId) {
+    const governed = resolveControlClient()
+    if (!governed || governed.identity.zoneId !== params.zoneId) {
       return reply.code(409).send({ error: 'governed_execution_unconfigured' })
     }
+    const controlClient = governed.client
 
     const lockKey = `operator:exec:${params.zoneId}:${params.id}:${planSeq}`
     // An owner token so the lock is only ever released by the request that holds it; a

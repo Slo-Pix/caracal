@@ -32,9 +32,8 @@ const SAVED_KEYS = [
   'API_OPERATOR_AI_OPENAI_API_KEY',
   'API_OPERATOR_AI_LOCAL_BASE_URL',
   'API_OPERATOR_AI_LOCAL_MODEL',
-  'API_OPERATOR_CONTROL_CLIENT_ID',
+  'API_OPERATOR_SELF_GOVERN',
   'API_OPERATOR_CONTROL_CLIENT_SECRET',
-  'API_OPERATOR_CONTROL_ZONE_ID',
   'API_MAX_RESOURCES_PER_ZONE',
   'API_READY_OUTBOX_DEAD_MAX',
   'CARACAL_MODE',
@@ -157,39 +156,28 @@ describe('api config trustProxy', () => {
     expect(loadConfig().trustProxy).toBe(true)
   })
 
-  test('leaves operatorControl null when its config is absent', async () => {
+  test('defaults self-governance off and leaves the control secret null when unset', async () => {
     const { loadConfig } = (await import(CONFIG_PATH)) as typeof import('../../../../apps/api/src/config')
-    expect(loadConfig().operatorControl).toBeNull()
+    const cfg = loadConfig()
+    expect(cfg.operatorSelfGovern).toBe(false)
+    expect(cfg.operatorControlSecret).toBeNull()
   })
 
-  test('leaves operatorControl null when the identity is only partially configured', async () => {
-    process.env.API_OPERATOR_CONTROL_CLIENT_ID = 'app-operator'
-    process.env.API_OPERATOR_CONTROL_ZONE_ID = 'zone-sys'
-    // Missing the secret: a partial identity must not load.
-    const { loadConfig } = (await import(CONFIG_PATH)) as typeof import('../../../../apps/api/src/config')
-    expect(loadConfig().operatorControl).toBeNull()
-  })
-
-  test('loads the operatorControl identity when all three values are present', async () => {
-    process.env.API_OPERATOR_CONTROL_CLIENT_ID = 'app-operator'
+  test('enables self-governance and loads the control secret when configured', async () => {
+    process.env.API_OPERATOR_SELF_GOVERN = 'true'
     process.env.API_OPERATOR_CONTROL_CLIENT_SECRET = 'cs_operator_secret'
-    process.env.API_OPERATOR_CONTROL_ZONE_ID = 'zone-sys'
     const { loadConfig } = (await import(CONFIG_PATH)) as typeof import('../../../../apps/api/src/config')
-    expect(loadConfig().operatorControl).toEqual({
-      applicationId: 'app-operator',
-      clientSecret: 'cs_operator_secret',
-      zoneId: 'zone-sys',
-    })
+    const cfg = loadConfig()
+    expect(cfg.operatorSelfGovern).toBe(true)
+    expect(cfg.operatorControlSecret).toBe('cs_operator_secret')
   })
 
   test('resolves the operator control secret from a secret file', async () => {
     const secretFile = join(dir, 'operatorControlSecret')
     writeFileSync(secretFile, 'cs_from_file\n')
-    process.env.API_OPERATOR_CONTROL_CLIENT_ID = 'app-operator'
     process.env.API_OPERATOR_CONTROL_CLIENT_SECRET_FILE = secretFile
-    process.env.API_OPERATOR_CONTROL_ZONE_ID = 'zone-sys'
     const { loadConfig } = (await import(CONFIG_PATH)) as typeof import('../../../../apps/api/src/config')
-    expect(loadConfig().operatorControl?.clientSecret).toBe('cs_from_file')
+    expect(loadConfig().operatorControlSecret).toBe('cs_from_file')
     delete process.env.API_OPERATOR_CONTROL_CLIENT_SECRET_FILE
   })
 

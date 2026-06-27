@@ -86,20 +86,24 @@ export interface Config {
   operatorAllowedCapabilities: string[] | null
   operatorSystemZones: string[]
   operatorAiProviders: ProviderConfig[]
-  // Internal-only: the Operator's reserved caracal.sys control identity. The Operator
-  // dogfoods Caracal by executing through the governed control plane as this real
-  // least-privilege application — exactly as a customer's control key does — rather than
-  // borrowing the admin token. It is provisioned from sealed platform config because the
-  // Operator is a Caracal-internal system, not authored by an end user. Null disables
-  // governed execution. Control tokens are zone-bound, so this identity governs the one
-  // zone it belongs to (the caracal.sys system zone the Operator self-manages).
-  operatorControl: OperatorControlIdentity | null
+  // Internal-only: when set, the Operator provisions and self-governs the reserved
+  // caracal.sys system zone, executing through the governed control plane as a real
+  // least-privilege control identity — exactly as a customer's control key does — rather
+  // than borrowing the admin token. The system zone and that identity are provisioned
+  // autonomously at startup; the only knob is the sealed client secret below, so the user
+  // surface is one secret rather than a hand-wired identity.
+  operatorSelfGovern: boolean
+  // The sealed client secret for the Operator's reserved control identity. Sourced from
+  // platform config (file-resolvable like every platform secret) and never set by an end
+  // user. Null leaves governed execution unconfigured.
+  operatorControlSecret: string | null
   metricsBearer: string | null
   control: ControlConfig | null
 }
 
-// Internal-only: credentials and zone binding for the Operator's caracal.sys control
-// identity. Strictly a platform-internal adapter; never exposed to or set by end users.
+// Internal-only: the resolved credentials and zone binding for the Operator's caracal.sys
+// control identity, assembled at startup from the provisioned system zone plus the sealed
+// secret. Strictly a platform-internal adapter; never exposed to or set by end users.
 export interface OperatorControlIdentity {
   applicationId: string
   clientSecret: string
@@ -184,16 +188,12 @@ function loadOperatorAiProviders(): ProviderConfig[] {
   return providers
 }
 
-// Internal-only: resolves the Operator's caracal.sys control identity from sealed platform
-// config. All three values are required together; any missing one disables governed
-// execution rather than running with a partial identity. The secret is _FILE-resolvable
-// like every other platform secret and never leaves config.
-function loadOperatorControlIdentity(): OperatorControlIdentity | null {
-  const applicationId = process.env.API_OPERATOR_CONTROL_CLIENT_ID?.trim()
-  const clientSecret = process.env.API_OPERATOR_CONTROL_CLIENT_SECRET
-  const zoneId = process.env.API_OPERATOR_CONTROL_ZONE_ID?.trim()
-  if (!applicationId || !clientSecret || !zoneId) return null
-  return { applicationId, clientSecret, zoneId }
+// Internal-only: resolves whether the Operator should self-govern the caracal.sys system
+// zone. Governed execution requires the control plane (checked by the caller) and the
+// sealed control secret; the system zone and identity are provisioned autonomously at
+// startup, so the only user-facing knob is the secret.
+function loadOperatorSelfGovern(): boolean {
+  return boolEnv('API_OPERATOR_SELF_GOVERN', false)
 }
 
 export function loadConfig(): Config {
@@ -254,7 +254,8 @@ export function loadConfig(): Config {
     operatorAllowedCapabilities: csvEnv('API_OPERATOR_ALLOWED_CAPABILITIES'),
     operatorSystemZones: csvEnv('API_OPERATOR_SYSTEM_ZONES') ?? [],
     operatorAiProviders: loadOperatorAiProviders(),
-    operatorControl: loadOperatorControlIdentity(),
+    operatorSelfGovern: loadOperatorSelfGovern(),
+    operatorControlSecret: process.env.API_OPERATOR_CONTROL_CLIENT_SECRET?.trim() || null,
     metricsBearer: process.env.METRICS_BEARER ?? null,
     control,
   }
