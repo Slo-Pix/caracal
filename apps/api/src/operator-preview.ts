@@ -70,6 +70,8 @@ async function previewStep(
     case 'listZones':
     case 'listApplications':
     case 'listProviders':
+    case 'listResources':
+    case 'listPolicies':
     case 'explainAccess':
       return { effect: 'read_only', detail: 'Reads current state; changes nothing.' }
 

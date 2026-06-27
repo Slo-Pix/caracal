@@ -41,6 +41,8 @@ describe('isControlExecutable', () => {
     expect(isControlExecutable('grantAccess')).toBe(true)
     expect(isControlExecutable('listApplications')).toBe(true)
     expect(isControlExecutable('listProviders')).toBe(true)
+    expect(isControlExecutable('listResources')).toBe(true)
+    expect(isControlExecutable('listPolicies')).toBe(true)
     expect(isControlExecutable('rotateApplicationSecret')).toBe(true)
     // Zone lifecycle is a platform operation, not governed-executable by the Operator.
     expect(isControlExecutable('createZone')).toBe(false)
@@ -85,6 +87,8 @@ describe('buildInvocation', () => {
   it('builds reads with no flags', () => {
     expect(CONTROL_CAPABILITIES.listApplications.buildInvocation({}, gen).flags).toEqual({})
     expect(CONTROL_CAPABILITIES.listProviders.buildInvocation({}, gen).flags).toEqual({})
+    expect(CONTROL_CAPABILITIES.listResources.buildInvocation({}, gen).flags).toEqual({})
+    expect(CONTROL_CAPABILITIES.listPolicies.buildInvocation({}, gen).flags).toEqual({})
   })
 })
 
@@ -124,5 +128,16 @@ describe('describeOutcome', () => {
       'Found 2 applications in this zone.',
     )
     expect(CONTROL_CAPABILITIES.listProviders.describeOutcome([], {}, gen).detail).toBe('Found 0 providers in this zone.')
+    expect(CONTROL_CAPABILITIES.listResources.describeOutcome([{ id: 'r' }], {}, gen).detail).toBe('Found 1 resource in this zone.')
+    expect(CONTROL_CAPABILITIES.listPolicies.describeOutcome([{ id: 'p' }, { id: 'q' }], {}, gen).detail).toBe(
+      'Found 2 policies in this zone.',
+    )
+  })
+
+  it('surfaces read rows under their named output key', () => {
+    const resources = [{ id: 'r1', identifier: 'res://a' }]
+    expect(CONTROL_CAPABILITIES.listResources.describeOutcome(resources, {}, gen).output).toEqual({ resources })
+    const policies = [{ id: 'p1', name: 'binding', description: null }]
+    expect(CONTROL_CAPABILITIES.listPolicies.describeOutcome(policies, {}, gen).output).toEqual({ policies })
   })
 })

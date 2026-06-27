@@ -109,6 +109,15 @@ export const CAPABILITIES: Record<string, Capability> = {
     args: z.object({ name: z.string().min(1).max(200), scopes: z.array(Scope).min(1).max(64) }).strict(),
     argsHint: 'name (string), scopes (array of scope strings)',
   },
+  listResources: {
+    id: 'listResources',
+    title: 'List resources',
+    summary: 'Read the protected resources defined in the zone and the scopes they expose.',
+    domain: 'resource',
+    mutating: false,
+    args: NoArgs,
+    argsHint: 'no arguments',
+  },
   grantAccess: {
     id: 'grantAccess',
     title: 'Grant access',
@@ -133,6 +142,15 @@ export const CAPABILITIES: Record<string, Capability> = {
     mutating: false,
     args: z.object({ application_id: IdRef.optional(), resource_id: IdRef.optional() }).strict(),
     argsHint: 'application_id (string, optional), resource_id (string, optional)',
+  },
+  listPolicies: {
+    id: 'listPolicies',
+    title: 'List policies',
+    summary: 'Read the policies defined in the zone by name and description. Returns no policy source.',
+    domain: 'policy',
+    mutating: false,
+    args: NoArgs,
+    argsHint: 'no arguments',
   },
 }
 

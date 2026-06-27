@@ -230,6 +230,8 @@ describe('operatorControlScopes', () => {
       'control:app:write',
       'control:grant:write',
       'control:identity-provider:read',
+      'control:policy:read',
+      'control:resource:read',
     ])
   })
 })

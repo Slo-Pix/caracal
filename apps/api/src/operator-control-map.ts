@@ -56,7 +56,8 @@ function asArray(value: unknown): unknown[] {
 
 function countLabel(rows: unknown[], singular: string): string {
   const n = rows.length
-  return `Found ${n} ${singular}${n === 1 ? '' : 's'}`
+  const plural = /[^aeiou]y$/.test(singular) ? `${singular.slice(0, -1)}ies` : `${singular}s`
+  return `Found ${n} ${n === 1 ? singular : plural}`
 }
 
 // The governed control mapping for every Operator capability that executes through the
@@ -81,6 +82,25 @@ export const CONTROL_CAPABILITIES: Record<string, ControlCapability> = {
     describeOutcome: (result) => {
       const providers = asArray(result)
       return { detail: `${countLabel(providers, 'provider')} in this zone.`, output: { providers } }
+    },
+  },
+  listResources: {
+    scopes: ['control:resource:read'],
+    buildInvocation: () => ({ command: 'resource', subcommand: 'list', flags: {} }),
+    describeOutcome: (result) => {
+      const resources = asArray(result)
+      return { detail: `${countLabel(resources, 'resource')} in this zone.`, output: { resources } }
+    },
+  },
+  listPolicies: {
+    scopes: ['control:policy:read'],
+    // The control policy list returns metadata only — name, description, ownership — never
+    // the Rego source, which lives in policy versions behind a separate read. So a list is
+    // safe to surface in full without leaking policy logic.
+    buildInvocation: () => ({ command: 'policy', subcommand: 'list', flags: {} }),
+    describeOutcome: (result) => {
+      const policies = asArray(result)
+      return { detail: `${countLabel(policies, 'policy')} in this zone.`, output: { policies } }
     },
   },
 
