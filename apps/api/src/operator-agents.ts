@@ -43,7 +43,7 @@ export function buildTriageMessages(message: string): GatewayMessage[] {
         'You triage a Caracal operator request into the smallest sufficient handling tier. Reply ' +
         'with ONLY a JSON object {"tier":"<tier>"} and no prose. Tiers:\n' +
         '- "conversational": a greeting, small talk, an acknowledgement, a question about what you ' +
-        'can do, or a clarifying question — nothing about the operator\'s actual Caracal state.\n' +
+        "can do, or a clarifying question — nothing about the operator's actual Caracal state.\n" +
         '- "read": a question that inspects or explains current state or a past decision, changing ' +
         'nothing.\n' +
         '- "change": a request to create, connect, rotate, grant, or set up ONE thing.\n' +

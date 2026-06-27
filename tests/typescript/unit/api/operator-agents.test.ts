@@ -4,7 +4,14 @@
 // Unit tests for the Operator agents: intent routing, planning, and explanation.
 
 import { describe, it, expect, vi } from 'vitest'
-import { buildPlannerMessages, buildTriageMessages, runTriage, tierPlans, runPlanner, runExplainer } from '../../../../apps/api/src/operator-agents.js'
+import {
+  buildPlannerMessages,
+  buildTriageMessages,
+  runTriage,
+  tierPlans,
+  runPlanner,
+  runExplainer,
+} from '../../../../apps/api/src/operator-agents.js'
 import type { Gateway, CompletionResult, CompletionObjectResult } from '../../../../apps/api/src/operator-gateway.js'
 
 // A gateway stub whose free-text completions are scripted, so the explainer's prompt
