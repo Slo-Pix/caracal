@@ -10,7 +10,7 @@ import { newRedis } from './redis.js'
 import { startDCRGC } from './jobs/dcr-gc.js'
 import { startSessionsReaper } from './jobs/sessions-reaper.js'
 import { OutboxDispatcher } from './outbox.js'
-import { seedBootstrapAdminToken, seedConsoleReadToken } from './auth.js'
+import { seedBootstrapAdminToken, seedConsoleReadToken, seedConsoleWriteToken } from './auth.js'
 import { assertPublishedSafe, createLogger, initNodeTelemetry, ShutdownRegistry, withTimeout } from '@caracalai/core'
 
 assertPublishedSafe()
@@ -63,6 +63,10 @@ try {
     log: (msg) => log('info', msg),
   })
   await seedConsoleReadToken(db, {
+    envToken: cfg.bootstrapAdminToken,
+    log: (msg) => log('info', msg),
+  })
+  await seedConsoleWriteToken(db, {
     envToken: cfg.bootstrapAdminToken,
     log: (msg) => log('info', msg),
   })

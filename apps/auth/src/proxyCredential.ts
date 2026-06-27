@@ -11,17 +11,22 @@ export interface ProxyCredential {
 }
 
 // Decides the credential for one proxied console request. A read (GET or HEAD) presents the
-// least-privilege read-only token and may fall back to the admin token if the read token is not
-// recognized, so a not-yet-provisioned or rotated read token never makes a read fail closed. A
-// write always presents the admin token with no fallback, because the read token is denied every
-// mutating request at the API, so falling back to it could never help and offering it as a
-// second attempt would only widen the surface. A read with no distinct read token configured
-// presents the admin token directly, since there is nothing weaker to prefer.
-export function selectProxyCredential(method: string, adminToken: string, readToken: string | undefined): ProxyCredential {
+// read-only token; a write presents the write token. Either may fall back to the deployment
+// admin token if its own token is not recognized, so a not-yet-provisioned or rotated derived
+// token never makes a request fail closed — the admin token is the break-glass fallback rather
+// than the everyday credential. When a derived token is absent or equal to the admin token there
+// is nothing weaker to prefer and no distinct fallback, so the admin token is presented directly.
+export function selectProxyCredential(
+  method: string,
+  adminToken: string,
+  readToken: string | undefined,
+  writeToken: string | undefined,
+): ProxyCredential {
   const verb = method.toUpperCase()
   const isRead = verb === 'GET' || verb === 'HEAD'
-  if (isRead && readToken && readToken !== adminToken) {
-    return { token: readToken, fallbackToken: adminToken }
+  const preferred = isRead ? readToken : writeToken
+  if (preferred && preferred !== adminToken) {
+    return { token: preferred, fallbackToken: adminToken }
   }
   return { token: adminToken }
 }

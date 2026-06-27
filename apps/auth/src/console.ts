@@ -4,7 +4,7 @@
 // Session-guarded backend-for-frontend that proxies the Community Edition web client to the Caracal admin API.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { discoverAdminToken, discoverCoordinatorToken, deriveConsoleReadToken, pathOnly } from '@caracalai/core'
+import { discoverAdminToken, discoverCoordinatorToken, deriveConsoleReadToken, deriveConsoleWriteToken, pathOnly } from '@caracalai/core'
 import {
   applyControlLifecycleAction,
   controlKeyRecord,
@@ -57,12 +57,21 @@ function adminToken(): string | undefined {
 
 // The read-only admin token the BFF presents on read traffic, derived deterministically from
 // the deployment admin token so it matches the read-capability row the API provisions. The
-// admin token stays the credential for writes and the fallback when the read token is not yet
-// recognized, so least privilege on reads never costs availability. Returns undefined only
-// when no admin token is discoverable, in which case the proxy already reports unconfigured.
+// admin token is the break-glass fallback when the read token is not yet recognized, so least
+// privilege on reads never costs availability. Returns undefined only when no admin token is
+// discoverable, in which case the proxy already reports unconfigured.
 function consoleReadToken(): string | undefined {
   const admin = adminToken()
   return admin ? deriveConsoleReadToken(admin) : undefined
+}
+
+// The write admin token the BFF presents on mutating traffic, derived from the deployment admin
+// token so it matches the write-capability row the API provisions. Presenting it keeps the
+// deployment admin token off the BFF's normal write path, reserving it as a break-glass fallback
+// rather than the everyday operational credential.
+function consoleWriteToken(): string | undefined {
+  const admin = adminToken()
+  return admin ? deriveConsoleWriteToken(admin) : undefined
 }
 
 function coordinatorToken(): string | undefined {
@@ -425,12 +434,12 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: stri
     sendJson(res, 404, { error: 'not_found' })
     return
   }
-  // Reads present the least-privilege read-only token and fall back to the admin token only if
-  // it is not recognized; writes always use the admin token, since the read token is denied any
-  // mutating request at the API. This keeps the god token off the dominant read path without
-  // ever risking a read failing closed.
+  // Reads present the read-only token and writes present the write token; either falls back to
+  // the deployment admin token only if its own token is unrecognized. This keeps the bootstrap
+  // admin token off the BFF's normal path entirely — reserved as a break-glass fallback — while
+  // a request can never fail closed for want of a credential.
   const method = (req.method ?? 'GET').toUpperCase()
-  const credential = selectProxyCredential(method, token, consoleReadToken())
+  const credential = selectProxyCredential(method, token, consoleReadToken(), consoleWriteToken())
   await forwardProxy(req, res, target, credential.token, id, credential.fallbackToken)
   // A successful write to the control plane can change what diagnostics reports (zone
   // inventory, resources, policy enforcement, …); drop cached reports so the next read

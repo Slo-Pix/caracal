@@ -6,7 +6,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import { timingSafeEqual } from 'node:crypto'
-import { sha256, deriveConsoleReadToken } from '@caracalai/core'
+import { sha256, deriveConsoleReadToken, deriveConsoleWriteToken } from '@caracalai/core'
 import { v7 as uuidv7 } from 'uuid'
 import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
@@ -181,49 +181,91 @@ async function revokeStaleBootstrapTokens(db: DB, activeDigest: Buffer): Promise
   )
 }
 
-// The reserved name and creator of the Console BFF's read-only admin token, so the seeder
-// can reconcile exactly this one row without touching operator-minted tokens.
+// The reserved names and creators of the Console BFF's derived admin tokens, so each seeder can
+// reconcile exactly its own row without touching operator-minted tokens or the other derived
+// token. The creators are distinct so the per-creator stale-revocation of one token type can
+// never revoke the other.
 const CONSOLE_READ_TOKEN_NAME = 'console-read-only'
 const CONSOLE_READ_TOKEN_CREATED_BY = 'env-derived'
+const CONSOLE_WRITE_TOKEN_NAME = 'console-write'
+const CONSOLE_WRITE_TOKEN_CREATED_BY = 'env-derived-write'
 
-// Provisions the Console BFF's read-only admin token: a global, read-capability credential
-// derived deterministically from the deployment admin token. The BFF presents it on read
-// traffic so the shared god token is no longer the credential behind the bulk of console
-// requests; a read token cannot mutate state at the API, so a fault confined to the read
-// proxy path can never write. The value is deterministic, so this is idempotent — the same
-// admin token yields the same row every run — and needs no secret file or minting round-trip,
-// which keeps every BFF replica in agreement. Rotating the admin token rotates this token and
-// supersedes the prior row, which is then revoked so a stale derived credential never lingers.
-export async function seedConsoleReadToken(db: DB, opts: SeedOptions): Promise<void> {
-  if (!opts.envToken) return
-  const token = deriveConsoleReadToken(opts.envToken)
-  const digest = sha256(token)
+// Provisions a Console BFF admin token derived deterministically from the deployment admin
+// token. The value is deterministic, so this is idempotent — the same admin token yields the
+// same row every run — and needs no secret file or minting round-trip, which keeps every BFF
+// replica in agreement. Rotating the admin token rotates the derived token and supersedes the
+// prior row, which is then revoked (scoped to this token's own creator) so a stale derived
+// credential never lingers and the two derived tokens never revoke each other.
+async function seedDerivedConsoleToken(
+  db: DB,
+  derived: string,
+  meta: { name: string; capability: AdminCapability; createdBy: string; logLabel: string },
+  log: (msg: string) => void,
+): Promise<void> {
+  const digest = sha256(derived)
   const { rows } = await db.query<{ token_hash: string | null }>(`SELECT token_hash FROM admin_tokens WHERE token_sha256 = $1 LIMIT 1`, [
     digest,
   ])
   if (!rows[0]) {
-    const tokenHash = await hashAdminToken(token)
+    const tokenHash = await hashAdminToken(derived)
     await db.query(
       `INSERT INTO admin_tokens (id, name, token_sha256, token_hash, scope, capability, zone_id, created_by)
-       VALUES ($1, $2, $3, $4, 'global', 'read', NULL, $5)`,
-      [uuidv7(), CONSOLE_READ_TOKEN_NAME, digest, tokenHash, CONSOLE_READ_TOKEN_CREATED_BY],
+       VALUES ($1, $2, $3, $4, 'global', $5, NULL, $6)`,
+      [uuidv7(), meta.name, digest, tokenHash, meta.capability, meta.createdBy],
     )
-    opts.log('seeded console read-only admin token')
+    log(meta.logLabel)
   } else if (!rows[0].token_hash) {
     await db.query(`UPDATE admin_tokens SET token_hash = $1 WHERE token_sha256 = $2 AND token_hash IS NULL`, [
-      await hashAdminToken(token),
+      await hashAdminToken(derived),
       digest,
     ])
   }
-  // Revoke any previously derived read token whose admin token has since rotated, so exactly
-  // one read-only credential is ever live.
   await db.query(
     `UPDATE admin_tokens
      SET revoked_at = now()
      WHERE created_by = $1
        AND revoked_at IS NULL
        AND token_sha256 <> $2`,
-    [CONSOLE_READ_TOKEN_CREATED_BY, digest],
+    [meta.createdBy, digest],
+  )
+}
+
+// Provisions the Console BFF's read-only admin token: a global, read-capability credential the
+// BFF presents on read traffic so the shared god token is no longer the credential behind the
+// bulk of console requests. A read token cannot mutate state at the API, so a fault confined to
+// the read proxy path can never write.
+export async function seedConsoleReadToken(db: DB, opts: SeedOptions): Promise<void> {
+  if (!opts.envToken) return
+  await seedDerivedConsoleToken(
+    db,
+    deriveConsoleReadToken(opts.envToken),
+    {
+      name: CONSOLE_READ_TOKEN_NAME,
+      capability: 'read',
+      createdBy: CONSOLE_READ_TOKEN_CREATED_BY,
+      logLabel: 'seeded console read-only admin token',
+    },
+    opts.log,
+  )
+}
+
+// Provisions the Console BFF's write admin token: a global, write-capability credential the BFF
+// presents on mutating traffic so the deployment admin token is reserved as a break-glass
+// fallback rather than the everyday operational credential. It is independently revocable from
+// the bootstrap admin token, yet derivable only by a holder of that token, so it grants nothing
+// new while taking the bootstrap secret off the BFF's normal write path.
+export async function seedConsoleWriteToken(db: DB, opts: SeedOptions): Promise<void> {
+  if (!opts.envToken) return
+  await seedDerivedConsoleToken(
+    db,
+    deriveConsoleWriteToken(opts.envToken),
+    {
+      name: CONSOLE_WRITE_TOKEN_NAME,
+      capability: 'write',
+      createdBy: CONSOLE_WRITE_TOKEN_CREATED_BY,
+      logLabel: 'seeded console write admin token',
+    },
+    opts.log,
   )
 }
 

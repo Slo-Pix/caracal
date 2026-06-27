@@ -1,45 +1,56 @@
 // Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 // Caracal, a product of Garudex Labs
 //
-// Unit tests for the Console BFF proxy credential selection: reads use the read-only token, writes use the admin token.
+// Unit tests for the Console BFF proxy credential selection: reads use the read token, writes use the write token, the admin token is the break-glass fallback.
 
 import { describe, expect, it } from 'vitest'
 import { selectProxyCredential, shouldRetryWithFallback } from '../../../../apps/auth/src/proxyCredential.ts'
 
 const ADMIN = 'cat_admin_god'
 const READ = 'cat_read_only'
+const WRITE = 'cat_write'
 
 describe('selectProxyCredential', () => {
   it('uses the read token with an admin fallback for GET', () => {
-    expect(selectProxyCredential('GET', ADMIN, READ)).toEqual({ token: READ, fallbackToken: ADMIN })
+    expect(selectProxyCredential('GET', ADMIN, READ, WRITE)).toEqual({ token: READ, fallbackToken: ADMIN })
   })
 
   it('uses the read token with an admin fallback for HEAD', () => {
-    expect(selectProxyCredential('HEAD', ADMIN, READ)).toEqual({ token: READ, fallbackToken: ADMIN })
+    expect(selectProxyCredential('HEAD', ADMIN, READ, WRITE)).toEqual({ token: READ, fallbackToken: ADMIN })
   })
 
   it('treats the method case-insensitively', () => {
-    expect(selectProxyCredential('get', ADMIN, READ)).toEqual({ token: READ, fallbackToken: ADMIN })
+    expect(selectProxyCredential('get', ADMIN, READ, WRITE)).toEqual({ token: READ, fallbackToken: ADMIN })
   })
 
-  it('uses the admin token with no fallback for writes', () => {
+  it('uses the write token with an admin fallback for writes', () => {
     for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
-      expect(selectProxyCredential(method, ADMIN, READ), method).toEqual({ token: ADMIN })
+      expect(selectProxyCredential(method, ADMIN, READ, WRITE), method).toEqual({ token: WRITE, fallbackToken: ADMIN })
     }
   })
 
-  it('never offers the read token as a fallback on a write', () => {
-    const credential = selectProxyCredential('POST', ADMIN, READ)
-    expect(credential.fallbackToken).toBeUndefined()
-    expect(credential.token).toBe(ADMIN)
+  it('never presents the read token on a write', () => {
+    const credential = selectProxyCredential('POST', ADMIN, READ, WRITE)
+    expect(credential.token).toBe(WRITE)
+    expect(credential.token).not.toBe(READ)
+  })
+
+  it('keeps the admin token off the normal path: neither read nor write uses it as the primary', () => {
+    expect(selectProxyCredential('GET', ADMIN, READ, WRITE).token).not.toBe(ADMIN)
+    expect(selectProxyCredential('POST', ADMIN, READ, WRITE).token).not.toBe(ADMIN)
   })
 
   it('falls back to the admin token on a read when no read token is configured', () => {
-    expect(selectProxyCredential('GET', ADMIN, undefined)).toEqual({ token: ADMIN })
+    expect(selectProxyCredential('GET', ADMIN, undefined, WRITE)).toEqual({ token: ADMIN })
   })
 
-  it('does not set a redundant fallback when the read token equals the admin token', () => {
-    expect(selectProxyCredential('GET', ADMIN, ADMIN)).toEqual({ token: ADMIN })
+  it('falls back to the admin token on a write when no write token is configured', () => {
+    expect(selectProxyCredential('POST', ADMIN, READ, undefined)).toEqual({ token: ADMIN })
+  })
+
+  it('does not set a redundant fallback when a derived token equals the admin token', () => {
+    expect(selectProxyCredential('GET', ADMIN, ADMIN, WRITE)).toEqual({ token: ADMIN })
+    expect(selectProxyCredential('POST', ADMIN, READ, ADMIN)).toEqual({ token: ADMIN })
   })
 })
 

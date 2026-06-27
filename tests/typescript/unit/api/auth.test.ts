@@ -7,8 +7,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import Fastify from 'fastify'
 import type { DB } from '../../../../apps/api/src/db.js'
-import { adminAuthPlugin, lookupAdminToken, seedBootstrapAdminToken, seedConsoleReadToken } from '../../../../apps/api/src/auth.js'
-import { deriveConsoleReadToken } from '../../../../packages/core/ts/src/consoleToken.js'
+import {
+  adminAuthPlugin,
+  lookupAdminToken,
+  seedBootstrapAdminToken,
+  seedConsoleReadToken,
+  seedConsoleWriteToken,
+} from '../../../../apps/api/src/auth.js'
+import { deriveConsoleReadToken, deriveConsoleWriteToken } from '../../../../packages/core/ts/src/consoleToken.js'
 
 function digest(token: string): Buffer {
   return createHash('sha256').update(token).digest()
@@ -380,6 +386,17 @@ describe('deriveConsoleReadToken', () => {
   })
 })
 
+describe('deriveConsoleWriteToken', () => {
+  it('is deterministic, in the cat_ format, and distinct from the read token of the same admin token', () => {
+    const w = deriveConsoleWriteToken('cat_admin_secret')
+    expect(w).toBe(deriveConsoleWriteToken('cat_admin_secret'))
+    expect(w).toMatch(/^cat_[A-Za-z0-9_-]+$/)
+    // Distinct domain separation: read and write tokens of the same admin token never collide.
+    expect(w).not.toBe(deriveConsoleReadToken('cat_admin_secret'))
+    expect(w).not.toBe('cat_admin_secret')
+  })
+})
+
 describe('seedConsoleReadToken', () => {
   it('does nothing when env token is not set', async () => {
     const db = { query: vi.fn() } as unknown as DB
@@ -399,12 +416,16 @@ describe('seedConsoleReadToken', () => {
     await seedConsoleReadToken(db, { envToken: 'tok', log: () => {} })
     const insert = inserts.find((q) => q.sql.startsWith('INSERT INTO admin_tokens'))
     expect(insert).toBeDefined()
-    // Provisioned as a global, read-capability token under the reserved derived creator.
-    expect(insert!.sql).toContain("'global', 'read'")
-    expect(insert!.params).toContain('console-read-only')
-    expect(insert!.params).toContain('env-derived')
-    // Stale derived tokens are revoked so only one read credential is ever live.
-    expect(inserts.some((q) => q.sql.includes('created_by = $1') && q.sql.includes('revoked_at = now()'))).toBe(true)
+    // Provisioned as a global, read-capability token under its own reserved creator. Params:
+    // [id, name, digest, hash, capability, createdBy].
+    expect(insert!.sql).toContain("'global', $5")
+    expect(insert!.params![1]).toBe('console-read-only')
+    expect(insert!.params![4]).toBe('read')
+    expect(insert!.params![5]).toBe('env-derived')
+    // Stale derived tokens are revoked, scoped to this token's own creator.
+    const revoke = inserts.find((q) => q.sql.includes('created_by = $1') && q.sql.includes('revoked_at = now()'))
+    expect(revoke).toBeDefined()
+    expect(revoke!.params![0]).toBe('env-derived')
   })
 
   it('is idempotent: no insert when the derived token row already exists with a verifier', async () => {
@@ -420,5 +441,33 @@ describe('seedConsoleReadToken', () => {
     expect(seen.some((s) => s.startsWith('INSERT INTO admin_tokens'))).toBe(false)
     // Still reconciles stale derived tokens on every run.
     expect(seen.some((s) => s.includes('created_by = $1') && s.includes('revoked_at = now()'))).toBe(true)
+  })
+})
+
+describe('seedConsoleWriteToken', () => {
+  it('does nothing when env token is not set', async () => {
+    const db = { query: vi.fn() } as unknown as DB
+    await seedConsoleWriteToken(db, { envToken: null, log: () => {} })
+    expect(db.query).not.toHaveBeenCalled()
+  })
+
+  it('inserts a global write-capability row under a creator distinct from the read token', async () => {
+    const inserts: { sql: string; params?: unknown[] }[] = []
+    const db = {
+      query: vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
+        inserts.push({ sql, params })
+        if (sql.includes('SELECT token_hash')) return Promise.resolve({ rows: [] })
+        return Promise.resolve({ rows: [], rowCount: 1 })
+      }),
+    } as unknown as DB
+    await seedConsoleWriteToken(db, { envToken: 'tok', log: () => {} })
+    const insert = inserts.find((q) => q.sql.startsWith('INSERT INTO admin_tokens'))
+    expect(insert).toBeDefined()
+    expect(insert!.params![1]).toBe('console-write')
+    expect(insert!.params![4]).toBe('write')
+    // A distinct creator so the write seeder's stale-revoke never revokes the read token.
+    expect(insert!.params![5]).toBe('env-derived-write')
+    const revoke = inserts.find((q) => q.sql.includes('created_by = $1') && q.sql.includes('revoked_at = now()'))
+    expect(revoke!.params![0]).toBe('env-derived-write')
   })
 })
