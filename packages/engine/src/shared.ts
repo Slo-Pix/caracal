@@ -6,11 +6,7 @@
 import { readFileSync } from 'node:fs'
 import { AdminClient } from '@caracalai/admin'
 import { discoverAdminToken, discoverCoordinatorToken } from '@caracalai/core'
-import {
-  DEFAULT_API_URL,
-  DEFAULT_COORDINATOR_URL,
-  resolveServiceUrl,
-} from './runtimeConfig.js'
+import { DEFAULT_API_URL, DEFAULT_COORDINATOR_URL, resolveServiceUrl } from './runtimeConfig.js'
 
 export interface AdminContext {
   client: AdminClient
@@ -28,19 +24,20 @@ function isLocalUrl(value: string): boolean {
 }
 
 export function adminTokenProvisionCommand(env: NodeJS.ProcessEnv = process.env): string {
-  return env.CARACAL_MODE === 'dev' || (!env.CARACAL_MODE && env.CARACAL_REPO_ROOT !== undefined)
-    ? 'pnpm caracal up'
-    : 'caracal up'
+  return env.CARACAL_MODE === 'dev' || (!env.CARACAL_MODE && env.CARACAL_REPO_ROOT !== undefined) ? 'pnpm caracal up' : 'caracal up'
 }
 
-export function buildAdminClient(): AdminContext {
+// Builds an admin client from the discovered deployment credentials. adminToken overrides the
+// discovered token, which the Console BFF uses to drive read-only diagnostics under its
+// least-privilege read token instead of the deployment admin token; with no override the
+// deployment admin token is discovered as before, so the CLI and every other caller are
+// unchanged.
+export function buildAdminClient(opts: { adminToken?: string } = {}): AdminContext {
   const apiUrl = resolveServiceUrl('CARACAL_API_URL', DEFAULT_API_URL)
   const coordinatorUrl = resolveServiceUrl('CARACAL_COORDINATOR_URL', DEFAULT_COORDINATOR_URL)
-  const adminToken = discoverAdminToken(undefined, { preferGenerated: isLocalUrl(apiUrl) })
+  const adminToken = opts.adminToken ?? discoverAdminToken(undefined, { preferGenerated: isLocalUrl(apiUrl) })
   if (!adminToken) {
-    throw new Error(
-      `Admin token not found; run \`${adminTokenProvisionCommand()}\` to provision local admin credentials.`,
-    )
+    throw new Error(`Admin token not found; run \`${adminTokenProvisionCommand()}\` to provision local admin credentials.`)
   }
   const coordinatorToken = discoverCoordinatorToken(undefined, { preferGenerated: isLocalUrl(coordinatorUrl) })
   const zoneId = process.env.CARACAL_ZONE_ID

@@ -41,9 +41,7 @@ describe('buildAdminClient', () => {
       CARACAL_COORDINATOR_URL: 'http://localhost:4000',
     })
 
-    expect(() => buildAdminClient()).toThrow(
-      'Admin token not found; run `pnpm caracal up` to provision local admin credentials.',
-    )
+    expect(() => buildAdminClient()).toThrow('Admin token not found; run `pnpm caracal up` to provision local admin credentials.')
   })
 
   it('recommends pnpm caracal up when launched from the workspace', () => {
@@ -56,9 +54,7 @@ describe('buildAdminClient', () => {
     })
     delete process.env.CARACAL_MODE
 
-    expect(() => buildAdminClient()).toThrow(
-      'Admin token not found; run `pnpm caracal up` to provision local admin credentials.',
-    )
+    expect(() => buildAdminClient()).toThrow('Admin token not found; run `pnpm caracal up` to provision local admin credentials.')
   })
 
   it.each(['rc', 'stable'] as const)('recommends caracal up when the admin token is missing in %s mode', (mode) => {
@@ -71,9 +67,7 @@ describe('buildAdminClient', () => {
       CARACAL_COORDINATOR_URL: 'http://localhost:4000',
     })
 
-    expect(() => buildAdminClient()).toThrow(
-      'Admin token not found; run `caracal up` to provision local admin credentials.',
-    )
+    expect(() => buildAdminClient()).toThrow('Admin token not found; run `caracal up` to provision local admin credentials.')
   })
 
   it('discovers the coordinator token from the local secret file', async () => {
@@ -88,18 +82,24 @@ describe('buildAdminClient', () => {
       CARACAL_COORDINATOR_URL: 'http://coordinator.test',
     }
     delete process.env.CARACAL_COORDINATOR_TOKEN
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ items: [], next_cursor: null }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }))
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ items: [], next_cursor: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     const { client } = buildAdminClient()
     await client.agents.list('z1')
 
-    expect(fetchMock).toHaveBeenCalledWith('http://coordinator.test/zones/z1/agents', expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: 'Bearer coordinator-secret' }),
-    }))
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://coordinator.test/zones/z1/agents',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer coordinator-secret' }),
+      }),
+    )
   })
 
   it('uses generated local coordinator secrets instead of stale env tokens for local Console', async () => {
@@ -132,12 +132,46 @@ describe('buildAdminClient', () => {
     await client.zones.list()
     await client.agents.list('z1')
 
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:3000/v1/zones', expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: 'Bearer admin-secret' }),
-    }))
-    expect(fetchMock).toHaveBeenCalledWith('http://localhost:4000/zones/z1/agents', expect.objectContaining({
-      headers: expect.objectContaining({ Authorization: 'Bearer coordinator-secret' }),
-    }))
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/v1/zones',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer admin-secret' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:4000/zones/z1/agents',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer coordinator-secret' }),
+      }),
+    )
+  })
+
+  it('uses an explicit adminToken override instead of the discovered token', async () => {
+    process.env = {
+      ...saved,
+      CARACAL_ADMIN_TOKEN: 'discovered-admin',
+      CARACAL_API_URL: 'http://api.test',
+      CARACAL_COORDINATOR_URL: 'http://coordinator.test',
+    }
+    delete process.env.CARACAL_COORDINATOR_TOKEN
+    delete process.env.CARACAL_COORDINATOR_TOKEN_FILE
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { client } = buildAdminClient({ adminToken: 'override-read-token' })
+    await client.zones.list()
+
+    // The override is presented, never the discovered deployment admin token.
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/v1/zones',
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer override-read-token' }) }),
+    )
   })
 })
 

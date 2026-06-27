@@ -280,6 +280,10 @@ async function computeDiagnostics(options: DiagnosticsOptions): Promise<Diagnost
     zoneId: options.preflightOnly ? undefined : options.zoneId,
     strict: options.strict,
     preflightOnly: options.preflightOnly,
+    // Diagnostics only read, so they run under the least-privilege read-only token rather than
+    // the deployment admin token. The admin token is the fallback when no read token is
+    // derivable, so diagnostics never fail closed for want of a credential.
+    adminToken: consoleReadToken() ?? adminToken(),
   })
   const generatedAt = new Date().toISOString()
   return { at: Date.now(), generation, payload: { ...report, generatedAt } }

@@ -124,6 +124,21 @@ describe('runDoctorDiagnostics — full system run', () => {
     fetchSpy.mockRestore()
   })
 
+  it('threads an adminToken override to buildAdminClient so diagnostics can run under a read token', async () => {
+    const mock = vi.mocked(buildAdminClient).mockReturnValue(fakeAdminContext() as never)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.endsWith('/health') || url.endsWith('/ready')) return jsonResponse({}, true)
+      if (url.endsWith('/stats')) return jsonResponse({ outbox: { pending: 0, dead: 0 }, invocations: { running: 1 } })
+      return jsonResponse({ opa: { compile_errors: 0 }, bindings_loaded: 2, consumer_lag: 0 })
+    })
+
+    await runDoctorDiagnostics({ adminToken: 'read-only-token' })
+    expect(mock).toHaveBeenCalledWith({ adminToken: 'read-only-token' })
+
+    fetchSpy.mockRestore()
+  })
+
   it('emits a coordinator metrics warn when unauthenticated and a 401 is returned', async () => {
     vi.mocked(buildAdminClient).mockReturnValue(fakeAdminContext({ zones: { list: vi.fn(async () => []), get: vi.fn() } }) as never)
     vi.mocked(discoverCoordinatorToken).mockReturnValue(undefined)
@@ -252,7 +267,7 @@ describe('runDoctorDiagnostics — full system run', () => {
         readyAttempts.count += 1
         // First attempt simulates a cold-start abort; the retry hits a warm service.
         if (readyAttempts.count === 1) {
-          throw new DOMException("The operation was aborted due to timeout", "TimeoutError")
+          throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
         }
         return jsonResponse({}, true)
       }
@@ -275,7 +290,7 @@ describe('runDoctorDiagnostics — full system run', () => {
       const url = String(input)
       if (url.endsWith(':4000/ready')) {
         readyAttempts.count += 1
-        throw new DOMException("The operation was aborted due to timeout", "TimeoutError")
+        throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
       }
       if (url.endsWith('/health') || url.endsWith('/ready')) return jsonResponse({}, true)
       if (url.endsWith('/stats')) return jsonResponse({ outbox: { pending: 0, dead: 0 }, invocations: { running: 0 } })

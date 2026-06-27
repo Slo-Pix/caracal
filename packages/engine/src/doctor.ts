@@ -51,6 +51,11 @@ export interface DoctorOptions {
   zoneId?: string
   strict?: boolean
   preflightOnly?: boolean
+  // Overrides the admin token the health and zone checks authenticate with. The Console BFF
+  // passes its least-privilege read-only token so diagnostics — which only read — never run
+  // under the deployment admin token. Unset everywhere else, so the discovered admin token is
+  // used as before.
+  adminToken?: string
 }
 
 interface MetricEvaluation {
@@ -436,9 +441,9 @@ function report(mode: DoctorMode, strict: boolean, context: DoctorContext, check
   }
 }
 
-function buildAdminContext(checks: DoctorCheck[]): AdminContext | undefined {
+function buildAdminContext(checks: DoctorCheck[], adminToken?: string): AdminContext | undefined {
   try {
-    return buildAdminClientCore()
+    return buildAdminClientCore({ adminToken })
   } catch (err) {
     addCheck(checks, {
       section: 'health',
@@ -618,7 +623,7 @@ export async function runDoctorDiagnostics(options: DoctorOptions = {}): Promise
   let zoneIds: string[] = preflightOnly ? [] : zoneId ? [zoneId] : []
 
   if (!preflightOnly) {
-    const ctx = buildAdminContext(checks)
+    const ctx = buildAdminContext(checks, options.adminToken)
     apiUrl = normalizeHttpUrl(ctx?.apiUrl ?? apiUrl, 'CARACAL_API_URL')
     zoneId = zoneId ?? ctx?.zoneId
     const zoneResult = await runHealthAndZoneChecks(checks, ctx, zoneId)
