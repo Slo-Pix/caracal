@@ -28,7 +28,8 @@ import {
   type Gateway,
   type ProviderConfig,
 } from '../operator-gateway.js'
-import { runTriage, tierPlans, runPlanner, runExplainer, type AgentContext, type OperatorTier } from '../operator-agents.js'
+import { type AgentContext } from '../operator-agents.js'
+import { createOrchestrator } from '../operator-orchestrator.js'
 import { summarizeHistory, type ConversationFacts } from '../operator-memory.js'
 
 const TITLE_MAX_LENGTH = 200
@@ -325,6 +326,11 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
   // The optional AI gateway. With no provider configured it reports disabled and
   // performs no work, so the AI tier costs nothing until an operator brings a key.
   const gateway: Gateway = createGateway(opts.aiProviders ?? [], opts.fetchImpl)
+
+  // The orchestrator triages each turn to its tier and runs the one skill that handles it,
+  // returning a typed artifact the deterministic spine below validates, previews, and governs.
+  // Built once for the plugin; it holds no per-request state.
+  const orchestrator = createOrchestrator()
 
   // Builds the Operator's governed control client for the currently resolved identity, or
   // null when governed execution is not fully configured — no identity, or the control
@@ -994,14 +1000,13 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
     }
 
     try {
-      // Triage routes the request to the smallest sufficient tier so a simple turn never pays
-      // the planning pipeline. A triage that fails the schema defaults to the read tier, which
-      // answers as text and never acts — the safe direction on ambiguity.
-      const triage = await runTriage(tracked.gateway, parsed.data.message)
-      const tier: OperatorTier = triage.ok ? triage.value : 'read'
+      // The orchestrator triages the request to its tier and runs the one skill that handles
+      // it. A plan outcome flows through validate → preview → store-for-approval; an answer
+      // outcome is recorded as a note. The model only proposes — every plan is governed below.
+      const { tier, outcome } = await orchestrator.handle(tracked.gateway, parsed.data.message, context)
 
-      if (tierPlans(tier)) {
-        const planned = await runPlanner(tracked.gateway, parsed.data.message, context)
+      if (outcome.kind === 'plan') {
+        const planned = outcome.result
         if (!planned.ok || planned.value.steps.length === 0) {
           const message = planned.ok ? 'I could not turn that into an action with the capabilities available.' : planned.error
           const turn = await appendTurnTx(
@@ -1068,7 +1073,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
         return reply.code(201).send({ intent: 'plan', tier, ok: true, turn: turn.turn, validation, preview, ...meta() })
       }
 
-      const explained = await runExplainer(tracked.gateway, parsed.data.message, context)
+      const explained = outcome.result
       const answer = explained.ok ? explained.value : { text: 'I could not produce an explanation.' }
       const noteContent: Record<string, unknown> = { text: answer.text }
       if (answer.reasoning) noteContent.reasoning = answer.reasoning
