@@ -107,3 +107,6 @@ apps/web/src/routeTree.gen.ts
 
 # Generated evidence packs
 /evidence/
+
+# Control plane runtime gate state (dev stack)
+infra/docker/control/
