@@ -1376,7 +1376,7 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
       summary: 'Connect GitHub',
       steps: [{ id: 's1', capability: 'connectProvider', args: { name: 'GitHub', kind: 'oauth2_authorization_code' } }],
     }
-    const fetchImpl = fetchReturning('{"intent":"plan"}', JSON.stringify(plan))
+    const fetchImpl = fetchReturning('{"tier":"change"}', JSON.stringify(plan))
     const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
     // user message turn (BEGIN, FOR UPDATE, UPDATE seq, INSERT, COMMIT)
     clientQuery
@@ -1407,14 +1407,14 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
-    expect(body).toMatchObject({ intent: 'plan', ok: true })
+    expect(body).toMatchObject({ intent: 'plan', tier: 'change', ok: true })
     expect(body.turn).toMatchObject({ kind: 'plan' })
     expect(body.validation.ok).toBe(true)
     expect(body.preview.steps[0]).toMatchObject({ effect: 'create' })
   })
 
   it('records an error turn when the model cannot produce a usable plan', async () => {
-    const fetchImpl = fetchReturning('{"intent":"plan"}', 'I cannot help with that.')
+    const fetchImpl = fetchReturning('{"tier":"change"}', 'I cannot help with that.')
     const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
     clientQuery
       .mockResolvedValueOnce(undefined)
@@ -1446,7 +1446,7 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
   })
 
   it('answers an explain intent with a note turn', async () => {
-    const fetchImpl = fetchReturning('{"intent":"explain"}', 'The request was denied because the scope is missing.')
+    const fetchImpl = fetchReturning('{"tier":"read"}', 'The request was denied because the scope is missing.')
     const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
     clientQuery
       .mockResolvedValueOnce(undefined)
@@ -1473,8 +1473,45 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     })
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
-    expect(body).toMatchObject({ intent: 'explain', ok: true })
+    expect(body).toMatchObject({ intent: 'explain', tier: 'read', ok: true })
     expect(body.text).toContain('scope is missing')
+  })
+
+  it('answers a conversational request as text without invoking the planner', async () => {
+    // Triage classifies a greeting as conversational; the orchestrator answers it directly with
+    // the explainer and never calls the planner, so only two model calls are made: triage and
+    // the text answer.
+    const fetchImpl = fetchReturning('{"tier":"conversational"}', 'I help you operate Caracal in plain language.')
+    const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1 }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'note' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'hello, what can you do?' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body).toMatchObject({ intent: 'explain', tier: 'conversational', ok: true })
+    expect(body.turn).toMatchObject({ kind: 'note' })
+    // Exactly two model calls: triage + the text answer. No planner call.
+    expect((fetchImpl as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(2)
   })
 
   it('reports real token usage, model, and context window with the answer', async () => {
@@ -1495,7 +1532,7 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
       return fn as unknown as typeof fetch
     }
     const fetchImpl = fetchWithUsage(
-      { content: '{"intent":"explain"}', prompt: 120, completion: 4 },
+      { content: '{"tier":"read"}', prompt: 120, completion: 4 },
       { content: 'Because the scope was missing.', prompt: 400, completion: 60 },
     )
     const { app, clientQuery, db } = buildApp(true, { aiProviders: [usageProvider], fetchImpl })
@@ -1544,7 +1581,7 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
   it('routes the message to the chosen provider and reports it', async () => {
     const first = { ...provider, id: 'first', model: 'model-a' }
     const second = { ...provider, id: 'second', model: 'model-b', contextWindow: 64000 }
-    const fetchImpl = fetchReturning('{"intent":"explain"}', 'Routed through model-b.')
+    const fetchImpl = fetchReturning('{"tier":"read"}', 'Routed through model-b.')
     const { app, clientQuery, db } = buildApp(true, {
       aiProviders: [first, second],
       fetchImpl,

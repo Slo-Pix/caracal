@@ -4,7 +4,7 @@
 // Unit tests for the Operator agents: intent routing, planning, and explanation.
 
 import { describe, it, expect, vi } from 'vitest'
-import { buildPlannerMessages, runRouter, runPlanner, runExplainer } from '../../../../apps/api/src/operator-agents.js'
+import { buildPlannerMessages, buildTriageMessages, runTriage, tierPlans, runPlanner, runExplainer } from '../../../../apps/api/src/operator-agents.js'
 import type { Gateway, CompletionResult, CompletionObjectResult } from '../../../../apps/api/src/operator-gateway.js'
 
 // A gateway stub whose free-text completions are scripted, so the explainer's prompt
@@ -38,16 +38,40 @@ function gatewayProducing(...results: (object | Error)[]): { gateway: Gateway; c
   }
 }
 
-describe('runRouter', () => {
-  it('returns the classified intent', async () => {
-    const { gateway } = gatewayProducing({ intent: 'plan' })
-    expect(await runRouter(gateway, 'connect github')).toEqual({ ok: true, value: 'plan' })
+describe('runTriage', () => {
+  it('returns the classified tier', async () => {
+    const { gateway } = gatewayProducing({ tier: 'change' })
+    expect(await runTriage(gateway, 'connect github')).toEqual({ ok: true, value: 'change' })
+  })
+
+  it('classifies a read question into the read tier', async () => {
+    const { gateway } = gatewayProducing({ tier: 'read' })
+    expect(await runTriage(gateway, 'what providers do I have')).toEqual({ ok: true, value: 'read' })
   })
 
   it('fails closed when classification does not pass the schema', async () => {
     const { gateway } = gatewayProducing(new Error('schema validation failed'))
-    const result = await runRouter(gateway, 'hmm')
+    const result = await runTriage(gateway, 'hmm')
     expect(result.ok).toBe(false)
+  })
+})
+
+describe('tierPlans', () => {
+  it('plans only for change and compound tiers', () => {
+    expect(tierPlans('change')).toBe(true)
+    expect(tierPlans('compound')).toBe(true)
+    expect(tierPlans('conversational')).toBe(false)
+    expect(tierPlans('read')).toBe(false)
+  })
+})
+
+describe('buildTriageMessages', () => {
+  it('names every tier so the model classifies into the smallest sufficient one', () => {
+    const system = buildTriageMessages('hello')[0].content
+    expect(system).toContain('conversational')
+    expect(system).toContain('read')
+    expect(system).toContain('change')
+    expect(system).toContain('compound')
   })
 })
 
