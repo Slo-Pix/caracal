@@ -14,7 +14,17 @@ describe('POST /v1/admin-tokens', () => {
   it('mints a global-scoped token and returns the plaintext once', async () => {
     const { app, db } = buildRouteApp(adminTokensRoutes, { prefix: '/v1' }, { actor: globalActor })
     db.query.mockResolvedValueOnce({
-      rows: [{ id: 't1', name: 'ci', scope: 'global', zone_id: null, created_by: 'admin:op-1', created_at: '2026-01-01T00:00:00.000Z' }],
+      rows: [
+        {
+          id: 't1',
+          name: 'ci',
+          scope: 'global',
+          capability: 'write',
+          zone_id: null,
+          created_by: 'admin:op-1',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
     })
 
     await app.ready()
@@ -23,9 +33,39 @@ describe('POST /v1/admin-tokens', () => {
     expect(res.statusCode).toBe(201)
     const body = JSON.parse(res.body)
     expect(body.token).toMatch(/^cat_/)
-    expect(body).toMatchObject({ id: 't1', scope: 'global', zone_id: null })
+    expect(body).toMatchObject({ id: 't1', scope: 'global', capability: 'write', zone_id: null })
     const insertCols = db.query.mock.calls[0][1] as unknown[]
-    expect(insertCols[5]).toBeNull()
+    // An unspecified mint defaults to a full-capability write token; zone_id stays null.
+    expect(insertCols[5]).toBe('write')
+    expect(insertCols[6]).toBeNull()
+  })
+
+  it('mints a read-capability token when requested', async () => {
+    const { app, db } = buildRouteApp(adminTokensRoutes, { prefix: '/v1' }, { actor: globalActor })
+    db.query.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 't3',
+          name: 'viewer',
+          scope: 'global',
+          capability: 'read',
+          zone_id: null,
+          created_by: 'admin:op-1',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/admin-tokens',
+      payload: { name: 'viewer', scope: 'global', capability: 'read' },
+    })
+
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ capability: 'read' })
+    expect((db.query.mock.calls[0][1] as unknown[])[5]).toBe('read')
   })
 
   it('mints a zone-scoped token after verifying the zone exists', async () => {
@@ -33,7 +73,15 @@ describe('POST /v1/admin-tokens', () => {
     db.query.mockResolvedValueOnce({ rows: [{ '?column?': 1 }] })
     db.query.mockResolvedValueOnce({
       rows: [
-        { id: 't2', name: 'deployer', scope: 'zone', zone_id: 'z1', created_by: 'admin:op-1', created_at: '2026-01-01T00:00:00.000Z' },
+        {
+          id: 't2',
+          name: 'deployer',
+          scope: 'zone',
+          capability: 'write',
+          zone_id: 'z1',
+          created_by: 'admin:op-1',
+          created_at: '2026-01-01T00:00:00.000Z',
+        },
       ],
     })
 
@@ -42,7 +90,7 @@ describe('POST /v1/admin-tokens', () => {
 
     expect(res.statusCode).toBe(201)
     expect(JSON.parse(res.body)).toMatchObject({ scope: 'zone', zone_id: 'z1' })
-    expect(db.query.mock.calls[1][1][5]).toBe('z1')
+    expect(db.query.mock.calls[1][1][6]).toBe('z1')
   })
 
   it('rejects a zone-scoped actor with 403', async () => {
