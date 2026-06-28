@@ -2241,6 +2241,31 @@ function PlanAdvisory({ advisory }: { advisory: PlanAdvisoryView }) {
   );
 }
 
+// An honest, human message for why applying a plan failed, so a refused execution never fails
+// silently. Governed execution is bound to one zone, so a conversation in any other zone cannot
+// apply changes; that case is named plainly rather than shown as a generic error.
+function executeErrorMessage(err: unknown): string {
+  const code = (err as { code?: string } | null)?.code;
+  switch (code) {
+    case "governed_execution_unconfigured":
+      return "Caracal can't apply changes in this zone - governed execution isn't configured here.";
+    case "zone_forbidden":
+      return "This zone is internal to Caracal, so the Operator can't apply changes here.";
+    case "mode_forbidden":
+      return "This conversation is in ask mode, so it can explain but not apply changes.";
+    case "plan_already_executed":
+      return "This plan was already applied.";
+    case "plan_not_approved":
+      return "Approve the plan before applying it.";
+    case "plan_rejected":
+      return "This plan was rejected, so it can't be applied.";
+    case "conversation_archived":
+      return "This conversation is archived, so it can't apply changes.";
+    default:
+      return "Couldn't apply the changes. Please try again.";
+  }
+}
+
 // The active execution plan rendered as a first-class operational artifact: steps,
 // per-step effect, live progress, and the approve / reject / apply controls.
 function PlanArtifact({
@@ -2338,13 +2363,21 @@ function PlanArtifact({
       ) : null}
 
       {plan.canExecute ? (
-        <div className="flex items-center gap-2 border-t border-border bg-surface px-3.5 py-2.5">
-          <Button size="sm" onClick={() => execute.mutate(plan.seq)} disabled={busy}>
-            Apply changes
-          </Button>
-          {busy ? (
-            <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-purple" /> Working…
+        <div className="flex flex-col gap-1.5 border-t border-border bg-surface px-3.5 py-2.5">
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={() => execute.mutate(plan.seq)} disabled={busy}>
+              Apply changes
+            </Button>
+            {busy ? (
+              <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-purple" />{" "}
+                Working…
+              </span>
+            ) : null}
+          </div>
+          {execute.isError ? (
+            <span className="text-[11px] text-destructive">
+              {executeErrorMessage(execute.error)}
             </span>
           ) : null}
         </div>
