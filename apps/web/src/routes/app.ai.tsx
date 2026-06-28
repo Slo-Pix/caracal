@@ -1290,6 +1290,7 @@ function AutopilotMenu({
       onChange={(next) => onChange(next === "auto")}
       ariaLabel="Approval mode"
       pending={pending}
+      tone="ghost"
     />
   );
 }
