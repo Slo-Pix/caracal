@@ -17,6 +17,14 @@ const ARCHIVE_ANIM_MS = 450;
 // authority decisions, so logging them here avoids opening a client-to-server error ingest surface.
 const MAX_LOG = 50;
 
+// A discrete error to surface. The id identifies the occurrence, so the same message text raised
+// again (for example a second send while no provider is connected) is a new event and re-surfaces
+// the label rather than being suppressed as a duplicate.
+export interface OperatorErrorEvent {
+  id: string;
+  message: string;
+}
+
 interface ErrorLogEntry {
   id: string;
   message: string;
@@ -90,27 +98,23 @@ function timeLabel(at: number): string {
 // then shrinks back into the audit archive on the left after a few seconds or when dismissed. The
 // archive holds every error this session and opens a filterable log, so a transient error is never
 // just lost — it is recorded and reviewable.
-export function OperatorErrorLog({ message }: { message: string | null }) {
+export function OperatorErrorLog({ event }: { event: OperatorErrorEvent | null }) {
   const [log, setLog] = useState<ErrorLogEntry[]>([]);
   const [active, setActive] = useState<{ id: string; message: string } | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  // The message last surfaced as a label, so a persistent error condition is shown once and a new
-  // distinct message reopens the label. Cleared when the source clears so the same message can
-  // resurface after it resolves.
+  // The occurrence last surfaced as a label, keyed by event id so a distinct occurrence — even with
+  // the same message text — reopens the label, while the same event never re-surfaces.
   const handled = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!message) {
-      handled.current = null;
-      return;
-    }
-    if (message === handled.current) return;
-    handled.current = message;
-    setActive({ id: crypto.randomUUID(), message });
+    if (!event) return;
+    if (event.id === handled.current) return;
+    handled.current = event.id;
+    setActive({ id: event.id, message: event.message });
     setArchiving(false);
-  }, [message]);
+  }, [event]);
 
   // Rest, then begin the shrink-into-audit animation.
   useEffect(() => {

@@ -19,7 +19,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { ModulePage } from "@/components/console/ModulePage";
-import { OperatorErrorLog } from "@/components/console/OperatorErrorLog";
+import { OperatorErrorLog, type OperatorErrorEvent } from "@/components/console/OperatorErrorLog";
 import {
   Context,
   ContextCacheUsage,
@@ -255,11 +255,12 @@ const RAIL_COLLAPSED_WIDTH = "2.75rem";
 const DRAFT_MODE_KEY = "caracal.operator.draftMode";
 const DRAFT_AUTOPILOT_KEY = "caracal.operator.draftAutopilot";
 
-// Shown wherever the Operator would otherwise invite a message while no AI provider is connected.
-// The Operator turns natural language into governed plans through a model, so with no provider every
-// send is refused upstream; the console says so plainly and disables sending rather than presenting
-// a chat that silently fails and stalls on a "working" indicator.
-const AI_DISCONNECTED_NOTICE = "Connect an AI provider to use the Operator.";
+// Raised as an error label when a message is sent while no AI provider is connected. The Operator
+// turns natural language into governed plans through a model, so with no provider the send cannot
+// be acted on; rather than dispatch it into an upstream refusal, the send is held back and this is
+// surfaced in the error label so the operator sees why nothing happened.
+const AI_DISCONNECTED_ERROR =
+  "No AI provider is connected, so the Operator can't act on that. Connect a provider to continue.";
 
 function readRailCollapsed(): boolean {
   if (typeof localStorage === "undefined") return false;
@@ -301,6 +302,10 @@ function OperatorWorkspace() {
   const [railWidth, setRailWidth] = useState(readRailWidth);
   const [view, setView] = useState<"active" | "archived">("active");
   const [streamError, setStreamError] = useState(false);
+  // The error currently surfaced to the operator error label, as a discrete event so the same
+  // message raised again re-surfaces. Query and stream failures feed it through an effect; a send
+  // held back because no provider is connected reports one directly.
+  const [operatorError, setOperatorError] = useState<OperatorErrorEvent | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
 
@@ -313,11 +318,18 @@ function OperatorWorkspace() {
 
   const { data: autopilotAvailable } = useOperatorAutopilotAvailable();
 
-  // Whether the Operator has a usable model. Only a loaded status that reports no provider blocks
-  // sending; while the status is still loading the composer stays interactive so a configured
-  // deployment never flickers through a disabled state.
+  // Whether the Operator has a usable model. Only a loaded status that reports no provider counts;
+  // while the status is still loading a send proceeds normally so a configured deployment never
+  // briefly refuses. The composer stays interactive either way — a send with no provider is held
+  // back and reported in the error label rather than disabling the input.
   const aiStatus = useOperatorAiStatus(true);
   const aiUnavailable = aiStatus.data?.enabled === false;
+
+  // Surfaces a message to the operator error label as a fresh occurrence, so an identical message
+  // raised again still re-opens the label.
+  const reportError = useCallback((message: string) => {
+    setOperatorError({ id: crypto.randomUUID(), message });
+  }, []);
 
   useEffect(() => {
     if (typeof localStorage !== "undefined") {
@@ -378,9 +390,8 @@ function OperatorWorkspace() {
     window.addEventListener("pointerup", onUp);
   }, []);
 
-  // The single source of truth for the workspace error banner: whichever failure is
-  // active surfaces once at the top of the chat pane. A new error re-shows the banner
-  // even after a prior one was dismissed.
+  // The active query or stream failure as a message, or null when none. It feeds the operator
+  // error label through an effect so each distinct failure surfaces as its own occurrence.
   const errorMessage = useMemo(() => {
     if (conversations.isError) {
       return "Your sessions could not be loaded. Check your connection and try again.";
@@ -393,6 +404,10 @@ function OperatorWorkspace() {
     }
     return null;
   }, [conversations.isError, create.isError, streamError]);
+
+  useEffect(() => {
+    if (errorMessage) reportError(errorMessage);
+  }, [errorMessage, reportError]);
 
   // Accumulate the real token usage reported by each answered message so the rail can
   // show genuine context consumption for the session rather than an estimate.
@@ -424,13 +439,17 @@ function OperatorWorkspace() {
     );
   }
 
-  // Starting from intent: derive a session title from the message, create the
-  // session, then hand the message to the stream to send as the opening turn. With no
-  // AI provider the request would only be refused upstream, so the session is not even
-  // created — the hero shows the disconnected notice instead.
+  // Starting from intent: derive a session title from the message, create the session, then hand
+  // the message to the stream to send as the opening turn. With no AI provider the request could
+  // only be refused upstream, so the send is held back — no session is created — and the reason is
+  // reported in the error label instead.
   function startFromIntent(text: string) {
     const value = text.trim();
-    if (!value || create.isPending || aiUnavailable) return;
+    if (!value || create.isPending) return;
+    if (aiUnavailable) {
+      reportError(AI_DISCONNECTED_ERROR);
+      return;
+    }
     setPendingMessage(value);
     setHeroDraft("");
     create.mutate(
@@ -532,7 +551,7 @@ function OperatorWorkspace() {
         >
           {fullscreen ? <ShrinkGlyph className="h-4 w-4" /> : <ExpandGlyph className="h-4 w-4" />}
         </button>
-        <OperatorErrorLog message={errorMessage} />
+        <OperatorErrorLog event={operatorError} />
         <SessionStrip
           conversations={conversations.data ?? []}
           selectedId={selectedId}
@@ -557,6 +576,7 @@ function OperatorWorkspace() {
             model={selectedModel}
             onModelChange={setSelectedModel}
             aiUnavailable={aiUnavailable}
+            onBlockedSend={() => reportError(AI_DISCONNECTED_ERROR)}
           />
         ) : (
           <NewChatHero
@@ -567,7 +587,6 @@ function OperatorWorkspace() {
             pending={create.isPending}
             model={selectedModel}
             onModelChange={setSelectedModel}
-            aiUnavailable={aiUnavailable}
             controls={{
               mode: draftMode,
               onModeChange: setDraftMode,
@@ -1291,6 +1310,7 @@ function ActivityStream({
   model,
   onModelChange,
   aiUnavailable,
+  onBlockedSend,
 }: {
   zoneId: string | null;
   conversationId: string;
@@ -1304,6 +1324,7 @@ function ActivityStream({
   model: string | null;
   onModelChange: (id: string | null) => void;
   aiUnavailable: boolean;
+  onBlockedSend?: () => void;
 }) {
   const { data: turns, isLoading } = useOperatorTurns(zoneId, conversationId);
   const send = useSendOperatorMessage(zoneId, conversationId);
@@ -1324,12 +1345,15 @@ function ActivityStream({
 
   // Queue a message when the Operator is busy or earlier messages are still waiting, so a
   // sequence of instructions can be lined up and sent in order; otherwise send it now. With no AI
-  // provider the request would only be refused upstream, so nothing is sent or queued — the
-  // composer is disabled and shows the disconnected notice instead, so it never stalls on a
-  // "working" indicator for a model that cannot answer.
+  // provider the request could only be refused upstream, so the send is held back — not sent or
+  // queued — and reported in the error label so the operator sees why nothing happened.
   function submit(text: string) {
     const value = text.trim();
-    if (!value || aiUnavailable) return;
+    if (!value) return;
+    if (aiUnavailable) {
+      onBlockedSend?.();
+      return;
+    }
     setMessage("");
     if (send.isPending || queued.length > 0) {
       setQueued((prev) => [...prev, { id: crypto.randomUUID(), text: value }]);
@@ -1415,7 +1439,6 @@ function ActivityStream({
           model={model}
           onModelChange={onModelChange}
           controls={controls}
-          aiUnavailable={aiUnavailable}
         />
       </div>
     );
@@ -1464,7 +1487,6 @@ function ActivityStream({
         model={model}
         onModelChange={onModelChange}
         controls={controls}
-        aiUnavailable={aiUnavailable}
       />
     </div>
   );
@@ -1589,7 +1611,6 @@ function OperatorInput({
   model,
   onModelChange,
   leftSlot,
-  blockedReason,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1602,17 +1623,13 @@ function OperatorInput({
   model?: string | null;
   onModelChange?: (id: string | null) => void;
   leftSlot?: ReactNode;
-  // When set, the input is non-interactive and the reason is shown as the placeholder. Used when
-  // no AI provider is connected, so the Operator never invites a message it could only refuse.
-  blockedReason?: string;
 }) {
   const { ref, adjust } = useAutoResizeTextarea({ minHeight, maxHeight: 220 });
   useEffect(() => {
     adjust();
   }, [value, adjust]);
 
-  const blocked = blockedReason !== undefined;
-  const canSend = !pending && !blocked && value.trim().length > 0;
+  const canSend = !pending && value.trim().length > 0;
 
   const textarea = (
     <textarea
@@ -1623,14 +1640,13 @@ function OperatorInput({
       onKeyDown={(event) => {
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
-          if (!blocked) onSubmit();
+          onSubmit();
         }
       }}
       rows={1}
-      disabled={blocked}
-      placeholder={blockedReason ?? "Describe what you want, or ask a question…"}
+      placeholder="Describe what you want, or ask a question…"
       aria-label="Message the Operator"
-      className="scrollbar-thin w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:cursor-not-allowed"
+      className="scrollbar-thin w-full resize-none bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
       style={{ height: minHeight }}
     />
   );
@@ -1816,7 +1832,6 @@ function Composer({
   model,
   onModelChange,
   controls,
-  aiUnavailable,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1826,7 +1841,6 @@ function Composer({
   model: string | null;
   onModelChange: (id: string | null) => void;
   controls: ComposerControls;
-  aiUnavailable: boolean;
 }) {
   return (
     <div className="flex-shrink-0 border-t border-border bg-card px-3 py-3">
@@ -1839,7 +1853,6 @@ function Composer({
         usage={usage ?? ZERO_USAGE}
         model={model}
         onModelChange={onModelChange}
-        blockedReason={aiUnavailable ? AI_DISCONNECTED_NOTICE : undefined}
         leftSlot={
           <ModeMenu
             mode={controls.mode}
@@ -1849,13 +1862,9 @@ function Composer({
         }
       />
       <AutopilotRow controls={controls} />
-      {aiUnavailable ? (
-        <p className="mt-1.5 px-0.5 text-[11px] text-muted-foreground">{AI_DISCONNECTED_NOTICE}</p>
-      ) : (
-        <p className="mt-1.5 px-0.5 text-[10px] text-muted-foreground">
-          Enter to send · Shift+Enter for a new line - nothing changes until you approve the plan.
-        </p>
-      )}
+      <p className="mt-1.5 px-0.5 text-[10px] text-muted-foreground">
+        Enter to send · Shift+Enter for a new line - nothing changes until you approve the plan.
+      </p>
     </div>
   );
 }
@@ -1908,7 +1917,6 @@ function NewChatHero({
   model,
   onModelChange,
   controls,
-  aiUnavailable,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -1918,7 +1926,6 @@ function NewChatHero({
   model: string | null;
   onModelChange: (id: string | null) => void;
   controls: ComposerControls;
-  aiUnavailable: boolean;
 }) {
   const { greeting, message } = useMemo(() => greetingForNow(), []);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -2021,7 +2028,6 @@ function NewChatHero({
               usage={ZERO_USAGE}
               model={model}
               onModelChange={onModelChange}
-              blockedReason={aiUnavailable ? AI_DISCONNECTED_NOTICE : undefined}
               leftSlot={
                 <ModeMenu
                   mode={controls.mode}
@@ -2031,11 +2037,6 @@ function NewChatHero({
               }
             />
             <AutopilotRow controls={controls} />
-            {aiUnavailable ? (
-              <p className="mt-2 px-0.5 text-center text-xs text-muted-foreground">
-                {AI_DISCONNECTED_NOTICE}
-              </p>
-            ) : null}
           </div>
 
           <div
@@ -2057,7 +2058,7 @@ function NewChatHero({
                   <button
                     key={suggestion.title}
                     onClick={() => onPick(suggestion.title)}
-                    disabled={pending || aiUnavailable}
+                    disabled={pending}
                     title={suggestion.hint}
                     className="group inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-xs text-muted-foreground shadow-sm transition-colors hover:border-accent-purple/40 hover:bg-accent hover:text-foreground disabled:opacity-50"
                   >
