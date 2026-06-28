@@ -12,6 +12,11 @@ import { cx } from "@/lib/cx";
 // animation runs. The animation duration is mirrored in the label's transition class.
 const AUTO_DISMISS_MS = 6000;
 const ARCHIVE_ANIM_MS = 450;
+// The audit box is hidden while a label is shown; it comes up this long before the label archives
+// so the label visibly shrinks into it, then lingers briefly after the label vanishes before
+// hiding again. So the box only appears around the archive moment rather than persisting.
+const PRE_REVEAL_MS = 2000;
+const ARCHIVE_LINGER_MS = 1500;
 // The audit log is a session-scoped, in-memory record of the operator errors seen this page load.
 // It is intentionally not sent to the server: these are client-observed transient failures, not
 // authority decisions, so logging them here avoids opening a client-to-server error ingest surface.
@@ -104,6 +109,10 @@ export function OperatorErrorLog({ event }: { event: OperatorErrorEvent | null }
   const [archiving, setArchiving] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [filter, setFilter] = useState("");
+  // Whether the audit box is visible. It stays hidden while a label rests, comes up shortly before
+  // the label archives so the label shrinks into it, lingers a moment after the label vanishes, then
+  // hides again. The panel being open keeps it visible so an opened log is not yanked away.
+  const [revealed, setRevealed] = useState(false);
   // The occurrence last surfaced as a label, keyed by event id so a distinct occurrence — even with
   // the same message text — reopens the label, while the same event never re-surfaces.
   const handled = useRef<string | null>(null);
@@ -114,14 +123,29 @@ export function OperatorErrorLog({ event }: { event: OperatorErrorEvent | null }
     handled.current = event.id;
     setActive({ id: event.id, message: event.message });
     setArchiving(false);
+    // A new label is shown, so the audit box auto-hides behind it until just before it archives.
+    setRevealed(false);
   }, [event]);
 
-  // Rest, then begin the shrink-into-audit animation.
+  // While a label rests: reveal the audit box shortly before it archives, then begin the
+  // shrink-into-audit animation.
   useEffect(() => {
     if (!active || archiving) return;
-    const timer = setTimeout(() => setArchiving(true), AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
+    const reveal = setTimeout(
+      () => setRevealed(true),
+      Math.max(0, AUTO_DISMISS_MS - PRE_REVEAL_MS),
+    );
+    const archive = setTimeout(() => setArchiving(true), AUTO_DISMISS_MS);
+    return () => {
+      clearTimeout(reveal);
+      clearTimeout(archive);
+    };
   }, [active, archiving]);
+
+  // A dismissal (the X) archives immediately, so make sure the box is revealed as the shrink target.
+  useEffect(() => {
+    if (archiving) setRevealed(true);
+  }, [archiving]);
 
   // Once the animation has played, commit the label to the audit log and remove it.
   useEffect(() => {
@@ -135,8 +159,16 @@ export function OperatorErrorLog({ event }: { event: OperatorErrorEvent | null }
     return () => clearTimeout(timer);
   }, [archiving, active]);
 
-  const hasArchive = log.length > 0 || active !== null;
-  if (!hasArchive) return null;
+  // After the label has vanished, let the box linger briefly, then hide it again — unless the log
+  // panel is open, in which case it stays so the operator can keep reading.
+  useEffect(() => {
+    if (active || !revealed || panelOpen) return;
+    const timer = setTimeout(() => setRevealed(false), ARCHIVE_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [active, revealed, panelOpen]);
+
+  const boxVisible = revealed || panelOpen;
+  if (!active && !boxVisible) return null;
 
   const filtered = log.filter((entry) =>
     entry.message.toLowerCase().includes(filter.trim().toLowerCase()),
@@ -144,17 +176,17 @@ export function OperatorErrorLog({ event }: { event: OperatorErrorEvent | null }
 
   return (
     <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-start gap-2">
-      {/* The audit archive: the animation target on the left and the entry point to the log. */}
-      {hasArchive ? (
-        <div className="pointer-events-auto relative flex flex-col items-center">
+      {/* The audit archive: hidden while a label rests, it appears as the label's shrink target. */}
+      {boxVisible ? (
+        <div className="pointer-events-auto relative flex animate-fade-in flex-col items-center">
           <button
             type="button"
             onClick={() => setPanelOpen((open) => !open)}
             aria-label="Operator audit log"
             aria-expanded={panelOpen}
             className={cx(
-              "grid h-9 w-9 place-items-center rounded-lg border bg-card text-muted-foreground shadow-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
-              archiving ? "border-destructive/40 text-destructive" : "border-border",
+              "grid h-9 w-9 place-items-center rounded-lg bg-card text-muted-foreground shadow-sm outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/40",
+              archiving ? "text-destructive" : "",
             )}
           >
             <ArchiveIcon className="h-4 w-4" />
