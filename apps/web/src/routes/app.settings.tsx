@@ -5,7 +5,7 @@ Caracal, a product of Garudex Labs
 This file defines the settings route.
 */
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { ModulePage } from "@/components/console/ModulePage";
 import { EnterpriseUpsell } from "@/components/console/EnterpriseUpsell";
@@ -31,6 +31,8 @@ import {
   useUpdateOperatorAiProvider,
   useRotateOperatorAiProviderKey,
   useDeleteOperatorAiProvider,
+  useSystemZoneId,
+  systemZoneViewPath,
   useZones,
 } from "@/platform/api/hooks";
 import type { OperatorAiProvider } from "@/platform/api/types";
@@ -631,26 +633,19 @@ function PreferencesSection() {
 
 /* ------------------------------ AI Operator ------------------------------ */
 
-// Common OpenAI-compatible base URLs across providers, offered as endpoint autofill. The model id
-// is whatever the endpoint serves, so it is typed in rather than chosen from a list; only the
+// Common OpenAI-compatible base URLs across providers, offered as endpoint suggestions. The model
+// id is whatever the endpoint serves, so it is typed in rather than chosen from a list; only the
 // endpoint, which genuinely varies by provider, is worth suggesting. Each is the provider's
 // OpenAI-compatible /chat/completions surface (Anthropic and Gemini expose one natively; others go
 // through a proxy), with placeholders the operator fills in for their own resource.
-const ENDPOINT_SUGGESTIONS = [
-  // OpenAI
-  "https://api.openai.com/v1",
-  // Azure OpenAI
-  "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
-  // Anthropic (OpenAI-compatible)
-  "https://api.anthropic.com/v1",
-  // Google Gemini (OpenAI-compatible)
-  "https://generativelanguage.googleapis.com/v1beta/openai",
-  // OpenRouter
-  "https://openrouter.ai/api/v1",
-  // LiteLLM proxy (self-hosted)
-  "http://localhost:4000/v1",
-  // Ollama (local)
-  "http://localhost:11434/v1",
+const ENDPOINT_SUGGESTIONS: { name: string; url: string }[] = [
+  { name: "OpenAI", url: "https://api.openai.com/v1" },
+  { name: "Azure OpenAI", url: "https://YOUR-RESOURCE.openai.azure.com/openai/v1" },
+  { name: "Anthropic", url: "https://api.anthropic.com/v1" },
+  { name: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai" },
+  { name: "OpenRouter", url: "https://openrouter.ai/api/v1" },
+  { name: "LiteLLM proxy", url: "http://localhost:4000/v1" },
+  { name: "Ollama (local)", url: "http://localhost:11434/v1" },
 ];
 
 // The Operator addresses a provider by a slug used to build its configuration keys, so the slug
@@ -687,6 +682,7 @@ function AiOperatorSection() {
   const list = useOperatorAiProviders();
   const check = useOperatorAiCheck();
   const remove = useDeleteOperatorAiProvider();
+  const systemZone = useSystemZoneId();
   const toast = useToast();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -726,6 +722,29 @@ function AiOperatorSection() {
                   ? `${runtime.length} model${runtime.length === 1 ? "" : "s"} in failover order`
                   : "Add a model below to bring the Operator online."}
               </span>
+              {systemZone.data ? (
+                <a
+                  href={systemZoneViewPath()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="3" y="11" width="18" height="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Open System Zone
+                </a>
+              ) : null}
             </div>
           )}
 
@@ -894,6 +913,71 @@ function AiOperatorSection() {
   );
 }
 
+// The endpoint base-URL field with a focus-triggered suggestions menu. Each provider's
+// OpenAI-compatible base URL is clickable to fill the field; a final non-clickable row makes clear
+// that any other OpenAI-compatible URL can be typed in directly, so the list reads as a shortcut
+// rather than a closed set. A native datalist cannot show a non-selectable hint, so this is a
+// small popover that closes on outside click or Escape.
+function EndpointField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointer, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative block">
+      <FieldLabel
+        label="Endpoint base URL"
+        info="The OpenAI-compatible /chat/completions base URL the request is sent to."
+      />
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onFocus={() => setOpen(true)}
+        placeholder="https://api.openai.com/v1"
+        className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25"
+      />
+      {open ? (
+        <div className="animate-pop-in absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-xl">
+          {ENDPOINT_SUGGESTIONS.map((item) => (
+            <button
+              key={item.url}
+              type="button"
+              onClick={() => {
+                onChange(item.url);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/50"
+            >
+              <span className="text-sm text-foreground">{item.name}</span>
+              <span className="truncate font-mono text-[11px] text-muted-foreground">
+                {item.url}
+              </span>
+            </button>
+          ))}
+          <div className="mt-1 border-t border-border px-2 py-1.5 text-[11px] text-muted-foreground">
+            Custom — type any OpenAI-compatible URL above.
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // The add and edit form. Adding starts empty so the operator supplies only what matters: an
 // OpenAI-compatible endpoint, a key, and the model ids the endpoint serves. The slug defaults
 // from the label. Editing locks the slug and omits the key, which is changed through rotate. The
@@ -1045,24 +1129,9 @@ function ProviderFormModal({
             disabled={editing !== null}
             error={slugTaken ? "That id is already in use." : undefined}
           />
-          <label className="block sm:col-span-2">
-            <FieldLabel
-              label="Endpoint base URL"
-              info="The OpenAI-compatible /chat/completions base URL the request is sent to."
-            />
-            <input
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="https://api.openai.com/v1"
-              list="operator-ai-endpoints"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25"
-            />
-            <datalist id="operator-ai-endpoints">
-              {ENDPOINT_SUGGESTIONS.map((url) => (
-                <option key={url} value={url} />
-              ))}
-            </datalist>
-          </label>
+          <div className="sm:col-span-2">
+            <EndpointField value={baseUrl} onChange={setBaseUrl} />
+          </div>
           <Field
             label="Context window"
             info="Optional. The model's token window, used for the usage gauge."
