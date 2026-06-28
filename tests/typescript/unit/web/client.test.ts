@@ -200,6 +200,24 @@ describe('operator conversation lifecycle', () => {
     expect(JSON.parse(init.body as string)).toEqual({ mode: 'ask' })
   })
 
+  it('engages autopilot through a patch', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { id: 'conv-1', autopilot: true }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await consoleApi.operator.conversations.setAutopilot('z1', 'conv-1', true)
+    const [url, init] = fetchMock.mock.calls[0]! as [string, RequestInit]
+    expect(url).toContain('/v1/zones/z1/operator-conversations/conv-1')
+    expect(init.method).toBe('PATCH')
+    expect(JSON.parse(init.body as string)).toEqual({ autopilot: true })
+  })
+
+  it('reports autopilot availability from the status probe', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse(200, { enabled: true, autopilot: { available: true, capabilities: ['registerApplication'] } }),
+    )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    expect(await consoleApi.operator.autopilotAvailable()).toBe(true)
+  })
+
   it('fetches the working-memory context snapshot', async () => {
     const context = {
       conversation_id: 'conv-1',

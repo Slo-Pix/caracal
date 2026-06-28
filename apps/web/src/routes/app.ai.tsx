@@ -496,7 +496,9 @@ function OperatorWorkspace() {
             zoneId={zoneId}
             conversationId={selectedId}
             mode={(conversations.data ?? []).find((c) => c.id === selectedId)?.mode ?? "agent"}
-            autopilot={(conversations.data ?? []).find((c) => c.id === selectedId)?.autopilot ?? false}
+            autopilot={
+              (conversations.data ?? []).find((c) => c.id === selectedId)?.autopilot ?? false
+            }
             initialMessage={pendingMessage}
             onInitialConsumed={() => setPendingMessage(null)}
             onUsage={(meta) => recordUsage(selectedId, meta)}
@@ -1069,7 +1071,9 @@ function AutopilotToggle({
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Autopilot</span>
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          Autopilot
+        </span>
         <span className="text-xs text-muted-foreground">
           {autopilot
             ? "Caracal auto-approves low-risk changes it has pre-authorized; major changes still need you."
@@ -1085,7 +1089,9 @@ function AutopilotToggle({
         onClick={() => onChange(!autopilot)}
         className={cx(
           "flex flex-shrink-0 items-center border px-2.5 py-1 text-xs transition-colors",
-          autopilot ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
+          autopilot
+            ? "border-foreground bg-foreground text-background"
+            : "border-border text-muted-foreground hover:text-foreground",
         )}
       >
         {autopilot ? "On" : "Off"}
@@ -1927,8 +1933,9 @@ function StreamEntry({
 
 function planDecision(plan: PlanItem): { tone: BadgeTone; label: string } {
   if (plan.decision === "approved") {
-    return plan.executed
-      ? { tone: "success", label: "Applied" }
+    if (plan.executed) return { tone: "success", label: "Applied" };
+    return plan.approvedByAutopilot
+      ? { tone: "success", label: "Approved by autopilot" }
       : { tone: "success", label: "Approved" };
   }
   if (plan.decision === "rejected") return { tone: "danger", label: "Rejected" };

@@ -101,6 +101,24 @@ describe('buildTimeline', () => {
     expect(latestPlan).toBeNull()
   })
 
+  it('marks a plan approved by autopilot when the approval turn carries the autopilot flag', () => {
+    const { latestPlan } = buildTimeline([
+      planTurn(1, [{ id: 's1', capability: 'registerApplication', summary: 'Register', mutating: true }]),
+      turn({ seq: 2, kind: 'approval', role: 'system', content: { plan_seq: 1, autopilot: true } }),
+    ])
+    expect(latestPlan?.decision).toBe('approved')
+    expect(latestPlan?.approvedByAutopilot).toBe(true)
+  })
+
+  it('does not mark a human approval as autopilot', () => {
+    const { latestPlan } = buildTimeline([
+      planTurn(1, [{ id: 's1', capability: 'registerApplication', summary: 'Register', mutating: true }]),
+      turn({ seq: 2, kind: 'approval', content: { plan_seq: 1 } }),
+    ])
+    expect(latestPlan?.decision).toBe('approved')
+    expect(latestPlan?.approvedByAutopilot).toBe(false)
+  })
+
   it('surfaces a persisted advisory security review on the plan', () => {
     const advisory = {
       summary: 'The grant is scoped to read; low blast-radius.',
