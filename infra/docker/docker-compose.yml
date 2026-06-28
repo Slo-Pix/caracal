@@ -400,6 +400,14 @@ services:
       # system zone and identity are provisioned autonomously. Internal-only.
       API_OPERATOR_SELF_GOVERN: ${API_OPERATOR_SELF_GOVERN:-}
       API_OPERATOR_CONTROL_CLIENT_SECRET: ${API_OPERATOR_CONTROL_CLIENT_SECRET:-}
+      # Caracal-governed autopilot: the deployment-set boundary of what the Operator may
+      # auto-approve in agent mode. Disabled with an empty allowlist by default, so autopilot
+      # approves nothing until both the master switch and a narrow capability allowlist are set.
+      API_OPERATOR_AUTOPILOT_ENABLED: ${API_OPERATOR_AUTOPILOT_ENABLED:-}
+      API_OPERATOR_AUTOPILOT_CAPABILITIES: ${API_OPERATOR_AUTOPILOT_CAPABILITIES:-}
+      API_OPERATOR_AUTOPILOT_MAX_STEPS: ${API_OPERATOR_AUTOPILOT_MAX_STEPS:-}
+      API_OPERATOR_AUTOPILOT_WINDOW_SEC: ${API_OPERATOR_AUTOPILOT_WINDOW_SEC:-}
+      API_OPERATOR_AUTOPILOT_WINDOW_MAX: ${API_OPERATOR_AUTOPILOT_WINDOW_MAX:-}
       PORT: 3000
       HOST: 0.0.0.0
     ports:
