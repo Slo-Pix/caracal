@@ -631,95 +631,13 @@ function PreferencesSection() {
 
 /* ------------------------------ AI Operator ------------------------------ */
 
-type EndpointKind = "direct" | "aggregator" | "custom";
-
-interface ModelPreset {
-  id: string;
-  label: string;
-  family: string;
-  model: string;
-  slug: string;
-  endpoint: EndpointKind;
-  baseUrl: string;
-}
-
-const AGGREGATOR_NOTE =
-  "Not an OpenAI-wire-format API. Front it with an OpenAI-compatible aggregator (a self-hosted LiteLLM proxy or OpenRouter) and point the endpoint there.";
-const AGGREGATOR_BASE_URL = "https://your-litellm-or-openrouter/v1";
-
-const MODEL_PRESETS: ModelPreset[] = [
-  {
-    id: "gpt-5.5",
-    label: "GPT 5.5",
-    family: "OpenAI",
-    model: "gpt-5.5",
-    slug: "openai",
-    endpoint: "direct",
-    baseUrl: "https://api.openai.com/v1",
-  },
-  {
-    id: "gpt-5.4",
-    label: "GPT 5.4",
-    family: "OpenAI",
-    model: "gpt-5.4",
-    slug: "openai",
-    endpoint: "direct",
-    baseUrl: "https://api.openai.com/v1",
-  },
-  {
-    id: "gpt-5.4-mini",
-    label: "GPT 5.4 mini",
-    family: "OpenAI",
-    model: "gpt-5.4-mini",
-    slug: "openai",
-    endpoint: "direct",
-    baseUrl: "https://api.openai.com/v1",
-  },
-  {
-    id: "claude-opus-4.8",
-    label: "Claude Opus 4.8",
-    family: "Anthropic",
-    model: "claude-opus-4.8",
-    slug: "anthropic",
-    endpoint: "aggregator",
-    baseUrl: AGGREGATOR_BASE_URL,
-  },
-  {
-    id: "claude-sonnet-4.6",
-    label: "Claude Sonnet 4.6",
-    family: "Anthropic",
-    model: "claude-sonnet-4.6",
-    slug: "anthropic",
-    endpoint: "aggregator",
-    baseUrl: AGGREGATOR_BASE_URL,
-  },
-  {
-    id: "gemini-3.5-flash",
-    label: "Gemini 3.5 Flash",
-    family: "Google",
-    model: "gemini-3.5-flash",
-    slug: "gemini",
-    endpoint: "aggregator",
-    baseUrl: AGGREGATOR_BASE_URL,
-  },
-  {
-    id: "gemini-3.1-pro",
-    label: "Gemini 3.1 Pro",
-    family: "Google",
-    model: "gemini-3.1-pro",
-    slug: "gemini",
-    endpoint: "aggregator",
-    baseUrl: AGGREGATOR_BASE_URL,
-  },
-  {
-    id: "custom",
-    label: "Custom OpenAI-compatible",
-    family: "Custom",
-    model: "",
-    slug: "custom",
-    endpoint: "custom",
-    baseUrl: "https://your-endpoint/v1",
-  },
+// Common OpenAI-compatible endpoints offered as base-URL autofill. The model id is whatever the
+// endpoint serves, so it is typed in rather than chosen from a list; only the endpoint, which
+// genuinely varies by provider, is worth suggesting.
+const ENDPOINT_SUGGESTIONS = [
+  "https://api.openai.com/v1",
+  "https://openrouter.ai/api/v1",
+  "http://localhost:4000/v1",
 ];
 
 // The Operator addresses a provider by a slug used to build its configuration keys, so the slug
@@ -963,11 +881,12 @@ function AiOperatorSection() {
   );
 }
 
-// The add and edit form. Adding starts from a model preset that prefills the slug, endpoint, and
-// model so only the key remains; editing locks the slug and omits the key, which is changed
-// through rotate. The provider and resource details Caracal sets automatically (api-key auth, an
-// Authorization Bearer header, the llm:invoke and agent:lifecycle scopes, and the gateway
-// binding) are shown read-only rather than asked for.
+// The add and edit form. Adding starts empty so the operator supplies only what matters: an
+// OpenAI-compatible endpoint, a key, and the model ids the endpoint serves. The slug defaults
+// from the label. Editing locks the slug and omits the key, which is changed through rotate. The
+// provider and resource details Caracal sets automatically (api-key auth, an Authorization Bearer
+// header, the llm:invoke and agent:lifecycle scopes, and the gateway binding) are explained
+// rather than asked for.
 function ProviderFormModal({
   open,
   editing,
@@ -984,10 +903,8 @@ function ProviderFormModal({
   const create = useCreateOperatorAiProvider();
   const update = useUpdateOperatorAiProvider();
 
-  const [presetId, setPresetId] = useState<string>(MODEL_PRESETS[0].id);
-  const preset = MODEL_PRESETS.find((item) => item.id === presetId) ?? MODEL_PRESETS[0];
-
   const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
   const [label, setLabel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [models, setModels] = useState<string[]>([]);
@@ -996,30 +913,36 @@ function ProviderFormModal({
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  // Seed the form whenever it opens: an edit loads the provider, a fresh add applies the first
-  // preset's defaults so the common case needs only a key.
+  // Seed the form whenever it opens: an edit loads the provider, a fresh add starts empty so the
+  // operator supplies only what matters — endpoint, key, and the model ids the endpoint serves.
   useEffect(() => {
     if (!open) return;
     setError(null);
+    setModelDraft("");
     if (editing) {
       setSlug(editing.slug);
+      setSlugEdited(true);
       setLabel(editing.label);
       setBaseUrl(editing.baseUrl);
       setModels(editing.models);
       setContextWindow(editing.contextWindow ? String(editing.contextWindow) : "");
       setApiKey("");
     } else {
-      applyPreset(MODEL_PRESETS[0]);
+      setSlug("");
+      setSlugEdited(false);
+      setLabel("");
+      setBaseUrl("");
+      setModels([]);
+      setContextWindow("");
+      setApiKey("");
     }
   }, [open, editing]);
 
-  function applyPreset(next: ModelPreset) {
-    setPresetId(next.id);
-    setSlug(next.slug === "custom" ? "" : next.slug);
-    setLabel(next.family === "Custom" ? "" : next.label);
-    setBaseUrl(next.endpoint === "direct" ? next.baseUrl : "");
-    setModels(next.model ? [next.model] : []);
-    setModelDraft("");
+  // The slug defaults to a sanitized form of the label so a new provider needs no separate id,
+  // unless the operator edits the slug directly, after which it is left alone.
+  function changeLabel(value: string) {
+    setLabel(value);
+    if (!editing && !slugEdited) setSlug(sanitizeSlug(value));
   }
 
   function addModel() {
@@ -1076,7 +999,7 @@ function ProviderFormModal({
       description={
         editing
           ? "Update the endpoint and models. Rotate the key from the provider's menu."
-          : "Pick a model, supply the endpoint and key, and Caracal seals and governs it."
+          : "Supply an OpenAI-compatible endpoint and key; Caracal seals and governs it."
       }
       footer={
         <>
@@ -1090,69 +1013,43 @@ function ProviderFormModal({
       }
     >
       <div className="grid gap-5">
-        {!editing ? (
-          <div className="grid gap-2">
-            <span className="text-sm font-medium text-foreground">Model</span>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {MODEL_PRESETS.map((item) => {
-                const active = item.id === presetId;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => applyPreset(item)}
-                    className={[
-                      "flex flex-col gap-0.5 border px-3 py-2 text-left transition-colors",
-                      active
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border bg-card text-foreground hover:bg-surface",
-                    ].join(" ")}
-                  >
-                    <span className="text-xs font-medium">{item.label}</span>
-                    <span
-                      className={[
-                        "text-[10px]",
-                        active ? "text-background/70" : "text-muted-foreground",
-                      ].join(" ")}
-                    >
-                      {item.family}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-            {preset.endpoint === "aggregator" ? (
-              <p className="border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-400">
-                {AGGREGATOR_NOTE}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-
         <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Label"
             value={label}
-            onChange={(event) => setLabel(event.target.value)}
+            onChange={(event) => changeLabel(event.target.value)}
             placeholder="OpenAI production"
           />
           <Field
             label="Provider id"
             info="A short slug Caracal uses to name the sealed provider and resource."
             value={slug}
-            onChange={(event) => setSlug(sanitizeSlug(event.target.value))}
+            onChange={(event) => {
+              setSlug(sanitizeSlug(event.target.value));
+              setSlugEdited(true);
+            }}
             placeholder="openai"
             disabled={editing !== null}
             error={slugTaken ? "That id is already in use." : undefined}
           />
-          <Field
-            label="Endpoint base URL"
-            info="The OpenAI-compatible base URL the request is sent to."
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-            placeholder={preset.baseUrl}
-            className="font-mono sm:col-span-2"
-          />
+          <label className="block sm:col-span-2">
+            <FieldLabel
+              label="Endpoint base URL"
+              info="The OpenAI-compatible /chat/completions base URL the request is sent to."
+            />
+            <input
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="https://api.openai.com/v1"
+              list="operator-ai-endpoints"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25"
+            />
+            <datalist id="operator-ai-endpoints">
+              {ENDPOINT_SUGGESTIONS.map((url) => (
+                <option key={url} value={url} />
+              ))}
+            </datalist>
+          </label>
           <Field
             label="Context window"
             info="Optional. The model's token window, used for the usage gauge."
@@ -1176,7 +1073,7 @@ function ProviderFormModal({
         <div className="grid gap-2">
           <FieldLabel
             label="Models"
-            info="One provider can serve several models behind the same key."
+            info="The exact model ids this endpoint serves. One provider can serve several behind the same key."
           />
           <div className="flex gap-2">
             <input
@@ -1188,7 +1085,7 @@ function ProviderFormModal({
                   addModel();
                 }
               }}
-              placeholder="model id, then Enter"
+              placeholder="e.g. gpt-5.5, then Enter"
               className="h-9 w-full rounded-md border border-input bg-background px-3 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/25"
             />
             <Button
@@ -1224,10 +1121,12 @@ function ProviderFormModal({
         </div>
 
         <div className="border border-border bg-muted/40 px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-          Caracal sets the rest automatically: api-key auth over an Authorization Bearer header, the
-          llm:invoke and agent:lifecycle scopes, and the gateway binding to the Operator. The key is
-          sealed into the caracal.sys system zone and the Operator reaches the model only through
-          the governed gateway.
+          The endpoint must speak the OpenAI <span className="font-mono">/chat/completions</span>{" "}
+          format — OpenAI and Azure work directly; for Claude, Gemini, or others, point this at an
+          OpenAI-compatible proxy such as LiteLLM or OpenRouter. Caracal sets the rest automatically
+          (api-key auth over an Authorization Bearer header, the llm:invoke and agent:lifecycle
+          scopes, and the gateway binding), seals the key into the caracal.sys system zone, and
+          routes the Operator only through the governed gateway.
         </div>
 
         {error ? <p className="text-xs text-destructive">{error}</p> : null}
