@@ -105,12 +105,15 @@ async function nextZoneSlug(client: Queryable, name: string): Promise<string> {
 
 // Creates a zone row, allocating a unique slug when one is not supplied. Shared by
 // the zones route and the Operator executor so both create zones identically.
-export async function createZoneRecord(db: Queryable, input: { name: string; slug?: string; dcrEnabled?: boolean }): Promise<ZoneRow> {
+export async function createZoneRecord(
+  db: Queryable,
+  input: { name: string; slug?: string; dcrEnabled?: boolean; ownerAccountId?: string | null },
+): Promise<ZoneRow> {
   const { rows } = await db.query<ZoneRow>(
-    `INSERT INTO zones (id, name, slug, dek_ciphertext, dcr_enabled)
-     VALUES ($1, $2, $3, gen_random_bytes(32), $4)
+    `INSERT INTO zones (id, name, slug, dek_ciphertext, dcr_enabled, owner_account_id)
+     VALUES ($1, $2, $3, gen_random_bytes(32), $4, $5)
      RETURNING id, name, slug, dcr_enabled, created_at, updated_at`,
-    [uuidv7(), input.name, input.slug ?? (await nextZoneSlug(db, input.name)), input.dcrEnabled ?? false],
+    [uuidv7(), input.name, input.slug ?? (await nextZoneSlug(db, input.name)), input.dcrEnabled ?? false, input.ownerAccountId ?? null],
   )
   return rows[0]
 }
@@ -327,6 +330,7 @@ export const zonesRoutes: FastifyPluginAsync = async (fastify) => {
         name: body.name,
         slug: body.slug,
         dcrEnabled: body.dcr_enabled,
+        ownerAccountId: req.account?.id ?? null,
       })
       return reply.code(201).send(row)
     } catch (err) {

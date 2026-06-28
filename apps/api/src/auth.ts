@@ -6,7 +6,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import { timingSafeEqual } from 'node:crypto'
-import { sha256, deriveConsoleReadToken, deriveConsoleWriteToken } from '@caracalai/core'
+import { sha256, deriveConsoleReadToken, deriveConsoleWriteToken, verifyAccountAssertion } from '@caracalai/core'
 import { v7 as uuidv7 } from 'uuid'
 import type { DB } from './db.js'
 import type { RedisClient } from './redis.js'
@@ -46,11 +46,24 @@ interface AdminTokenRow {
   revoked_at: Date | null
 }
 
+// The authenticated end-operator behind a Console request, as asserted by the BFF and verified
+// here. It is an attribution and ownership signal layered on top of the admin actor — the BFF
+// still proxies with the shared Console credential — so it is optional: absent on direct admin
+// API calls and on deployments that have not provisioned the verifying admin token. Phase 1 only
+// records it (ownership stamping); it does not yet narrow authority.
+export interface Account {
+  id: string
+}
+
 declare module 'fastify' {
   interface FastifyRequest {
     actor: Actor
+    account: Account | null
   }
 }
+
+// The header the Console BFF carries the signed per-account assertion in.
+const ACCOUNT_ASSERTION_HEADER = 'x-caracal-account'
 
 const BEARER_PREFIX = 'Bearer '
 const MAX_ADMIN_BEARER_BYTES = 4096
@@ -292,6 +305,10 @@ export interface AuthPluginOptions {
   authFailLimitPerMin?: number
   lastUsedDebounceSec?: number
   verifyCacheTtlMs?: number
+  // The deployment admin token, used only as the shared key that verifies the BFF's per-account
+  // assertion. Absent disables account binding entirely, so the API behaves exactly as before —
+  // a strict, backward-compatible default that never fails a request for want of this signal.
+  accountAssertionKey?: string | null
 }
 
 const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opts) => {
@@ -299,6 +316,28 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
   const redis = opts.redis ?? null
   const failLimit = opts.authFailLimitPerMin ?? 0
   const debounceSec = opts.lastUsedDebounceSec ?? 0
+  const accountKey = opts.accountAssertionKey ?? null
+
+  // Resolves the account behind a request from the BFF's signed assertion. Binding is opt-in: it
+  // needs the verifying key, and a malformed, expired, or unsigned header binds no account rather
+  // than failing the request, so a direct admin call or an unconfigured deployment is unaffected.
+  // A present-but-invalid assertion is logged and dropped — it is never trusted.
+  function resolveAccount(req: FastifyRequest): Account | null {
+    if (!accountKey) return null
+    const raw = req.headers[ACCOUNT_ASSERTION_HEADER]
+    const assertion = Array.isArray(raw) ? raw[0] : raw
+    if (typeof assertion !== 'string' || assertion.length === 0) return null
+    const verified = verifyAccountAssertion(accountKey, assertion, Math.floor(Date.now() / 1000))
+    if (!verified) {
+      req.log.warn('rejected an invalid account assertion')
+      return null
+    }
+    return { id: verified.accountId }
+  }
+
+  // Default the account to null so any route reading it is safe even on a path that skips the
+  // preHandler (the control invoke route returns before binding), and is never left undefined.
+  fastify.decorateRequest('account', null)
 
   // The admin token is a static, high-entropy secret, yet every /v1/ request re-runs an
   // Argon2id verification (64 MB, timeCost 3) plus a Postgres lookup. A single page fires
@@ -414,6 +453,7 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
     }
 
     req.actor = actor
+    req.account = resolveAccount(req)
     bindRequestZoneScope(actor.scope === 'zone' && actor.zoneId ? actor.zoneId : GLOBAL_ZONE_SCOPE)
     if (await shouldTouchLastUsed(redis, actor.id, debounceSec)) {
       touchLastUsed(opts.db, actor.id).catch((err) => {

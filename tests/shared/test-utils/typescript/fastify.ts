@@ -13,13 +13,10 @@ interface RouteOptions {
 
 interface BuildRouteAppExtras {
   actor?: unknown
+  account?: unknown
 }
 
-export function buildRouteApp(
-  route: FastifyPluginAsync,
-  options: RouteOptions = { prefix: '/v1' },
-  extras: BuildRouteAppExtras = {},
-) {
+export function buildRouteApp(route: FastifyPluginAsync, options: RouteOptions = { prefix: '/v1' }, extras: BuildRouteAppExtras = {}) {
   const app = Fastify({ logger: false })
   const db = {
     query: vi.fn(),
@@ -36,9 +33,11 @@ export function buildRouteApp(
   }
   app.decorate('db', db as never)
   app.decorate('redis', redis as never)
-  if (extras.actor !== undefined) {
+  app.decorateRequest('account', null)
+  if (extras.actor !== undefined || extras.account !== undefined) {
     app.addHook('preHandler', async (req) => {
-      ;(req as unknown as { actor: unknown }).actor = extras.actor
+      if (extras.actor !== undefined) (req as unknown as { actor: unknown }).actor = extras.actor
+      if (extras.account !== undefined) (req as unknown as { account: unknown }).account = extras.account
     })
   }
   app.register(route, options)

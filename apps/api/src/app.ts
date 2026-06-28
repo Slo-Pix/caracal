@@ -260,6 +260,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
     redis,
     authFailLimitPerMin: cfg.adminAuthFailLimitPerMin,
     lastUsedDebounceSec: cfg.lastUsedDebounceSec,
+    accountAssertionKey: cfg.bootstrapAdminToken,
   })
   registerAdminAuditHook(app, { db, hmacKey: cfg.auditHmacKey })
 

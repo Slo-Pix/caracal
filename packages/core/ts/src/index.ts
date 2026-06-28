@@ -4,6 +4,7 @@
 // @caracalai/core: configuration, errors, and logging for TypeScript services.
 
 export * from './async.js'
+export * from './accountAssertion.js'
 export * from './config.js'
 export * from './consoleToken.js'
 export * from './crypto.js'

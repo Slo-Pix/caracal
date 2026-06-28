@@ -16,6 +16,7 @@ import {
   seedConsoleWriteToken,
 } from '../../../../apps/api/src/auth.js'
 import { deriveConsoleReadToken, deriveConsoleWriteToken } from '../../../../packages/core/ts/src/consoleToken.js'
+import { signAccountAssertion } from '../../../../packages/core/ts/src/accountAssertion.js'
 
 function digest(token: string): Buffer {
   return createHash('sha256').update(token).digest()
@@ -80,7 +81,12 @@ async function buildPluginApp(
     expire: (k: string, s: number) => Promise<number>
     set: (k: string, v: string, ...args: unknown[]) => Promise<'OK' | null>
   },
-  options: { authFailLimitPerMin?: number; lastUsedDebounceSec?: number; verifyCacheTtlMs?: number } = {},
+  options: {
+    authFailLimitPerMin?: number
+    lastUsedDebounceSec?: number
+    verifyCacheTtlMs?: number
+    accountAssertionKey?: string | null
+  } = {},
 ) {
   const app = Fastify({ logger: false })
   await app.register(adminAuthPlugin, {
@@ -89,8 +95,9 @@ async function buildPluginApp(
     authFailLimitPerMin: options.authFailLimitPerMin,
     lastUsedDebounceSec: options.lastUsedDebounceSec,
     verifyCacheTtlMs: options.verifyCacheTtlMs,
+    accountAssertionKey: options.accountAssertionKey,
   })
-  app.get('/v1/zones', async (req) => ({ ok: true, actor: req.actor }))
+  app.get('/v1/zones', async (req) => ({ ok: true, actor: req.actor, account: req.account }))
   app.get('/v1/zones/:zoneId/things', async (req) => ({ ok: true, params: req.params }))
   app.get('/v1/zones/:zoneId/provider-grants/oauth/callback', async () => ({ ok: true }))
   app.post('/v1/zones', async () => ({ ok: true }))
@@ -528,5 +535,71 @@ describe('isDerivedConsoleActor', () => {
   it('does not match the bootstrap or operator-minted creators', () => {
     expect(isDerivedConsoleActor(actor('env-bootstrap'))).toBe(false)
     expect(isDerivedConsoleActor(actor('admin:t1'))).toBe(false)
+  })
+})
+
+describe('account assertion binding', () => {
+  function bind(token: string, accountId: string, exp: number): string {
+    return signAccountAssertion(token, accountId, exp)
+  }
+
+  it('binds req.account from a valid assertion when the key is configured', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }), undefined, { accountAssertionKey: 'secret' })
+    const exp = Math.floor(Date.now() / 1000) + 60
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones',
+      headers: { authorization: 'Bearer secret', 'x-caracal-account': bind('secret', 'acct-7', exp) },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().account).toEqual({ id: 'acct-7' })
+    await app.close()
+  })
+
+  it('binds no account when the key is not configured (backward compatible)', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }))
+    const exp = Math.floor(Date.now() / 1000) + 60
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones',
+      headers: { authorization: 'Bearer secret', 'x-caracal-account': bind('secret', 'acct-7', exp) },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().account).toBeNull()
+    await app.close()
+  })
+
+  it('binds no account when the assertion is missing', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }), undefined, { accountAssertionKey: 'secret' })
+    const res = await app.inject({ method: 'GET', url: '/v1/zones', headers: { authorization: 'Bearer secret' } })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().account).toBeNull()
+    await app.close()
+  })
+
+  it('does not bind an account from a forged assertion (wrong key)', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }), undefined, { accountAssertionKey: 'secret' })
+    const exp = Math.floor(Date.now() / 1000) + 60
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones',
+      headers: { authorization: 'Bearer secret', 'x-caracal-account': bind('attacker-key', 'acct-evil', exp) },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().account).toBeNull()
+    await app.close()
+  })
+
+  it('does not bind an account from an expired assertion', async () => {
+    const app = await buildPluginApp(makeDb({ token: 'secret' }), undefined, { accountAssertionKey: 'secret' })
+    const exp = Math.floor(Date.now() / 1000) - 1
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/zones',
+      headers: { authorization: 'Bearer secret', 'x-caracal-account': bind('secret', 'acct-7', exp) },
+    })
+    expect(res.statusCode).toBe(200)
+    expect(res.json().account).toBeNull()
+    await app.close()
   })
 })

@@ -4,7 +4,14 @@
 // Session-guarded backend-for-frontend that proxies the Community Edition web client to the Caracal admin API.
 
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { discoverAdminToken, discoverCoordinatorToken, deriveConsoleReadToken, deriveConsoleWriteToken, pathOnly } from '@caracalai/core'
+import {
+  discoverAdminToken,
+  discoverCoordinatorToken,
+  deriveConsoleReadToken,
+  deriveConsoleWriteToken,
+  pathOnly,
+  signAccountAssertion,
+} from '@caracalai/core'
 import {
   applyControlLifecycleAction,
   controlKeyRecord,
@@ -76,6 +83,23 @@ function consoleWriteToken(): string | undefined {
 
 function coordinatorToken(): string | undefined {
   return discoverCoordinatorToken(undefined, { preferGenerated: isLocalUrl(coordinatorUrl()) })
+}
+
+// The header the per-account assertion is carried in, matching the API's verifier.
+const ACCOUNT_ASSERTION_HEADER = 'x-caracal-account'
+// The assertion's lifetime: long enough to cover a proxied request with clock skew, short enough
+// that a captured assertion is only briefly replayable. Replay on the internal hop grants strictly
+// less than the admin bearer already present there, so this is a tight bound on an already-low risk.
+const ACCOUNT_ASSERTION_TTL_SEC = 60
+
+// Signs the per-account assertion that carries the authenticated operator's account id to the API,
+// keyed by the deployment admin token both sides hold. Absent when no admin token is discoverable
+// (the proxy already reports unconfigured) or no account id is present, so the API simply binds no
+// account and behaves exactly as before.
+function accountAssertion(accountId: string | undefined): string | undefined {
+  const admin = adminToken()
+  if (!admin || !accountId) return undefined
+  return signAccountAssertion(admin, accountId, Math.floor(Date.now() / 1000) + ACCOUNT_ASSERTION_TTL_SEC)
 }
 
 function toWebHeaders(req: IncomingMessage): Headers {
@@ -348,9 +372,11 @@ async function forwardProxy(
   token: string,
   id: string,
   fallbackToken?: string,
+  account?: string,
 ): Promise<void> {
   const method = req.method ?? 'GET'
   const baseHeaders: Record<string, string> = downstreamHeaders(id)
+  if (account) baseHeaders[ACCOUNT_ASSERTION_HEADER] = account
 
   // Let the engine compress its response and pass the encoded bytes through untouched, so large
   // admin lists travel compressed across the real network between the browser and the BFF.
@@ -423,7 +449,7 @@ function targetPath(target: string): string {
 // Validates that a proxied path stays within an allowed prefix after URL normalization, closing
 // a prefix-check bypass (e.g. `/v1/../metrics`). Defined in security.ts as a path-confinement
 // primitive and reused here for both the API and coordinator proxy surfaces.
-async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: string, id: string): Promise<void> {
+async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: string, id: string, account?: string): Promise<void> {
   const token = adminToken()
   if (!token) {
     sendJson(res, 503, { error: 'control_plane_not_configured' })
@@ -440,7 +466,7 @@ async function handleProxy(req: IncomingMessage, res: ServerResponse, rest: stri
   // a request can never fail closed for want of a credential.
   const method = (req.method ?? 'GET').toUpperCase()
   const credential = selectProxyCredential(method, token, consoleReadToken(), consoleWriteToken())
-  await forwardProxy(req, res, target, credential.token, id, credential.fallbackToken)
+  await forwardProxy(req, res, target, credential.token, id, credential.fallbackToken, account)
   // A successful write to the control plane can change what diagnostics reports (zone
   // inventory, resources, policy enforcement, …); drop cached reports so the next read
   // recomputes against the new state instead of surfacing a stale warning.
@@ -668,6 +694,11 @@ export async function handleConsole(req: IncomingMessage, res: ServerResponse, c
     })
   }
 
+  // The signed account assertion carries the authenticated operator's account id to the API so it
+  // can attribute and, in later phases, scope by ownership. It is bound to the verified session, so
+  // the API can trust it as the human behind the shared Console credential.
+  const account = accountAssertion(session.user.id)
+
   if (url.startsWith(`${COORD_PREFIX}/`)) {
     await handleCoordProxy(req, res, url.slice(COORD_PREFIX.length), ctx.id)
     return true
@@ -688,7 +719,7 @@ export async function handleConsole(req: IncomingMessage, res: ServerResponse, c
     return true
   }
   if (path.startsWith('/v1/')) {
-    await handleProxy(req, res, path, ctx.id)
+    await handleProxy(req, res, path, ctx.id, account)
     return true
   }
 

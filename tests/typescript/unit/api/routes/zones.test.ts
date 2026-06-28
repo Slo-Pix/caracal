@@ -153,6 +153,38 @@ describe('POST /v1/zones', () => {
     expect(insertValues[2]).toBe('my-zone-2')
   })
 
+  it('stamps the creating account as the zone owner', async () => {
+    const created = { id: 'z2', name: 'My Zone', slug: 'my-zone', dcr_enabled: false }
+    const { app, db } = buildRouteApp(zonesRoutes, { prefix: '/v1' }, { account: { id: 'acct-9' } })
+    db.query.mockResolvedValue({ rows: [created] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones',
+      payload: { name: 'My Zone', slug: 'my-zone' },
+    })
+    expect(res.statusCode).toBe(201)
+    const insertCall = db.query.mock.calls.find((c) => String(c[0]).includes('INSERT INTO zones'))!
+    const insertValues = insertCall[1] as unknown[]
+    expect(insertValues[4]).toBe('acct-9')
+  })
+
+  it('leaves the owner null when no account is bound', async () => {
+    const created = { id: 'z2', name: 'My Zone', slug: 'my-zone', dcr_enabled: false }
+    const { app, db } = buildRouteApp(zonesRoutes)
+    db.query.mockResolvedValue({ rows: [created] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones',
+      payload: { name: 'My Zone', slug: 'my-zone' },
+    })
+    expect(res.statusCode).toBe(201)
+    const insertCall = db.query.mock.calls.find((c) => String(c[0]).includes('INSERT INTO zones'))!
+    const insertValues = insertCall[1] as unknown[]
+    expect(insertValues[4]).toBeNull()
+  })
+
   it('returns conflict for explicit duplicate zone slugs', async () => {
     const { app, db } = buildRouteApp(zonesRoutes)
     db.query.mockRejectedValueOnce(
