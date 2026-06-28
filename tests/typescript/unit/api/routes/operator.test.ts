@@ -21,6 +21,7 @@ function buildApp(
     controlEndpoints?: { stsUrl: string; audience: string; controlUrl: string; controlEnabled: boolean }
     fetchImpl?: typeof fetch
     autopilotPolicy?: ReturnType<typeof buildAutopilotPolicy>
+    aiGovernance?: { maxOutputTokens: number; maxCallsPerTurn: number }
   } = {},
 ) {
   const app = Fastify({ logger: false })
@@ -57,6 +58,7 @@ function buildApp(
     controlEndpoints: authorityOpts.controlEndpoints ?? null,
     fetchImpl: authorityOpts.fetchImpl,
     autopilotPolicy: authorityOpts.autopilotPolicy,
+    aiGovernance: authorityOpts.aiGovernance,
   })
   return { app, db, clientQuery, redis }
 }
@@ -1463,6 +1465,38 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     })
     expect(res.statusCode).toBe(403)
     expect(JSON.parse(res.body)).toMatchObject({ error: 'zone_forbidden' })
+  })
+
+  it('refuses a message that would exceed the per-turn model-call budget', async () => {
+    // With a budget of one model call, triage consumes it and the answer call is refused, so the
+    // turn stops with a 429 rather than running an unbounded sequence of model calls.
+    const fetchImpl = fetchReturning('{"tier":"read"}', 'an answer that is never reached')
+    const { app, clientQuery, db } = buildApp(true, {
+      aiProviders: [provider],
+      fetchImpl,
+      aiGovernance: { maxOutputTokens: 0, maxCallsPerTurn: 1 },
+    })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: false, next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1, kind: 'message' }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'why was my agent denied' },
+    })
+    expect(res.statusCode).toBe(429)
+    expect(JSON.parse(res.body)).toMatchObject({ error: 'ai_budget_exceeded', max_calls: 1 })
+    // Only the triage model call was made before the budget refused the next one.
+    expect((fetchImpl as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(1)
   })
 
   it('turns a natural-language request into a validated, previewed plan', async () => {

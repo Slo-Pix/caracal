@@ -3,9 +3,10 @@
 //
 // The Operator LLM gateway: a provider-agnostic completion client built on the Vercel AI SDK over any OpenAI-compatible endpoint with multi-provider failover.
 
-import { APICallError, extractReasoningMiddleware, generateObject, generateText, wrapLanguageModel } from 'ai'
+import { APICallError, extractReasoningMiddleware, generateObject, generateText, wrapLanguageModel, type LanguageModelMiddleware } from 'ai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import type { ZodType } from 'zod'
+import { buildGovernanceMiddleware, type GovernanceLimits } from './operator-ai-governance.js'
 
 // A single configured backend. The OpenAI-compatible chat surface is the common
 // denominator across hosted providers (OpenAI, Together, Groq), local servers
@@ -117,6 +118,17 @@ export class GatewayError extends Error {
   }
 }
 
+// The per-turn model-call budget was reached, so a further completion is refused. This bounds the
+// multi-agent fan-out deterministically: a turn that would make more model calls than Caracal
+// permits stops rather than running an unbounded loop. It is a governance limit, not a model
+// failure, so callers distinguish it from a provider error.
+export class GatewayBudgetError extends Error {
+  constructor(public readonly maxCalls: number) {
+    super(`the per-turn model-call budget of ${maxCalls} was reached`)
+    this.name = 'GatewayBudgetError'
+  }
+}
+
 type FetchImpl = typeof fetch
 
 // The OpenAI-compatible provider emits one benign warning on every structured
@@ -165,12 +177,22 @@ function buildBackend(fetchImpl: FetchImpl, provider: ProviderConfig) {
 // The chat model for free-text completions, wrapped so a reasoning model's chain of
 // thought is captured however it is exposed: the OpenAI-compatible reasoning_content
 // channel maps into reasoningText, and the middleware additionally extracts an inline
-// <think>...</think> block.
-function buildReasoningModel(fetchImpl: FetchImpl, provider: ProviderConfig) {
+// <think>...</think> block. The Caracal governance middleware, when present, is applied
+// first so the output-token ceiling holds before any provider call.
+function buildReasoningModel(fetchImpl: FetchImpl, provider: ProviderConfig, governance?: LanguageModelMiddleware) {
+  const reasoning = extractReasoningMiddleware({ tagName: 'think' })
   return wrapLanguageModel({
     model: buildBackend(fetchImpl, provider).chatModel(provider.model),
-    middleware: extractReasoningMiddleware({ tagName: 'think' }),
+    middleware: governance ? [governance, reasoning] : reasoning,
   })
+}
+
+// The chat model for structured completions. It carries the Caracal governance middleware when
+// present so the output-token ceiling holds on the object path too; structured output does not
+// need reasoning extraction, so that middleware is not applied here.
+function buildObjectModel(fetchImpl: FetchImpl, provider: ProviderConfig, governance?: LanguageModelMiddleware) {
+  const model = buildBackend(fetchImpl, provider).chatModel(provider.model)
+  return governance ? wrapLanguageModel({ model, middleware: governance }) : model
 }
 
 // The AI SDK takes system content through the system option rather than as a message
@@ -204,13 +226,14 @@ async function callProvider(
   provider: ProviderConfig,
   messages: GatewayMessage[],
   options: CompletionOptions,
+  governance?: LanguageModelMiddleware,
 ): Promise<CompletionResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), provider.timeoutMs)
   try {
     const { system, conversation } = splitSystem(messages)
     const result = await generateText({
-      model: buildReasoningModel(fetchImpl, provider),
+      model: buildReasoningModel(fetchImpl, provider, governance),
       system,
       messages: conversation,
       maxOutputTokens: options.maxTokens,
@@ -245,13 +268,14 @@ async function callProviderObject<T>(
   messages: GatewayMessage[],
   schema: ZodType<T>,
   options: CompletionOptions,
+  governance?: LanguageModelMiddleware,
 ): Promise<CompletionObjectResult<T>> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), provider.timeoutMs)
   try {
     const { system, conversation } = splitSystem(messages)
     const result = await generateObject({
-      model: buildBackend(fetchImpl, provider).chatModel(provider.model),
+      model: buildObjectModel(fetchImpl, provider, governance),
       schema,
       system,
       messages: conversation,
@@ -311,9 +335,13 @@ async function runWithFailover<T>(
 
 // Builds a gateway over an ordered provider list. The order is the failover order:
 // each completion tries every available provider in turn and returns the first success.
-// fetchImpl is injectable so the transport can be exercised without a live backend.
-export function createGateway(providers: ProviderConfig[], fetchImpl: FetchImpl = fetch): Gateway {
+// fetchImpl is injectable so the transport can be exercised without a live backend. When
+// governance limits are supplied with a positive output ceiling, every model call carries the
+// Caracal governance middleware so the ceiling holds uniformly across providers.
+export function createGateway(providers: ProviderConfig[], fetchImpl: FetchImpl = fetch, governance?: GovernanceLimits): Gateway {
   const available = providers.filter(providerAvailable)
+  const governanceMiddleware =
+    governance && governance.maxOutputTokens > 0 ? buildGovernanceMiddleware(governance) : undefined
 
   return {
     status() {
@@ -334,12 +362,14 @@ export function createGateway(providers: ProviderConfig[], fetchImpl: FetchImpl 
     },
 
     complete(messages, options = {}) {
-      return runWithFailover(available, options.preferredProvider, (provider) => callProvider(fetchImpl, provider, messages, options))
+      return runWithFailover(available, options.preferredProvider, (provider) =>
+        callProvider(fetchImpl, provider, messages, options, governanceMiddleware),
+      )
     },
 
     completeObject(messages, schema, options = {}) {
       return runWithFailover(available, options.preferredProvider, (provider) =>
-        callProviderObject(fetchImpl, provider, messages, schema, options),
+        callProviderObject(fetchImpl, provider, messages, schema, options, governanceMiddleware),
       )
     },
   }
@@ -348,19 +378,32 @@ export function createGateway(providers: ProviderConfig[], fetchImpl: FetchImpl 
 // Wraps a gateway for the span of a single request so the real token usage of every
 // completion made through it is tallied. The underlying gateway is shared across
 // requests, so usage must be collected per call here rather than held on the gateway.
-export function withUsage(gateway: Gateway): { gateway: Gateway; usage: () => GatewayUsage } {
+// When maxCalls is set, it also enforces the per-turn model-call budget: each model call
+// counts, and a call beyond the budget is refused with a GatewayBudgetError before it reaches a
+// provider, so the multi-agent composition for one message can never run an unbounded loop. A
+// failover across providers is a single logical call, so the budget bounds agent steps, not
+// provider retries.
+export function withUsage(gateway: Gateway, options: { maxCalls?: number } = {}): { gateway: Gateway; usage: () => GatewayUsage } {
   let inputTokens = 0
   let outputTokens = 0
+  let calls = 0
+  const maxCalls = options.maxCalls
+  const guard = () => {
+    if (maxCalls !== undefined && maxCalls > 0 && calls >= maxCalls) throw new GatewayBudgetError(maxCalls)
+    calls += 1
+  }
   const tracked: Gateway = {
     status: () => gateway.status(),
     active: () => gateway.active(),
     async complete(messages, options) {
+      guard()
       const result = await gateway.complete(messages, options)
       inputTokens += result.promptTokens ?? 0
       outputTokens += result.completionTokens ?? 0
       return result
     },
     async completeObject(messages, schema, options) {
+      guard()
       const result = await gateway.completeObject(messages, schema, options)
       inputTokens += result.promptTokens ?? 0
       outputTokens += result.completionTokens ?? 0

@@ -331,6 +331,8 @@ describe('AdminClient', () => {
       calls.push({ url, method: init.method ?? 'GET', body: init.body as string | undefined })
       const body = url.includes('/audit') || url.includes('/sessions')
         ? { rows: [], next_cursor: null }
+        : url.includes('/children')
+        ? { items: [], next_cursor: null }
         : {}
       return Promise.resolve({
         ok: true, status: 200, statusText: 'OK', headers: new Headers(),

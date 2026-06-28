@@ -49,6 +49,7 @@ import { zoneEventsRoutes } from './routes/zone-events.js'
 import { adminTokensRoutes } from './routes/admin-tokens.js'
 import { operatorRoutes } from './routes/operator.js'
 import { buildAutopilotPolicy } from './operator-autopilot.js'
+import { buildGovernanceLimits } from './operator-ai-governance.js'
 
 import './fastify-augmentation.js'
 
@@ -330,6 +331,10 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
       maxStepsPerPlan: cfg.operatorAutopilotMaxSteps,
       windowSec: cfg.operatorAutopilotWindowSec,
       windowMaxApprovals: cfg.operatorAutopilotWindowMax,
+    }),
+    aiGovernance: buildGovernanceLimits({
+      maxOutputTokens: cfg.operatorAiMaxOutputTokens,
+      maxCallsPerTurn: cfg.operatorAiMaxCallsPerTurn,
     }),
     resolveControlIdentity: () => operatorControlIdentity.current,
     controlEndpoints: cfg.control
