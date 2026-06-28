@@ -1197,20 +1197,18 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
           }
         }
 
-        return reply
-          .code(201)
-          .send({
-            intent: 'plan',
-            tier,
-            ok: true,
-            turn: turn.turn,
-            validation,
-            preview,
-            advisory,
-            auto_approved: autoApproved,
-            approval_turn: approvalTurn,
-            ...meta(),
-          })
+        return reply.code(201).send({
+          intent: 'plan',
+          tier,
+          ok: true,
+          turn: turn.turn,
+          validation,
+          preview,
+          advisory,
+          auto_approved: autoApproved,
+          approval_turn: approvalTurn,
+          ...meta(),
+        })
       }
 
       const explained = outcome.result
