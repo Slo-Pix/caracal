@@ -54,11 +54,13 @@ export interface SystemZoneIdentity {
 }
 
 // A third-party upstream the Operator must reach without holding its key directly: the
-// provider id, its base URL, and the secret key Caracal seals and injects at the gateway.
+// provider id, its base URL, and the secret key Caracal seals and injects at the gateway. The
+// key is supplied only when it is being set or rotated; an upstream already sealed in a prior
+// run carries no key here, and its provider is reconciled by identifier without re-sealing.
 export interface GovernedUpstream {
   id: string
   baseUrl: string
-  apiKey: string
+  apiKey?: string
 }
 
 // The reserved, single system-zone policy and policy-set that carry the Operator's
@@ -170,12 +172,20 @@ async function ensureOperatorIdentity(admin: AdminClient, zoneId: string, secret
 }
 
 // Seals an upstream's api key into a Caracal api_key provider the gateway injects at call
-// time, so the Operator never holds the key. The key is reconciled on every run (the sealed
-// secret cannot be read back to compare), so rotating it in config and restarting rotates
-// the protected credential. allow_runtime_injection lets the gateway inject it for a
-// runtime exchange, not only a gateway-authenticated one.
-async function ensureApiKeyProvider(admin: AdminClient, zoneId: string, upstream: GovernedUpstream): Promise<string> {
+// time, so the Operator never holds the key. When a key is supplied it is reconciled (the
+// sealed secret cannot be read back to compare), so setting or rotating a key and applying
+// updates the protected credential. When no key is supplied the upstream was sealed in a prior
+// run, so the existing provider is resolved by identifier and left untouched; a missing
+// provider returns null, marking the upstream unconfigured so no resource binds a dead
+// credential. allow_runtime_injection lets the gateway inject it for a runtime exchange, not
+// only a gateway-authenticated one.
+async function ensureApiKeyProvider(admin: AdminClient, zoneId: string, upstream: GovernedUpstream): Promise<string | null> {
   const identifier = llmProviderIdentifier(upstream.id)
+  const providers = await admin.providers.list(zoneId)
+  const existing = providers.find((provider) => provider.identifier === identifier)
+  if (upstream.apiKey === undefined) {
+    return existing?.id ?? null
+  }
   const config = {
     auth_location: 'header' as const,
     header_name: 'Authorization',
@@ -183,8 +193,6 @@ async function ensureApiKeyProvider(admin: AdminClient, zoneId: string, upstream
     api_key: upstream.apiKey,
     allow_runtime_injection: true,
   }
-  const providers = await admin.providers.list(zoneId)
-  const existing = providers.find((provider) => provider.identifier === identifier)
   if (!existing) {
     const created = await admin.providers.create(zoneId, {
       name: `Operator LLM ${upstream.id}`,
@@ -322,11 +330,12 @@ async function pruneOrphanedProviders(admin: AdminClient, zoneId: string, desire
 
 // Reconciles every governed upstream to a sealed provider + LLM resource + gateway binding,
 // archives the providers for upstreams no longer configured, then reconciles the one
-// system-zone policy-set so it grants the Operator exactly the current upstreams. Safe to run
-// with an empty set: it prunes any previously governed upstream's provider and reconciles the
-// grant set to empty. Returns the upstream-id to resource-identifier mapping the runtime
-// routes through.
-async function provisionGovernedUpstreams(
+// system-zone policy-set so it grants the Operator exactly the current upstreams. An upstream
+// whose provider cannot be resolved (no key supplied and none sealed before) is skipped, so it
+// neither binds a dead credential nor receives a grant. Safe to run with an empty set: it
+// prunes any previously governed upstream's provider and reconciles the grant set to empty.
+// Returns the upstream-id to resource-identifier mapping the runtime routes through.
+export async function provisionGovernedUpstreams(
   admin: AdminClient,
   zoneId: string,
   operatorAppId: string,
@@ -335,6 +344,7 @@ async function provisionGovernedUpstreams(
   const governed: { id: string; resourceIdentifier: string }[] = []
   for (const upstream of upstreams) {
     const providerId = await ensureApiKeyProvider(admin, zoneId, upstream)
+    if (!providerId) continue
     const resourceIdentifier = await ensureLlmResource(admin, zoneId, upstream, providerId, operatorAppId)
     governed.push({ id: upstream.id, resourceIdentifier })
   }
