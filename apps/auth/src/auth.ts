@@ -64,8 +64,12 @@ export const auth = betterAuth({
     },
   },
   session: {
+    // A console session carries the shared global admin token, so a forgotten or compromised
+    // device must not retain access indefinitely. Bound every session to a fixed seven-day
+    // lifetime measured from sign-in and never extend it on activity, so even a continuously
+    // used session is forced back through authentication instead of rolling forward forever.
     expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    disableSessionRefresh: true,
   },
   // Throttle credential endpoints so a directly reachable auth surface cannot be brute-forced
   // or enumerated. The window is shared across all auth routes with a tighter ceiling on the

@@ -40,6 +40,31 @@ func TestCopyResponseStripsIdentityHeader(t *testing.T) {
 	}
 }
 
+func TestCopyResponseStripsServerBanners(t *testing.T) {
+	store := newRevocationStore(zerolog.Nop())
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"Content-Type":        {"application/json"},
+			"Server":              {"nginx/1.27.0"},
+			"X-Powered-By":        {"Express"},
+			"X-Aspnet-Version":    {"4.0.30319"},
+			"X-Aspnetmvc-Version": {"5.2"},
+		},
+		Body: io.NopCloser(strings.NewReader(`{"ok":true}`)),
+	}
+	rec := httptest.NewRecorder()
+	copyResponse(rec, resp, store, tokenRevocationIDs{SID: "sid-1"})
+	for _, banner := range []string{"Server", "X-Powered-By", "X-Aspnet-Version", "X-Aspnetmvc-Version"} {
+		if got := rec.Header().Get(banner); got != "" {
+			t.Fatalf("%s banner must not surface to clients, got %q", banner, got)
+		}
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type lost in copy, got %q", got)
+	}
+}
+
 type slowReader struct {
 	closed atomic.Bool
 }

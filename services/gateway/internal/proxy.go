@@ -574,6 +574,16 @@ func joinURLPath(upstreamPath, requestPath string) string {
 	return path.Join(upstreamPath, requestPath)
 }
 
+// upstreamIdentityHeaders name upstream response headers that only disclose the
+// proxied service's server software or framework version. They carry no value for
+// clients and reveal the upstream stack, so the gateway drops them on fan-out.
+var upstreamIdentityHeaders = []string{
+	"Server",
+	"X-Powered-By",
+	"X-AspNet-Version",
+	"X-AspNetMvc-Version",
+}
+
 // copyResponse streams the upstream response back to the client, flushing on every chunk
 // so SSE consumers see real-time data without server-side buffering. Between chunks it
 // consults revocations: if any authority anchor bound to the token is revoked
@@ -588,6 +598,9 @@ func copyResponse(w http.ResponseWriter, resp *http.Response, revocations revoca
 	// provider-native auth modes. Echoing it back to clients would surface a
 	// short-TTL but still usable bearer; strip it before fan-out.
 	resp.Header.Del("X-Caracal-Identity")
+	for _, banner := range upstreamIdentityHeaders {
+		resp.Header.Del(banner)
+	}
 	for key, vals := range resp.Header {
 		for _, val := range vals {
 			w.Header().Add(key, val)
