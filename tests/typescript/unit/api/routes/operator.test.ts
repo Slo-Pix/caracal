@@ -1536,6 +1536,42 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     expect(body.text).toContain('scope is missing')
   })
 
+  it('routes a diagnostic read through the troubleshooter and answers with a note turn', async () => {
+    // Triage classifies the read with the diagnostic topic; the default registry selects the
+    // troubleshooter, still a read-only answer recorded as a note. Two model calls: triage + answer.
+    const fetchImpl = fetchReturning('{"tier":"read","topic":"diagnostic"}', 'It was denied because no grant exists yet for that resource.')
+    const { app, clientQuery, db } = buildApp(true, { aiProviders: [provider], fetchImpl })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1 }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'note' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'why was my agent denied access to the invoices resource' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body).toMatchObject({ intent: 'explain', tier: 'read', ok: true })
+    expect(body.text).toContain('no grant exists')
+    // Read-only diagnosis: triage + the answer, no planner, no governed write.
+    expect((fetchImpl as unknown as { mock: { calls: unknown[] } }).mock.calls).toHaveLength(2)
+  })
+
   it('answers a conversational request as text without invoking the planner', async () => {
     // Triage classifies a greeting as conversational; the orchestrator answers it directly with
     // the explainer and never calls the planner, so only two model calls are made: triage and

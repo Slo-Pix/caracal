@@ -7,6 +7,8 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   buildPlannerMessages,
   buildExplainerMessages,
+  buildTroubleshooterMessages,
+  buildTranslatorMessages,
   buildSecurityAnalystMessages,
   buildTriageMessages,
   runTriage,
@@ -15,6 +17,8 @@ import {
   tierComposes,
   runPlanner,
   runExplainer,
+  runTroubleshooter,
+  runTranslator,
   runSecurityAnalyst,
 } from '../../../../apps/api/src/operator-agents.js'
 import type { Gateway, CompletionResult, CompletionObjectResult } from '../../../../apps/api/src/operator-gateway.js'
@@ -51,14 +55,24 @@ function gatewayProducing(...results: (object | Error)[]): { gateway: Gateway; c
 }
 
 describe('runTriage', () => {
-  it('returns the classified tier', async () => {
-    const { gateway } = gatewayProducing({ tier: 'change' })
-    expect(await runTriage(gateway, 'connect github')).toEqual({ ok: true, value: 'change' })
+  it('returns the classified tier and topic', async () => {
+    const { gateway } = gatewayProducing({ tier: 'change', topic: 'general' })
+    expect(await runTriage(gateway, 'connect github')).toEqual({ ok: true, value: { tier: 'change', topic: 'general' } })
   })
 
   it('classifies a read question into the read tier', async () => {
+    const { gateway } = gatewayProducing({ tier: 'read', topic: 'general' })
+    expect(await runTriage(gateway, 'what providers do I have')).toEqual({ ok: true, value: { tier: 'read', topic: 'general' } })
+  })
+
+  it('classifies a diagnostic read with the diagnostic topic', async () => {
+    const { gateway } = gatewayProducing({ tier: 'read', topic: 'diagnostic' })
+    expect(await runTriage(gateway, 'why was my agent denied')).toEqual({ ok: true, value: { tier: 'read', topic: 'diagnostic' } })
+  })
+
+  it('defaults the topic to general when the model omits it', async () => {
     const { gateway } = gatewayProducing({ tier: 'read' })
-    expect(await runTriage(gateway, 'what providers do I have')).toEqual({ ok: true, value: 'read' })
+    expect(await runTriage(gateway, 'what is in my zone')).toEqual({ ok: true, value: { tier: 'read', topic: 'general' } })
   })
 
   it('fails closed when classification does not pass the schema', async () => {
@@ -84,6 +98,13 @@ describe('buildTriageMessages', () => {
     expect(system).toContain('read')
     expect(system).toContain('change')
     expect(system).toContain('compound')
+  })
+
+  it('names the read topics so the model can route to a specialist', () => {
+    const system = buildTriageMessages('hello')[0].content
+    expect(system).toContain('diagnostic')
+    expect(system).toContain('integration')
+    expect(system).toContain('general')
   })
 })
 
@@ -296,6 +317,60 @@ describe('runExplainer', () => {
   it('fails closed on an empty answer', async () => {
     const { gateway } = gatewayReturning('   ')
     const result = await runExplainer(gateway, 'why', { facts: null, state: null })
+    expect(result).toMatchObject({ ok: false })
+  })
+})
+
+describe('buildTroubleshooterMessages', () => {
+  it('frames a diagnosis grounded in evidence and recent activity, never acting', () => {
+    const messages = buildTroubleshooterMessages('why was my agent denied', {
+      facts: null,
+      state: null,
+      evidence: [{ capability: 'listResources', domain: 'resource', ok: true, count: 1, names: ['Stripe invoices'] }],
+    })
+    const system = messages[0].content
+    expect(system).toContain('troubleshooting')
+    expect(system).toContain('denied')
+    expect(system).toContain('never make changes')
+    expect(messages[1].content).toContain('Live state (read just now)')
+  })
+})
+
+describe('runTroubleshooter', () => {
+  it('returns the diagnostic answer text', async () => {
+    const { gateway } = gatewayReturning('  No grant exists yet for that resource.  ')
+    const result = await runTroubleshooter(gateway, 'why denied', { facts: null, state: null })
+    expect(result).toEqual({ ok: true, value: { text: 'No grant exists yet for that resource.', reasoning: undefined } })
+  })
+
+  it('fails closed on an empty answer', async () => {
+    const { gateway } = gatewayReturning('   ')
+    const result = await runTroubleshooter(gateway, 'why', { facts: null, state: null })
+    expect(result).toMatchObject({ ok: false })
+  })
+})
+
+describe('buildTranslatorMessages', () => {
+  it('grounds integration guidance in the capability catalog and never acts', () => {
+    const messages = buildTranslatorMessages('how do I connect GitHub', { facts: null, state: null })
+    const system = messages[0].content
+    expect(system).toContain('integration')
+    // The connection kinds come from the real catalog so the guidance names valid options.
+    expect(system).toContain('connectProvider')
+    expect(system).toContain('never make changes')
+  })
+})
+
+describe('runTranslator', () => {
+  it('returns the integration guidance text', async () => {
+    const { gateway } = gatewayReturning('  Connect GitHub as an OAuth authorization-code provider.  ')
+    const result = await runTranslator(gateway, 'how do I connect GitHub', { facts: null, state: null })
+    expect(result).toEqual({ ok: true, value: { text: 'Connect GitHub as an OAuth authorization-code provider.', reasoning: undefined } })
+  })
+
+  it('fails closed on an empty answer', async () => {
+    const { gateway } = gatewayReturning('   ')
+    const result = await runTranslator(gateway, 'how', { facts: null, state: null })
     expect(result).toMatchObject({ ok: false })
   })
 })

@@ -14,10 +14,12 @@ import type { Gateway, GatewayMessage } from './operator-gateway.js'
 // a proposed plan, or an explanation — that the deterministic pipeline then
 // validates, previews, and governs. A model can propose; only Caracal decides.
 
-const TRIAGE_MAX_TOKENS = 16
+const TRIAGE_MAX_TOKENS = 32
 const PLANNER_MAX_TOKENS = 800
 const EXPLAINER_MAX_TOKENS = 600
 const SECURITY_ANALYST_MAX_TOKENS = 500
+const TROUBLESHOOTER_MAX_TOKENS = 600
+const TRANSLATOR_MAX_TOKENS = 600
 
 // The handling tier a request is triaged into: the smallest sufficient path, so a simple turn
 // never pays the planning pipeline. conversational and read are answered directly as text;
@@ -51,7 +53,27 @@ export function tierComposes(tier: OperatorTier): boolean {
   return tier === 'compound'
 }
 
-const TriageOutput = z.object({ tier: z.enum(['conversational', 'read', 'change', 'compound']) }).strict()
+const TriageOutput = z
+  .object({
+    tier: z.enum(['conversational', 'read', 'change', 'compound']),
+    topic: z.enum(['general', 'diagnostic', 'integration']).optional(),
+  })
+  .strict()
+
+// The answer specialty a read request is routed to, so a read tier picks the best-suited
+// read-only answer skill rather than always the general explainer. diagnostic routes a
+// "why was X denied / why did this fail" question to the troubleshooter; integration routes a
+// "how do I connect X / what scopes does Y need" question to the provider-resource translator;
+// general is everything else and uses the explainer. The topic only refines which read-only
+// answer skill replies — it never widens authority and is ignored on the planning tiers.
+export type OperatorTopic = 'general' | 'diagnostic' | 'integration'
+
+// The triage classification: the handling tier plus, for an answer, its specialty. The orchestrator
+// selects a skill from this — Caracal decides which skill runs, the model only classifies.
+export interface OperatorTriage {
+  tier: OperatorTier
+  topic: OperatorTopic
+}
 
 export function buildTriageMessages(message: string): GatewayMessage[] {
   return [
@@ -59,28 +81,33 @@ export function buildTriageMessages(message: string): GatewayMessage[] {
       role: 'system',
       content:
         'You triage a Caracal operator request into the smallest sufficient handling tier. Reply ' +
-        'with ONLY a JSON object {"tier":"<tier>"} and no prose. Tiers:\n' +
+        'with ONLY a JSON object {"tier":"<tier>","topic":"<topic>"} and no prose. Tiers:\n' +
         '- "conversational": a greeting, small talk, an acknowledgement, a question about what you ' +
         "can do, or a clarifying question — nothing about the operator's actual Caracal state.\n" +
         '- "read": a question that inspects or explains current state or a past decision, changing ' +
         'nothing.\n' +
         '- "change": a request to create, connect, rotate, grant, or set up ONE thing.\n' +
-        '- "compound": a request that combines several changes, or needs investigation before acting.',
+        '- "compound": a request that combines several changes, or needs investigation before acting.\n' +
+        'topic refines a read: "diagnostic" for why something was denied or a change failed, ' +
+        '"integration" for how to connect a provider or what scopes a resource needs, "general" for ' +
+        'anything else. Use "general" when unsure or when the tier is not read.',
     },
     { role: 'user', content: message },
   ]
 }
 
-// Classifies a request into the smallest sufficient tier. The model's answer is generated as a
-// schema-validated object, so an off-schema classification fails closed as an error rather than
-// a guessed tier; the orchestrator then defaults to the read tier, which never acts.
-export async function runTriage(gateway: Gateway, message: string): Promise<AgentResult<OperatorTier>> {
+// Classifies a request into the smallest sufficient tier and, for a read, its answer specialty.
+// The answer is generated as a schema-validated object, so an off-schema classification fails
+// closed as an error rather than a guessed tier; the orchestrator then defaults to a general read,
+// which never acts. topic defaults to general when the model omits it, so an older classification
+// shape stays valid and an absent specialty simply uses the explainer.
+export async function runTriage(gateway: Gateway, message: string): Promise<AgentResult<OperatorTriage>> {
   try {
     const completion = await gateway.completeObject(buildTriageMessages(message), TriageOutput, {
       maxTokens: TRIAGE_MAX_TOKENS,
       temperature: 0,
     })
-    return { ok: true, value: completion.value.tier }
+    return { ok: true, value: { tier: completion.value.tier, topic: completion.value.topic ?? 'general' } }
   } catch {
     return { ok: false, error: 'triage returned an unrecognized tier' }
   }
@@ -213,9 +240,81 @@ export async function runExplainer(
   return { ok: true, value: { text, reasoning: completion.reasoning } }
 }
 
-// The advisory severity of a single security finding. Advisory only: it informs the human who
-// approves the plan and never gates authority, which stays with validation, the Operator's
-// least-privilege grant, preview, and approval.
+export function buildTroubleshooterMessages(message: string, context: AgentContext): GatewayMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        'You are a read-only Caracal troubleshooting assistant. The operator is asking why an access ' +
+        'was denied or why a change failed. Diagnose the most likely cause in plain language and give ' +
+        'a concrete next step, for an operator who should not need to know Caracal internals. Ground ' +
+        'your diagnosis in the live state and the recent activity in the context — the last error, ' +
+        'the latest plan and how it was decided, and what exists in the zone — and do not invent ' +
+        'applications, providers, resources, or policies the context does not show. A denial is ' +
+        'usually a missing grant, a missing scope, or a resource or application that does not exist ' +
+        'yet. You never make changes and must not claim to; when a fix needs a change, tell the ' +
+        'operator to ask for it so it can be planned and approved.',
+    },
+    { role: 'user', content: `Context:\n${describeContext(context)}\n\nProblem: ${message}` },
+  ]
+}
+
+// Diagnoses a denial or failure as a read-only answer. It shares the read tier's governed
+// evidence and the conversation's error and decision history; it carries no authority and
+// performs no action, so a diagnosis can only inform — any fix still flows through the governed
+// plan path.
+export async function runTroubleshooter(
+  gateway: Gateway,
+  message: string,
+  context: AgentContext,
+): Promise<AgentResult<{ text: string; reasoning?: string }>> {
+  const completion = await gateway.complete(buildTroubleshooterMessages(message, context), {
+    maxTokens: TROUBLESHOOTER_MAX_TOKENS,
+    temperature: 0.2,
+  })
+  const text = completion.text.trim()
+  if (text.length === 0) return { ok: false, error: 'troubleshooter returned an empty answer' }
+  return { ok: true, value: { text, reasoning: completion.reasoning } }
+}
+
+export function buildTranslatorMessages(message: string, context: AgentContext): GatewayMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        'You are a read-only Caracal integration assistant. The operator is asking how to connect a ' +
+        'provider or what a resource and its scopes should look like. Translate the real-world nouns ' +
+        'they use — a SaaS product, an API, a permission — into the Caracal terms that express them, ' +
+        'using ONLY the capabilities below. Name the provider connection kind that fits (for example ' +
+        'an OAuth authorization-code flow for a user-facing SaaS, client credentials for a ' +
+        'service-to-service API, or an API key or bearer token for a simple keyed API), and describe ' +
+        'the resource and scopes that would model the access. Ground your guidance in the live state ' +
+        'in the context so you do not propose something that already exists. You never make changes ' +
+        'and must not claim to; tell the operator to ask for the change so it can be planned and ' +
+        'approved.\n\nCapabilities:\n' +
+        describeCapabilitiesForPrompt(),
+    },
+    { role: 'user', content: `Context:\n${describeContext(context)}\n\nQuestion: ${message}` },
+  ]
+}
+
+// Translates a real-world integration request into Caracal connection and resource guidance as a
+// read-only answer. It is grounded in the capability catalog and the read tier's live evidence; it
+// carries no authority and performs no action, so it can only guide — the connection itself still
+// flows through the governed plan path.
+export async function runTranslator(
+  gateway: Gateway,
+  message: string,
+  context: AgentContext,
+): Promise<AgentResult<{ text: string; reasoning?: string }>> {
+  const completion = await gateway.complete(buildTranslatorMessages(message, context), {
+    maxTokens: TRANSLATOR_MAX_TOKENS,
+    temperature: 0.2,
+  })
+  const text = completion.text.trim()
+  if (text.length === 0) return { ok: false, error: 'translator returned an empty answer' }
+  return { ok: true, value: { text, reasoning: completion.reasoning } }
+}
 export type AdvisorySeverity = 'info' | 'caution' | 'warning'
 
 export interface AdvisoryFinding {

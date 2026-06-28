@@ -11,9 +11,11 @@ const emptyContext = { facts: null, state: null }
 
 // A gateway stub whose triage classification and free-text answer are scripted, so the
 // orchestrator's dispatch is exercised without a live model. The first structured completion is
-// the triage tier; free-text completions are the answer skill's output.
-function gatewayFor(tier: string, answer = 'an answer'): Gateway {
-  const completeObject = vi.fn().mockResolvedValue({ value: { tier }, provider: 't', model: 'm' } satisfies CompletionObjectResult<object>)
+// the triage classification (tier and topic); free-text completions are the answer skill's output.
+function gatewayFor(tier: string, answer = 'an answer', topic = 'general'): Gateway {
+  const completeObject = vi
+    .fn()
+    .mockResolvedValue({ value: { tier, topic }, provider: 't', model: 'm' } satisfies CompletionObjectResult<object>)
   const complete = vi.fn().mockResolvedValue({ text: answer, provider: 't', model: 'm' } satisfies CompletionResult)
   return { status: () => ({ enabled: true, providers: [] }), complete, completeObject } as unknown as Gateway
 }
@@ -42,14 +44,27 @@ function composingGateway(plan: object, advisory: object): Gateway {
 describe('createSkillRegistry', () => {
   it('maps change and compound tiers to the planning skill', () => {
     const registry = createSkillRegistry()
-    expect(registry.forTier('change').kind).toBe('plan')
-    expect(registry.forTier('compound').kind).toBe('plan')
+    expect(registry.select({ tier: 'change', topic: 'general' }).kind).toBe('plan')
+    expect(registry.select({ tier: 'compound', topic: 'general' }).kind).toBe('plan')
   })
 
   it('maps conversational and read tiers to the answering skill', () => {
     const registry = createSkillRegistry()
-    expect(registry.forTier('conversational').kind).toBe('answer')
-    expect(registry.forTier('read').kind).toBe('answer')
+    expect(registry.select({ tier: 'conversational', topic: 'general' }).kind).toBe('answer')
+    expect(registry.select({ tier: 'read', topic: 'general' }).kind).toBe('answer')
+  })
+
+  it('routes a read tier to the answer specialist named by its topic', () => {
+    const registry = createSkillRegistry()
+    expect(registry.select({ tier: 'read', topic: 'general' }).id).toBe('explainer')
+    expect(registry.select({ tier: 'read', topic: 'diagnostic' }).id).toBe('troubleshooter')
+    expect(registry.select({ tier: 'read', topic: 'integration' }).id).toBe('translator')
+  })
+
+  it('keeps a conversational tier on the general explainer regardless of topic', () => {
+    const registry = createSkillRegistry()
+    expect(registry.select({ tier: 'conversational', topic: 'diagnostic' }).id).toBe('explainer')
+    expect(registry.select({ tier: 'conversational', topic: 'integration' }).id).toBe('explainer')
   })
 })
 
@@ -105,7 +120,7 @@ describe('createOrchestrator', () => {
         return { ok: true, value: { text: 'probed' } }
       },
     }
-    const registry: SkillRegistry = { forTier: () => probeSkill }
+    const registry: SkillRegistry = { select: () => probeSkill }
     const result = await createOrchestrator(registry).handle(gatewayFor('change'), 'anything', emptyContext)
     // The orchestrator runs exactly the skill the registry returns, regardless of tier — the
     // seam later phases extend with specialist skills.
@@ -118,7 +133,7 @@ describe('createOrchestrator', () => {
     const researcher = { gather: vi.fn().mockResolvedValue({ evidence }) }
     let seen: unknown
     const registry: SkillRegistry = {
-      forTier: () => ({
+      select: () => ({
         id: 'probe',
         kind: 'answer',
         run: async (_g, _m, context) => {
@@ -132,6 +147,44 @@ describe('createOrchestrator', () => {
     // answering skill's context.
     expect(researcher.gather).toHaveBeenCalledTimes(1)
     expect(seen).toEqual(evidence)
+  })
+
+  it('routes a diagnostic read to the troubleshooter and an integration read to the translator', async () => {
+    // The default registry is used, so the real specialists run; the topic in the scripted triage
+    // decides which one. Both are read-only answer skills grounded in the gathered evidence.
+    const diagnostic = await createOrchestrator().handle(
+      gatewayFor('read', 'It was denied because no grant exists.', 'diagnostic'),
+      'why was my agent denied',
+      emptyContext,
+    )
+    expect(diagnostic.tier).toBe('read')
+    expect(diagnostic.outcome.kind).toBe('answer')
+
+    const integration = await createOrchestrator().handle(
+      gatewayFor('read', 'Connect it as an OAuth authorization-code provider.', 'integration'),
+      'how do I connect GitHub',
+      emptyContext,
+    )
+    expect(integration.tier).toBe('read')
+    expect(integration.outcome.kind).toBe('answer')
+  })
+
+  it('runs the read specialist the injected registry selects for a topic without any orchestrator change', async () => {
+    // The evolvability property: a new read specialist is added by registering it against a topic;
+    // the orchestrator selects and runs it unchanged.
+    const calls: string[] = []
+    const registry: SkillRegistry = {
+      select: ({ topic }) => ({
+        id: `probe-${topic}`,
+        kind: 'answer',
+        run: async () => {
+          calls.push(topic)
+          return { ok: true, value: { text: 'probed' } }
+        },
+      }),
+    }
+    await createOrchestrator(registry).handle(gatewayFor('read', 'x', 'diagnostic'), 'why denied', emptyContext)
+    expect(calls).toEqual(['diagnostic'])
   })
 
   it('does not gather evidence for a conversational tier', async () => {
@@ -155,7 +208,7 @@ describe('createOrchestrator', () => {
     const researcher = { gather: vi.fn().mockRejectedValue(new Error('control unreachable')) }
     let seen: unknown = 'unset'
     const registry: SkillRegistry = {
-      forTier: () => ({
+      select: () => ({
         id: 'probe',
         kind: 'answer',
         run: async (_g, _m, context) => {

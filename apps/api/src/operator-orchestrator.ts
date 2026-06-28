@@ -10,10 +10,13 @@ import {
   tierComposes,
   runPlanner,
   runExplainer,
+  runTroubleshooter,
+  runTranslator,
   runSecurityAnalyst,
   type AgentContext,
   type AgentResult,
   type OperatorTier,
+  type OperatorTriage,
   type SecurityAdvisory,
 } from './operator-agents.js'
 import type { ProposedPlanInput } from './operator-capabilities.js'
@@ -41,12 +44,12 @@ export interface PlanSkill {
 
 export type Skill = AnswerSkill | PlanSkill
 
-// The registry the orchestrator selects from. It maps each tier to exactly one handling skill,
-// so the dispatch is deterministic: the LLM triages into a tier, and Caracal — not the model —
-// decides which skill runs. Phases that add specialists register more skills and richer
-// tier-to-skill maps here; the orchestrator's contract does not change.
+// The registry the orchestrator selects from. It maps a triage classification to exactly one
+// handling skill, so the dispatch is deterministic: the LLM triages into a tier and topic, and
+// Caracal — not the model — decides which skill runs. A new specialist is added by registering it
+// here against a tier and topic; the orchestrator's contract does not change.
 export interface SkillRegistry {
-  forTier(tier: OperatorTier): Skill
+  select(triage: OperatorTriage): Skill
 }
 
 // The typed artifact a turn produced, tagged so the route runs the matching deterministic path:
@@ -77,13 +80,42 @@ const explainerSkill: AnswerSkill = {
   run: (gateway, message, context) => runExplainer(gateway, message, context),
 }
 
-// The default registry: change and compound tiers plan; conversational and read tiers answer.
-// This is exactly the tier split tierPlans encodes, surfaced as a registry so later phases swap
-// in specialist skills per tier without touching the orchestrator.
+// The read-only diagnostic skill: diagnoses why an access was denied or a change failed, grounded
+// in the live evidence and the conversation's error and decision history. It never acts.
+const troubleshooterSkill: AnswerSkill = {
+  id: 'troubleshooter',
+  kind: 'answer',
+  run: (gateway, message, context) => runTroubleshooter(gateway, message, context),
+}
+
+// The read-only integration skill: translates a real-world provider or resource into the Caracal
+// connection kind, resource, and scopes that express it, grounded in the catalog and live state.
+// It guides only; the connection itself still flows through the governed plan path.
+const translatorSkill: AnswerSkill = {
+  id: 'translator',
+  kind: 'answer',
+  run: (gateway, message, context) => runTranslator(gateway, message, context),
+}
+
+// Picks the read-only answer specialist for a read request's topic: diagnostic questions go to the
+// troubleshooter, integration questions to the provider-resource translator, and everything else
+// to the general explainer. A misclassified topic only changes which read-only answer replies — it
+// never widens authority — so it degrades safely to the explainer.
+function answerSkillForTopic(topic: OperatorTriage['topic']): AnswerSkill {
+  if (topic === 'diagnostic') return troubleshooterSkill
+  if (topic === 'integration') return translatorSkill
+  return explainerSkill
+}
+
+// The default registry: change and compound tiers plan; a read tier picks its answer specialist by
+// topic; a conversational tier always uses the general explainer. Each entry is a skill keyed on a
+// tier and topic, so a new specialist is added here without touching the orchestrator.
 export function createSkillRegistry(): SkillRegistry {
   return {
-    forTier(tier: OperatorTier): Skill {
-      return tierPlans(tier) ? plannerSkill : explainerSkill
+    select({ tier, topic }: OperatorTriage): Skill {
+      if (tierPlans(tier)) return plannerSkill
+      if (tier === 'read') return answerSkillForTopic(topic)
+      return explainerSkill
     },
   }
 }
@@ -115,9 +147,9 @@ async function withEvidence(context: AgentContext, researcher: Researcher | null
   }
 }
 
-// Builds the orchestrator over a skill registry. Per turn it triages the request to its tier
-// then runs the one skill the registry maps that tier to. A triage that fails the schema
-// defaults to the read tier, which answers as text and never acts — the safe direction on
+// Builds the orchestrator over a skill registry. Per turn it triages the request to its tier and,
+// for a read, its topic, then runs the one skill the registry selects. A triage that fails the
+// schema defaults to a general read, which answers as text and never acts — the safe direction on
 // ambiguity. A read tier grounds its answer in live state gathered through governed reads. A
 // compound tier composes specialists: it gathers live state, plans against it, and runs an
 // advisory security review over the proposed plan. Every plan — single or composed — still flows
@@ -128,8 +160,9 @@ export function createOrchestrator(registry: SkillRegistry = createSkillRegistry
   return {
     async handle(gateway, message, context, options = {}): Promise<OrchestrationResult> {
       const triage = await runTriage(gateway, message)
-      const tier: OperatorTier = triage.ok ? triage.value : 'read'
-      const skill = registry.forTier(tier)
+      const classification: OperatorTriage = triage.ok ? triage.value : { tier: 'read', topic: 'general' }
+      const tier = classification.tier
+      const skill = registry.select(classification)
 
       if (skill.kind === 'plan') {
         // A compound request plans against freshly read live state; a single change does not, so
