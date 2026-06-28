@@ -1507,6 +1507,169 @@ describe('POST /v1/zones/:zoneId/operator-conversations/:id/message', () => {
     expect(body.preview.steps[0]).toMatchObject({ effect: 'create' })
   })
 
+  it('auto-approves a low-risk plan in agent mode when autopilot is engaged and the policy allows it', async () => {
+    // registerApplication is allowlisted, governed-executable, not on the denied floor, and
+    // previews as a clean create — so Caracal's evaluator auto-satisfies the approval. The
+    // conversation row reports agent mode with autopilot engaged.
+    const plan = { summary: 'Register the billing app', steps: [{ id: 's1', capability: 'registerApplication', args: { name: 'Billing' } }] }
+    const fetchImpl = fetchReturning('{"tier":"change"}', JSON.stringify(plan))
+    const { app, clientQuery, db } = buildApp(true, {
+      aiProviders: [provider],
+      fetchImpl,
+      autopilotPolicy: buildAutopilotPolicy({ enabled: true, capabilities: ['registerApplication'], maxStepsPerPlan: 5 }),
+    })
+    // user message turn
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: true, next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1, kind: 'message' }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] }) // latest plan seq
+      .mockResolvedValueOnce({ rows: [] }) // error rows
+      .mockResolvedValueOnce({ rows: [] }) // messages
+      .mockResolvedValueOnce({ rows: [] }) // facts
+      .mockResolvedValueOnce({ rows: [] }) // previewPlan: application name free
+      .mockResolvedValueOnce({ rows: [{ n: 0 }] }) // countRecentAutoApprovals
+    // plan turn persist
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: true, next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'plan' }] })
+      .mockResolvedValueOnce(undefined)
+    // autopilot approval turn persist
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: true, next_seq: 3 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-3', seq: 3, kind: 'approval' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'register the billing app' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body).toMatchObject({ intent: 'plan', tier: 'change', ok: true, auto_approved: true })
+    expect(body.approval_turn).toMatchObject({ kind: 'approval' })
+    // The approval turn was persisted referencing the plan's seq and attributed to autopilot.
+    const approvalInsert = clientQuery.mock.calls.find(
+      (c) => String(c[0]).includes('INSERT INTO operator_turns') && String(c[1]?.[5]) === 'approval',
+    )
+    expect(approvalInsert).toBeDefined()
+    const content = JSON.parse(String(approvalInsert![1][6]))
+    expect(content).toMatchObject({ plan_seq: 2, autopilot: true })
+  })
+
+  it('does not auto-approve a plan whose capability is not on the autopilot allowlist', async () => {
+    // connectProvider is governed-executable but not allowlisted here, so the evaluator stops for
+    // a human: the plan is persisted but no approval turn is recorded.
+    const plan = {
+      summary: 'Connect GitHub',
+      steps: [{ id: 's1', capability: 'connectProvider', args: { name: 'GitHub', kind: 'api_key' } }],
+    }
+    const fetchImpl = fetchReturning('{"tier":"change"}', JSON.stringify(plan))
+    const { app, clientQuery, db } = buildApp(true, {
+      aiProviders: [provider],
+      fetchImpl,
+      autopilotPolicy: buildAutopilotPolicy({ enabled: true, capabilities: ['registerApplication'], maxStepsPerPlan: 5 }),
+    })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: true, next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1, kind: 'message' }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }) // previewPlan: provider name free
+      .mockResolvedValueOnce({ rows: [{ n: 0 }] }) // countRecentAutoApprovals
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: true, next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'plan' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'connect github' },
+    })
+    expect(res.statusCode).toBe(201)
+    const body = JSON.parse(res.body)
+    expect(body).toMatchObject({ intent: 'plan', ok: true, auto_approved: false })
+    expect(body.approval_turn).toBeNull()
+    // No approval turn was written: the plan waits for a human.
+    expect(clientQuery.mock.calls.some((c) => String(c[0]).includes('INSERT INTO operator_turns') && String(c[1]?.[5]) === 'approval')).toBe(false)
+  })
+
+  it('does not auto-approve when autopilot is not engaged on the conversation', async () => {
+    // The deployment policy allows the capability, but the conversation has not engaged autopilot,
+    // so no auto-approval happens and the policy is never even evaluated against the budget.
+    const plan = { summary: 'Register the billing app', steps: [{ id: 's1', capability: 'registerApplication', args: { name: 'Billing' } }] }
+    const fetchImpl = fetchReturning('{"tier":"change"}', JSON.stringify(plan))
+    const { app, clientQuery, db } = buildApp(true, {
+      aiProviders: [provider],
+      fetchImpl,
+      autopilotPolicy: buildAutopilotPolicy({ enabled: true, capabilities: ['registerApplication'], maxStepsPerPlan: 5 }),
+    })
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: false, next_seq: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-1', seq: 1, kind: 'message' }] })
+      .mockResolvedValueOnce(undefined)
+    db.query
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [] }) // previewPlan
+    clientQuery
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ rows: [{ status: 'active', mode: 'agent', autopilot: false, next_seq: 2 }] })
+      .mockResolvedValueOnce({ rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ id: 'turn-2', seq: 2, kind: 'plan' }] })
+      .mockResolvedValueOnce(undefined)
+    await app.ready()
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/zones/z1/operator-conversations/conv-1/message',
+      payload: { message: 'register the billing app' },
+    })
+    expect(res.statusCode).toBe(201)
+    expect(JSON.parse(res.body)).toMatchObject({ auto_approved: false, approval_turn: null })
+    // The budget query is never run because autopilot is not engaged.
+    expect(db.query.mock.calls.some((c) => String(c[0]).includes("content->>'autopilot'"))).toBe(false)
+  })
+
+  it('surfaces autopilot availability and its allowlist on the status endpoint', async () => {
+    const { app } = buildApp(true, {
+      aiProviders: [provider],
+      autopilotPolicy: buildAutopilotPolicy({ enabled: true, capabilities: ['registerApplication'], maxStepsPerPlan: 3 }),
+    })
+    await app.ready()
+    const res = await app.inject({ method: 'GET', url: '/v1/operator/status' })
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.autopilot).toEqual({ available: true, capabilities: ['registerApplication'], max_steps_per_plan: 3 })
+  })
+
+  it('reports autopilot unavailable by default', async () => {
+    const { app } = buildApp(true, { aiProviders: [provider] })
+    await app.ready()
+    const res = await app.inject({ method: 'GET', url: '/v1/operator/status' })
+    expect(JSON.parse(res.body).autopilot).toEqual({ available: false })
+  })
+
   it('refuses to plan in ask mode and answers with a switch-to-agent note', async () => {
     // Ask mode is read-only. Triage classifies the request as a change, but the orchestrator
     // short-circuits to a deterministic switch-to-agent answer and never calls the planner, so

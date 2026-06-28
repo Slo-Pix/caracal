@@ -705,6 +705,9 @@ export interface OperatorConversation {
   title: string;
   status: OperatorConversationStatus;
   mode: OperatorConversationMode;
+  // Whether this conversation has engaged Caracal-governed autopilot. Honored only in agent mode;
+  // what it may auto-approve is set in Caracal, never by the conversation.
+  autopilot: boolean;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -862,6 +865,10 @@ export type OperatorMessageResult = (
       preview: { ok: boolean; mutating: boolean; steps: OperatorValidatedStep[] };
       // Present only for a composed (compound) plan; absent for a single change.
       advisory?: OperatorSecurityAdvisory;
+      // Whether Caracal-governed autopilot auto-satisfied this plan's approval, and the approval
+      // turn it recorded. False with a null turn whenever autopilot did not act.
+      auto_approved?: boolean;
+      approval_turn?: OperatorTurn | null;
     }
   | { intent: "plan"; ok: false; error: string; turn: OperatorTurn | null }
   | { intent: "explain"; ok: boolean; text: string; reasoning?: string; turn: OperatorTurn | null }

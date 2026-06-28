@@ -124,6 +124,8 @@ import {
   useRenameOperatorConversation,
   useRestoreOperatorConversation,
   useSetOperatorConversationMode,
+  useSetOperatorConversationAutopilot,
+  useOperatorAutopilotAvailable,
   useSendOperatorMessage,
 } from "@/platform/api/hooks";
 import {
@@ -494,6 +496,7 @@ function OperatorWorkspace() {
             zoneId={zoneId}
             conversationId={selectedId}
             mode={(conversations.data ?? []).find((c) => c.id === selectedId)?.mode ?? "agent"}
+            autopilot={(conversations.data ?? []).find((c) => c.id === selectedId)?.autopilot ?? false}
             initialMessage={pendingMessage}
             onInitialConsumed={() => setPendingMessage(null)}
             onUsage={(meta) => recordUsage(selectedId, meta)}
@@ -1048,10 +1051,54 @@ function ModeToggle({
   );
 }
 
+// The per-conversation autopilot engage control, shown only in agent mode and only when the
+// deployment has an autopilot policy that could approve something. Engaging it lets Caracal
+// auto-satisfy the approval for low-risk changes it has pre-authorized; what may be auto-approved
+// is set in Caracal, never here, and major or non-allowlisted changes always still stop for a
+// human. The control only flips the conversation's engage flag — it never widens what autopilot
+// may do.
+function AutopilotToggle({
+  autopilot,
+  pending,
+  onChange,
+}: {
+  autopilot: boolean;
+  pending: boolean;
+  onChange: (autopilot: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Autopilot</span>
+        <span className="text-xs text-muted-foreground">
+          {autopilot
+            ? "Caracal auto-approves low-risk changes it has pre-authorized; major changes still need you."
+            : "Off — every change waits for your approval."}
+        </span>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={autopilot}
+        aria-label="Autopilot"
+        disabled={pending}
+        onClick={() => onChange(!autopilot)}
+        className={cx(
+          "flex flex-shrink-0 items-center border px-2.5 py-1 text-xs transition-colors",
+          autopilot ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground",
+        )}
+      >
+        {autopilot ? "On" : "Off"}
+      </button>
+    </div>
+  );
+}
+
 function ActivityStream({
   zoneId,
   conversationId,
   mode,
+  autopilot,
   initialMessage,
   onInitialConsumed,
   onUsage,
@@ -1063,6 +1110,7 @@ function ActivityStream({
   zoneId: string | null;
   conversationId: string;
   mode: OperatorConversationMode;
+  autopilot: boolean;
   initialMessage?: string | null;
   onInitialConsumed?: () => void;
   onUsage?: (meta: OperatorUsageMeta) => void;
@@ -1074,6 +1122,8 @@ function ActivityStream({
   const { data: turns, isLoading } = useOperatorTurns(zoneId, conversationId);
   const send = useSendOperatorMessage(zoneId, conversationId);
   const setMode = useSetOperatorConversationMode(zoneId);
+  const setAutopilot = useSetOperatorConversationAutopilot(zoneId);
+  const { data: autopilotAvailable } = useOperatorAutopilotAvailable();
   const [message, setMessage] = useState("");
   const [queued, setQueued] = useState<QueuedMessage[]>([]);
 
@@ -1173,6 +1223,13 @@ function ActivityStream({
         pending={setMode.isPending}
         onChange={(next) => setMode.mutate({ id: conversationId, mode: next })}
       />
+      {mode === "agent" && autopilotAvailable ? (
+        <AutopilotToggle
+          autopilot={autopilot}
+          pending={setAutopilot.isPending}
+          onChange={(next) => setAutopilot.mutate({ id: conversationId, autopilot: next })}
+        />
+      ) : null}
       <MemoryStrip zoneId={zoneId} conversationId={conversationId} />
 
       <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-4">
