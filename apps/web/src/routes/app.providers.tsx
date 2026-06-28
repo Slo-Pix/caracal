@@ -526,7 +526,7 @@ function ProviderConnections({ provider, zoneId }: { provider: Provider; zoneId:
     <DetailSection
       title={`Connected users (${rows.length})`}
       action={
-        <Button variant="secondary" size="sm" onClick={() => setConnectOpen(true)}>
+        <Button variant="secondary" size="sm" mutating onClick={() => setConnectOpen(true)}>
           Connect user
         </Button>
       }

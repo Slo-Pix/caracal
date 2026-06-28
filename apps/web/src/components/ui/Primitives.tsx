@@ -147,6 +147,9 @@ export function Field({
   hint?: string;
   error?: string;
 }) {
+  // On a read-only surface every editable field is disabled, so a view-only page cannot be used
+  // to stage a change. Search is a separate control, so inspection stays fully usable.
+  const { readOnly } = useViewOnly();
   return (
     <label className="block" htmlFor={id}>
       <FieldLabel label={label} info={info} />
@@ -159,6 +162,7 @@ export function Field({
           className,
         )}
         {...props}
+        disabled={readOnly || props.disabled}
       />
       {error ? (
         <span className="mt-1 block text-xs text-destructive">{error}</span>
@@ -182,6 +186,7 @@ export function PasswordField({
   onRevealChange?: (revealed: boolean) => void;
 }) {
   const [show, setShow] = useState(false);
+  const { readOnly } = useViewOnly();
   function toggle() {
     setShow((value) => {
       const next = !value;
@@ -198,6 +203,7 @@ export function PasswordField({
           type={show ? "text" : "password"}
           className={cx(fieldBase, "h-9 pr-9", className)}
           {...props}
+          disabled={readOnly || props.disabled}
         />
         <button
           type="button"
@@ -249,10 +255,16 @@ export function Textarea({
   info?: string;
   hint?: string;
 }) {
+  const { readOnly } = useViewOnly();
   return (
     <label className="block" htmlFor={id}>
       <FieldLabel label={label} info={info} />
-      <textarea id={id} className={cx(fieldBase, "min-h-20 py-2", className)} {...props} />
+      <textarea
+        id={id}
+        className={cx(fieldBase, "min-h-20 py-2", className)}
+        {...props}
+        disabled={readOnly || props.disabled}
+      />
       {hint ? <span className="mt-1 block text-xs text-muted-foreground">{hint}</span> : null}
     </label>
   );
@@ -266,10 +278,16 @@ export function Select({
   children,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & { label?: string; info?: string }) {
+  const { readOnly } = useViewOnly();
   return (
     <label className="block" htmlFor={id}>
       <FieldLabel label={label} info={info} />
-      <select id={id} className={cx(fieldBase, "h-9 cursor-pointer pr-8", className)} {...props}>
+      <select
+        id={id}
+        className={cx(fieldBase, "h-9 cursor-pointer pr-8", className)}
+        {...props}
+        disabled={readOnly || props.disabled}
+      >
         {children}
       </select>
     </label>

@@ -4,10 +4,12 @@ Caracal, a product of Garudex Labs
 
 This file builds the type-safe client router for the SPA.
 */
-import { QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryClient } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
 
 import { ErrorState } from "./components/ErrorState";
+import { ConsoleApiError } from "./platform/api/client";
+import { pushNotification } from "./platform/state/notifications";
 import { routeTree } from "./routeTree.gen";
 
 // Centralized data contract for every console query: cache briefly, never retry
@@ -15,6 +17,22 @@ import { routeTree } from "./routeTree.gen";
 // reconnect so the control plane recovers cleanly after a dropped connection.
 export function buildQueryClient(): QueryClient {
   return new QueryClient({
+    // The read-only system-zone viewer blocks every mutation at the API client, so a control
+    // rendered without its read-only state still cannot change anything. This single mutation
+    // observer turns that refusal into one honest message instead of a silent or generic
+    // failure, no matter which control raised it.
+    mutationCache: new MutationCache({
+      onError: (error) => {
+        if (error instanceof ConsoleApiError && error.code === "system_zone_read_only") {
+          pushNotification({
+            tone: "error",
+            title: "Read-only view",
+            description:
+              "This is Caracal's internal system zone, shown read-only for transparency.",
+          });
+        }
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: 15_000,

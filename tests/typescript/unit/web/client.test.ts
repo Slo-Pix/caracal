@@ -428,3 +428,57 @@ describe('operator conversation lifecycle', () => {
     })
   })
 })
+
+describe('read-only system-zone viewer chokepoint', () => {
+  function installViewerTab(search: string): void {
+    const store = new Map<string, string>()
+    ;(globalThis as { window?: unknown }).window = {
+      location: { search },
+      sessionStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => store.set(k, v),
+        removeItem: (k: string) => store.delete(k),
+      },
+    }
+  }
+
+  afterEach(() => {
+    delete (globalThis as { window?: unknown }).window
+  })
+
+  it('blocks a mutating request from the viewer tab without sending it', async () => {
+    installViewerTab('?systemZone=1')
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await expect(consoleApi.applications.patch('z1', 'app-1', { name: 'x' })).rejects.toMatchObject({
+      status: 403,
+      code: 'system_zone_read_only',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('blocks every mutating method from the viewer tab', async () => {
+    installViewerTab('?systemZone=1')
+    const fetchMock = vi.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await expect(consoleApi.zones.create({ name: 'n', slug: 's' })).rejects.toMatchObject({ code: 'system_zone_read_only' })
+    await expect(consoleApi.applications.delete('z1', 'app-1')).rejects.toMatchObject({ code: 'system_zone_read_only' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('still allows reads from the viewer tab', async () => {
+    installViewerTab('?systemZone=1')
+    const fetchMock = vi.fn(async () => jsonResponse(200, { id: 'z1', name: 'Zone One' }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await expect(consoleApi.zones.get('z1')).resolves.toEqual({ id: 'z1', name: 'Zone One' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not block mutations outside the viewer tab', async () => {
+    installViewerTab('')
+    const fetchMock = vi.fn(async () => jsonResponse(201, { id: 'app-1' }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+    await expect(consoleApi.applications.create('z1', { name: 'a', registration_method: 'managed' })).resolves.toEqual({ id: 'app-1' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+})

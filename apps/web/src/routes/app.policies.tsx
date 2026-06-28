@@ -419,7 +419,7 @@ function PolicySetInspector({
           <Button variant="secondary" size="sm" onClick={onSimulate}>
             Simulate
           </Button>
-          <Button size="sm" onClick={onNewVersion}>
+          <Button size="sm" mutating onClick={onNewVersion}>
             New version
           </Button>
         </div>
@@ -449,7 +449,7 @@ function PolicySetInspector({
           <p className="text-xs text-muted-foreground">
             Remove this policy set. An active set falling away leaves the zone deny-all.
           </p>
-          <Button variant="danger" size="sm" onClick={onDelete}>
+          <Button variant="danger" size="sm" mutating onClick={onDelete}>
             Delete
           </Button>
         </div>
@@ -1061,7 +1061,7 @@ function PolicyInspector({
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone="neutral">{policy.owner_type}</Badge>
         <div className="ml-auto">
-          <Button size="sm" onClick={onNewVersion}>
+          <Button size="sm" mutating onClick={onNewVersion}>
             New version
           </Button>
         </div>
@@ -1108,7 +1108,7 @@ function PolicyInspector({
         </h3>
         <div className="mt-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">Remove this policy and all its versions.</p>
-          <Button variant="danger" size="sm" onClick={onDelete}>
+          <Button variant="danger" size="sm" mutating onClick={onDelete}>
             Delete
           </Button>
         </div>

@@ -392,7 +392,7 @@ export function DangerZone({
     <DetailSection title="Danger zone">
       <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3">
         <p className="min-w-0 text-xs text-muted-foreground">{description}</p>
-        <Button variant="danger" size="sm" onClick={onAction} className="flex-shrink-0">
+        <Button variant="danger" size="sm" mutating onClick={onAction} className="flex-shrink-0">
           {actionLabel}
         </Button>
       </div>

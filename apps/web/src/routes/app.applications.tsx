@@ -443,6 +443,7 @@ function IdentitySection({
               <Button
                 size="sm"
                 loading={busy}
+                mutating
                 disabled={!name.trim() || name.trim() === app.name}
                 onClick={() => void onRename(name.trim()).then(() => setEditing(false))}
               >
@@ -462,7 +463,7 @@ function IdentitySection({
           ) : (
             <div className="flex min-h-9 items-center justify-between gap-2">
               <span className="min-w-0 break-words text-sm text-foreground">{app.name}</span>
-              <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              <Button variant="ghost" size="sm" mutating onClick={() => setEditing(true)}>
                 Rename
               </Button>
             </div>
@@ -485,7 +486,7 @@ function CredentialsSection({ onRotate }: { onRotate: () => void }) {
           The client secret is shown only once. Rotate to issue a new secret and invalidate the old
           one immediately.
         </p>
-        <Button variant="secondary" size="sm" onClick={onRotate} className="flex-shrink-0">
+        <Button variant="secondary" size="sm" mutating onClick={onRotate} className="flex-shrink-0">
           Rotate secret
         </Button>
       </div>

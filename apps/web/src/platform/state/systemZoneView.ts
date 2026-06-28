@@ -9,8 +9,8 @@ This file holds the per-tab read-only system-zone viewer latch shared by the API
 // the per-tab sessionStorage latch it sets. The flag is latched so it survives in-tab navigation
 // (which drops the query string) while staying strictly per-tab: a normal tab is never switched
 // into the viewer, and the shared active-zone storage is never touched.
-export const SYSTEM_ZONE_VIEW_PARAM = "systemZone";
-export const SYSTEM_ZONE_VIEW_KEY = "caracal.systemZoneView";
+const SYSTEM_ZONE_VIEW_PARAM = "systemZone";
+const SYSTEM_ZONE_VIEW_KEY = "caracal.systemZoneView";
 
 // The relative URL that opens the reserved system zone in a new, read-only viewer tab.
 export function systemZoneViewPath(): string {
