@@ -102,6 +102,11 @@ export interface Config {
   operatorAutopilotMaxSteps: number
   operatorAutopilotWindowSec: number
   operatorAutopilotWindowMax: number
+  // Caracal-set governance over the Operator's model usage, enforced above the spine: a hard
+  // ceiling on a single completion's output tokens and a per-turn model-call budget. Both have
+  // safe defaults that bound runaways without affecting normal operation; zero lifts a bound.
+  operatorAiMaxOutputTokens: number
+  operatorAiMaxCallsPerTurn: number
   // Internal-only: when set, the Operator provisions and self-governs the reserved
   // caracal.sys system zone, executing through the governed control plane as a real
   // least-privilege control identity — exactly as a customer's control key does — rather
@@ -277,6 +282,8 @@ export function loadConfig(): Config {
     operatorAutopilotMaxSteps: intEnv('API_OPERATOR_AUTOPILOT_MAX_STEPS', 1, 1),
     operatorAutopilotWindowSec: intEnv('API_OPERATOR_AUTOPILOT_WINDOW_SEC', 3600, 0),
     operatorAutopilotWindowMax: intEnv('API_OPERATOR_AUTOPILOT_WINDOW_MAX', 10, 0),
+    operatorAiMaxOutputTokens: intEnv('API_OPERATOR_AI_MAX_OUTPUT_TOKENS', 4096, 0),
+    operatorAiMaxCallsPerTurn: intEnv('API_OPERATOR_AI_MAX_CALLS_PER_TURN', 12, 0),
     operatorSelfGovern: loadOperatorSelfGovern(),
     operatorControlSecret: process.env.API_OPERATOR_CONTROL_CLIENT_SECRET?.trim() || null,
     metricsBearer: process.env.METRICS_BEARER ?? null,

@@ -672,9 +672,10 @@ export const consoleApi = {
     get: (zoneId: string, id: string) =>
       request<Agent>(`/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}`),
     children: async (zoneId: string, id: string) => {
-      return request<Agent[]>(
+      const res = await request<CoordinatorList<Agent>>(
         `/coord/zones/${encodeURIComponent(zoneId)}/agents/${encodeURIComponent(id)}/children`,
       );
+      return res.items;
     },
     effectiveAuthority: (zoneId: string, id: string) =>
       request<EffectiveAuthority>(
