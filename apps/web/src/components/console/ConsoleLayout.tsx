@@ -15,9 +15,13 @@ import { NotificationsMenu } from "@/components/console/NotificationsMenu";
 import { LanguageMenu } from "@/components/console/LanguageMenu";
 import { Sidebar } from "@/components/console/Sidebar";
 import { UtilityRail } from "@/components/console/UtilityRail";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { ViewOnlyProvider } from "@/components/ui/ViewOnly";
 import { useSystemZoneView } from "@/platform/api/hooks";
 import { cx } from "@/lib/cx";
+
+const SYSTEM_ZONE_VIEW_REASON =
+  "This is Caracal's internal system zone, shown read-only for transparency. Caracal governs it through its own policies, so changes are disabled here.";
 
 const COLLAPSE_KEY = "caracal.sidebar.collapsed";
 
@@ -61,11 +65,13 @@ export function ConsoleLayout() {
   }, []);
 
   return (
-    <ViewOnlyProvider
-      readOnly={systemView}
-      reason="Caracal governs this internal system zone - it is shown read-only for transparency."
-    >
-      <div className="flex h-screen overflow-hidden bg-background text-foreground">
+    <ViewOnlyProvider readOnly={systemView} reason={SYSTEM_ZONE_VIEW_REASON}>
+      <div
+        className={cx(
+          "flex h-screen overflow-hidden bg-background text-foreground",
+          systemView && "ring-2 ring-inset ring-pink-500",
+        )}
+      >
         <aside
           className={cx(
             "hidden flex-shrink-0 border-r border-border transition-[width] duration-200 md:block",
@@ -121,32 +127,33 @@ export function ConsoleLayout() {
             </div>
 
             <div className="flex items-center gap-2">
+              {systemView ? (
+                <Tooltip label={SYSTEM_ZONE_VIEW_REASON} side="bottom" align="end">
+                  <span
+                    tabIndex={0}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-pink-500/40 bg-pink-500/10 px-2.5 py-1 text-xs font-medium text-pink-600 outline-none focus-visible:ring-2 focus-visible:ring-pink-500 dark:text-pink-400"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-3.5 w-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect x="3" y="11" width="18" height="11" rx="2" />
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                    </svg>
+                    View only
+                  </span>
+                </Tooltip>
+              ) : null}
               <NotificationsMenu />
               <LanguageMenu />
             </div>
           </header>
-
-          {systemView ? (
-            <div className="flex flex-shrink-0 items-center gap-2 border-b border-border bg-accent/40 px-4 py-2 text-xs text-muted-foreground">
-              <svg
-                viewBox="0 0 24 24"
-                className="h-3.5 w-3.5 flex-shrink-0"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="3" y="11" width="18" height="11" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <span>
-                Read-only system zone. This tab shows Caracal&apos;s internal infrastructure for
-                transparency; every change is disabled here.
-              </span>
-            </div>
-          ) : null}
 
           <main
             className={cx(
