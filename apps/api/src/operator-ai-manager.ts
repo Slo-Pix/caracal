@@ -9,7 +9,14 @@ import type { OperatorControlIdentity } from './config.js'
 import type { ProviderConfig } from './operator-gateway.js'
 import type { OperatorLlmTransport } from './operator-llm-transport.js'
 import { GovernedUpstream, provisionGovernedUpstreams } from './system-zone.js'
-import { deleteAiProvider, getAiProvider, listAiProviders, upsertAiProvider, type OperatorAiProviderRecord } from './operator-ai-store.js'
+import {
+  deleteAiProvider,
+  getAiProvider,
+  listAiProviders,
+  upsertAiProvider,
+  type AuthPlacement,
+  type OperatorAiProviderRecord,
+} from './operator-ai-store.js'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 
@@ -22,6 +29,7 @@ export interface OperatorAiProviderView {
   models: string[]
   contextWindow: number
   enabled: boolean
+  auth: AuthPlacement
 }
 
 function toView(record: OperatorAiProviderRecord): OperatorAiProviderView {
@@ -32,6 +40,7 @@ function toView(record: OperatorAiProviderRecord): OperatorAiProviderView {
     models: record.models,
     contextWindow: record.contextWindow,
     enabled: record.enabled,
+    auth: record.auth,
   }
 }
 
@@ -43,6 +52,7 @@ export interface CreateProviderInput {
   contextWindow: number
   apiKey: string
   enabled: boolean
+  auth: AuthPlacement
 }
 
 export interface UpdateProviderInput {
@@ -51,6 +61,7 @@ export interface UpdateProviderInput {
   models?: string[]
   contextWindow?: number
   enabled?: boolean
+  auth?: AuthPlacement
 }
 
 // Raised when a write is attempted while governed execution is not configured. The routes map
@@ -127,7 +138,7 @@ export function mergeDesiredUpstreams(
   for (const upstream of envUpstreams) bySlug.set(upstream.id, upstream)
   for (const record of records) {
     const apiKey = keyOverride && keyOverride.slug === record.slug ? keyOverride.apiKey : undefined
-    bySlug.set(record.slug, { id: record.slug, baseUrl: record.baseUrl, apiKey })
+    bySlug.set(record.slug, { id: record.slug, baseUrl: record.baseUrl, apiKey, auth: record.auth })
   }
   return [...bySlug.values()]
 }
@@ -190,6 +201,7 @@ export function createOperatorAiManager(deps: OperatorAiManagerDeps): OperatorAi
         models: input.models,
         contextWindow: input.contextWindow,
         enabled: input.enabled,
+        auth: input.auth,
       })
       await reconcile({ slug: input.slug, apiKey: input.apiKey })
       return toView(record)
@@ -206,6 +218,7 @@ export function createOperatorAiManager(deps: OperatorAiManagerDeps): OperatorAi
         models: patch.models ?? existing.models,
         contextWindow: patch.contextWindow ?? existing.contextWindow,
         enabled: patch.enabled ?? existing.enabled,
+        auth: patch.auth ?? existing.auth,
       })
       await reconcile()
       return toView(record)

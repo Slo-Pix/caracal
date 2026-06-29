@@ -421,7 +421,7 @@ export async function buildApp({ cfg, db, redis, isDraining }: AppDeps) {
         // store-managed providers (already sealed in a prior run, reconciled by identifier
         // without a key), so a restart never archives a console-added provider.
         const storeRecords = await listAiProviders(db)
-        const storeUpstreams: GovernedUpstream[] = storeRecords.map((record) => ({ id: record.slug, baseUrl: record.baseUrl }))
+        const storeUpstreams: GovernedUpstream[] = storeRecords.map((record) => ({ id: record.slug, baseUrl: record.baseUrl, auth: record.auth }))
         const desiredUpstreams = [...envGovernedUpstreams, ...storeUpstreams]
         const identity = await provisionSystemZone(admin, secret, audience, findZoneBySlug, desiredUpstreams)
         operatorControlIdentity.current = {

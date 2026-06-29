@@ -74,6 +74,7 @@ import type {
   OperatorAiProviderList,
   OperatorAiProviderInput,
   OperatorAiProviderPatch,
+  OperatorAiAuth,
   OperatorExecutionResult,
   OperatorMessageResult,
   OperatorNarrativeInput,
@@ -260,6 +261,20 @@ function queryString(params: Record<string, string | number | undefined>): strin
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";
+}
+
+// Maps the camelCase auth placement to the API's snake_case body. A header carries a name and an
+// optional scheme; a query carries a parameter name. The server defaults an omitted placement to
+// an Authorization Bearer header, so this only sends what the operator set.
+function serializeAuth(auth: OperatorAiAuth): Record<string, unknown> {
+  if (auth.location === "query") {
+    return { location: "query", query_param_name: auth.queryParamName ?? "api_key" };
+  }
+  return {
+    location: "header",
+    header_name: auth.headerName ?? "Authorization",
+    ...(auth.authScheme ? { auth_scheme: auth.authScheme } : {}),
+  };
 }
 
 export const CONTROL_INVOKE_TRAIT = "control:invoke";
@@ -560,6 +575,7 @@ export const consoleApi = {
             context_window: input.contextWindow,
             api_key: input.apiKey,
             enabled: input.enabled,
+            ...(input.auth ? { auth: serializeAuth(input.auth) } : {}),
           }),
         }),
       update: (slug: string, patch: OperatorAiProviderPatch) =>
@@ -571,6 +587,7 @@ export const consoleApi = {
             ...(patch.models !== undefined ? { models: patch.models } : {}),
             ...(patch.contextWindow !== undefined ? { context_window: patch.contextWindow } : {}),
             ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+            ...(patch.auth ? { auth: serializeAuth(patch.auth) } : {}),
           }),
         }),
       rotateKey: (slug: string, apiKey: string) =>
