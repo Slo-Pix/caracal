@@ -665,8 +665,18 @@ function sanitizeSlug(raw: string): string {
 function checkErrorMessage(err: unknown): string {
   if (err instanceof ConsoleApiError) {
     if (err.code === "ai_unavailable") return "No AI provider is configured for the Operator.";
-    if (err.code === "ai_unreachable")
-      return "The configured provider could not be reached. Check the endpoint and key.";
+    if (err.code === "ai_unreachable") {
+      // Surface the upstream's own status so a rejected key (401/403) reads differently from a
+      // wrong endpoint (404) or an unreachable host, rather than one ambiguous message.
+      const attempts = (err.detail as { attempts?: { reason?: string }[] } | undefined)?.attempts;
+      const reason = attempts?.[0]?.reason ?? "";
+      const status = reason.match(/status (\d{3})/)?.[1];
+      if (status === "401" || status === "403")
+        return "The provider rejected the key. Check the API key.";
+      if (status === "404") return "The endpoint was not found. Check the base URL.";
+      if (status) return `The provider returned ${status}. Check the endpoint and key.`;
+      return "The provider could not be reached. Check the endpoint.";
+    }
   }
   return "The connectivity check failed. Try again.";
 }
