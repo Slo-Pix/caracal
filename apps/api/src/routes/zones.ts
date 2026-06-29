@@ -310,12 +310,11 @@ export const zonesRoutes: FastifyPluginAsync = async (fastify) => {
     // id for the read-only transparency view, so only the list is filtered.
     const conds = ['archived_at IS NULL', `NOT ${RESERVED_ZONE_SQL}`]
     const values: unknown[] = []
-    // Per-account isolation: a Console login sees only the zones it owns, plus unowned legacy
-    // zones during the transition. A request with no bound account (direct admin) sees all, so
-    // break-glass enumeration is unaffected.
+    // Per-account isolation: a Console login sees only the zones it owns. A request with no
+    // bound account (direct admin) sees all, so break-glass enumeration is unaffected.
     if (req.account) {
       values.push(req.account.id)
-      conds.push(`(owner_account_id IS NULL OR owner_account_id = $${values.length})`)
+      conds.push(`owner_account_id = $${values.length}`)
     }
     const keyset = appendKeysetCondition({ conds, values }, page)
     const { rows } = await fastify.db.query(

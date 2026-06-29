@@ -644,11 +644,26 @@ describe('per-account zone isolation', () => {
     await app.close()
   })
 
-  it('allows any account to reach an unowned legacy zone (no lockout)', async () => {
+  it('fail-closed: forbids an account on an unowned (orphan/admin) zone', async () => {
     const app = await buildPluginApp(makeDb({ token: 'secret', zoneOwner: null }), undefined, { accountAssertionKey: 'secret' })
     const res = await app.inject({ method: 'GET', url: '/v1/zones/z1/things', headers: withAccount('acct-b') })
-    expect(res.statusCode).toBe(200)
+    expect(res.statusCode).toBe(403)
+    expect(res.json()).toEqual({ error: 'zone_forbidden' })
     await app.close()
+  })
+
+  it('allows any account to read the reserved system zone but not mutate it', async () => {
+    const read = await buildPluginApp(makeDb({ token: 'secret', zoneReserved: true }), undefined, { accountAssertionKey: 'secret' })
+    const ok = await read.inject({ method: 'GET', url: '/v1/zones/z1/things', headers: withAccount('acct-b') })
+    expect(ok.statusCode).toBe(200)
+    await read.close()
+    const write = await buildPluginApp(makeDb({ token: 'secret', createdBy: 'admin:x', zoneReserved: true }), undefined, {
+      accountAssertionKey: 'secret',
+    })
+    const blocked = await write.inject({ method: 'DELETE', url: '/v1/zones/z1', headers: withAccount('acct-b') })
+    expect(blocked.statusCode).toBe(403)
+    expect(blocked.json()).toEqual({ error: 'system_zone_read_only' })
+    await write.close()
   })
 
   it('does not isolate a direct admin call with no bound account (break-glass preserved)', async () => {

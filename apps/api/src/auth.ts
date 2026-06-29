@@ -460,19 +460,24 @@ const adminAuthImpl: FastifyPluginAsync<AuthPluginOptions> = async (fastify, opt
       }
     }
 
-    // Per-account zone isolation: a Console login may only reach a zone it owns. The guard
-    // activates only when an account is bound — direct admin and the internal provisioner carry
-    // no account, so break-glass access and provisioning are unaffected — and an unowned (legacy)
-    // zone stays reachable by everyone, so no existing zone is ever locked out. It covers reads
-    // and writes alike and every zone-scoped child path, since they all carry the zone id in the
-    // URL, so one account can never see or change another account's zone, applications, policies,
-    // audit, or operator history.
+    // Per-account zone isolation: a Console login may reach only zones it owns. The guard
+    // activates when an account is bound — direct admin and the internal provisioner carry no
+    // account, so break-glass access and provisioning keep full reach — and is fail-closed: a zone
+    // owned by another account or owned by no one is refused, so an orphaned or admin-created zone
+    // is never silently shared. The reserved system zone is the one exception: it is read-only
+    // infrastructure exposed to any account for transparency, so reads of it are allowed while
+    // mutations remain blocked by the reserved-zone guard above. The check covers reads and writes
+    // and every zone-scoped child path, since they all carry the zone id in the URL, so one account
+    // can never see or change another account's zone, applications, policies, audit, or operator
+    // history.
     const account = resolveAccount(req)
     if (account) {
       const reqZone = zoneFromUrl(req.url)
       if (reqZone !== INVALID_ZONE_ID) {
-        const owner = (await zoneMeta(reqZone)).owner
-        if (owner !== null && owner !== account.id) {
+        const meta = await zoneMeta(reqZone)
+        const ownedByCaller = meta.owner === account.id
+        const sharedSystemRead = meta.reserved && isReadOnlyRequest(req.method, req.url)
+        if (!ownedByCaller && !sharedSystemRead) {
           return reply.code(403).send({ error: 'zone_forbidden' })
         }
       }

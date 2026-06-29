@@ -68,7 +68,7 @@ describe('GET /v1/zones', () => {
     const res = await app.inject({ method: 'GET', url: '/v1/zones?limit=10' })
     expect(res.statusCode).toBe(200)
     const sql = String(db.query.mock.calls[0][0])
-    expect(sql).toContain('owner_account_id IS NULL OR owner_account_id = $1')
+    expect(sql).toContain('owner_account_id = $1')
     expect(db.query.mock.calls[0][1]).toEqual(['acct-9', 10])
   })
 
