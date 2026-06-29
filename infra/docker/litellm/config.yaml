@@ -1,19 +1,21 @@
 # Copyright (C) 2026 Garudex Labs.  All Rights Reserved.
 # Caracal, a product of Garudex Labs
 #
-# LiteLLM proxy config: normalizes every provider to the OpenAI wire format for the Operator, so model-specific parameter quirks never reach Caracal. No keys live here; the gateway injects the key Caracal sealed, and LiteLLM forwards it to the upstream.
+# LiteLLM proxy config: normalizes every provider to the OpenAI wire format for the Operator, so model-specific parameter quirks never reach Caracal. No keys live here; Caracal seals the upstream key, the gateway injects it as X-API-Key, and LiteLLM forwards it to the provider.
 
 litellm_settings:
-  # Drop or remap parameters a target model rejects (temperature/max_tokens for GPT-5), so one
-  # canonical request works across current and future models without Caracal changes.
   drop_params: true
 
-# Models match by name and route to a provider; the caller key the Caracal gateway injects from
-# the sealed provider is forwarded upstream, so no provider key is stored here.
 model_list:
+  - model_name: gpt-5.4-mini
+    litellm_params:
+      model: azure/gpt-5.4-mini
+      api_base: https://caracalaus.services.ai.azure.com
+      api_version: "2024-10-21"
   - model_name: "*"
     litellm_params:
       model: openai/*
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+  forward_llm_provider_auth_headers: true
