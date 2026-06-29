@@ -13,6 +13,17 @@ import type { Actor } from './auth.js'
 export const OSS_ORG_ID = '00000000-0000-0000-0000-000000000000'
 export const CARACAL_ORG_ID = 'caracal'
 
+// Resolves the org an open-source request acts under. Open source has no concept of orgs or teams,
+// so there is exactly one valid org: the sentinel. Caracal's own system org is accepted as-is so
+// the reserved system zone resolves; every other value is collapsed to the sentinel rather than
+// honoured, so a tampered org id in the URL or a request body can never address a non-existent org
+// — it simply lands back on the single open-source org. Org creation lives only in the enterprise
+// build, so without it no other org can exist; this keeps the open-source build correct even if the
+// guard is bypassed. Enterprise overrides org resolution with its real, validated org directory.
+export function resolveOssOrg(orgId: string | undefined): string {
+  return orgId === CARACAL_ORG_ID ? CARACAL_ORG_ID : OSS_ORG_ID
+}
+
 // The set of zone ids no tenant zone may take. The system zone is provisioned with a fixed,
 // reserved id so its URL is the same for everyone; everything else is generated. A generated id
 // landing on a reserved value is regenerated, so the reserved space is never silently occupied.

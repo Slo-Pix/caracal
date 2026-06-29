@@ -11,6 +11,7 @@ import {
   isReservedZone,
   mintZoneId,
   OSS_ORG_ID,
+  resolveOssOrg,
   RESERVED_ZONE_IDS,
   RESERVED_ZONE_SQL,
 } from '../../../../apps/api/src/reserved-namespace.js'
@@ -147,5 +148,22 @@ describe('mintZoneId', () => {
 
   it('never returns a reserved id', () => {
     expect(RESERVED_ZONE_IDS.has(mintZoneId(() => (OSS_ORG_ID === 'x' ? 'x' : 'zone-1')))).toBe(false)
+  })
+})
+
+describe('resolveOssOrg', () => {
+  it('keeps the open-source sentinel org', () => {
+    expect(resolveOssOrg(OSS_ORG_ID)).toBe(OSS_ORG_ID)
+  })
+
+  it('keeps the reserved Caracal system org', () => {
+    expect(resolveOssOrg('caracal')).toBe('caracal')
+  })
+
+  it('collapses any other org id to the sentinel (open source has no orgs)', () => {
+    expect(resolveOssOrg('acme-corp')).toBe(OSS_ORG_ID)
+    expect(resolveOssOrg('11111111-1111-1111-1111-111111111111')).toBe(OSS_ORG_ID)
+    expect(resolveOssOrg(undefined)).toBe(OSS_ORG_ID)
+    expect(resolveOssOrg('')).toBe(OSS_ORG_ID)
   })
 })
