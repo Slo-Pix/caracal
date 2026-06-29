@@ -6,6 +6,8 @@ This file holds browser-local Community Edition identity: the operator profile, 
 */
 import { useSyncExternalStore } from "react";
 
+import { refreshNotificationsForIdentity } from "@/platform/state/notifications";
+
 export interface InstallationRecord {
   name: string;
   onboarded: boolean;
@@ -201,11 +203,13 @@ export function reconcileLocalIdentity(serverUserId: string | null): void {
   const boundId = read<string | null>(OWNER_KEY, null);
   if (serverUserId === null) {
     if (boundId !== null || hasStoredIdentity()) clearLocalIdentity();
+    refreshNotificationsForIdentity();
     return;
   }
   if (boundId !== serverUserId) {
     clearLocalIdentity();
     write(OWNER_KEY, serverUserId);
+    refreshNotificationsForIdentity();
   }
 }
 
