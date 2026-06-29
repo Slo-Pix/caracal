@@ -13,6 +13,7 @@ model_list:
       model: azure/gpt-5.4-mini
       api_base: https://caracalaus.services.ai.azure.com
       api_version: preview
+      base_model: azure/gpt-5.4-mini
   - model_name: "*"
     litellm_params:
       model: openai/*
