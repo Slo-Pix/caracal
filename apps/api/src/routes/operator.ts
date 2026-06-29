@@ -497,6 +497,34 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
   const ProviderSlug = z.string().regex(PROVIDER_SLUG_PATTERN)
   const ProviderModels = z.array(z.string().trim().min(1).max(120)).min(1).max(20)
   const ProviderBaseUrl = z.string().trim().url().max(400)
+  // Where the sealed key is injected. A discriminated union mirrors the provider contract: a
+  // header carries a name and an optional scheme; a query carries a parameter name and forbids a
+  // scheme. Omitted, it defaults to an Authorization Bearer header, so the common case sends none.
+  const AuthBody = z
+    .discriminatedUnion('location', [
+      z.object({
+        location: z.literal('header'),
+        header_name: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/)
+          .default('Authorization'),
+        auth_scheme: z.string().trim().max(32).optional(),
+      }),
+      z.object({
+        location: z.literal('query'),
+        query_param_name: z
+          .string()
+          .trim()
+          .regex(/^[A-Za-z0-9_.-]{1,64}$/)
+          .default('api_key'),
+      }),
+    ])
+    .optional()
+  const toAuthPlacement = (auth: z.infer<typeof AuthBody>) =>
+    auth === undefined || auth.location === 'header'
+      ? { location: 'header' as const, headerName: auth?.header_name ?? 'Authorization', authScheme: auth?.location === 'header' ? auth.auth_scheme : 'Bearer' }
+      : { location: 'query' as const, queryParamName: auth.query_param_name }
   const CreateProviderBody = z
     .object({
       slug: ProviderSlug,
@@ -506,6 +534,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
       context_window: z.number().int().min(0).max(10_000_000).default(0),
       api_key: z.string().min(1).max(8000),
       enabled: z.boolean().default(true),
+      auth: AuthBody,
     })
     .strict()
   const UpdateProviderBody = z
@@ -515,6 +544,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
       models: ProviderModels.optional(),
       context_window: z.number().int().min(0).max(10_000_000).optional(),
       enabled: z.boolean().optional(),
+      auth: AuthBody,
     })
     .strict()
   const RotateKeyBody = z.object({ api_key: z.string().min(1).max(8000) }).strict()
@@ -553,6 +583,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
         contextWindow: parsed.data.context_window,
         apiKey: parsed.data.api_key,
         enabled: parsed.data.enabled,
+        auth: toAuthPlacement(parsed.data.auth),
       })
       return reply.code(201).send(provider)
     } catch (err) {
@@ -574,6 +605,7 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
         models: parsed.data.models,
         contextWindow: parsed.data.context_window,
         enabled: parsed.data.enabled,
+        auth: parsed.data.auth ? toAuthPlacement(parsed.data.auth) : undefined,
       })
       return provider
     } catch (err) {

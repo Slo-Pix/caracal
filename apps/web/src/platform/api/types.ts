@@ -822,6 +822,15 @@ export interface OperatorAiCheckResult {
   latency_ms: number;
 }
 
+// Where the gateway injects the sealed key for an upstream. Defaults to an Authorization Bearer
+// header; an upstream wanting a different header (e.g. api-key) or a query parameter sets it.
+export interface OperatorAiAuth {
+  location: "header" | "query";
+  headerName?: string;
+  authScheme?: string;
+  queryParamName?: string;
+}
+
 // A governed model provider as managed from the console. The key is never represented here: it
 // lives sealed in the Caracal provider, so a view carries only the metadata.
 export interface OperatorAiProvider {
@@ -831,6 +840,7 @@ export interface OperatorAiProvider {
   models: string[];
   contextWindow: number;
   enabled: boolean;
+  auth: OperatorAiAuth;
 }
 
 export interface OperatorAiProviderList {
@@ -846,6 +856,7 @@ export interface OperatorAiProviderInput {
   contextWindow: number;
   apiKey: string;
   enabled: boolean;
+  auth?: OperatorAiAuth;
 }
 
 export interface OperatorAiProviderPatch {
@@ -854,6 +865,7 @@ export interface OperatorAiProviderPatch {
   models?: string[];
   contextWindow?: number;
   enabled?: boolean;
+  auth?: OperatorAiAuth;
 }
 
 export interface OperatorUsage {
