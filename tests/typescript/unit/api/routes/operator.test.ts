@@ -30,7 +30,7 @@ function buildApp(
   const clientQuery = vi.fn()
   const release = vi.fn()
   const db = {
-    query: vi.fn(),
+    query: vi.fn().mockResolvedValue({ rows: [] }),
     connect: vi.fn().mockResolvedValue({ query: clientQuery, release }),
   }
   const redis = {
@@ -126,6 +126,16 @@ describe('operator enablement gating', () => {
     await app.ready()
     const status = await app.inject({ method: 'GET', url: '/v1/operator/status' })
     expect(JSON.parse(status.body).governed_execution).toEqual({ configured: false })
+  })
+
+  it('surfaces the reserved system zone id by slug even when governed execution is unconfigured', async () => {
+    const { app, db } = buildApp(true)
+    db.query.mockResolvedValueOnce({ rows: [{ id: 'zone-sys-1' }] })
+    await app.ready()
+    const status = await app.inject({ method: 'GET', url: '/v1/operator/status' })
+    const body = JSON.parse(status.body)
+    expect(body.system_zone_id).toBe('zone-sys-1')
+    expect(body.governed_execution).toEqual({ configured: false })
   })
 
   it('reports governed execution configured with its zone, never the secret, when a control identity is supplied', async () => {

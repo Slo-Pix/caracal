@@ -518,13 +518,15 @@ export const consoleApi = {
       return res.enabled;
     },
     // The reserved system zone the Operator governs, exposed only as its id so the Console can
-    // open it in a read-only transparency view. Null when governed execution is not configured,
-    // in which case there is no system zone to open. The credential itself is never exposed.
+    // open it in a read-only transparency view. Resolved by slug when it exists, so the viewer is
+    // reachable even before governed execution is configured; falls back to the governed identity's
+    // zone for older deployments. Null when no system zone exists. The credential is never exposed.
     systemZoneId: async (signal?: AbortSignal) => {
       const res = await request<{
+        system_zone_id?: string | null;
         governed_execution?: { configured?: boolean; zone_id?: string };
       }>("/v1/operator/status", { signal });
-      return res.governed_execution?.zone_id ?? null;
+      return res.system_zone_id ?? res.governed_execution?.zone_id ?? null;
     },
     // Whether Caracal-governed autopilot is available in this deployment. Read from the same
     // status probe; the per-conversation engage toggle is only meaningful when this is true.

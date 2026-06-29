@@ -18,6 +18,7 @@ import { buildOperatorControlClient, type OperatorControlEndpoints } from '../op
 import { executeViaControlPlane, type GovernedPlanStep } from '../operator-governed-execute.js'
 import { createRoleScopedClient, roleScopes } from '../operator-agent-roles.js'
 import { isControlExecutable } from '../operator-control-map.js'
+import { SYSTEM_ZONE_SLUG } from '../system-zone.js'
 import { mayAutoApprove, autopilotAvailable, buildAutopilotPolicy, type AutopilotPolicy } from '../operator-autopilot.js'
 import type { ControlClient } from '../control-client.js'
 import type { OperatorControlIdentity } from '../config.js'
@@ -418,10 +419,18 @@ export const operatorRoutes: FastifyPluginAsync<OperatorRoutesOptions> = async (
   fastify.get('/operator/status', async () => {
     if (!opts.enabled) return { enabled: false }
     const identity = opts.resolveControlIdentity?.() ?? null
+    // The reserved system zone may be provisioned even when governed execution is not yet
+    // configured, so resolve its id by slug independently. It is the source for the Console's
+    // read-only "Open System Zone" viewer, which must be reachable whenever the zone exists, not
+    // only when the dogfooding identity is live.
+    const sysRows = (await fastify.db.query<{ id: string }>('SELECT id FROM zones WHERE slug = $1 LIMIT 1', [SYSTEM_ZONE_SLUG]))?.rows ?? []
+    const systemZoneId = sysRows[0]?.id ?? null
     return {
       enabled: true,
       principal: authority.principal,
       allowed_capabilities: [...authority.allowedCapabilities].sort(),
+      // The reserved system zone's id, when it exists, so the Console can open it read-only.
+      system_zone_id: systemZoneId,
       // Whether the Operator's governed-execution identity is provisioned, and the single
       // zone it governs. Surfaced so an operator can confirm the dogfooding identity is
       // configured without inspecting secrets; the credential itself is never exposed.
